@@ -1,82 +1,48 @@
 import logging
-import docker
 from typing import Dict, Any, List, Optional
-import time
+import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 class MetricsService:
-    def __init__(self):
-        self.client = docker.from_env()
+    def __init__(self, ssh_service=None):
+        self.ssh_service = ssh_service
         self.metrics_history: Dict[str, List[Dict[str, Any]]] = {}
         self.history_limit = 100  # Keep last 100 data points
 
-    def get_container_metrics(self, container_id: str) -> Dict[str, Any]:
+    def get_container_metrics(self, server_name: str, container_id: str) -> Dict[str, Any]:
         try:
-            container = self.client.containers.get(container_id)
-            stats = container.stats(stream=False)
+            if not self.ssh_service:
+                raise Exception("SSH service not initialized")
 
-            # Calculate CPU usage
-            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-            system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-            cpu_usage = (cpu_delta / system_delta) * 100 * len(stats['cpu_stats']['cpu_usage']['percpu_usage'])
+            # Get container stats using docker stats command
+            result = self.ssh_service.execute_command(
+                server_name,
+                f"docker stats {container_id} --no-stream --format '{{{{json .}}}}'"
+            )
 
-            # Calculate memory usage
-            memory_usage = stats['memory_stats']['usage']
-            memory_limit = stats['memory_stats']['limit']
-            memory_percent = (memory_usage / memory_limit) * 100
+            if result['exit_code'] != 0:
+                raise Exception(result['error'])
 
-            # Network stats
-            network_stats = {
-                'rx_bytes': 0,
-                'tx_bytes': 0,
-                'rx_packets': 0,
-                'tx_packets': 0
-            }
-
-            if 'networks' in stats:
-                for interface in stats['networks'].values():
-                    network_stats['rx_bytes'] += interface.get('rx_bytes', 0)
-                    network_stats['tx_bytes'] += interface.get('tx_bytes', 0)
-                    network_stats['rx_packets'] += interface.get('rx_packets', 0)
-                    network_stats['tx_packets'] += interface.get('tx_packets', 0)
-
-            # Block I/O stats
-            io_stats = {
-                'read_bytes': 0,
-                'write_bytes': 0,
-                'read_ops': 0,
-                'write_ops': 0
-            }
-
-            if 'blkio_stats' in stats:
-                for stat in stats['blkio_stats'].get('io_service_bytes_recursive', []):
-                    if stat['op'] == 'Read':
-                        io_stats['read_bytes'] += stat['value']
-                    elif stat['op'] == 'Write':
-                        io_stats['write_bytes'] += stat['value']
-
-                for stat in stats['blkio_stats'].get('io_serviced_recursive', []):
-                    if stat['op'] == 'Read':
-                        io_stats['read_ops'] += stat['value']
-                    elif stat['op'] == 'Write':
-                        io_stats['write_ops'] += stat['value']
+            stats = json.loads(result['output'])
 
             metrics = {
                 'timestamp': datetime.now().isoformat(),
                 'cpu': {
-                    'usage_percent': cpu_usage,
-                    'throttling_data': stats['cpu_stats'].get('throttling_data', {}),
+                    'usage_percent': stats['CPUPerc'].rstrip('%'),
                 },
                 'memory': {
-                    'usage': memory_usage,
-                    'limit': memory_limit,
-                    'percent': memory_percent,
-                    'stats': stats['memory_stats'].get('stats', {})
+                    'usage': self._parse_size(stats['MemUsage'].split('/')[0]),
+                    'limit': self._parse_size(stats['MemUsage'].split('/')[1]),
+                    'percent': stats['MemPerc'].rstrip('%'),
                 },
-                'network': network_stats,
-                'io': io_stats
+                'network': {
+                    'io': stats.get('NetIO', '0B / 0B'),
+                },
+                'block_io': {
+                    'io': stats.get('BlockIO', '0B / 0B'),
+                }
             }
 
             # Store metrics in history
@@ -97,7 +63,7 @@ class MetricsService:
                 'error': str(e)
             }
 
-    def get_metrics_history(self, container_id: str, duration: Optional[timedelta] = None) -> List[Dict[str, Any]]:
+    def get_metrics_history(self, container_id: str, duration: Optional[int] = None) -> List[Dict[str, Any]]:
         try:
             if container_id not in self.metrics_history:
                 return []
@@ -105,7 +71,7 @@ class MetricsService:
             if duration is None:
                 return self.metrics_history[container_id]
 
-            cutoff = datetime.now() - duration
+            cutoff = datetime.now() - timedelta(seconds=duration)
             return [
                 metric for metric in self.metrics_history[container_id]
                 if datetime.fromisoformat(metric['timestamp']) > cutoff
@@ -115,29 +81,52 @@ class MetricsService:
             logger.error(f"Error getting metrics history: {e}")
             return []
 
-    def get_system_metrics(self) -> Dict[str, Any]:
+    def get_system_metrics(self, server_name: str) -> Dict[str, Any]:
         try:
-            info = self.client.info()
+            if not self.ssh_service:
+                raise Exception("SSH service not initialized")
+
+            # Get Docker info
+            result = self.ssh_service.execute_command(server_name, "docker info --format '{{json .}}'")
+            if result['exit_code'] != 0:
+                raise Exception(result['error'])
+
+            info = json.loads(result['output'])
+
+            # Get system memory info
+            mem_result = self.ssh_service.execute_command(server_name, "free -b")
+            if mem_result['exit_code'] == 0:
+                mem_lines = mem_result['output'].strip().split('\n')
+                if len(mem_lines) >= 2:
+                    mem_values = mem_lines[1].split()
+                    total_memory = int(mem_values[1])
+                    used_memory = int(mem_values[2])
+                    free_memory = int(mem_values[3])
+            else:
+                total_memory = 0
+                used_memory = 0
+                free_memory = 0
 
             return {
                 'containers': {
-                    'total': info['Containers'],
-                    'running': info['ContainersRunning'],
-                    'paused': info['ContainersPaused'],
-                    'stopped': info['ContainersStopped']
+                    'total': info.get('Containers', 0),
+                    'running': info.get('ContainersRunning', 0),
+                    'paused': info.get('ContainersPaused', 0),
+                    'stopped': info.get('ContainersStopped', 0)
                 },
-                'images': info['Images'],
-                'docker_version': info['ServerVersion'],
+                'images': info.get('Images', 0),
+                'docker_version': info.get('ServerVersion', 'unknown'),
                 'memory': {
-                    'total': info['MemTotal'],
-                    'kernel': info.get('KernelMemory', 0)
+                    'total': total_memory,
+                    'used': used_memory,
+                    'free': free_memory
                 },
                 'cpu': {
-                    'cores': info['NCPU'],
-                    'architecture': info['Architecture']
+                    'cores': info.get('NCPU', 0),
+                    'architecture': info.get('Architecture', 'unknown')
                 },
                 'driver': {
-                    'name': info['Driver'],
+                    'name': info.get('Driver', 'unknown'),
                     'data': info.get('DriverStatus', [])
                 }
             }
@@ -147,3 +136,21 @@ class MetricsService:
             return {
                 'error': str(e)
             }
+
+    def _parse_size(self, size_str: str) -> float:
+        """Convert Docker size string to bytes"""
+        try:
+            value = float(''.join(filter(str.isdigit, size_str)))
+            unit = ''.join(filter(str.isalpha, size_str)).upper()
+
+            multipliers = {
+                'B': 1,
+                'KB': 1024,
+                'MB': 1024 ** 2,
+                'GB': 1024 ** 3,
+                'TB': 1024 ** 4
+            }
+
+            return value * multipliers.get(unit, 1)
+        except Exception:
+            return 0

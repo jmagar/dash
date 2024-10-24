@@ -1,0 +1,50 @@
+<div id="server-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="server-modal-title">Add Server</h2>
+            <button onclick="dockerDashboard.servers.closeServerModal()" class="modal-close">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="server-form" onsubmit="dockerDashboard.servers.submitServer(event)">
+                <div class="form-group">
+                    <label for="server-name">Server Name</label>
+                    <input type="text" id="server-name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="server-host">Host</label>
+                    <input type="text" id="server-host" name="host" required>
+                </div>
+                <div class="form-group">
+                    <label for="server-port">Port</label>
+                    <input type="number" id="server-port" name="port" value="22" required>
+                </div>
+                <div class="form-group">
+                    <label for="server-username">Username</label>
+                    <input type="text" id="server-username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Authentication Method</label>
+                    <div class="radio-group">
+                        <input type="radio" id="auth-password" name="auth-method" value="password" checked>
+                        <label for="auth-password">Password</label>
+                        <input type="radio" id="auth-key" name="auth-method" value="key">
+                        <label for="auth-key">SSH Key</label>
+                    </div>
+                </div>
+                <div id="password-group" class="form-group">
+                    <label for="server-password">Password</label>
+                    <input type="password" id="server-password" name="password">
+                </div>
+                <div id="key-group" class="form-group hidden">
+                    <label for="server-key">SSH Key Path</label>
+                    <input type="text" id="server-key" name="key_path">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Add Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,175 +1,189 @@
-import asyncio
-import websockets
-import logging
 import json
+import logging
 from typing import Dict, Any, Optional
-import docker
-from docker.models.containers import Container
+import gevent
+from geventwebsocket.websocket import WebSocket
 
 logger = logging.getLogger(__name__)
 
 class WebSocketService:
-    def __init__(self):
-        self.client = docker.from_env()
-        self.active_terminals: Dict[str, Any] = {}
-        self.active_logs: Dict[str, Any] = {}
+    def __init__(self, ssh_service=None):
+        self.connections = {}
+        self.ssh_service = ssh_service
+        logger.info("WebSocket service initialized")
 
-    async def handle_terminal(self, websocket, container_id: str):
+    def handle_connection(self, websocket: WebSocket, path: str):
         try:
-            container = self.client.containers.get(container_id)
-            exec_id = container.exec_run(
-                cmd="/bin/sh",
-                tty=True,
-                stdin=True,
-                socket=True
-            ).id
-
-            self.active_terminals[container_id] = exec_id
-
-            try:
-                while True:
-                    message = await websocket.recv()
-                    if not message:
-                        break
-
-                    # Send input to container
-                    container.exec_start(
-                        exec_id=exec_id,
-                        tty=True,
-                        stream=True,
-                        socket=True,
-                        demux=True
-                    )
-
-                    # Get output from container
-                    output = container.exec_inspect(exec_id)
-                    if output:
-                        await websocket.send(json.dumps({
-                            'type': 'terminal',
-                            'data': output
-                        }))
-            finally:
-                if container_id in self.active_terminals:
-                    del self.active_terminals[container_id]
-
-        except Exception as e:
-            logger.error(f"Error in terminal websocket: {e}")
-            await websocket.send(json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
-
-    async def handle_logs(self, websocket, container_id: str):
-        try:
-            container = self.client.containers.get(container_id)
-            logs_stream = container.logs(stream=True, follow=True, timestamps=True)
-
-            self.active_logs[container_id] = logs_stream
-
-            try:
-                for log in logs_stream:
-                    await websocket.send(json.dumps({
-                        'type': 'log',
-                        'data': log.decode('utf-8')
-                    }))
-            finally:
-                if container_id in self.active_logs:
-                    del self.active_logs[container_id]
-
-        except Exception as e:
-            logger.error(f"Error in logs websocket: {e}")
-            await websocket.send(json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
-
-    async def handle_metrics(self, websocket, container_id: str):
-        try:
-            container = self.client.containers.get(container_id)
-            while True:
-                try:
-                    stats = container.stats(stream=False)
-
-                    # Calculate CPU usage
-                    cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-                    system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-                    cpu_usage = (cpu_delta / system_delta) * 100 * len(stats['cpu_stats']['cpu_usage']['percpu_usage'])
-
-                    # Calculate memory usage
-                    memory_usage = stats['memory_stats']['usage']
-                    memory_limit = stats['memory_stats']['limit']
-                    memory_percent = (memory_usage / memory_limit) * 100
-
-                    await websocket.send(json.dumps({
-                        'type': 'metrics',
-                        'data': {
-                            'cpu_usage': f"{cpu_usage:.1f}%",
-                            'memory_usage': f"{memory_usage / (1024*1024):.1f}MB / {memory_limit / (1024*1024):.1f}MB",
-                            'memory_percent': f"{memory_percent:.1f}%",
-                            'network_rx': stats['networks']['eth0']['rx_bytes'] if 'networks' in stats else 0,
-                            'network_tx': stats['networks']['eth0']['tx_bytes'] if 'networks' in stats else 0
-                        }
-                    }))
-
-                    await asyncio.sleep(1)  # Update every second
-
-                except Exception as e:
-                    logger.error(f"Error getting container stats: {e}")
-                    await websocket.send(json.dumps({
-                        'type': 'error',
-                        'message': str(e)
-                    }))
-                    break
-
-        except Exception as e:
-            logger.error(f"Error in metrics websocket: {e}")
-            await websocket.send(json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
-
-    async def handle_events(self, websocket):
-        try:
-            events = self.client.events(decode=True)
-            for event in events:
-                await websocket.send(json.dumps({
-                    'type': 'event',
-                    'data': event
-                }))
-        except Exception as e:
-            logger.error(f"Error in events websocket: {e}")
-            await websocket.send(json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
-
-    async def handle_connection(self, websocket, path: str):
-        try:
-            # Parse path to determine type of connection and container ID
+            # Parse path to determine connection type and parameters
             parts = path.strip('/').split('/')
-            if len(parts) < 2:
-                raise ValueError("Invalid WebSocket path")
+            if not parts:
+                return
 
             connection_type = parts[0]
-            container_id = parts[1] if len(parts) > 1 else None
 
-            if connection_type == 'terminal' and container_id:
-                await self.handle_terminal(websocket, container_id)
-            elif connection_type == 'logs' and container_id:
-                await self.handle_logs(websocket, container_id)
-            elif connection_type == 'metrics' and container_id:
-                await self.handle_metrics(websocket, container_id)
+            if connection_type == 'terminal':
+                if len(parts) >= 3:
+                    server_name = parts[1]
+                    container_id = parts[2]
+                    self.handle_terminal(websocket, server_name, container_id)
+            elif connection_type == 'logs':
+                if len(parts) >= 3:
+                    server_name = parts[1]
+                    container_id = parts[2]
+                    self.handle_logs(websocket, server_name, container_id)
             elif connection_type == 'events':
-                await self.handle_events(websocket)
+                self.handle_events(websocket)
             else:
-                raise ValueError(f"Unknown connection type: {connection_type}")
+                logger.warning(f"Unknown connection type: {connection_type}")
 
         except Exception as e:
-            logger.error(f"Error handling websocket connection: {e}")
-            try:
-                await websocket.send(json.dumps({
+            logger.error(f"Error handling WebSocket connection: {e}")
+
+    def handle_terminal(self, websocket: WebSocket, server_name: str, container_id: str):
+        try:
+            if not self.ssh_service:
+                raise Exception("SSH service not initialized")
+
+            # Get SSH connection
+            ssh_client = self.ssh_service.connect(server_name)
+            if not ssh_client:
+                websocket.send(json.dumps({
                     'type': 'error',
-                    'message': str(e)
+                    'data': f'Failed to connect to server {server_name}'
+                }))
+                return
+
+            # Create interactive shell session
+            channel = ssh_client.invoke_shell()
+            channel.setblocking(0)
+
+            try:
+                # Send initial command to attach to container
+                channel.send(f'docker exec -it {container_id} /bin/sh\n')
+
+                while not websocket.closed:
+                    # Handle incoming messages from the web client
+                    try:
+                        message = websocket.receive()
+                        if message is None:  # WebSocket closed
+                            break
+                        data = json.loads(message)
+                        if data['type'] == 'input':
+                            channel.send(data['data'])
+                    except Exception as e:
+                        logger.error(f"Error handling terminal input: {e}")
+                        break
+
+                    # Send terminal output back to the web client
+                    try:
+                        if channel.recv_ready():
+                            output = channel.recv(4096).decode('utf-8', errors='replace')
+                            websocket.send(json.dumps({
+                                'type': 'terminal',
+                                'data': output
+                            }))
+                    except Exception as e:
+                        logger.error(f"Error handling terminal output: {e}")
+                        break
+
+                    gevent.sleep(0.1)
+
+            finally:
+                channel.close()
+
+        except Exception as e:
+            logger.error(f"Error in terminal handler: {e}")
+            try:
+                websocket.send(json.dumps({
+                    'type': 'error',
+                    'data': str(e)
+                }))
+            except:
+                pass
+
+    def handle_logs(self, websocket: WebSocket, server_name: str, container_id: str):
+        try:
+            if not self.ssh_service:
+                raise Exception("SSH service not initialized")
+
+            # Get SSH connection
+            ssh_client = self.ssh_service.connect(server_name)
+            if not ssh_client:
+                websocket.send(json.dumps({
+                    'type': 'error',
+                    'data': f'Failed to connect to server {server_name}'
+                }))
+                return
+
+            # Create channel for logs
+            channel = ssh_client.get_transport().open_session()
+            channel.exec_command(f'docker logs -f {container_id}')
+
+            try:
+                while not websocket.closed:
+                    if channel.recv_ready():
+                        output = channel.recv(4096).decode('utf-8', errors='replace')
+                        websocket.send(json.dumps({
+                            'type': 'log',
+                            'data': output
+                        }))
+                    elif channel.exit_status_ready():
+                        break
+                    gevent.sleep(0.1)
+            finally:
+                channel.close()
+
+        except Exception as e:
+            logger.error(f"Error in logs handler: {e}")
+            try:
+                websocket.send(json.dumps({
+                    'type': 'error',
+                    'data': str(e)
+                }))
+            except:
+                pass
+
+    def handle_events(self, websocket: WebSocket):
+        try:
+            if not self.ssh_service:
+                raise Exception("SSH service not initialized")
+
+            # Monitor events from all connected servers
+            servers = self.ssh_service.load_servers()
+            event_channels = {}
+
+            try:
+                for server in servers:
+                    ssh_client = self.ssh_service.connect(server['name'])
+                    if ssh_client:
+                        channel = ssh_client.get_transport().open_session()
+                        channel.exec_command('docker events --format "{{json .}}"')
+                        event_channels[server['name']] = channel
+
+                while not websocket.closed:
+                    for server_name, channel in event_channels.items():
+                        if channel.recv_ready():
+                            output = channel.recv(4096).decode('utf-8', errors='replace')
+                            for line in output.splitlines():
+                                try:
+                                    event = json.loads(line)
+                                    event['server_name'] = server_name
+                                    websocket.send(json.dumps(event))
+                                except json.JSONDecodeError:
+                                    continue
+
+                    gevent.sleep(0.1)
+
+            finally:
+                for channel in event_channels.values():
+                    channel.close()
+
+        except Exception as e:
+            logger.error(f"Error in events handler: {e}")
+            try:
+                websocket.send(json.dumps({
+                    'type': 'error',
+                    'data': str(e)
                 }))
             except:
                 pass

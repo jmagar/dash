@@ -11,9 +11,10 @@ class ContainerManager {
 
     initializeEventStream() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const port = '5001';
+        const wsHost = window.location.hostname;
+        const wsPort = window.location.port || '5932'; // Use same port as HTTP
         this.eventWebsocket = new RetryWebSocket(
-            `${protocol}//${window.location.hostname}:${port}/events`,
+            `${protocol}//${wsHost}:${wsPort}/ws/events`,
             {
                 onmessage: (event) => this.handleEvent(JSON.parse(event.data))
             }
@@ -22,11 +23,11 @@ class ContainerManager {
 
     handleEvent(event) {
         if (event.Type === 'container') {
-            this.refreshContainerStatus(event.Actor.ID);
+            this.refreshContainerStatus(event.server_name, event.Actor.ID);
         }
     }
 
-    async updateContainer(containerId, serviceName) {
+    async updateContainer(serverName, containerId, serviceName) {
         if (!containerId || !serviceName) {
             console.error('Container ID and service name are required');
             return;
@@ -37,7 +38,7 @@ class ContainerManager {
         }
 
         try {
-            const response = await fetch(`/container/${containerId}/update`, {
+            const response = await fetch(`/container/${serverName}/${containerId}/update`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -60,9 +61,9 @@ class ContainerManager {
         }
     }
 
-    async refreshContainerStatus(containerId) {
+    async refreshContainerStatus(serverName, containerId) {
         try {
-            const response = await fetch(`/container/${containerId}/status`);
+            const response = await fetch(`/container/${serverName}/${containerId}/status`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -119,73 +120,48 @@ class ContainerManager {
         }
     }
 
-    startMetricsStream(containerId) {
-        if (this.metricsWebsockets.has(containerId)) {
+    async viewLogs(serverName, containerId, serviceName) {
+        const modal = document.getElementById('logs-modal');
+        const title = document.getElementById('logs-modal-title');
+        const container = document.getElementById('logs-container');
+
+        if (!modal || !title || !container) {
+            console.error('Required logs modal elements not found');
             return;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const port = '5001';
-        const ws = new RetryWebSocket(
-            `${protocol}//${window.location.hostname}:${port}/metrics/${containerId}`,
-            {
-                onmessage: (event) => {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'metrics') {
-                        this.updateContainerUI(containerId, data.data);
-                    }
-                }
+        try {
+            title.textContent = `${serviceName} Logs`;
+            container.textContent = 'Loading logs...';
+            modal.classList.remove('hidden');
+
+            const response = await fetch(`/container/${serverName}/${containerId}/logs`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        );
-        this.metricsWebsockets.set(containerId, ws);
-    }
 
-    stopMetricsStream(containerId) {
-        const ws = this.metricsWebsockets.get(containerId);
-        if (ws) {
-            ws.close();
-            this.metricsWebsockets.delete(containerId);
-        }
-    }
+            const data = await response.json();
+            container.textContent = data.logs || 'No logs available';
 
-    async viewLogs(containerId, serviceName) {
-        const logsContainer = document.getElementById(`logs-${serviceName}`);
-        const terminalContainer = document.getElementById(`terminal-${serviceName}`);
-
-        // Hide terminal if visible
-        terminalContainer.classList.add('hidden');
-
-        // Toggle logs visibility
-        if (logsContainer.classList.contains('hidden')) {
-            try {
-                // Start WebSocket connection for live logs
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const port = '5001';
-                const ws = new RetryWebSocket(
-                    `${protocol}//${window.location.hostname}:${port}/logs/${containerId}`,
-                    {
-                        onmessage: (event) => {
-                            const data = JSON.parse(event.data);
-                            if (data.type === 'log') {
-                                this.appendLog(logsContainer, data.data);
-                            }
+            // Start WebSocket connection for live logs
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.hostname;
+            const wsPort = window.location.port || '5932'; // Use same port as HTTP
+            const ws = new RetryWebSocket(
+                `${protocol}//${wsHost}:${wsPort}/ws/logs/${serverName}/${containerId}`,
+                {
+                    onmessage: (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'log') {
+                            this.appendLog(container, data.data);
                         }
                     }
-                );
-                this.logsWebsockets.set(containerId, ws);
-                logsContainer.classList.remove('hidden');
-            } catch (error) {
-                console.error('Error setting up logs stream:', error);
-                logsContainer.textContent = 'Error setting up logs stream';
-                logsContainer.classList.remove('hidden');
-            }
-        } else {
-            const ws = this.logsWebsockets.get(containerId);
-            if (ws) {
-                ws.close();
-                this.logsWebsockets.delete(containerId);
-            }
-            logsContainer.classList.add('hidden');
+                }
+            );
+            this.logsWebsockets.set(containerId, ws);
+        } catch (error) {
+            console.error('Error setting up logs stream:', error);
+            container.textContent = `Error: ${error.message}`;
         }
     }
 
@@ -196,7 +172,23 @@ class ContainerManager {
             container.scrollTop = container.scrollHeight;
         }
     }
+
+    closeLogs() {
+        const modal = document.getElementById('logs-modal');
+        const container = document.getElementById('logs-container');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+        if (container) {
+            container.textContent = '';
+        }
+        // Close all log websockets
+        for (const [containerId, ws] of this.logsWebsockets.entries()) {
+            ws.close();
+            this.logsWebsockets.delete(containerId);
+        }
+    }
 }
 
 export const containerManager = new ContainerManager();
-export const { updateContainer, refreshContainerStatus, viewLogs } = containerManager;
+export const { updateContainer, refreshContainerStatus, viewLogs, closeLogs } = containerManager;

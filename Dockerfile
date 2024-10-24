@@ -1,52 +1,41 @@
 FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y \
+    curl \
     gcc \
     python3-dev \
-    curl \
-    docker.io \
-    bash \
+    libffi-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
+# Create necessary directories with proper permissions
+RUN mkdir -p logs static/css static/js/modules templates/components config && \
+    chmod -R 777 logs && \
+    chmod -R 777 config
+
+# Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Create necessary directories
-RUN mkdir -p logs && \
-    mkdir -p static/css && \
-    mkdir -p static/js/modules && \
-    mkdir -p templates/components && \
-    mkdir -p server
 
 # Copy application files
 COPY . .
 
-# Set permissions
-RUN chmod -R 755 /app && \
-    chmod +x app.py watcher.py
+# Set proper permissions
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -d /app -s /bin/bash appuser && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 . && \
+    chmod -R 777 logs && \
+    chmod -R 777 config && \
+    chmod +x setup.sh && \
+    chmod +x watcher.py
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV FLASK_APP=app.py
-ENV SHELL=/bin/bash
-ENV PYTHONPATH=/app
+USER appuser
 
-# Expose HTTP and WebSocket ports
-EXPOSE 5000
-EXPOSE 5001
+EXPOSE 5000 5001
 
-# Run as root to ensure Docker socket access
-USER root
-
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
-
-# Command to run the service (will be overridden by docker-compose for watcher)
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "wsgi:app"]

@@ -5,18 +5,21 @@ class TerminalManager {
         this.terminals = new Map();
     }
 
-    async openTerminal(containerId, serviceName) {
-        const logsContainer = document.getElementById(`logs-${serviceName}`);
-        const terminalContainer = document.getElementById(`terminal-${serviceName}`);
+    async openTerminal(serverName, containerId, serviceName) {
+        const modal = document.getElementById('terminal-modal');
+        const title = document.getElementById('terminal-modal-title');
+        const container = document.getElementById('terminal-container');
 
-        // Hide logs if visible
-        logsContainer.classList.add('hidden');
+        if (!modal || !title || !container) {
+            console.error('Required terminal modal elements not found');
+            return;
+        }
 
-        // Toggle terminal visibility
-        terminalContainer.classList.toggle('hidden');
+        title.textContent = `${serviceName} Terminal`;
+        modal.classList.remove('hidden');
 
-        if (!terminalContainer.classList.contains('hidden')) {
-            if (!this.terminals.has(serviceName)) {
+        if (!this.terminals.has(containerId)) {
+            try {
                 // Initialize terminal
                 const term = new Terminal({
                     cursorBlink: true,
@@ -31,35 +34,17 @@ class TerminalManager {
                 const fitAddon = new FitAddon.FitAddon();
                 term.loadAddon(fitAddon);
 
-                // Create terminal header
-                const header = document.createElement('div');
-                header.className = 'terminal-header';
-                header.innerHTML = `
-                    <div class="terminal-title">${serviceName}</div>
-                    <div class="terminal-controls">
-                        <button class="terminal-button" onclick="dockerDashboard.terminal.toggleFullscreen('${serviceName}')">
-                            <span class="material-icons">fullscreen</span>
-                        </button>
-                        <button class="terminal-button" onclick="dockerDashboard.terminal.closeTerminal('${serviceName}')">
-                            <span class="material-icons">close</span>
-                        </button>
-                    </div>
-                `;
-                terminalContainer.appendChild(header);
-
-                // Create terminal container
-                const terminalElement = document.createElement('div');
-                terminalElement.className = 'terminal';
-                terminalContainer.appendChild(terminalElement);
-
-                term.open(terminalElement);
+                // Clear container and open terminal
+                container.innerHTML = '';
+                term.open(container);
                 fitAddon.fit();
 
                 // Connect to container's terminal
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const port = '5001';
+                const wsHost = window.location.hostname;
+                const wsPort = window.location.port || '5932'; // Use same port as HTTP
                 const ws = new RetryWebSocket(
-                    `${protocol}//${window.location.hostname}:${port}/terminal/${containerId}`,
+                    `${protocol}//${wsHost}:${wsPort}/ws/terminal/${serverName}/${containerId}`,
                     {
                         onopen: () => {
                             term.write('\r\n$ ');
@@ -87,42 +72,58 @@ class TerminalManager {
                     }));
                 });
 
-                this.terminals.set(serviceName, {
+                this.terminals.set(containerId, {
                     terminal: term,
                     fitAddon: fitAddon,
-                    container: terminalContainer,
-                    element: terminalElement,
                     websocket: ws
                 });
-            } else {
-                // Resize existing terminal
-                const terminal = this.terminals.get(serviceName);
-                terminal.fitAddon.fit();
+
+                // Handle window resize
+                const resizeObserver = new ResizeObserver(() => {
+                    fitAddon.fit();
+                });
+                resizeObserver.observe(container);
+
+            } catch (error) {
+                console.error('Error initializing terminal:', error);
+                container.textContent = `Error: ${error.message}`;
             }
         } else {
-            this.closeTerminal(serviceName);
-        }
-    }
-
-    toggleFullscreen(serviceName) {
-        const terminal = this.terminals.get(serviceName);
-        if (terminal) {
-            const container = terminal.container;
-            container.classList.toggle('terminal-fullscreen');
+            const terminal = this.terminals.get(containerId);
             terminal.fitAddon.fit();
         }
     }
 
-    closeTerminal(serviceName) {
-        const terminal = this.terminals.get(serviceName);
-        if (terminal) {
+    toggleFullscreen() {
+        const modal = document.getElementById('terminal-modal');
+        if (modal) {
+            modal.classList.toggle('modal-fullscreen');
+            // Resize all terminals
+            for (const terminal of this.terminals.values()) {
+                terminal.fitAddon.fit();
+            }
+        }
+    }
+
+    closeTerminal() {
+        const modal = document.getElementById('terminal-modal');
+        const container = document.getElementById('terminal-container');
+        if (modal) {
+            modal.classList.remove('modal-fullscreen');
+            modal.classList.add('hidden');
+        }
+        // Close all terminals and websockets
+        for (const [containerId, terminal] of this.terminals.entries()) {
             if (terminal.websocket) {
                 terminal.websocket.close();
             }
-            terminal.container.classList.add('hidden');
-            if (terminal.container.classList.contains('terminal-fullscreen')) {
-                terminal.container.classList.remove('terminal-fullscreen');
+            if (terminal.terminal) {
+                terminal.terminal.dispose();
             }
+            this.terminals.delete(containerId);
+        }
+        if (container) {
+            container.innerHTML = '';
         }
     }
 }

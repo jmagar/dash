@@ -1,28 +1,26 @@
+# Import gevent and monkey patch before any other imports
+from gevent import monkey
+monkey.patch_all()
+
 from dotenv import load_dotenv
 import os
 from flask import Flask, render_template, jsonify, Response, request, send_from_directory
+from flask_sockets import Sockets
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import asyncio
-import websockets
+import gevent
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from server.docker_service import DockerService
-from server.notification_service import NotificationService
-from server.proxy_service import ProxyService
-from server.websocket_service import WebSocketService
-from server.metrics_service import MetricsService
+import sys
 
 # Create necessary directories
-Path('logs').mkdir(exist_ok=True)
-Path('static/css').mkdir(exist_ok=True, parents=True)
-Path('static/js/modules').mkdir(exist_ok=True, parents=True)
-Path('templates/components').mkdir(exist_ok=True, parents=True)
+for directory in ['logs', 'static/css', 'static/js/modules', 'templates/components', 'config']:
+    Path(directory).mkdir(exist_ok=True, parents=True)
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -52,12 +50,29 @@ app = Flask(__name__,
     static_folder='static'
 )
 
+# Initialize WebSocket
+sockets = Sockets(app)
+
 # Initialize services
-docker_service = DockerService()
-notification_service = NotificationService()
-proxy_service = ProxyService()
-websocket_service = WebSocketService()
-metrics_service = MetricsService()
+try:
+    from server import (
+        SSHService,
+        NotificationService,
+        ProxyService,
+        WebSocketService,
+        MetricsService
+    )
+
+    ssh_service = SSHService()
+    notification_service = NotificationService()
+    proxy_service = ProxyService()
+    websocket_service = WebSocketService(ssh_service=ssh_service)
+    metrics_service = MetricsService(ssh_service=ssh_service)
+
+    logger.info("All services initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize services: {e}")
+    raise
 
 # Enable CORS
 @app.after_request
@@ -68,53 +83,101 @@ def after_request(response):
     return response
 
 def get_compose_dir() -> str:
-    return os.getenv('COMPOSE_DIR', '/mnt/user/compose')
+    compose_dir = os.getenv('COMPOSE_DIR', '/mnt/user/compose')
+    if not os.path.exists(compose_dir):
+        logger.error(f"Compose directory does not exist: {compose_dir}")
+    return compose_dir
 
 def get_proxy_dir() -> str:
-    return os.getenv('PROXY_DIR', '/mnt/user/appdata/swag/nginx/proxy-confs')
+    proxy_dir = os.getenv('PROXY_DIR', '/mnt/user/appdata/swag/nginx/proxy-confs')
+    if not os.path.exists(proxy_dir):
+        logger.error(f"Proxy directory does not exist: {proxy_dir}")
+    return proxy_dir
 
-# Routes
+# Routes with improved error handling
 @app.route('/')
 def index():
-    services = docker_service.get_services(get_compose_dir())
-    return render_template('index.html', services=services)
-
-@app.route('/container/<container_id>/status')
-def container_status(container_id):
-    return jsonify(docker_service.get_container_status(container_id))
-
-@app.route('/container/<container_id>/logs')
-def container_logs(container_id):
     try:
-        logs = docker_service.get_container_logs(container_id)
-        return jsonify({'logs': logs})
+        servers = ssh_service.load_servers()
+        services = []
+        for server in servers:
+            server_services = ssh_service.get_services(server['name'], get_compose_dir())
+            services.extend(server_services)
+        return render_template('index.html', services=services, servers=servers)
+    except Exception as e:
+        logger.error(f"Error in index route: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/servers/add', methods=['POST'])
+def add_server():
+    try:
+        data = request.json
+        success = ssh_service.add_server(
+            name=data['name'],
+            host=data['host'],
+            port=data['port'],
+            username=data['username'],
+            password=data.get('password'),
+            key_path=data.get('key_path')
+        )
+        if success:
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error', 'message': 'Failed to add server'}), 500
+    except Exception as e:
+        logger.error(f"Error adding server: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/servers/<server_name>', methods=['DELETE'])
+def remove_server(server_name):
+    try:
+        success = ssh_service.remove_server(server_name)
+        if success:
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error', 'message': 'Failed to remove server'}), 500
+    except Exception as e:
+        logger.error(f"Error removing server: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/container/<server_name>/<container_id>/status')
+def container_status(server_name, container_id):
+    try:
+        return jsonify(ssh_service.get_container_status(server_name, container_id))
+    except Exception as e:
+        logger.error(f"Error getting container status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/container/<server_name>/<container_id>/logs')
+def container_logs(server_name, container_id):
+    try:
+        result = ssh_service.execute_command(server_name, f"docker logs --tail 100 {container_id}")
+        return jsonify({'logs': result['output']})
     except Exception as e:
         logger.error(f"Error getting container logs: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/container/<container_id>/update', methods=['POST'])
-def update_container(container_id):
+@app.route('/container/<server_name>/<container_id>/update', methods=['POST'])
+def update_container(server_name, container_id):
     try:
-        success = docker_service.update_container(container_id)
-        if success:
+        result = ssh_service.execute_command(server_name, f"docker-compose pull && docker-compose up -d {container_id}")
+        if result['exit_code'] == 0:
             notification_service.send_notification(f"Container {container_id} updated successfully")
             return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Update failed'}), 500
+        return jsonify({'status': 'error', 'message': result['error']}), 500
     except Exception as e:
         logger.error(f"Error updating container: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/container/<container_id>/metrics')
-def container_metrics(container_id):
+@app.route('/container/<server_name>/<container_id>/metrics')
+def container_metrics(server_name, container_id):
     try:
-        metrics = metrics_service.get_container_metrics(container_id)
+        metrics = metrics_service.get_container_metrics(server_name, container_id)
         return jsonify(metrics)
     except Exception as e:
         logger.error(f"Error getting container metrics: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/container/<container_id>/metrics/history')
-def container_metrics_history(container_id):
+@app.route('/container/<server_name>/<container_id>/metrics/history')
+def container_metrics_history(server_name, container_id):
     try:
         duration = request.args.get('duration', None)
         if duration:
@@ -125,10 +188,10 @@ def container_metrics_history(container_id):
         logger.error(f"Error getting metrics history: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/system/metrics')
-def system_metrics():
+@app.route('/system/<server_name>/metrics')
+def system_metrics(server_name):
     try:
-        metrics = metrics_service.get_system_metrics()
+        metrics = metrics_service.get_system_metrics(server_name)
         return jsonify(metrics)
     except Exception as e:
         logger.error(f"Error getting system metrics: {e}")
@@ -171,25 +234,14 @@ def disable_proxy(config_name):
 def health():
     return jsonify({'status': 'healthy'})
 
-# WebSocket server
-async def websocket_server():
-    async with websockets.serve(
-        websocket_service.handle_connection,
-        "0.0.0.0",
-        5001,
-        ping_interval=30,
-        ping_timeout=10
-    ):
-        await asyncio.Future()  # run forever
-
-def run_websocket_server():
-    asyncio.run(websocket_server())
+# WebSocket routes
+@sockets.route('/ws/<path:path>')
+def websocket_handler(ws, path):
+    websocket_service.handle_connection(ws, path)
 
 if __name__ == '__main__':
-    # Start WebSocket server in a separate thread
-    websocket_thread = threading.Thread(target=run_websocket_server)
-    websocket_thread.daemon = True
-    websocket_thread.start()
-
     # Start Flask server
-    app.run(host='0.0.0.0', port=5000)
+    from gevent import pywsgi
+    from geventwebsocket.handler import WebSocketHandler
+    server = pywsgi.WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
+    server.serve_forever()

@@ -1,5 +1,5 @@
 {% macro render_service(service) %}
-<div class="service-section p-6" id="service-{{ service.service_name }}" data-container-id="{{ service.container_id }}">
+<div class="service-section" id="service-{{ service.service_name }}" data-container-id="{{ service.container_id }}" data-server-name="{{ service.server_name }}">
     <!-- Service Header -->
     <div class="flex items-center justify-between mb-4">
         <div class="flex items-center">
@@ -22,17 +22,17 @@
         <!-- Action Buttons -->
         <div class="flex items-center space-x-2">
             {% if service.container_id %}
-            <button class="action-button" onclick="dockerDashboard.logs.viewLogs('{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons text-gray-500">article</span>
-                <span class="text-sm text-gray-700">Logs</span>
+            <button class="action-button" onclick="dockerDashboard.logs.viewLogs('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons">article</span>
+                <span class="text-sm">Logs</span>
             </button>
-            <button class="action-button" onclick="dockerDashboard.terminal.openTerminal('{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons text-gray-500">terminal</span>
-                <span class="text-sm text-gray-700">Terminal</span>
+            <button class="action-button" onclick="dockerDashboard.terminal.openTerminal('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons">terminal</span>
+                <span class="text-sm">Terminal</span>
             </button>
-            <button class="action-button" onclick="dockerDashboard.container.updateContainer('{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons text-gray-500">system_update</span>
-                <span class="text-sm text-gray-700">Update</span>
+            <button class="action-button" onclick="dockerDashboard.container.updateContainer('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons">system_update</span>
+                <span class="text-sm">Update</span>
             </button>
             {% endif %}
         </div>
@@ -45,11 +45,5 @@
 
     <!-- Service Details -->
     {% include 'components/service_details.html' %}
-
-    <!-- Logs Container (Hidden by default) -->
-    <div id="logs-{{ service.service_name }}" class="logs-container mt-4 hidden"></div>
-
-    <!-- Terminal Container (Hidden by default) -->
-    <div id="terminal-{{ service.service_name }}" class="terminal mt-4 hidden"></div>
 </div>
 {% endmacro %}
