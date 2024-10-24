@@ -1,5 +1,6 @@
 import os
 import yaml
+import logging
 from typing import Dict, Any, Optional, List
 from .base import setup_base_logger
 
@@ -28,7 +29,7 @@ class ConfigManager:
         # Configure root logger
         root_logger = setup_base_logger(
             'root',
-            level=getattr(setup_base_logger, log_level),
+            level=getattr(logging, log_level),
             format_str=log_format
         )
 
@@ -37,7 +38,7 @@ class ConfigManager:
             logger_level = logger_config.get('level', 'INFO').upper()
             logger = setup_base_logger(
                 logger_name,
-                level=getattr(setup_base_logger, logger_level),
+                level=getattr(logging, logger_level),
                 format_str=log_format
             )
 
