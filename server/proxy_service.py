@@ -28,12 +28,18 @@ class ProxyService:
                     upstream_match = re.search(r'proxy_pass\s+([^;]+);', content)
                     upstream = upstream_match.group(1).strip() if upstream_match else None
 
+                    # Extract SSL configuration
+                    ssl_enabled = 'ssl_certificate' in content
+                    auth_enabled = 'auth_request' in content
+
                     if domain and upstream:
                         configs.append({
                             'name': os.path.basename(conf_file),
                             'domain': domain,
                             'upstream': upstream,
-                            'enabled': not conf_file.endswith('.sample')
+                            'enabled': not conf_file.endswith('.sample'),
+                            'ssl_enabled': ssl_enabled,
+                            'auth_enabled': auth_enabled
                         })
 
         except Exception as e:
@@ -68,3 +74,44 @@ class ProxyService:
         except Exception as e:
             logger.error(f"Error disabling proxy config: {e}")
             return False
+
+    def get_proxy_status(self, config_name: str) -> Dict[str, Any]:
+        try:
+            config_path = os.path.join(self.proxy_dir, config_name)
+            sample_path = os.path.join(self.proxy_dir, f"{config_name}.sample")
+
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    content = f.read()
+                    return {
+                        'enabled': True,
+                        'ssl_enabled': 'ssl_certificate' in content,
+                        'auth_enabled': 'auth_request' in content,
+                        'last_modified': os.path.getmtime(config_path)
+                    }
+            elif os.path.exists(sample_path):
+                with open(sample_path, 'r') as f:
+                    content = f.read()
+                    return {
+                        'enabled': False,
+                        'ssl_enabled': 'ssl_certificate' in content,
+                        'auth_enabled': 'auth_request' in content,
+                        'last_modified': os.path.getmtime(sample_path)
+                    }
+            else:
+                return {
+                    'enabled': False,
+                    'ssl_enabled': False,
+                    'auth_enabled': False,
+                    'last_modified': None,
+                    'error': 'Config not found'
+                }
+        except Exception as e:
+            logger.error(f"Error getting proxy status: {e}")
+            return {
+                'enabled': False,
+                'ssl_enabled': False,
+                'auth_enabled': False,
+                'last_modified': None,
+                'error': str(e)
+            }

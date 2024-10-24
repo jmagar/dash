@@ -22,11 +22,13 @@ RUN mkdir -p logs && \
     mkdir -p static/css && \
     mkdir -p static/js/modules && \
     mkdir -p templates/components && \
+    mkdir -p server && \
     mkdir -p certs
 
 # Copy application files
 COPY app.py .
 COPY watcher.py .
+COPY server/ server/
 COPY templates/ templates/
 COPY static/ static/
 

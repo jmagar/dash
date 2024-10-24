@@ -5,6 +5,8 @@ import yaml
 import os
 import glob
 from pathlib import Path
+import subprocess
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,46 @@ class DockerService:
                 'cpu_usage': '0%',
                 'memory_usage': '0MB / 0MB',
                 'memory_percent': '0'
+            }
+
+    def get_container_logs(self, container_id: str, tail: int = 100) -> str:
+        try:
+            container = self.client.containers.get(container_id)
+            logs = container.logs(tail=tail, timestamps=True).decode('utf-8')
+            return logs
+        except Exception as e:
+            logger.error(f"Error getting container logs: {e}")
+            return f"Error getting logs: {str(e)}"
+
+    def update_container(self, container_id: str) -> bool:
+        try:
+            container = self.client.containers.get(container_id)
+            image_name = container.image.tags[0] if container.image.tags else container.image.id
+
+            # Pull latest image
+            self.client.images.pull(image_name)
+
+            # Restart container
+            container.restart()
+            logger.info(f"Container {container.name} updated successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating container: {e}")
+            return False
+
+    def execute_command(self, container_id: str, command: str) -> Dict[str, Any]:
+        try:
+            container = self.client.containers.get(container_id)
+            result = container.exec_run(command, tty=True)
+            return {
+                'exit_code': result.exit_code,
+                'output': result.output.decode('utf-8')
+            }
+        except Exception as e:
+            logger.error(f"Error executing command in container: {e}")
+            return {
+                'exit_code': -1,
+                'output': f"Error: {str(e)}"
             }
 
     def get_services(self, compose_dir: str) -> List[Dict[str, Any]]:
@@ -121,3 +163,17 @@ class DockerService:
             logger.error(f"Error getting services: {e}")
 
         return services
+
+    def get_container_terminal(self, container_id: str) -> Optional[str]:
+        try:
+            container = self.client.containers.get(container_id)
+            exec_id = container.exec_run(
+                cmd="/bin/sh",
+                tty=True,
+                stdin=True,
+                socket=True
+            ).id
+            return exec_id
+        except Exception as e:
+            logger.error(f"Error creating terminal session: {e}")
+            return None
