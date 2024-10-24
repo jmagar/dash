@@ -41,9 +41,9 @@ ENV FLASK_APP=app.py
 ENV SHELL=/bin/bash
 ENV PYTHONPATH=/app
 
-# Expose ports
-EXPOSE 5000  # HTTP
-EXPOSE 5001  # WebSocket
+# Expose HTTP and WebSocket ports
+EXPOSE 5000
+EXPOSE 5001
 
 # Run as root to ensure Docker socket access
 USER root
