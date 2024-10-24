@@ -18,9 +18,9 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL:-}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-      - GUNICORN_CMD_ARGS=--bind=0.0.0.0:5000 --worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers=3 --log-level=debug --timeout=120 --reload --capture-output --enable-stdio-inheritance
       - FLASK_ENV=development
       - FLASK_DEBUG=1
+      - LOG_LEVEL=debug
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/servers/suggested"]

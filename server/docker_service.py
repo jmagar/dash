@@ -7,7 +7,6 @@ import glob
 from pathlib import Path
 import subprocess
 import json
-from docker.transport import SSLAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +169,7 @@ class DockerService:
                             service_url = None
                             if 'labels' in service_data:
                                 for label in service_data['labels']:
-                                    if 'traefik.http.routers' in label:
+                                    if isinstance(label, str) and 'traefik.http.routers' in label:
                                         service_url = f"https://{label.split('=')[1]}"
                                         break
 
@@ -197,7 +196,7 @@ class DockerService:
                         logger.error(f"Error parsing docker-compose file {compose_file}: {e}")
                         continue
                     except Exception as e:
-                        logger.error(f"Error processing service {service_name}: {e}")
+                        logger.error(f"Error processing service: {e}")
                         continue
 
         except Exception as e:

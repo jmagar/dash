@@ -1,10 +1,9 @@
 import os
 import yaml
 from typing import Dict, Any, Optional, List
-import logging
-from pathlib import Path
+from .base import setup_base_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_base_logger(__name__)
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
@@ -19,6 +18,30 @@ class ConfigManager:
         self._config: Dict[str, Any] = {}
         self._servers: List[Dict[str, Any]] = []
         self.load_config()
+
+    def setup_logging(self) -> None:
+        """Set up logging configuration."""
+        logging_config = self.logging_config
+        log_level = logging_config.get('level', 'INFO').upper()
+        log_format = logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        # Configure root logger
+        root_logger = setup_base_logger(
+            'root',
+            level=getattr(setup_base_logger, log_level),
+            format_str=log_format
+        )
+
+        # Set level for specific loggers
+        for logger_name, logger_config in logging_config.get('loggers', {}).items():
+            logger_level = logger_config.get('level', 'INFO').upper()
+            logger = setup_base_logger(
+                logger_name,
+                level=getattr(setup_base_logger, logger_level),
+                format_str=log_format
+            )
+
+        logger.info("Logging configured successfully")
 
     def load_config(self) -> None:
         """Load and validate all configuration files."""
@@ -93,7 +116,7 @@ class ConfigManager:
 
     def _validate_server_config(self, server: Dict[str, Any]) -> None:
         """Validate individual server configuration."""
-        required_fields = ['name', 'host', 'port', 'username']
+        required_fields = ['name', 'type']
         missing_fields = [field for field in required_fields
                          if field not in server]
         if missing_fields:
@@ -101,13 +124,41 @@ class ConfigManager:
                 f"Missing required server fields: {', '.join(missing_fields)}"
             )
 
-        if not isinstance(server['port'], int):
-            raise ConfigValidationError(f"Port must be an integer for server {server['name']}")
+        if server['type'] == 'ssh':
+            ssh_fields = ['host', 'port', 'username']
+            missing_ssh_fields = [field for field in ssh_fields
+                                if field not in server]
+            if missing_ssh_fields:
+                raise ConfigValidationError(
+                    f"Missing required SSH fields: {', '.join(missing_ssh_fields)}"
+                )
 
-        if not any([server.get('password'), server.get('key_path')]):
-            raise ConfigValidationError(
-                f"Either password or key_path must be provided for server {server['name']}"
-            )
+            if not isinstance(server['port'], int):
+                raise ConfigValidationError(f"Port must be an integer for server {server['name']}")
+
+            if not any([server.get('password'), server.get('key_path')]):
+                raise ConfigValidationError(
+                    f"Either password or key_path must be provided for server {server['name']}"
+                )
+
+        elif server['type'] == 'docker_socket':
+            if 'socket_path' not in server:
+                server['socket_path'] = '/var/run/docker.sock'
+
+        elif server['type'] == 'docker_remote':
+            if 'docker_host' not in server:
+                raise ConfigValidationError(
+                    f"Docker host is required for remote connection {server['name']}"
+                )
+
+            if server.get('use_tls'):
+                tls_fields = ['cert_path', 'key_path', 'ca_path']
+                missing_tls_fields = [field for field in tls_fields
+                                    if field not in server]
+                if missing_tls_fields:
+                    raise ConfigValidationError(
+                        f"Missing required TLS fields: {', '.join(missing_tls_fields)}"
+                    )
 
     @property
     def python_config(self) -> Dict[str, Any]:
