@@ -1,23 +1,12 @@
 from dotenv import load_dotenv
 import os
-import requests
 from flask import Flask, render_template, jsonify, Response, request, send_from_directory
 import logging
 from logging.handlers import RotatingFileHandler
-import yaml
-import glob
-from functools import wraps
-import docker
-import json
-import subprocess
 from pathlib import Path
-import re
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-import websockets
-import asyncio
-import threading
-from concurrent.futures import ThreadPoolExecutor
+from server.docker_service import DockerService
+from server.notification_service import NotificationService
+from server.proxy_service import ProxyService
 
 # Create necessary directories
 Path('logs').mkdir(exist_ok=True)
@@ -57,12 +46,58 @@ app = Flask(__name__,
     static_folder='static'
 )
 
+# Initialize services
+docker_service = DockerService()
+notification_service = NotificationService()
+proxy_service = ProxyService()
+
 # Enable CORS for WebSocket connections
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
     return response
 
-# Previous app.py content remains unchanged after this point
+def get_compose_dir() -> str:
+    return os.getenv('COMPOSE_DIR', '/mnt/user/compose')
+
+def get_proxy_dir() -> str:
+    return os.getenv('PROXY_DIR', '/mnt/user/appdata/swag/nginx/proxy-confs')
+
+@app.route('/')
+def index():
+    services = docker_service.get_services(get_compose_dir())
+    return render_template('index.html', services=services)
+
+@app.route('/container/<container_id>/status')
+def container_status(container_id):
+    return jsonify(docker_service.get_container_status(container_id))
+
+@app.route('/container/<container_id>/logs')
+def container_logs(container_id):
+    try:
+        container = docker_service.client.containers.get(container_id)
+        logs = container.logs(tail=100).decode('utf-8')
+        return jsonify({'logs': logs})
+    except Exception as e:
+        logger.error(f"Error getting container logs: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/container/<container_id>/update', methods=['POST'])
+def update_container(container_id):
+    try:
+        container = docker_service.client.containers.get(container_id)
+        container.restart()
+        notification_service.send_notification(f"Container {container.name} updated")
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error updating container: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

@@ -1,178 +1,123 @@
 import docker
-from typing import Dict, Optional
-from .config import logger
+import logging
+from typing import Dict, List, Optional, Any
+import yaml
+import os
+import glob
+from pathlib import Path
 
-# Store Docker clients
-docker_clients: Dict[str, docker.DockerClient] = {
-    'local': docker.from_env()
-}
-
-# Store active Docker client
-active_client = 'local'
+logger = logging.getLogger(__name__)
 
 class DockerService:
-    @staticmethod
-    def get_container_status(container_id: str) -> dict:
-        """Get detailed container status"""
+    def __init__(self):
         try:
-            container = docker_clients[active_client].containers.get(container_id)
-            logger.debug(f"Retrieved container {container_id}")
+            self.client = docker.from_env()
+            logger.info("Docker client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker client: {e}")
+            raise
 
-            state = container.attrs['State']
+    def get_container_status(self, container_id: str) -> Dict[str, Any]:
+        try:
+            container = self.client.containers.get(container_id)
             stats = container.stats(stream=False)
 
-            # Calculate CPU usage
-            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
-                       stats['precpu_stats']['cpu_usage']['total_usage']
-            system_delta = stats['cpu_stats']['system_cpu_usage'] - \
-                          stats['precpu_stats']['system_cpu_usage']
-            cpu_percent = (cpu_delta / system_delta) * 100.0 if system_delta > 0 else 0.0
+            # Calculate CPU usage percentage
+            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+            system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+            cpu_usage = (cpu_delta / system_delta) * 100 * len(stats['cpu_stats']['cpu_usage']['percpu_usage'])
 
             # Calculate memory usage
-            mem_usage = stats['memory_stats'].get('usage', 0)
-            mem_limit = stats['memory_stats'].get('limit', 1)
-            mem_percent = (mem_usage / mem_limit) * 100.0
+            memory_usage = stats['memory_stats']['usage']
+            memory_limit = stats['memory_stats']['limit']
+            memory_percent = (memory_usage / memory_limit) * 100
 
             return {
-                'status': state['Status'],
-                'running': state['Running'],
-                'started_at': state['StartedAt'],
-                'health': state.get('Health', {}).get('Status', 'none'),
+                'running': container.status == 'running',
+                'status': container.status,
+                'health': container.attrs['State'].get('Health', {}).get('Status', 'N/A'),
                 'restarts': container.attrs['RestartCount'],
-                'cpu_usage': f"{cpu_percent:.1f}%",
-                'memory_usage': f"{mem_usage / (1024*1024):.1f}MB / {mem_limit / (1024*1024):.1f}MB",
-                'memory_percent': f"{mem_percent:.1f}%"
+                'cpu_usage': f"{cpu_usage:.1f}%",
+                'memory_usage': f"{memory_usage / (1024*1024):.1f}MB / {memory_limit / (1024*1024):.1f}MB",
+                'memory_percent': f"{memory_percent:.1f}"
             }
         except Exception as e:
-            logger.error(f"Error getting container status for {container_id}: {e}")
+            logger.error(f"Error getting container status: {e}")
             return {
-                'status': 'error',
                 'running': False,
-                'error': str(e)
+                'status': 'error',
+                'health': 'error',
+                'restarts': 0,
+                'cpu_usage': '0%',
+                'memory_usage': '0MB / 0MB',
+                'memory_percent': '0'
             }
 
-    @staticmethod
-    def get_container_logs(container_id: str, lines: int = 100) -> str:
-        """Get container logs"""
+    def get_services(self, compose_dir: str) -> List[Dict[str, Any]]:
+        services = []
         try:
-            container = docker_clients[active_client].containers.get(container_id)
-            return container.logs(tail=lines).decode('utf-8')
-        except Exception as e:
-            logger.error(f"Error getting container logs for {container_id}: {e}")
-            return f"Error retrieving logs: {str(e)}"
+            # Get all docker-compose files
+            compose_files = glob.glob(os.path.join(compose_dir, '**/docker-compose.yml'), recursive=True)
 
-    @staticmethod
-    def update_container(container_id: str) -> dict:
-        """Update a container (pull new image and recreate)"""
-        try:
-            container = docker_clients[active_client].containers.get(container_id)
-            image_tag = container.image.tags[0]
-
-            # Pull new image
-            docker_clients[active_client].images.pull(image_tag)
-            logger.info(f"Pulled new image for {container_id}")
-
-            # Stop and remove container
-            container.stop()
-            container.remove()
-            logger.info(f"Stopped and removed container {container_id}")
-
-            # Container will be recreated by docker-compose
-            return {"status": "success", "message": "Container updated successfully"}
-        except Exception as e:
-            logger.error(f"Error updating container {container_id}: {e}")
-            return {"status": "error", "message": str(e)}
-
-    @staticmethod
-    async def attach_terminal(websocket, container_id: str):
-        """Attach to container's terminal"""
-        try:
-            container = docker_clients[active_client].containers.get(container_id)
-
-            # Try to detect the available shell
-            shells = ['/bin/bash', '/bin/ash', '/bin/sh']
-            shell_cmd = None
-
-            for shell in shells:
-                try:
-                    result = container.exec_run(f'which {shell}')
-                    if result.exit_code == 0:
-                        shell_cmd = shell
-                        break
-                except:
-                    continue
-
-            if not shell_cmd:
-                shell_cmd = '/bin/sh'  # Fallback to sh
-
-            # Create exec instance with detected shell
-            exec_id = container.exec_run(
-                cmd=shell_cmd,
-                stdin=True,
-                tty=True,
-                privileged=True,
-                user='root',  # Use root to ensure access
-                socket=True
-            )
-
-            socket = exec_id.output
-
-            async def reader():
-                while True:
+            for compose_file in compose_files:
+                with open(compose_file, 'r') as f:
+                    compose_content = f.read()
                     try:
-                        data = await socket.recv()
-                        if not data:
-                            break
-                        await websocket.send(data.decode())
-                    except Exception as e:
-                        logger.error(f"Error in terminal reader: {e}")
-                        break
+                        compose_data = yaml.safe_load(compose_content)
+                        if not compose_data or 'services' not in compose_data:
+                            continue
 
-            async def writer():
-                while True:
-                    try:
-                        data = await websocket.recv()
-                        if not data:
-                            break
-                        socket.send(data.encode())
-                    except Exception as e:
-                        logger.error(f"Error in terminal writer: {e}")
-                        break
+                        stack_name = os.path.basename(os.path.dirname(compose_file))
+                        stack_services = []
 
-            await asyncio.gather(reader(), writer())
+                        for service_name, service_data in compose_data['services'].items():
+                            # Find container ID for this service
+                            container_id = None
+                            try:
+                                containers = self.client.containers.list(
+                                    all=True,
+                                    filters={'name': f'{stack_name}_{service_name}'}
+                                )
+                                if containers:
+                                    container_id = containers[0].id
+                            except Exception as e:
+                                logger.error(f"Error finding container for service {service_name}: {e}")
+
+                            # Get service URL from labels or environment
+                            service_url = None
+                            if 'labels' in service_data:
+                                for label in service_data['labels']:
+                                    if 'traefik.http.routers' in label:
+                                        service_url = f"https://{label.split('=')[1]}"
+                                        break
+
+                            service_info = {
+                                'service_name': service_name,
+                                'container_id': container_id,
+                                'service_url': service_url,
+                                'compose_file': compose_file,
+                                'compose_content': compose_content,
+                                'ports': service_data.get('ports', []),
+                                'volumes': service_data.get('volumes', []),
+                                'environment': service_data.get('environment', {}),
+                                'networks': list(service_data.get('networks', {}).keys()),
+                                'status': self.get_container_status(container_id) if container_id else None
+                            }
+                            stack_services.append(service_info)
+
+                        services.append({
+                            'stack_name': stack_name,
+                            'compose_file': compose_file,
+                            'services': stack_services
+                        })
+                    except yaml.YAMLError as e:
+                        logger.error(f"Error parsing docker-compose file {compose_file}: {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Error processing service {service_name}: {e}")
+                        continue
 
         except Exception as e:
-            logger.error(f"Error attaching to terminal for {container_id}: {e}")
-            await websocket.send(f"Error: {str(e)}\n")
-        finally:
-            try:
-                await websocket.close()
-            except:
-                pass
+            logger.error(f"Error getting services: {e}")
 
-    @staticmethod
-    def add_host(name: str, url: str, cert_path: Optional[str] = None) -> None:
-        """Add a new Docker host"""
-        client = docker.DockerClient(
-            base_url=url,
-            tls=cert_path
-        )
-        docker_clients[name] = client
-
-    @staticmethod
-    def switch_host(host: str) -> None:
-        """Switch active Docker host"""
-        if host not in docker_clients:
-            raise ValueError(f"Host {host} not found")
-        global active_client
-        active_client = host
-
-    @staticmethod
-    def test_connection(url: str, cert_path: Optional[str] = None) -> None:
-        """Test connection to Docker host"""
-        client = docker.DockerClient(
-            base_url=url,
-            tls=cert_path
-        )
-        # Test connection by listing containers
-        client.containers.list()
+        return services
