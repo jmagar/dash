@@ -9,17 +9,26 @@ services:
     ports:
       - "5932:5000"  # HTTP port
     volumes:
-      - ${COMPOSE_DIR:-/mnt/user/compose}:/mnt/user/compose:ro
-      - ${PROXY_DIR:-/mnt/user/appdata/swag/nginx/proxy-confs}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
+      # Example volume mappings:
+      # - /mnt/user/compose:/compose:ro            # Directory containing docker-compose files
+      # - /mnt/user/appdata/swag/proxy-confs:/proxy-conf:ro  # Nginx proxy configs
+      # - ./logs:/app/logs                         # Local logs directory
+      # - ./config:/app/config                     # Local config directory
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs:/app/logs
-      - ./config:/app/config
     environment:
-      - COMPOSE_DIR=/mnt/user/compose
-      - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
-      - GOTIFY_URL=${GOTIFY_URL:-}
-      - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-      - LOG_LEVEL=debug
+      # Example values:
+      # LOG_LEVEL: debug
+      # GOTIFY_URL: https://gotify.example.com
+      # GOTIFY_TOKEN: abcdef12345
+      # GITHUB_USERNAME: your-github-username
+      # GITHUB_TOKEN: ghp_123abc456def
+      # GITHUB_REPO: your-username/your-repo
+      - LOG_LEVEL
+      - GOTIFY_URL
+      - GOTIFY_TOKEN
+      - GITHUB_USERNAME
+      - GITHUB_TOKEN
+      - GITHUB_REPO
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/servers/suggested"]
@@ -27,32 +36,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  watcher:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: service-watcher
-    command: python watcher.py
-    volumes:
-      - ${COMPOSE_DIR:-/mnt/user/compose}:/mnt/user/compose:ro
-      - ${PROXY_DIR:-/mnt/user/appdata/swag/nginx/proxy-confs}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs:/app/logs
-      - ./config:/app/config
-    environment:
-      - COMPOSE_DIR=/mnt/user/compose
-      - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
-      - GOTIFY_URL=${GOTIFY_URL:-}
-      - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-    restart: unless-stopped
-    depends_on:
-      - dashboard
     logging:
       driver: "json-file"
       options:

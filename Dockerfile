@@ -12,10 +12,20 @@ RUN apt-get update && \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create necessary directories with proper permissions
-RUN mkdir -p logs static/css static/js/modules templates/components config && \
-    chmod -R 777 logs && \
-    chmod -R 755 config
+# Create required directories
+RUN mkdir -p \
+    /app/logs \
+    /app/config \
+    /compose \
+    /proxy-conf \
+    /app/run
+
+# Create log files
+RUN touch \
+    /app/logs/supervisord.log \
+    /app/logs/gunicorn.log \
+    /app/logs/watcher.log \
+    /app/run/supervisor.sock
 
 # Copy requirements first for better caching
 COPY requirements.txt .
@@ -25,17 +35,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Set proper permissions
-RUN chown -R nobody:users /app && \
-    chmod -R 755 . && \
-    chmod -R 777 logs && \
-    chmod -R 755 config && \
-    chmod 777 /app && \
-    mkdir -p /var/log/supervisor && \
-    chown -R nobody:users /var/log/supervisor && \
-    chmod -R 777 /var/log/supervisor
+RUN chown -R nobody:users \
+        /app \
+        /compose \
+        /proxy-conf && \
+    chmod -R 755 /app && \
+    chmod -R 777 /app/logs && \
+    chmod -R 777 /app/run && \
+    chmod 755 /app/config && \
+    chmod 755 /compose && \
+    chmod 755 /proxy-conf
 
 USER nobody
 
 EXPOSE 5000
 
-CMD ["supervisord", "-c", "/app/supervisord.conf"]
+CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
