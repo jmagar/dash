@@ -11,6 +11,7 @@ services:
     volumes:
       - ${COMPOSE_DIR:-/mnt/user/compose}:/mnt/user/compose:ro
       - ${PROXY_DIR:-/mnt/user/appdata/swag/nginx/proxy-confs}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./logs:/app/logs
       - ./config:/app/config
     environment:
@@ -18,8 +19,6 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL:-}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
       - LOG_LEVEL=debug
     restart: unless-stopped
     healthcheck:
@@ -43,6 +42,7 @@ services:
     volumes:
       - ${COMPOSE_DIR:-/mnt/user/compose}:/mnt/user/compose:ro
       - ${PROXY_DIR:-/mnt/user/appdata/swag/nginx/proxy-confs}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./logs:/app/logs
       - ./config:/app/config
     environment:

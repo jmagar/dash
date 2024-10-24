@@ -1,7 +1,5 @@
 # Python settings
 python:
-  path: /app
-  unbuffered: 1
   debug: true
   environment: development
 
@@ -25,17 +23,26 @@ server:
   host: 0.0.0.0
   port: 5000
   debug: true
+  environment: development
 
 # Logging settings
-logging:
-  level: DEBUG
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  handlers:
-    - stdout
+log_level: DEBUG
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-# Directory paths
-directories:
-  compose: /mnt/user/compose
-  proxy: /mnt/user/appdata/swag/nginx/proxy-confs
-  logs: /app/logs
-  config: /app/config
+# Docker settings
+docker_socket: /var/run/docker.sock
+
+# Notification settings
+# gotify_url: https://gotify.example.com
+# gotify_token: abcdef12345
+# gotify_priority: 5
+# gotify_retry: 60
+# gotify_expire: 3600
+
+# Backup settings
+# github_username: your-github-username
+# github_token: ghp_123abc456def
+# github_repo: your-username/your-repo
+# github_branch: main
+# github_path: /backup
+# github_interval: 3600  # backup interval in seconds

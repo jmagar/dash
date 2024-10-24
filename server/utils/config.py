@@ -23,8 +23,8 @@ class ConfigManager:
     def setup_logging(self) -> None:
         """Set up logging configuration."""
         logging_config = self.logging_config
-        log_level = logging_config.get('level', 'INFO').upper()
-        log_format = logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_level = os.getenv('LOG_LEVEL', logging_config.get('level', 'INFO')).upper()
+        log_format = os.getenv('LOG_FORMAT', logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
         # Configure root logger
         root_logger = setup_base_logger(
@@ -35,7 +35,7 @@ class ConfigManager:
 
         # Set level for specific loggers
         for logger_name, logger_config in logging_config.get('loggers', {}).items():
-            logger_level = logger_config.get('level', 'INFO').upper()
+            logger_level = os.getenv(f'LOG_LEVEL_{logger_name.upper()}', logger_config.get('level', 'INFO')).upper()
             logger = setup_base_logger(
                 logger_name,
                 level=getattr(logging, logger_level),
@@ -63,11 +63,74 @@ class ConfigManager:
                 with open(servers_path, 'r') as f:
                     self._servers = yaml.safe_load(f) or []
 
+            # Override with environment variables
+            self._override_with_env()
+
             logger.info("Configuration loaded successfully")
 
         except Exception as e:
             logger.error(f"Failed to load configuration: {e}")
             raise
+
+    def _override_with_env(self) -> None:
+        """Override configuration values with environment variables."""
+        # Server settings
+        if 'FLASK_ENV' in os.environ:
+            self._config['server']['environment'] = os.environ['FLASK_ENV']
+        if 'FLASK_DEBUG' in os.environ:
+            self._config['server']['debug'] = os.environ['FLASK_DEBUG'].lower() == 'true'
+        if 'SERVER_HOST' in os.environ:
+            self._config['server']['host'] = os.environ['SERVER_HOST']
+        if 'SERVER_PORT' in os.environ:
+            self._config['server']['port'] = int(os.environ['SERVER_PORT'])
+
+        # Python settings
+        if 'PYTHONPATH' in os.environ:
+            self._config['python']['path'] = os.environ['PYTHONPATH']
+        if 'PYTHONUNBUFFERED' in os.environ:
+            self._config['python']['unbuffered'] = os.environ['PYTHONUNBUFFERED']
+        if 'PYTHON_DEBUG' in os.environ:
+            self._config['python']['debug'] = os.environ['PYTHON_DEBUG'].lower() == 'true'
+
+        # Gunicorn settings
+        if 'GUNICORN_BIND' in os.environ:
+            self._config['gunicorn']['bind'] = os.environ['GUNICORN_BIND']
+        if 'GUNICORN_WORKERS' in os.environ:
+            self._config['gunicorn']['workers'] = int(os.environ['GUNICORN_WORKERS'])
+        if 'GUNICORN_WORKER_CLASS' in os.environ:
+            self._config['gunicorn']['worker_class'] = os.environ['GUNICORN_WORKER_CLASS']
+        if 'GUNICORN_TIMEOUT' in os.environ:
+            self._config['gunicorn']['timeout'] = int(os.environ['GUNICORN_TIMEOUT'])
+        if 'GUNICORN_RELOAD' in os.environ:
+            self._config['gunicorn']['reload'] = os.environ['GUNICORN_RELOAD'].lower() == 'true'
+        if 'GUNICORN_LOG_LEVEL' in os.environ:
+            self._config['gunicorn']['log_level'] = os.environ['GUNICORN_LOG_LEVEL']
+
+        # Directory paths
+        if 'COMPOSE_DIR' in os.environ:
+            self._config['directories']['compose'] = os.environ['COMPOSE_DIR']
+        if 'PROXY_DIR' in os.environ:
+            self._config['directories']['proxy'] = os.environ['PROXY_DIR']
+        if 'LOGS_DIR' in os.environ:
+            self._config['directories']['logs'] = os.environ['LOGS_DIR']
+        if 'CONFIG_DIR' in os.environ:
+            self._config['directories']['config'] = os.environ['CONFIG_DIR']
+
+        # Docker settings
+        if 'DOCKER_SOCKET' in os.environ:
+            self._config['docker']['socket_path'] = os.environ['DOCKER_SOCKET']
+        if 'DOCKER_HOST' in os.environ:
+            self._config['docker']['host'] = os.environ['DOCKER_HOST']
+        if 'DOCKER_TLS_VERIFY' in os.environ:
+            self._config['docker']['tls_verify'] = os.environ['DOCKER_TLS_VERIFY'].lower() == 'true'
+        if 'DOCKER_CERT_PATH' in os.environ:
+            self._config['docker']['cert_path'] = os.environ['DOCKER_CERT_PATH']
+
+        # Notification settings
+        if 'GOTIFY_URL' in os.environ:
+            self._config.setdefault('notifications', {})['gotify_url'] = os.environ['GOTIFY_URL']
+        if 'GOTIFY_TOKEN' in os.environ:
+            self._config.setdefault('notifications', {})['gotify_token'] = os.environ['GOTIFY_TOKEN']
 
     def _validate_config(self) -> None:
         """Validate configuration structure and required fields."""
@@ -185,6 +248,16 @@ class ConfigManager:
     def directory_paths(self) -> Dict[str, str]:
         """Get directory paths."""
         return self._config.get('directories', {})
+
+    @property
+    def docker_config(self) -> Dict[str, Any]:
+        """Get Docker configuration."""
+        return self._config.get('docker', {})
+
+    @property
+    def notification_config(self) -> Dict[str, Any]:
+        """Get notification configuration."""
+        return self._config.get('notifications', {})
 
     @property
     def servers(self) -> List[Dict[str, Any]]:

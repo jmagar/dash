@@ -24,17 +24,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
-# Remove any existing servers.json
-RUN rm -f /app/config/servers.json
-
 # Set proper permissions
-RUN chown -R nobody:nogroup /app && \
+RUN chown -R nobody:users /app && \
     chmod -R 755 . && \
     chmod -R 777 logs && \
-    chmod -R 755 config
+    chmod -R 755 config && \
+    chmod 777 /app && \
+    mkdir -p /var/log/supervisor && \
+    chown -R nobody:users /var/log/supervisor && \
+    chmod -R 777 /var/log/supervisor
 
 USER nobody
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "wsgi:app"]
+CMD ["supervisord", "-c", "/app/supervisord.conf"]
