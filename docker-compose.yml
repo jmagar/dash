@@ -18,14 +18,12 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL:-}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
+      - GUNICORN_CMD_ARGS=--bind=0.0.0.0:5000 --worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers=3 --log-level=debug --timeout=120 --reload --capture-output --enable-stdio-inheritance
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - GUNICORN_CMD_ARGS="--reload --worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers=3 --log-level=debug --timeout=120 --capture-output --enable-stdio-inheritance"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/servers/suggested"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -52,8 +50,6 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL:-}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     depends_on:
       - dashboard

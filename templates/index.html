@@ -3,59 +3,172 @@
 <head>
     {% include 'components/head.html' %}
 </head>
-<body class="bg-gray-100">
+<body>
     {% include 'components/navbar.html' %}
 
-    <div class="container mx-auto px-4 py-8">
-        <!-- Server Management -->
-        <div class="mb-8">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-bold">Servers</h2>
-                <button onclick="dockerDashboard.servers.openServerModal()" class="btn btn-primary">
-                    <span class="material-icons">add</span>
-                    Add Server
-                </button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for server in servers %}
-                <div class="bg-white rounded-lg shadow p-4">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-lg font-semibold">{{ server.name }}</h3>
-                        <button onclick="dockerDashboard.servers.removeServer('{{ server.name }}')" class="text-red-500 hover:text-red-700">
-                            <span class="material-icons">delete</span>
-                        </button>
-                    </div>
-                    <p class="text-gray-600">{{ server.host }}:{{ server.port }}</p>
-                    <p class="text-gray-600">{{ server.username }}</p>
-                </div>
-                {% endfor %}
+    <div class="container-fluid mt-4">
+        <!-- Connections List -->
+        <div class="connections-wrapper">
+            <div class="connections-list" id="connections-list">
+                <!-- Connection items will be dynamically added here -->
             </div>
         </div>
 
-        <!-- Services -->
-        <div class="grid grid-cols-1 gap-6">
-            {% for stack in services %}
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-2xl font-bold">{{ stack.stack_name }}</h2>
-                    <button onclick="dockerDashboard.compose.viewCompose('{{ stack.compose_file }}', '{{ stack.stack_name }}', `{{ stack.services[0].compose_content }}`)" class="text-blue-600 hover:text-blue-800">
-                        <span class="material-icons">description</span>
-                        View Compose
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 gap-4">
-                    {% for service in stack.services %}
-                    {{ service_card.render_service(service) }}
-                    {% endfor %}
+        <!-- Services Grid -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">Services</h5>
+                        <div>
+                            <button class="btn btn-primary" onclick="showAddServerModal()">
+                                <i class="fas fa-plus"></i> Add Connection
+                            </button>
+                            <button class="btn btn-secondary" onclick="refreshServices()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="services-container" class="row">
+                            <!-- Service cards will be dynamically added here -->
+                        </div>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
         </div>
     </div>
 
+    <!-- Modals -->
     {% include 'components/modals.html' %}
-    {% include 'components/server_modal.html' %}
 
-    <script type="module" src="{{ url_for('static', filename='js/loader.js') }}"></script>
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js"></script>
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js"></script>
+    <script src="/static/js/loader.js"></script>
+    <script src="/static/js/modules/websocket.js"></script>
+    <script src="/static/js/modules/servers.js"></script>
+    <script src="/static/js/modules/containers.js"></script>
+    <script src="/static/js/modules/terminal.js"></script>
+    <script src="/static/js/modules/compose.js"></script>
+    <script src="/static/js/modules/logs.js"></script>
+    <script src="/static/js/app.js"></script>
+
+    <script>
+        let activeConnection = null;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeWebSocket();
+            loadConnections();
+        });
+
+        function loadConnections() {
+            fetch('/servers/suggested')
+                .then(response => response.json())
+                .then(data => {
+                    const connectionsList = document.getElementById('connections-list');
+                    connectionsList.innerHTML = '';
+
+                    if (data.data.servers) {
+                        data.data.servers.forEach(server => {
+                            const connectionItem = createConnectionItem(server);
+                            connectionsList.appendChild(connectionItem);
+                        });
+
+                        // If no active connection, select the first one
+                        if (!activeConnection && data.data.servers.length > 0) {
+                            selectConnection(data.data.servers[0].name);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading connections:', error);
+                    showError('Failed to load connections');
+                });
+        }
+
+        function createConnectionItem(server) {
+            const item = document.createElement('div');
+            item.className = `connection-item ${server.type} ${server.name === activeConnection ? 'active' : ''}`;
+            item.onclick = () => selectConnection(server.name);
+
+            // Choose icon based on connection type
+            let icon = '';
+            switch (server.type) {
+                case 'ssh':
+                    icon = 'fas fa-terminal';
+                    break;
+                case 'docker_socket':
+                case 'docker_remote':
+                    icon = 'fab fa-docker';
+                    break;
+                default:
+                    icon = 'fas fa-server';
+            }
+
+            item.innerHTML = `
+                <i class="${icon}"></i>
+                ${server.name}
+            `;
+
+            return item;
+        }
+
+        function selectConnection(connectionName) {
+            activeConnection = connectionName;
+
+            // Update connection list UI
+            document.querySelectorAll('.connection-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.textContent.trim() === connectionName) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Load services for selected connection
+            loadServices(connectionName);
+        }
+
+        function loadServices(connectionName) {
+            fetch('/servers/suggested')
+                .then(response => response.json())
+                .then(data => {
+                    const servicesContainer = document.getElementById('services-container');
+                    servicesContainer.innerHTML = '';
+
+                    if (data.data.servers) {
+                        const server = data.data.servers.find(s => s.name === connectionName);
+                        if (server && server.services) {
+                            server.services.forEach(stack => {
+                                stack.services.forEach(service => {
+                                    const serviceCard = createServiceCard(server.name, stack, service);
+                                    servicesContainer.appendChild(serviceCard);
+                                });
+                            });
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading services:', error);
+                    showError('Failed to load services');
+                });
+        }
+
+        function refreshServices() {
+            if (activeConnection) {
+                loadServices(activeConnection);
+            } else {
+                loadConnections();
+            }
+        }
+
+        function showError(message) {
+            // Implement error notification
+            console.error(message);
+        }
+    </script>
 </body>
 </html>

@@ -7,6 +7,7 @@ import glob
 from pathlib import Path
 import subprocess
 import json
+from docker.transport import SSLAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,46 @@ class DockerService:
         except Exception as e:
             logger.error(f"Failed to initialize Docker client: {e}")
             raise
+
+    def get_socket_services(self, socket_path: str) -> List[Dict[str, Any]]:
+        """Get services using Unix socket connection."""
+        try:
+            client = docker.DockerClient(base_url=f"unix://{socket_path}")
+            return self.get_services(os.path.dirname(socket_path))
+        except Exception as e:
+            logger.error(f"Error connecting to Docker socket {socket_path}: {e}")
+            return []
+
+    def get_remote_services(
+        self,
+        docker_host: str,
+        use_tls: bool = False,
+        cert_path: Optional[str] = None,
+        key_path: Optional[str] = None,
+        ca_path: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get services using remote Docker connection."""
+        try:
+            tls_config = None
+            if use_tls:
+                if not all([cert_path, key_path, ca_path]):
+                    raise ValueError("All TLS paths must be provided when TLS is enabled")
+                tls_config = docker.tls.TLSConfig(
+                    client_cert=(cert_path, key_path),
+                    ca_cert=ca_path,
+                    verify=True
+                )
+
+            client = docker.DockerClient(
+                base_url=docker_host,
+                tls=tls_config
+            )
+            # Use the base directory of the host URL for compose file searching
+            compose_dir = '/'  # Default to root, can be configured if needed
+            return self.get_services(compose_dir)
+        except Exception as e:
+            logger.error(f"Error connecting to remote Docker host {docker_host}: {e}")
+            return []
 
     def get_container_status(self, container_id: str) -> Dict[str, Any]:
         try:

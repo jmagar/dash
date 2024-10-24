@@ -1,50 +1,279 @@
-<div id="server-modal" class="modal hidden">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="server-modal-title">Add Server</h2>
-            <button onclick="dockerDashboard.servers.closeServerModal()" class="modal-close">
-                <span class="material-icons">close</span>
-            </button>
-        </div>
-        <div class="modal-body">
-            <form id="server-form" onsubmit="dockerDashboard.servers.submitServer(event)">
-                <div class="form-group">
-                    <label for="server-name">Server Name</label>
-                    <input type="text" id="server-name" name="name" required>
-                </div>
-                <div class="form-group">
-                    <label for="server-host">Host</label>
-                    <input type="text" id="server-host" name="host" required>
-                </div>
-                <div class="form-group">
-                    <label for="server-port">Port</label>
-                    <input type="number" id="server-port" name="port" value="22" required>
-                </div>
-                <div class="form-group">
-                    <label for="server-username">Username</label>
-                    <input type="text" id="server-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label>Authentication Method</label>
-                    <div class="radio-group">
-                        <input type="radio" id="auth-password" name="auth-method" value="password" checked>
-                        <label for="auth-password">Password</label>
-                        <input type="radio" id="auth-key" name="auth-method" value="key">
-                        <label for="auth-key">SSH Key</label>
+<div class="modal fade" id="serverModal" tabindex="-1" aria-labelledby="serverModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="serverModalLabel">Add Connection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="serverForm">
+                    <!-- Connection Type -->
+                    <div class="mb-3">
+                        <label for="connectionType" class="form-label">Connection Type</label>
+                        <select class="form-select" id="connectionType" name="type" onchange="toggleConnectionFields()">
+                            <option value="ssh">SSH Connection</option>
+                            <option value="docker_socket">Docker Socket</option>
+                            <option value="docker_remote">Docker Remote</option>
+                        </select>
                     </div>
-                </div>
-                <div id="password-group" class="form-group">
-                    <label for="server-password">Password</label>
-                    <input type="password" id="server-password" name="password">
-                </div>
-                <div id="key-group" class="form-group hidden">
-                    <label for="server-key">SSH Key Path</label>
-                    <input type="text" id="server-key" name="key_path">
-                </div>
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary">Add Server</button>
-                </div>
-            </form>
+
+                    <!-- Connection Name -->
+                    <div class="mb-3">
+                        <label for="serverName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="serverName" name="name" required>
+                    </div>
+
+                    <!-- SSH Connection Fields -->
+                    <div id="sshFields">
+                        <div class="mb-3">
+                            <label for="serverHost" class="form-label">Host</label>
+                            <input type="text" class="form-control" id="serverHost" name="host">
+                        </div>
+                        <div class="mb-3">
+                            <label for="serverPort" class="form-label">Port</label>
+                            <input type="number" class="form-control" id="serverPort" name="port" value="22">
+                        </div>
+                        <div class="mb-3">
+                            <label for="serverUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="serverUsername" name="username">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Authentication Method</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="auth_type" id="authPassword" value="password" checked>
+                                <label class="form-check-label" for="authPassword">
+                                    Password
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="auth_type" id="authKey" value="key">
+                                <label class="form-check-label" for="authKey">
+                                    SSH Key
+                                </label>
+                            </div>
+                        </div>
+                        <div id="passwordSection" class="mb-3">
+                            <label for="serverPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="serverPassword" name="password">
+                        </div>
+                        <div id="keySection" class="mb-3 d-none">
+                            <label for="sshKey" class="form-label">SSH Key</label>
+                            <textarea class="form-control" id="sshKey" name="ssh_key" rows="5" placeholder="Paste your private SSH key here"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Docker Socket Fields -->
+                    <div id="dockerSocketFields" class="d-none">
+                        <div class="mb-3">
+                            <label for="socketPath" class="form-label">Socket Path</label>
+                            <input type="text" class="form-control" id="socketPath" name="socket_path" value="/var/run/docker.sock">
+                        </div>
+                    </div>
+
+                    <!-- Docker Remote Fields -->
+                    <div id="dockerRemoteFields" class="d-none">
+                        <div class="mb-3">
+                            <label for="dockerHost" class="form-label">Docker Host</label>
+                            <input type="text" class="form-control" id="dockerHost" name="docker_host" placeholder="tcp://hostname:2375">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="useTLS" name="use_tls" onchange="toggleTLSFields()">
+                                <label class="form-check-label" for="useTLS">
+                                    Use TLS
+                                </label>
+                            </div>
+                        </div>
+                        <div id="tlsFields" class="d-none">
+                            <div class="mb-3">
+                                <label for="certPath" class="form-label">Certificate Path</label>
+                                <input type="text" class="form-control" id="certPath" name="cert_path">
+                            </div>
+                            <div class="mb-3">
+                                <label for="keyPath" class="form-label">Key Path</label>
+                                <input type="text" class="form-control" id="keyPath" name="key_path">
+                            </div>
+                            <div class="mb-3">
+                                <label for="caPath" class="form-label">CA Path</label>
+                                <input type="text" class="form-control" id="caPath" name="ca_path">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveConnection()">Save</button>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+let editingConnection = null;
+
+function showAddServerModal() {
+    editingConnection = null;
+    document.getElementById('serverModalLabel').textContent = 'Add Connection';
+    document.getElementById('serverForm').reset();
+    toggleConnectionFields();
+    const modal = new bootstrap.Modal(document.getElementById('serverModal'));
+    modal.show();
+}
+
+function showEditServerModal(connection) {
+    editingConnection = connection;
+    document.getElementById('serverModalLabel').textContent = 'Edit Connection';
+
+    const form = document.getElementById('serverForm');
+    form.reset();
+
+    // Set connection type and name
+    document.getElementById('connectionType').value = connection.type;
+    document.getElementById('serverName').value = connection.name;
+
+    // Fill form based on connection type
+    if (connection.type === 'ssh') {
+        document.getElementById('serverHost').value = connection.host;
+        document.getElementById('serverPort').value = connection.port;
+        document.getElementById('serverUsername').value = connection.username;
+
+        if (connection.ssh_key) {
+            document.getElementById('authKey').checked = true;
+            document.getElementById('sshKey').value = connection.ssh_key;
+        } else {
+            document.getElementById('authPassword').checked = true;
+            document.getElementById('serverPassword').value = connection.password || '';
+        }
+    } else if (connection.type === 'docker_socket') {
+        document.getElementById('socketPath').value = connection.socket_path;
+    } else if (connection.type === 'docker_remote') {
+        document.getElementById('dockerHost').value = connection.docker_host;
+        document.getElementById('useTLS').checked = connection.use_tls;
+        if (connection.use_tls) {
+            document.getElementById('certPath').value = connection.cert_path;
+            document.getElementById('keyPath').value = connection.key_path;
+            document.getElementById('caPath').value = connection.ca_path;
+        }
+    }
+
+    toggleConnectionFields();
+    const modal = new bootstrap.Modal(document.getElementById('serverModal'));
+    modal.show();
+}
+
+function toggleConnectionFields() {
+    const type = document.getElementById('connectionType').value;
+    const sshFields = document.getElementById('sshFields');
+    const dockerSocketFields = document.getElementById('dockerSocketFields');
+    const dockerRemoteFields = document.getElementById('dockerRemoteFields');
+
+    // Hide all fields first
+    sshFields.classList.add('d-none');
+    dockerSocketFields.classList.add('d-none');
+    dockerRemoteFields.classList.add('d-none');
+
+    // Show fields based on type
+    if (type === 'ssh') {
+        sshFields.classList.remove('d-none');
+        toggleAuthSections(document.querySelector('input[name="auth_type"]:checked').value);
+    } else if (type === 'docker_socket') {
+        dockerSocketFields.classList.remove('d-none');
+    } else if (type === 'docker_remote') {
+        dockerRemoteFields.classList.remove('d-none');
+        toggleTLSFields();
+    }
+}
+
+function toggleAuthSections(type) {
+    const passwordSection = document.getElementById('passwordSection');
+    const keySection = document.getElementById('keySection');
+
+    if (type === 'password') {
+        passwordSection.classList.remove('d-none');
+        keySection.classList.add('d-none');
+    } else {
+        passwordSection.classList.add('d-none');
+        keySection.classList.remove('d-none');
+    }
+}
+
+function toggleTLSFields() {
+    const tlsFields = document.getElementById('tlsFields');
+    const useTLS = document.getElementById('useTLS').checked;
+
+    if (useTLS) {
+        tlsFields.classList.remove('d-none');
+    } else {
+        tlsFields.classList.add('d-none');
+    }
+}
+
+// Add event listeners
+document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        toggleAuthSections(e.target.value);
+    });
+});
+
+function saveConnection() {
+    const form = document.getElementById('serverForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const formData = new FormData(form);
+    const connectionData = {
+        name: formData.get('name'),
+        type: formData.get('type')
+    };
+
+    // Add fields based on connection type
+    if (connectionData.type === 'ssh') {
+        connectionData.host = formData.get('host');
+        connectionData.port = parseInt(formData.get('port'));
+        connectionData.username = formData.get('username');
+
+        const authType = formData.get('auth_type');
+        if (authType === 'password') {
+            connectionData.password = formData.get('password');
+        } else {
+            connectionData.ssh_key = formData.get('ssh_key');
+        }
+    } else if (connectionData.type === 'docker_socket') {
+        connectionData.socket_path = formData.get('socket_path');
+    } else if (connectionData.type === 'docker_remote') {
+        connectionData.docker_host = formData.get('docker_host');
+        connectionData.use_tls = formData.get('use_tls') === 'on';
+
+        if (connectionData.use_tls) {
+            connectionData.cert_path = formData.get('cert_path');
+            connectionData.key_path = formData.get('key_path');
+            connectionData.ca_path = formData.get('ca_path');
+        }
+    }
+
+    // Save connection data
+    fetch('/servers/save', {
+        method: editingConnection ? 'PUT' : 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(connectionData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            bootstrap.Modal.getInstance(document.getElementById('serverModal')).hide();
+            loadConnections();  // Refresh connections list
+        } else {
+            throw new Error(data.message || 'Failed to save connection');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving connection:', error);
+        alert(`Error saving connection: ${error.message}`);
+    });
+}
+</script>

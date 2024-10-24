@@ -10,6 +10,78 @@
     --terminal-text: #e0e0e0;
 }
 
+/* Connection List */
+.connections-wrapper {
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+    padding: 0.75rem;
+}
+
+.connections-list {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary-color) transparent;
+}
+
+.connections-list::-webkit-scrollbar {
+    height: 6px;
+}
+
+.connections-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.connections-list::-webkit-scrollbar-thumb {
+    background-color: var(--secondary-color);
+    border-radius: 3px;
+}
+
+.connection-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 1.5rem;
+    background-color: #f8fafc;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.connection-item:hover {
+    background-color: #edf2f7;
+    transform: translateY(-1px);
+}
+
+.connection-item.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.connection-item i {
+    font-size: 1.1rem;
+}
+
+.connection-item.ssh i {
+    color: #f6993f;
+}
+
+.connection-item.docker i {
+    color: #38c172;
+}
+
+.connection-item.active i {
+    color: white;
+}
+
 /* Server Management */
 .server-section {
     background-color: white;

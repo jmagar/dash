@@ -1,49 +1,177 @@
-{% macro render_service(service) %}
-<div class="service-section" id="service-{{ service.service_name }}" data-container-id="{{ service.container_id }}" data-server-name="{{ service.server_name }}">
-    <!-- Service Header -->
-    <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center">
-            {% if service.status and service.status.running %}
-            <span class="status-indicator status-running" title="Running"></span>
-            {% else %}
-            <span class="status-indicator status-stopped" title="Stopped"></span>
-            {% endif %}
-
-            {% if service.service_url %}
-            <a href="{{ service.service_url }}" target="_blank" class="text-lg font-medium text-gray-900 hover:text-blue-600 flex items-center">
-                {{ service.service_name }}
-                <span class="material-icons text-sm ml-1">open_in_new</span>
-            </a>
-            {% else %}
-            <span class="text-lg font-medium text-gray-900">{{ service.service_name }}</span>
-            {% endif %}
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex items-center space-x-2">
-            {% if service.container_id %}
-            <button class="action-button" onclick="dockerDashboard.logs.viewLogs('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons">article</span>
-                <span class="text-sm">Logs</span>
-            </button>
-            <button class="action-button" onclick="dockerDashboard.terminal.openTerminal('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons">terminal</span>
-                <span class="text-sm">Terminal</span>
-            </button>
-            <button class="action-button" onclick="dockerDashboard.container.updateContainer('{{ service.server_name }}', '{{ service.container_id }}', '{{ service.service_name }}')">
-                <span class="material-icons">system_update</span>
-                <span class="text-sm">Update</span>
-            </button>
-            {% endif %}
+<div class="service-card card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-cube me-2"></i>
+            <span class="service-name">{{ service.service_name }}</span>
+        </h5>
+        <div class="service-status">
+            {% include 'components/service_status.html' %}
         </div>
     </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Service Info -->
+            <div class="col-md-6">
+                <p class="mb-2">
+                    <strong>Stack:</strong> {{ stack.stack_name }}
+                </p>
+                {% if service.service_url %}
+                <p class="mb-2">
+                    <strong>URL:</strong>
+                    <a href="{{ service.service_url }}" target="_blank">{{ service.service_url }}</a>
+                </p>
+                {% endif %}
+                {% if service.ports %}
+                <p class="mb-2">
+                    <strong>Ports:</strong>
+                    {% for port in service.ports %}
+                    <span class="badge bg-secondary me-1">{{ port }}</span>
+                    {% endfor %}
+                </p>
+                {% endif %}
+            </div>
 
-    <!-- Service Status -->
-    {% if service.status %}
-    {% include 'components/service_status.html' %}
-    {% endif %}
-
-    <!-- Service Details -->
-    {% include 'components/service_details.html' %}
+            <!-- Service Metrics -->
+            <div class="col-md-6">
+                {% if service.status %}
+                <div class="metrics">
+                    <p class="mb-1">
+                        <i class="fas fa-microchip me-2"></i>
+                        CPU: {{ service.status.cpu_usage }}
+                    </p>
+                    <p class="mb-1">
+                        <i class="fas fa-memory me-2"></i>
+                        Memory: {{ service.status.memory_usage }}
+                    </p>
+                    <p class="mb-1">
+                        <i class="fas fa-redo me-2"></i>
+                        Restarts: {{ service.status.restarts }}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="card-footer">
+        <div class="btn-group" role="group">
+            <button class="btn btn-sm btn-primary" onclick="showServiceDetails('{{ service.service_name }}')">
+                <i class="fas fa-info-circle"></i> Details
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="showServiceLogs('{{ service.service_name }}')">
+                <i class="fas fa-file-alt"></i> Logs
+            </button>
+            <button class="btn btn-sm btn-success" onclick="restartService('{{ service.service_name }}')">
+                <i class="fas fa-redo"></i> Restart
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="stopService('{{ service.service_name }}')">
+                <i class="fas fa-stop"></i> Stop
+            </button>
+        </div>
+    </div>
 </div>
-{% endmacro %}
+
+<script>
+function createServiceCard(serverName, stack, service) {
+    const template = document.createElement('template');
+    const cardHtml = `
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="service-card card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-cube me-2"></i>
+                        ${service.service_name}
+                    </h5>
+                    <div class="service-status">
+                        ${getStatusBadge(service.status)}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-2">
+                                <strong>Stack:</strong> ${stack.stack_name}
+                            </p>
+                            ${service.service_url ? `
+                            <p class="mb-2">
+                                <strong>URL:</strong>
+                                <a href="${service.service_url}" target="_blank">${service.service_url}</a>
+                            </p>
+                            ` : ''}
+                            ${service.ports && service.ports.length ? `
+                            <p class="mb-2">
+                                <strong>Ports:</strong>
+                                ${service.ports.map(port => `
+                                    <span class="badge bg-secondary me-1">${port}</span>
+                                `).join('')}
+                            </p>
+                            ` : ''}
+                        </div>
+                        <div class="col-md-6">
+                            ${service.status ? `
+                            <div class="metrics">
+                                <p class="mb-1">
+                                    <i class="fas fa-microchip me-2"></i>
+                                    CPU: ${service.status.cpu_usage}
+                                </p>
+                                <p class="mb-1">
+                                    <i class="fas fa-memory me-2"></i>
+                                    Memory: ${service.status.memory_usage}
+                                </p>
+                                <p class="mb-1">
+                                    <i class="fas fa-redo me-2"></i>
+                                    Restarts: ${service.status.restarts}
+                                </p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-primary" onclick="showServiceDetails('${serverName}', '${service.service_name}')">
+                            <i class="fas fa-info-circle"></i> Details
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="showServiceLogs('${serverName}', '${service.service_name}')">
+                            <i class="fas fa-file-alt"></i> Logs
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="restartService('${serverName}', '${service.service_name}')">
+                            <i class="fas fa-redo"></i> Restart
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="stopService('${serverName}', '${service.service_name}')">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    template.innerHTML = cardHtml.trim();
+    return template.content.firstChild;
+}
+
+function getStatusBadge(status) {
+    if (!status) return '<span class="badge bg-secondary">Unknown</span>';
+
+    let badgeClass = 'bg-secondary';
+    let statusText = status.health || status.status || 'Unknown';
+
+    switch (statusText.toLowerCase()) {
+        case 'healthy':
+        case 'running':
+            badgeClass = 'bg-success';
+            break;
+        case 'unhealthy':
+        case 'error':
+            badgeClass = 'bg-danger';
+            break;
+        case 'starting':
+            badgeClass = 'bg-info';
+            break;
+        case 'stopped':
+            badgeClass = 'bg-warning';
+            break;
+    }
+
+    return `<span class="badge ${badgeClass}">${statusText}</span>`;
+}
+</script>

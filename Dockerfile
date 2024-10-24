@@ -15,7 +15,7 @@ RUN apt-get update && \
 # Create necessary directories with proper permissions
 RUN mkdir -p logs static/css static/js/modules templates/components config && \
     chmod -R 777 logs && \
-    chmod -R 777 config
+    chmod -R 755 config
 
 # Copy requirements first for better caching
 COPY requirements.txt .
@@ -24,18 +24,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
+# Remove any existing servers.json
+RUN rm -f /app/config/servers.json
+
 # Set proper permissions
-RUN groupadd -r appuser && \
-    useradd -r -g appuser -d /app -s /bin/bash appuser && \
-    chown -R appuser:appuser /app && \
+RUN chown -R nobody:nogroup /app && \
     chmod -R 755 . && \
     chmod -R 777 logs && \
-    chmod -R 777 config && \
-    chmod +x setup.sh && \
-    chmod +x watcher.py
+    chmod -R 755 config
 
-USER appuser
+USER nobody
 
-EXPOSE 5000 5001
+EXPOSE 5000
 
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "wsgi:app"]

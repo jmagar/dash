@@ -1,6 +1,7 @@
 class ServerManager {
     constructor() {
         this.initializeEventListeners();
+        this.suggestedServers = [];
     }
 
     initializeEventListeners() {
@@ -20,15 +21,68 @@ class ServerManager {
         });
     }
 
-    openServerModal() {
+    async loadSuggestedServers() {
+        try {
+            const response = await fetch('/servers/suggested');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            this.suggestedServers = data.servers;
+            this.updateSuggestedServersList();
+        } catch (error) {
+            console.error('Error loading suggested servers:', error);
+        }
+    }
+
+    updateSuggestedServersList() {
+        const suggestedList = document.getElementById('suggested-servers');
+        if (!suggestedList) return;
+
+        suggestedList.innerHTML = '<option value="">Select a suggested server...</option>';
+        this.suggestedServers.forEach(server => {
+            const option = document.createElement('option');
+            option.value = server.name;
+            option.textContent = `${server.name} (${server.host})`;
+            suggestedList.appendChild(option);
+        });
+    }
+
+    handleSuggestedServerSelect(event) {
+        const selectedName = event.target.value;
+        if (!selectedName) return;
+
+        const server = this.suggestedServers.find(s => s.name === selectedName);
+        if (!server) return;
+
+        // Fill form with selected server details
+        document.getElementById('server-name').value = server.name;
+        document.getElementById('server-host').value = server.host;
+        document.getElementById('server-port').value = server.port;
+        document.getElementById('server-username').value = server.username;
+
+        if (server.key_path) {
+            document.getElementById('auth-key').checked = true;
+            document.getElementById('server-key').value = server.key_path;
+            document.getElementById('password-group').classList.add('hidden');
+            document.getElementById('key-group').classList.remove('hidden');
+        }
+    }
+
+    async openServerModal() {
         const modal = document.getElementById('server-modal');
         modal.classList.remove('hidden');
+        await this.loadSuggestedServers();
     }
 
     closeServerModal() {
         const modal = document.getElementById('server-modal');
         modal.classList.add('hidden');
         document.getElementById('server-form').reset();
+        const suggestedList = document.getElementById('suggested-servers');
+        if (suggestedList) {
+            suggestedList.value = '';
+        }
     }
 
     async submitServer(event) {

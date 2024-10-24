@@ -1,247 +1,215 @@
-# Import gevent and monkey patch before any other imports
-from gevent import monkey
-monkey.patch_all()
-
-from dotenv import load_dotenv
-import os
-from flask import Flask, render_template, jsonify, Response, request, send_from_directory
-from flask_sockets import Sockets
+from flask import Flask, jsonify, request
+from geventwebsocket.handler import WebSocketHandler
+from gevent.pywsgi import WSGIServer
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-import gevent
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import sys
+import os
+from typing import Optional, Dict, Any
 
-# Create necessary directories
-for directory in ['logs', 'static/css', 'static/js/modules', 'templates/components', 'config']:
-    Path(directory).mkdir(exist_ok=True, parents=True)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Add file handler for logging
-file_handler = RotatingFileHandler(
-    'logs/dashboard.log',
-    maxBytes=1024 * 1024,  # 1MB
-    backupCount=5
-)
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-))
-logger.addHandler(file_handler)
-
-# Load environment variables
-try:
-    load_dotenv()
-    logger.info("Environment variables loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load .env file: {e}")
-    raise
-
-# Initialize Flask app
-app = Flask(__name__,
-    static_url_path='/static',
-    static_folder='static'
+from server.ssh_service import SSHService
+from server.docker_service import DockerService
+from server.websocket_service import WebSocketService
+from server.metrics_service import MetricsService
+from server.proxy_service import ProxyService
+from server.utils.logger import LoggerSetup
+from server.utils.config import config, ConfigValidationError
+from server.routes import (
+    server_routes,
+    container_routes,
+    proxy_routes,
+    websocket_routes
 )
 
-# Initialize WebSocket
-sockets = Sockets(app)
+logger = LoggerSetup.setup_logger(__name__)
 
-# Initialize services
-try:
-    from server import (
-        SSHService,
-        NotificationService,
-        ProxyService,
-        WebSocketService,
-        MetricsService
-    )
+class DashboardApp:
+    """Main application class for the dashboard."""
 
-    ssh_service = SSHService()
-    notification_service = NotificationService()
-    proxy_service = ProxyService()
-    websocket_service = WebSocketService(ssh_service=ssh_service)
-    metrics_service = MetricsService(ssh_service=ssh_service)
+    def __init__(self):
+        self.app: Optional[Flask] = None
+        self.ssh_service: Optional[SSHService] = None
+        self.docker_service: Optional[DockerService] = None
+        self.websocket_service: Optional[WebSocketService] = None
+        self.metrics_service: Optional[MetricsService] = None
+        self.proxy_service: Optional[ProxyService] = None
 
-    logger.info("All services initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize services: {e}")
-    raise
+    def initialize(self) -> Flask:
+        """Initialize the application and its services."""
+        try:
+            # Initialize Flask app
+            self.app = Flask(__name__)
+            self.app.config['SECRET_KEY'] = os.urandom(24)
 
-# Enable CORS
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
-    return response
+            # Initialize services
+            self._initialize_services()
 
-def get_compose_dir() -> str:
-    compose_dir = os.getenv('COMPOSE_DIR', '/mnt/user/compose')
-    if not os.path.exists(compose_dir):
-        logger.error(f"Compose directory does not exist: {compose_dir}")
-    return compose_dir
+            # Register error handlers
+            self._register_error_handlers()
 
-def get_proxy_dir() -> str:
-    proxy_dir = os.getenv('PROXY_DIR', '/mnt/user/appdata/swag/nginx/proxy-confs')
-    if not os.path.exists(proxy_dir):
-        logger.error(f"Proxy directory does not exist: {proxy_dir}")
-    return proxy_dir
+            # Register routes
+            self._register_routes()
 
-# Routes with improved error handling
-@app.route('/')
-def index():
-    try:
-        servers = ssh_service.load_servers()
-        services = []
-        for server in servers:
-            server_services = ssh_service.get_services(server['name'], get_compose_dir())
-            services.extend(server_services)
-        return render_template('index.html', services=services, servers=servers)
-    except Exception as e:
-        logger.error(f"Error in index route: {e}")
-        return jsonify({'error': str(e)}), 500
+            logger.info("Application initialized successfully")
+            return self.app
 
-@app.route('/servers/add', methods=['POST'])
-def add_server():
-    try:
-        data = request.json
-        success = ssh_service.add_server(
-            name=data['name'],
-            host=data['host'],
-            port=data['port'],
-            username=data['username'],
-            password=data.get('password'),
-            key_path=data.get('key_path')
-        )
-        if success:
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Failed to add server'}), 500
-    except Exception as e:
-        logger.error(f"Error adding server: {e}")
-        return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logger.error(f"Failed to initialize application: {e}")
+            raise
 
-@app.route('/servers/<server_name>', methods=['DELETE'])
-def remove_server(server_name):
-    try:
-        success = ssh_service.remove_server(server_name)
-        if success:
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Failed to remove server'}), 500
-    except Exception as e:
-        logger.error(f"Error removing server: {e}")
-        return jsonify({'error': str(e)}), 500
+    def _initialize_services(self) -> None:
+        """Initialize application services."""
+        try:
+            # Initialize SSH service
+            self.ssh_service = SSHService()
 
-@app.route('/container/<server_name>/<container_id>/status')
-def container_status(server_name, container_id):
-    try:
-        return jsonify(ssh_service.get_container_status(server_name, container_id))
-    except Exception as e:
-        logger.error(f"Error getting container status: {e}")
-        return jsonify({'error': str(e)}), 500
+            # Initialize Docker service
+            self.docker_service = DockerService()
 
-@app.route('/container/<server_name>/<container_id>/logs')
-def container_logs(server_name, container_id):
-    try:
-        result = ssh_service.execute_command(server_name, f"docker logs --tail 100 {container_id}")
-        return jsonify({'logs': result['output']})
-    except Exception as e:
-        logger.error(f"Error getting container logs: {e}")
-        return jsonify({'error': str(e)}), 500
+            # Initialize WebSocket service
+            self.websocket_service = WebSocketService()
 
-@app.route('/container/<server_name>/<container_id>/update', methods=['POST'])
-def update_container(server_name, container_id):
-    try:
-        result = ssh_service.execute_command(server_name, f"docker-compose pull && docker-compose up -d {container_id}")
-        if result['exit_code'] == 0:
-            notification_service.send_notification(f"Container {container_id} updated successfully")
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': result['error']}), 500
-    except Exception as e:
-        logger.error(f"Error updating container: {e}")
-        return jsonify({'error': str(e)}), 500
+            # Initialize Metrics service
+            self.metrics_service = MetricsService(self.ssh_service)
 
-@app.route('/container/<server_name>/<container_id>/metrics')
-def container_metrics(server_name, container_id):
-    try:
-        metrics = metrics_service.get_container_metrics(server_name, container_id)
-        return jsonify(metrics)
-    except Exception as e:
-        logger.error(f"Error getting container metrics: {e}")
-        return jsonify({'error': str(e)}), 500
+            # Initialize Proxy service
+            self.proxy_service = ProxyService()
 
-@app.route('/container/<server_name>/<container_id>/metrics/history')
-def container_metrics_history(server_name, container_id):
-    try:
-        duration = request.args.get('duration', None)
-        if duration:
-            duration = int(duration)
-        metrics = metrics_service.get_metrics_history(container_id, duration)
-        return jsonify(metrics)
-    except Exception as e:
-        logger.error(f"Error getting metrics history: {e}")
-        return jsonify({'error': str(e)}), 500
+            # Add services to Flask app context
+            if self.app:
+                self.app.ssh_service = self.ssh_service
+                self.app.docker_service = self.docker_service
+                self.app.websocket_service = self.websocket_service
+                self.app.metrics_service = self.metrics_service
+                self.app.proxy_service = self.proxy_service
 
-@app.route('/system/<server_name>/metrics')
-def system_metrics(server_name):
-    try:
-        metrics = metrics_service.get_system_metrics(server_name)
-        return jsonify(metrics)
-    except Exception as e:
-        logger.error(f"Error getting system metrics: {e}")
-        return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logger.error(f"Failed to initialize services: {e}")
+            raise
 
-@app.route('/proxy/configs')
-def proxy_configs():
-    try:
-        configs = proxy_service.get_proxy_configs()
-        return jsonify(configs)
-    except Exception as e:
-        logger.error(f"Error getting proxy configs: {e}")
-        return jsonify({'error': str(e)}), 500
+    def _register_error_handlers(self) -> None:
+        """Register error handlers for the application."""
+        if not self.app:
+            raise RuntimeError("Flask app not initialized")
 
-@app.route('/proxy/<config_name>/enable', methods=['POST'])
-def enable_proxy(config_name):
-    try:
-        success = proxy_service.enable_proxy(config_name)
-        if success:
-            notification_service.send_notification(f"Proxy config {config_name} enabled")
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Enable failed'}), 500
-    except Exception as e:
-        logger.error(f"Error enabling proxy config: {e}")
-        return jsonify({'error': str(e)}), 500
+        @self.app.errorhandler(400)
+        def bad_request(error: Any) -> tuple[Dict[str, Any], int]:
+            return jsonify({
+                'status': 'error',
+                'message': str(error),
+                'error_type': 'BadRequest'
+            }), 400
 
-@app.route('/proxy/<config_name>/disable', methods=['POST'])
-def disable_proxy(config_name):
-    try:
-        success = proxy_service.disable_proxy(config_name)
-        if success:
-            notification_service.send_notification(f"Proxy config {config_name} disabled")
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Disable failed'}), 500
-    except Exception as e:
-        logger.error(f"Error disabling proxy config: {e}")
-        return jsonify({'error': str(e)}), 500
+        @self.app.errorhandler(404)
+        def not_found(error: Any) -> tuple[Dict[str, Any], int]:
+            return jsonify({
+                'status': 'error',
+                'message': str(error),
+                'error_type': 'NotFound'
+            }), 404
 
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy'})
+        @self.app.errorhandler(500)
+        def internal_error(error: Any) -> tuple[Dict[str, Any], int]:
+            logger.error(f"Internal server error: {error}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Internal server error',
+                'error_type': 'InternalError'
+            }), 500
 
-# WebSocket routes
-@sockets.route('/ws/<path:path>')
-def websocket_handler(ws, path):
-    websocket_service.handle_connection(ws, path)
+        @self.app.errorhandler(ConfigValidationError)
+        def config_error(error: Any) -> tuple[Dict[str, Any], int]:
+            return jsonify({
+                'status': 'error',
+                'message': str(error),
+                'error_type': 'ConfigurationError'
+            }), 400
+
+    def _register_routes(self) -> None:
+        """Register application routes."""
+        if not self.app:
+            raise RuntimeError("Flask app not initialized")
+
+        # Register blueprints
+        self.app.register_blueprint(server_routes.bp)
+        self.app.register_blueprint(container_routes.bp)
+        self.app.register_blueprint(proxy_routes.bp)
+        self.app.register_blueprint(websocket_routes.bp)
+
+        # Register health check route
+        @self.app.route('/health')
+        def health_check() -> tuple[Dict[str, Any], int]:
+            try:
+                services_status = {
+                    'ssh_service': bool(self.ssh_service),
+                    'docker_service': bool(self.docker_service),
+                    'websocket_service': bool(self.websocket_service),
+                    'metrics_service': bool(self.metrics_service),
+                    'proxy_service': bool(self.proxy_service)
+                }
+
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Service is healthy',
+                    'services': services_status
+                }), 200
+
+            except Exception as e:
+                logger.error(f"Health check failed: {e}")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Service is unhealthy',
+                    'error': str(e)
+                }), 500
+
+        # Register WebSocket route
+        @self.app.route('/ws')
+        def websocket() -> Optional[str]:
+            if not self.websocket_service:
+                return 'WebSocket service not initialized'
+
+            ws = request.environ.get('wsgi.websocket')
+            if not ws:
+                return 'WebSocket connection failed'
+
+            client_id = self.websocket_service.register_client(ws)
+
+            try:
+                while not ws.closed:
+                    message = ws.receive()
+                    if message:
+                        self.websocket_service.handle_client_message(client_id, message)
+
+            except Exception as e:
+                logger.error(f"WebSocket error: {e}")
+
+            finally:
+                self.websocket_service.unregister_client(client_id)
+
+            return None
+
+def create_app() -> Flask:
+    """Create and configure the application."""
+    dashboard = DashboardApp()
+    return dashboard.initialize()
 
 if __name__ == '__main__':
-    # Start Flask server
-    from gevent import pywsgi
-    from geventwebsocket.handler import WebSocketHandler
-    server = pywsgi.WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
-    server.serve_forever()
+    app = create_app()
+
+    # Get server configuration
+    host = config.server_config.get('host', '0.0.0.0')
+    port = config.server_config.get('port', 5000)
+
+    print("Starting Dash Dashboard server")
+    http_server = WSGIServer(
+        (host, port),
+        app,
+        handler_class=WebSocketHandler
+    )
+
+    try:
+        print("Server is ready")
+        http_server.serve_forever()
+    except KeyboardInterrupt:
+        print("Server shutting down...")
+    except Exception as e:
+        print(f"Server error: {e}")
+        raise

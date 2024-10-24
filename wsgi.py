@@ -1,32 +1,33 @@
-# Import gevent and monkey patch before any other imports
-from gevent import monkey
-monkey.patch_all()
-
+import os
 import logging
-logger = logging.getLogger(__name__)
+from app import create_app
+from server.utils.config import config
+from server.utils.logger import LoggerSetup
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Initialize logging
+logger = LoggerSetup.setup_logger(__name__)
 
-# Import app after monkey patching
 try:
-    from app import app
+    # Load configuration
+    config.setup_logging()
+    logger.info("Configuration loaded successfully")
+
+    # Create Flask application
+    app = create_app()
     logger.info("Application imported successfully")
+
 except Exception as e:
-    logger.error(f"Failed to import app: {e}")
+    logger.error(f"Failed to initialize application: {e}")
     raise
 
-# Create WSGI application with WebSocket support
-from gevent import pywsgi
-from geventwebsocket.handler import WebSocketHandler
+def on_starting(server):
+    """Called just before the master process is initialized."""
+    logger.info("Starting Dash Dashboard server")
 
-def create_app():
-    server = pywsgi.WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
-    return server
+def post_fork(server, worker):
+    """Called just after a worker has been forked."""
+    logger.info(f"Worker process initialized with pid: {worker.pid}")
 
-if __name__ == '__main__':
-    server = create_app()
-    server.serve_forever()
+def on_exit(server):
+    """Called just before exiting Gunicorn."""
+    logger.info("Shutting down Dash Dashboard server")
