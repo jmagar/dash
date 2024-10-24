@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build: .
+    container_name: service-dashboard
+    ports:
+      - "5932:5000"
+      - "5008:5001"  # WebSocket port for terminal
+    volumes:
+      - ${COMPOSE_DIR}:/mnt/user/compose:ro
+      - ${PROXY_DIR}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - COMPOSE_DIR=/mnt/user/compose
+      - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
+      - GOTIFY_URL=${GOTIFY_URL}
+      - GOTIFY_TOKEN=${GOTIFY_TOKEN}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  watcher:
+    build: .
+    container_name: service-watcher
+    command: python watcher.py
+    volumes:
+      - ${COMPOSE_DIR}:/mnt/user/compose:ro
+      - ${PROXY_DIR}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - COMPOSE_DIR=/mnt/user/compose
+      - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
+      - GOTIFY_URL=${GOTIFY_URL}
+      - GOTIFY_TOKEN=${GOTIFY_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - dashboard
