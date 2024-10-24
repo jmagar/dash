@@ -5,8 +5,8 @@ services:
     build: .
     container_name: service-dashboard
     ports:
-      - "5932:5000"
-      - "5008:5001"  # WebSocket port for terminal
+      - "5932:5000"  # HTTP port
+      - "5008:5001"  # WebSocket port
     volumes:
       - ${COMPOSE_DIR}:/mnt/user/compose:ro
       - ${PROXY_DIR}:/mnt/user/appdata/swag/nginx/proxy-confs:ro
@@ -17,6 +17,8 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN}
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -39,6 +41,9 @@ services:
       - PROXY_DIR=/mnt/user/appdata/swag/nginx/proxy-confs
       - GOTIFY_URL=${GOTIFY_URL}
       - GOTIFY_TOKEN=${GOTIFY_TOKEN}
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     depends_on:
-      - dashboard
+      dashboard:
+        condition: service_healthy
