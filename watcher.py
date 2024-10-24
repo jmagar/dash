@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os
 import logging
 from watchdog.observers import Observer
@@ -7,6 +6,7 @@ import time
 import yaml
 from typing import Optional
 import requests
+from server.utils.config import config
 
 # Configure logging
 logging.basicConfig(
@@ -15,13 +15,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
-try:
-    load_dotenv()
-except Exception as e:
-    logger.error(f"Failed to load .env file: {e}")
-    raise
-
 class ConfigurationError(Exception):
     """Raised when there's an issue with configuration settings."""
     pass
@@ -29,7 +22,7 @@ class ConfigurationError(Exception):
 def check_directory(path: str, name: str) -> bool:
     """Check if directory exists and is accessible"""
     if not path:
-        logger.error(f"{name} path not set in environment variables")
+        logger.error(f"{name} path not set")
         return False
     if not os.path.exists(path):
         logger.error(f"{name} directory does not exist: {path}")
@@ -44,8 +37,9 @@ def check_directory(path: str, name: str) -> bool:
 
 class NotificationService:
     def __init__(self):
-        self.gotify_url = os.getenv('GOTIFY_URL')
-        self.gotify_token = os.getenv('GOTIFY_TOKEN')
+        # Environment variables take precedence over config
+        self.gotify_url = os.getenv('GOTIFY_URL') or config.notification_config.get('gotify_url')
+        self.gotify_token = os.getenv('GOTIFY_TOKEN') or config.notification_config.get('gotify_token')
         self.enabled = all([self.gotify_url, self.gotify_token])
 
         if not self.enabled:
@@ -91,9 +85,9 @@ class NotificationService:
 
 class ServiceConfigWatcher(FileSystemEventHandler):
     def __init__(self, compose_dir: str, proxy_dir: str):
-        if not check_directory(compose_dir, "COMPOSE_DIR"):
+        if not check_directory(compose_dir, "compose_dir"):
             raise ConfigurationError(f"Invalid compose directory: {compose_dir}")
-        if not check_directory(proxy_dir, "PROXY_DIR"):
+        if not check_directory(proxy_dir, "proxy_dir"):
             raise ConfigurationError(f"Invalid proxy directory: {proxy_dir}")
 
         self.compose_dir = compose_dir
@@ -148,13 +142,11 @@ class ServiceConfigWatcher(FileSystemEventHandler):
 
 def main():
     """Main function to run the watcher service."""
-    compose_dir = os.getenv('COMPOSE_DIR')
-    proxy_dir = os.getenv('PROXY_DIR')
-
-    if not all([compose_dir, proxy_dir]):
-        raise ConfigurationError("Missing required environment variables: COMPOSE_DIR and/or PROXY_DIR")
-
     try:
+        # Environment variables take precedence over config
+        compose_dir = os.getenv('COMPOSE_DIR') or config.directory_paths['compose']
+        proxy_dir = os.getenv('PROXY_DIR') or config.directory_paths['proxy']
+
         event_handler = ServiceConfigWatcher(compose_dir, proxy_dir)
         observer = Observer()
 

@@ -26,11 +26,23 @@ server:
   environment: development
 
 # Logging settings
-log_level: DEBUG
-log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+logging:
+  level: DEBUG
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - stdout
+
+# Directory paths
+directories:
+  compose: /compose
+  proxy: /proxy-conf
+  logs: /app/logs
+  config: /app/config
 
 # Docker settings
-docker_socket: /var/run/docker.sock
+docker:
+  socket_path: /var/run/docker.sock
+  default_connection: true
 
 # Notification settings
 # gotify_url: https://gotify.example.com
