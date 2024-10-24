@@ -22,8 +22,7 @@ RUN mkdir -p logs && \
     mkdir -p static/css && \
     mkdir -p static/js/modules && \
     mkdir -p templates/components && \
-    mkdir -p server && \
-    mkdir -p certs
+    mkdir -p server
 
 # Copy application files
 COPY app.py .
@@ -33,19 +32,25 @@ COPY templates/ templates/
 COPY static/ static/
 
 # Set permissions
-RUN chmod -R 755 /app
+RUN chmod -R 755 /app && \
+    chmod +x app.py watcher.py
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=app.py
 ENV SHELL=/bin/bash
+ENV PYTHONPATH=/app
 
 # Expose ports
-EXPOSE 5000
-EXPOSE 5001
+EXPOSE 5000  # HTTP
+EXPOSE 5001  # WebSocket
 
 # Run as root to ensure Docker socket access
 USER root
 
-# Command to run both services
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Command to run the service (will be overridden by docker-compose for watcher)
 CMD ["python", "app.py"]
