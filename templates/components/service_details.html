@@ -1,0 +1,67 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Configuration -->
+    <div>
+        <h4 class="flex items-center text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">
+            <span class="material-icons text-gray-400 mr-1">settings</span>
+            Configuration
+        </h4>
+        <div class="space-y-2">
+            <p class="text-sm text-gray-600">
+                <span class="font-medium">Image:</span> {{ service.image }}
+            </p>
+            {% if service.depends_on %}
+            <p class="text-sm text-gray-600">
+                <span class="font-medium">Depends On:</span> {{ service.depends_on|join(', ') }}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Ports -->
+    <div>
+        <h4 class="flex items-center text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">
+            <span class="material-icons text-gray-400 mr-1">swap_horiz</span>
+            Ports
+        </h4>
+        <div class="flex flex-wrap gap-2">
+            {% for port in service.ports %}
+            <span class="tag tag-port">
+                <span class="material-icons text-sm">public</span>
+                {{ port }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Volumes -->
+    <div>
+        <h4 class="flex items-center text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">
+            <span class="material-icons text-gray-400 mr-1">storage</span>
+            Volumes
+        </h4>
+        <div class="flex flex-wrap gap-2">
+            {% for volume in service.volumes %}
+            <span class="tag tag-volume">
+                <span class="material-icons text-sm">folder</span>
+                {{ volume }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Networks -->
+    <div>
+        <h4 class="flex items-center text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">
+            <span class="material-icons text-gray-400 mr-1">hub</span>
+            Networks
+        </h4>
+        <div class="flex flex-wrap gap-2">
+            {% for network in service.networks %}
+            <span class="tag tag-network">
+                <span class="material-icons text-sm">lan</span>
+                {{ network }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+</div>

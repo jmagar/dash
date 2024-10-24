@@ -1,0 +1,26 @@
+<nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+            <div class="flex items-center">
+                <span class="material-icons text-blue-600 text-2xl">dashboard</span>
+                <h1 class="ml-3 text-xl font-semibold text-gray-900">Docker Services Dashboard</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- Docker Host Selector -->
+                <div class="host-selector">
+                    <button class="host-button active" onclick="switchHost('local')">
+                        <span class="material-icons mr-1">computer</span>
+                        Local
+                    </button>
+                    <div id="remote-hosts">
+                        <!-- Remote hosts will be added here dynamically -->
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="material-icons text-gray-400 mr-2">refresh</span>
+                    <span class="text-sm text-gray-500">Auto-refresh: 30s</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>

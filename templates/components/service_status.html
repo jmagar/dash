@@ -1,0 +1,24 @@
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+    <div class="bg-gray-50 rounded-lg p-4">
+        <h4 class="text-sm font-medium text-gray-500 mb-2">CPU Usage</h4>
+        <div class="resource-meter">
+            <div class="resource-meter-fill bg-blue-500" style="width: {{ service.status.cpu_usage|replace('%', '') }}%"></div>
+        </div>
+        <p class="mt-1 text-sm text-gray-700">{{ service.status.cpu_usage }}</p>
+    </div>
+    <div class="bg-gray-50 rounded-lg p-4">
+        <h4 class="text-sm font-medium text-gray-500 mb-2">Memory Usage</h4>
+        <div class="resource-meter">
+            <div class="resource-meter-fill bg-green-500" style="width: {{ service.status.memory_percent|replace('%', '') }}%"></div>
+        </div>
+        <p class="mt-1 text-sm text-gray-700">{{ service.status.memory_usage }}</p>
+    </div>
+    <div class="bg-gray-50 rounded-lg p-4">
+        <h4 class="text-sm font-medium text-gray-500 mb-2">Status</h4>
+        <p class="text-sm text-gray-700">
+            <span class="font-medium">State:</span> {{ service.status.status }}<br>
+            <span class="font-medium">Health:</span> {{ service.status.health }}<br>
+            <span class="font-medium">Restarts:</span> {{ service.status.restarts }}
+        </p>
+    </div>
+</div>

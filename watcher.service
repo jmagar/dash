@@ -1,0 +1,32 @@
+[Unit]
+Description=Folder Watcher for Docker Compose and SWAG Proxy
+After=network.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/home/jmagar/dashboard/venv/bin/python3 /home/jmagar/dashboard/watcher.py
+Restart=on-failure
+RestartSec=30s
+User=jmagar
+Group=jmagar
+WorkingDirectory=/home/jmagar/dashboard
+EnvironmentFile=/home/jmagar/dashboard/.env
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+ReadOnlyPaths=/
+ReadWritePaths=/mnt/user/compose /mnt/user/appdata/swag/nginx/proxy-confs
+
+# Resource limits
+CPUQuota=25%
+MemoryLimit=256M
+TasksMax=100
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'components/head.html' %}
+    <!-- Import JavaScript loader -->
+    <script type="module" src="{{ url_for('static', filename='js/loader.js') }}"></script>
+</head>
+<body class="min-h-screen">
+    {% include 'components/navbar.html' %}
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-6">
+            {% for stack in services %}
+            <div class="stack-card bg-white shadow rounded-lg overflow-hidden">
+                <!-- Stack Header -->
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="material-icons text-gray-500 mr-2">layers</span>
+                            <h2 class="text-lg font-medium text-gray-900">{{ stack.stack_name }}</h2>
+                            <span class="ml-3 px-3 py-1 text-sm font-medium text-blue-600 bg-blue-100 rounded-full">
+                                {{ stack.services|length }} services
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="action-button" onclick="dockerDashboard.compose.viewCompose('{{ stack.compose_file }}', '{{ stack.stack_name }}', {{ stack.services[0].compose_content|tojson|safe }})">
+                                <span class="material-icons text-gray-500">description</span>
+                                <span class="text-sm text-gray-700">docker-compose.yml</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Services List -->
+                <div class="divide-y divide-gray-200">
+                    {% from 'components/service_card.html' import render_service %}
+                    {% for service in stack.services %}
+                        {{ render_service(service) }}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <!-- Floating Action Button -->
+    <button class="fab" onclick="dockerDashboard.host.showConnectionModal()">
+        <span class="material-icons">add</span>
+    </button>
+
+    {% include 'components/modals.html' %}
+</body>
+</html>

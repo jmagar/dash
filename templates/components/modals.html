@@ -1,0 +1,39 @@
+<!-- Connection Modal -->
+<div id="connection-modal" class="modal hidden">
+    <div class="modal-content">
+        <h2 class="text-xl font-semibold mb-4">Add Docker Host</h2>
+        <form id="connection-form" onsubmit="dockerDashboard.host.testConnection(event)">
+            <div class="input-group">
+                <label for="host-name">Host Name</label>
+                <input type="text" id="host-name" required placeholder="e.g., Production Server">
+            </div>
+            <div class="input-group">
+                <label for="host-url">Docker Host URL</label>
+                <input type="text" id="host-url" required placeholder="tcp://hostname:2375">
+            </div>
+            <div class="input-group">
+                <label for="tls-cert">TLS Certificate (optional)</label>
+                <input type="file" id="tls-cert" accept=".pem,.crt">
+            </div>
+            <div class="flex justify-end space-x-2 mt-4">
+                <button type="button" class="btn btn-secondary" onclick="dockerDashboard.host.closeConnectionModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Test Connection</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Compose Viewer Modal -->
+<div id="compose-modal" class="fixed inset-0 bg-gray-500 bg-opacity-75 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900" id="compose-modal-title"></h3>
+            <button onclick="dockerDashboard.compose.closeComposeModal()" class="text-gray-400 hover:text-gray-500">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        <div class="p-6 compose-viewer">
+            <pre><code class="language-yaml" id="compose-content"></code></pre>
+        </div>
+    </div>
+</div>

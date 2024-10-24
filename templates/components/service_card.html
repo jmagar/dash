@@ -1,0 +1,55 @@
+{% macro render_service(service) %}
+<div class="service-section p-6" id="service-{{ service.service_name }}" data-container-id="{{ service.container_id }}">
+    <!-- Service Header -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+            {% if service.status and service.status.running %}
+            <span class="status-indicator status-running" title="Running"></span>
+            {% else %}
+            <span class="status-indicator status-stopped" title="Stopped"></span>
+            {% endif %}
+
+            {% if service.service_url %}
+            <a href="{{ service.service_url }}" target="_blank" class="text-lg font-medium text-gray-900 hover:text-blue-600 flex items-center">
+                {{ service.service_name }}
+                <span class="material-icons text-sm ml-1">open_in_new</span>
+            </a>
+            {% else %}
+            <span class="text-lg font-medium text-gray-900">{{ service.service_name }}</span>
+            {% endif %}
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2">
+            {% if service.container_id %}
+            <button class="action-button" onclick="dockerDashboard.logs.viewLogs('{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons text-gray-500">article</span>
+                <span class="text-sm text-gray-700">Logs</span>
+            </button>
+            <button class="action-button" onclick="dockerDashboard.terminal.openTerminal('{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons text-gray-500">terminal</span>
+                <span class="text-sm text-gray-700">Terminal</span>
+            </button>
+            <button class="action-button" onclick="dockerDashboard.container.updateContainer('{{ service.container_id }}', '{{ service.service_name }}')">
+                <span class="material-icons text-gray-500">system_update</span>
+                <span class="text-sm text-gray-700">Update</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Service Status -->
+    {% if service.status %}
+    {% include 'components/service_status.html' %}
+    {% endif %}
+
+    <!-- Service Details -->
+    {% include 'components/service_details.html' %}
+
+    <!-- Logs Container (Hidden by default) -->
+    <div id="logs-{{ service.service_name }}" class="logs-container mt-4 hidden"></div>
+
+    <!-- Terminal Container (Hidden by default) -->
+    <div id="terminal-{{ service.service_name }}" class="terminal mt-4 hidden"></div>
+</div>
+{% endmacro %}

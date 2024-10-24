@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Dashboard</title>
+
+    <!-- Import Google Fonts for Noto Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Import Material Design Lite (MDL) -->
+    <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
+    <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+
+    <!-- Custom Styles for Accent Colors -->
+    <style>
+        body {
+            font-family: 'Noto Sans', sans-serif;
+        }
+        .mdl-data-table {
+            width: 100%;
+        }
+        .mdl-layout__header {
+            background-color: #1565c0; /* Material Design Blue 800 */
+        }
+        .mdl-layout__drawer {
+            background-color: #1e88e5; /* Material Design Blue 600 */
+        }
+        .mdl-layout__header-row h1 {
+            color: white;
+        }
+        .mdl-data-table th, .mdl-data-table td {
+            text-align: left;
+        }
+        .mdl-button--accent {
+            color: #40c4ff; /* Light Blue A200 Accent */
+        }
+    </style>
+</head>
+<body>
+    <!-- MDL Layout -->
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header">
+        <header class="mdl-layout__header">
+            <div class="mdl-layout__header-row">
+                <h1 class="mdl-layout-title">Services Overview</h1>
+            </div>
+        </header>
+
+        <main class="mdl-layout__content">
+            <div class="page-content">
+                <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp">
+                    <thead>
+                        <tr>
+                            <th>Service Name</th>
+                            <th>Compose File</th>
+                            <th>Proxy File</th>
+                            <th>Ports</th>
+                            <th>Volumes</th>
+                            <th>Environment Variables</th>
+                            <th>Stack</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for service in services %}
+                        <tr>
+                            <td>{{ service.service_name }}</td>
+                            <td>{{ service.compose_file }}</td>
+                            <td>{{ service.proxy_file }}</td>
+                            <td>{{ service.ports }}</td>
+                            <td>{{ service.volumes }}</td>
+                            <td>{{ service.environment }}</td>
+                            <td>{{ service.stack }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

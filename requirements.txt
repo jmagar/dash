@@ -1,0 +1,8 @@
+flask
+watchdog
+pyyaml
+python-dotenv
+requests
+typing-extensions
+docker
+websockets
