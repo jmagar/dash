@@ -19,6 +19,7 @@ services:
       - GOTIFY_TOKEN=${GOTIFY_TOKEN}
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - GUNICORN_CMD_ARGS="--reload --worker-class=gevent --workers=3"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]

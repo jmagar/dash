@@ -25,11 +25,7 @@ RUN mkdir -p logs && \
     mkdir -p server
 
 # Copy application files
-COPY app.py .
-COPY watcher.py .
-COPY server/ server/
-COPY templates/ templates/
-COPY static/ static/
+COPY . .
 
 # Set permissions
 RUN chmod -R 755 /app && \
@@ -53,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
 # Command to run the service (will be overridden by docker-compose for watcher)
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "wsgi:app"]
