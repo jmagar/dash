@@ -13,7 +13,7 @@ class ConfigValidationError(Exception):
 class ConfigManager:
     """Manages application configuration with validation and defaults."""
 
-    REQUIRED_SECTIONS = ['python', 'gunicorn', 'server', 'logging', 'directories']
+    REQUIRED_SECTIONS = ['server', 'logging', 'directories']
 
     def __init__(self):
         self._config: Dict[str, Any] = {}
@@ -24,7 +24,7 @@ class ConfigManager:
         """Set up logging configuration."""
         logging_config = self.logging_config
         log_level = os.getenv('LOG_LEVEL', logging_config.get('level', 'INFO')).upper()
-        log_format = os.getenv('LOG_FORMAT', logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        log_format = logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
         # Configure root logger
         root_logger = setup_base_logger(
@@ -55,13 +55,14 @@ class ConfigManager:
             with open(config_path, 'r') as f:
                 self._config = yaml.safe_load(f) or {}
 
-            self._validate_config()
-
             # Load servers config
             servers_path = os.path.join('config', 'servers.yaml')
             if os.path.exists(servers_path):
                 with open(servers_path, 'r') as f:
                     self._servers = yaml.safe_load(f) or []
+
+            # Validate base config before env overrides
+            self._validate_config()
 
             # Override with environment variables
             self._override_with_env()
@@ -76,61 +77,39 @@ class ConfigManager:
         """Override configuration values with environment variables."""
         # Server settings
         if 'FLASK_ENV' in os.environ:
-            self._config['server']['environment'] = os.environ['FLASK_ENV']
+            self._config.setdefault('server', {})['environment'] = os.environ['FLASK_ENV']
         if 'FLASK_DEBUG' in os.environ:
-            self._config['server']['debug'] = os.environ['FLASK_DEBUG'].lower() == 'true'
-        if 'SERVER_HOST' in os.environ:
-            self._config['server']['host'] = os.environ['SERVER_HOST']
-        if 'SERVER_PORT' in os.environ:
-            self._config['server']['port'] = int(os.environ['SERVER_PORT'])
-
-        # Python settings
-        if 'PYTHONPATH' in os.environ:
-            self._config['python']['path'] = os.environ['PYTHONPATH']
-        if 'PYTHONUNBUFFERED' in os.environ:
-            self._config['python']['unbuffered'] = os.environ['PYTHONUNBUFFERED']
-        if 'PYTHON_DEBUG' in os.environ:
-            self._config['python']['debug'] = os.environ['PYTHON_DEBUG'].lower() == 'true'
-
-        # Gunicorn settings
-        if 'GUNICORN_BIND' in os.environ:
-            self._config['gunicorn']['bind'] = os.environ['GUNICORN_BIND']
-        if 'GUNICORN_WORKERS' in os.environ:
-            self._config['gunicorn']['workers'] = int(os.environ['GUNICORN_WORKERS'])
-        if 'GUNICORN_WORKER_CLASS' in os.environ:
-            self._config['gunicorn']['worker_class'] = os.environ['GUNICORN_WORKER_CLASS']
-        if 'GUNICORN_TIMEOUT' in os.environ:
-            self._config['gunicorn']['timeout'] = int(os.environ['GUNICORN_TIMEOUT'])
-        if 'GUNICORN_RELOAD' in os.environ:
-            self._config['gunicorn']['reload'] = os.environ['GUNICORN_RELOAD'].lower() == 'true'
-        if 'GUNICORN_LOG_LEVEL' in os.environ:
-            self._config['gunicorn']['log_level'] = os.environ['GUNICORN_LOG_LEVEL']
+            self._config.setdefault('server', {})['debug'] = os.environ['FLASK_DEBUG'].lower() == 'true'
 
         # Directory paths
         if 'COMPOSE_DIR' in os.environ:
-            self._config['directories']['compose'] = os.environ['COMPOSE_DIR']
+            self._config.setdefault('directories', {})['compose'] = os.environ['COMPOSE_DIR']
         if 'PROXY_DIR' in os.environ:
-            self._config['directories']['proxy'] = os.environ['PROXY_DIR']
-        if 'LOGS_DIR' in os.environ:
-            self._config['directories']['logs'] = os.environ['LOGS_DIR']
-        if 'CONFIG_DIR' in os.environ:
-            self._config['directories']['config'] = os.environ['CONFIG_DIR']
+            self._config.setdefault('directories', {})['proxy'] = os.environ['PROXY_DIR']
 
         # Docker settings
         if 'DOCKER_SOCKET' in os.environ:
-            self._config['docker']['socket_path'] = os.environ['DOCKER_SOCKET']
-        if 'DOCKER_HOST' in os.environ:
-            self._config['docker']['host'] = os.environ['DOCKER_HOST']
-        if 'DOCKER_TLS_VERIFY' in os.environ:
-            self._config['docker']['tls_verify'] = os.environ['DOCKER_TLS_VERIFY'].lower() == 'true'
-        if 'DOCKER_CERT_PATH' in os.environ:
-            self._config['docker']['cert_path'] = os.environ['DOCKER_CERT_PATH']
+            self._config.setdefault('docker', {})['socket_path'] = os.environ['DOCKER_SOCKET']
 
         # Notification settings
-        if 'GOTIFY_URL' in os.environ:
-            self._config.setdefault('notifications', {})['gotify_url'] = os.environ['GOTIFY_URL']
-        if 'GOTIFY_TOKEN' in os.environ:
-            self._config.setdefault('notifications', {})['gotify_token'] = os.environ['GOTIFY_TOKEN']
+        if any(key in os.environ for key in ['GOTIFY_URL', 'GOTIFY_TOKEN']):
+            notifications = self._config.setdefault('notifications', {})
+            gotify = notifications.setdefault('gotify', {})
+            if 'GOTIFY_URL' in os.environ:
+                gotify['url'] = os.environ['GOTIFY_URL']
+            if 'GOTIFY_TOKEN' in os.environ:
+                gotify['token'] = os.environ['GOTIFY_TOKEN']
+
+        # GitHub backup settings
+        if any(key in os.environ for key in ['GITHUB_USERNAME', 'GITHUB_TOKEN', 'GITHUB_REPO']):
+            backup = self._config.setdefault('backup', {})
+            github = backup.setdefault('github', {})
+            if 'GITHUB_USERNAME' in os.environ:
+                github['username'] = os.environ['GITHUB_USERNAME']
+            if 'GITHUB_TOKEN' in os.environ:
+                github['token'] = os.environ['GITHUB_TOKEN']
+            if 'GITHUB_REPO' in os.environ:
+                github['repo'] = os.environ['GITHUB_REPO']
 
     def _validate_config(self) -> None:
         """Validate configuration structure and required fields."""
@@ -141,18 +120,6 @@ class ConfigManager:
             raise ConfigValidationError(
                 f"Missing required configuration sections: {', '.join(missing_sections)}"
             )
-
-        # Validate Python section
-        python_config = self._config.get('python', {})
-        if not isinstance(python_config.get('path'), str):
-            raise ConfigValidationError("Python path must be a string")
-
-        # Validate Gunicorn section
-        gunicorn_config = self._config.get('gunicorn', {})
-        if not isinstance(gunicorn_config.get('bind'), str):
-            raise ConfigValidationError("Gunicorn bind must be a string")
-        if not isinstance(gunicorn_config.get('workers'), int):
-            raise ConfigValidationError("Gunicorn workers must be an integer")
 
         # Validate Server section
         server_config = self._config.get('server', {})
@@ -257,7 +224,12 @@ class ConfigManager:
     @property
     def notification_config(self) -> Dict[str, Any]:
         """Get notification configuration."""
-        return self._config.get('notifications', {})
+        return self._config.get('notifications', {}).get('gotify', {})
+
+    @property
+    def backup_config(self) -> Dict[str, Any]:
+        """Get backup configuration."""
+        return self._config.get('backup', {}).get('github', {})
 
     @property
     def servers(self) -> List[Dict[str, Any]]:
