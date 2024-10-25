@@ -43,7 +43,7 @@ class ConfigManager:
         log_level = os.getenv('LOG_LEVEL', logging_config.get('level', 'INFO')).upper()
         log_format = logging_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-        # Configure root logger
+        # Configure root logger first
         root_logger = setup_base_logger(
             'root',
             level=getattr(logging, log_level),
@@ -53,12 +53,13 @@ class ConfigManager:
         # Set level for specific loggers
         for logger_name, logger_config in logging_config.get('loggers', {}).items():
             logger_level = os.getenv(f'LOG_LEVEL_{logger_name.upper()}', logger_config.get('level', 'INFO')).upper()
-            logger = setup_base_logger(
+            setup_base_logger(
                 logger_name,
                 level=getattr(logging, logger_level),
                 format_str=log_format
             )
 
+        # Use the class logger to log success
         logger.info("Logging configured successfully")
 
     def load_config(self) -> None:
