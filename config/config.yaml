@@ -1,3 +1,10 @@
+# WARNING: Python settings below are critical for the application to function.
+# DO NOT modify these values unless you absolutely understand what you're doing.
+# Incorrect values will break the application's ability to find its own modules.
+python:
+  path: /app  # Application root directory - changing this will break module imports
+  unbuffered: 1  # Ensure Python output isn't buffered - required for proper logging
+
 # Server settings
 server:
   host: 0.0.0.0

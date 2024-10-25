@@ -1,4 +1,5 @@
 import os
+import sys
 import yaml
 import logging
 from typing import Dict, Any, Optional, List
@@ -13,12 +14,28 @@ class ConfigValidationError(Exception):
 class ConfigManager:
     """Manages application configuration with validation and defaults."""
 
-    REQUIRED_SECTIONS = ['server', 'logging', 'directories']
+    REQUIRED_SECTIONS = ['python', 'server', 'logging', 'directories']
 
     def __init__(self):
         self._config: Dict[str, Any] = {}
         self._servers: List[Dict[str, Any]] = []
         self.load_config()
+        self._setup_python_env()
+
+    def _setup_python_env(self) -> None:
+        """Set up Python environment based on configuration."""
+        python_config = self.python_config
+
+        # Set Python path if not already in sys.path
+        python_path = python_config.get('path')
+        if python_path and python_path not in sys.path:
+            sys.path.insert(0, python_path)
+            logger.debug(f"Added {python_path} to Python path")
+
+        # Set unbuffered output if configured
+        if python_config.get('unbuffered'):
+            os.environ['PYTHONUNBUFFERED'] = '1'
+            logger.debug("Set Python output to unbuffered")
 
     def setup_logging(self) -> None:
         """Set up logging configuration."""
@@ -120,6 +137,11 @@ class ConfigManager:
             raise ConfigValidationError(
                 f"Missing required configuration sections: {', '.join(missing_sections)}"
             )
+
+        # Validate Python section
+        python_config = self._config.get('python', {})
+        if not isinstance(python_config.get('path'), str):
+            raise ConfigValidationError("Python path must be a string")
 
         # Validate Server section
         server_config = self._config.get('server', {})
