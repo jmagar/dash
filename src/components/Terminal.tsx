@@ -12,8 +12,8 @@ import {
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { io, Socket } from 'socket.io-client';
 import { useAsync, useKeyPress, useLocalStorage } from '../hooks';
 import { Host } from '../types';

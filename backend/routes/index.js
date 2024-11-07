@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const authRoutes = require('./auth');
 const dockerRoutes = require('./docker');
+const hostsRoutes = require('./hosts');
+const filesRoutes = require('./files');
+const packagesRoutes = require('./packages');
 const { authenticateToken, rateLimiter, errorHandler } = require('../middleware/auth');
 const { healthCheck } = require('../db');
 
@@ -20,6 +23,9 @@ router.use('/auth', authRoutes);
 // Protected routes
 router.use(authenticateToken);
 router.use('/docker', dockerRoutes);
+router.use('/hosts', hostsRoutes);
+router.use('/files', filesRoutes);
+router.use('/packages', packagesRoutes);
 
 // Error handling
 router.use(errorHandler);

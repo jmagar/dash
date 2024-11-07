@@ -2,12 +2,15 @@ FROM node:16-alpine
 
 WORKDIR /app
 
+# Install dependencies
 COPY package*.json ./
+RUN npm install
 
-RUN npm ci --legacy-peer-deps
-
+# Copy source code
 COPY . .
 
-EXPOSE 3000
+# Build app
+RUN npm run build
 
+# Start app
 CMD ["npm", "start"]

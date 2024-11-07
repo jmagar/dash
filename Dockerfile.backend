@@ -5,16 +5,24 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    docker-cli
+    openssh-client
 
 WORKDIR /app
 
-COPY package*.json ./
+# Install app dependencies
+COPY backend/package*.json ./
+RUN npm install
 
-RUN npm ci --legacy-peer-deps
+# Copy source code
+COPY backend/ .
+COPY db/ ./db/
 
-COPY . .
+# Create directory for SSH keys
+RUN mkdir -p /root/.ssh && \
+    chmod 700 /root/.ssh
 
+# Expose port
 EXPOSE 4000
 
-CMD ["node", "backend/server.js"]
+# Start app
+CMD ["npm", "start"]

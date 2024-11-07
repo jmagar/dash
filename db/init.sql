@@ -81,3 +81,25 @@ CREATE INDEX idx_ssh_keys_user_id ON ssh_keys(user_id);
 CREATE INDEX idx_command_history_user_id ON command_history(user_id);
 CREATE INDEX idx_command_history_host_id ON command_history(host_id);
 CREATE INDEX idx_command_history_created_at ON command_history(created_at);
+
+-- Insert default admin user
+-- Password is 'admin123' (hashed with bcrypt)
+INSERT INTO users (username, email, password_hash, role, is_active, gdpr_compliant)
+VALUES (
+    'admin',
+    'admin@localhost',
+    '$2b$10$5RoQxE1/UKqHPxqGWORz9.ex1v4j3/8ZN0IZJ5JzOVXWNdAHzuA4.',
+    'admin',
+    true,
+    true
+) ON CONFLICT (username) DO NOTHING;
+
+-- Insert default local host
+INSERT INTO hosts (name, hostname, port, ip, is_active)
+VALUES (
+    'localhost',
+    'localhost',
+    22,
+    '127.0.0.1',
+    true
+) ON CONFLICT DO NOTHING;
