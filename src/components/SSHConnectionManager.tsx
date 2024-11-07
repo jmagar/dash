@@ -1,25 +1,23 @@
-import React, { useState } from 'react';
+import {
+  PowerSettingsNew as PowerIcon,
+  Link as ConnectedIcon,
+  LinkOff as DisconnectedIcon,
+} from '@mui/icons-material';
 import {
   Box,
   IconButton,
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import {
-  PowerSettingsNew as PowerIcon,
-  Link as ConnectedIcon,
-  LinkOff as DisconnectedIcon,
-} from '@mui/icons-material';
+import React, { useState } from 'react';
 
-interface SSHConnectionManagerProps {
-  // Add any necessary props
-}
+type SSHConnectionManagerProps = Record<string, never>;
 
 const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  const connect = async () => {
+  const connect = async (): Promise<void> => {
     try {
       setIsConnecting(true);
       // TODO: Implement actual SSH connection logic
@@ -32,7 +30,7 @@ const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = () => {
     }
   };
 
-  const disconnect = async () => {
+  const disconnect = async (): Promise<void> => {
     try {
       setIsConnecting(true);
       // TODO: Implement actual SSH disconnection logic

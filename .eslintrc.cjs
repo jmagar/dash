@@ -36,9 +36,11 @@ module.exports = {
     'import/resolver': {
       typescript: {
         project: './tsconfig.json',
+        alwaysTryTypes: true,
       },
       node: {
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        moduleDirectory: ['node_modules', 'src/'],
       },
     },
   },
@@ -67,12 +69,10 @@ module.exports = {
         caseInsensitive: true,
       },
     }],
-    'import/no-unresolved': ['error', {
-      ignore: ['\\.css$'],
-    }],
-    'import/named': 'error',
-    'import/default': 'error',
-    'import/namespace': 'error',
+    'import/no-unresolved': 'off', // Disable since TypeScript handles this
+    'import/named': 'off', // Disable since TypeScript handles this
+    'import/namespace': 'off', // Disable since TypeScript handles this
+    'import/default': 'off', // Disable since TypeScript handles this
 
     // React-specific rules
     'react/prop-types': 'off',
