@@ -1,41 +1,39 @@
+import { ThemeProvider, CssBaseline } from '@mui/material';
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, CssBaseline } from '@mui/material';
-import { theme } from './styles/theme';
-import Layout from './components/Layout';
+
+import { validateToken } from './api/auth';
 import Dashboard from './components/Dashboard';
 import FileExplorer from './components/FileExplorer';
-import Terminal from './components/Terminal';
-import RemoteExecution from './components/RemoteExecution';
-import PackageManager from './components/PackageManager';
-import UserProfile from './components/UserProfile';
+import Layout from './components/Layout';
 import Login from './components/Login';
+import PackageManager from './components/PackageManager';
 import PrivateRoute from './components/PrivateRoute';
+import RemoteExecution from './components/RemoteExecution';
+import Terminal from './components/Terminal';
+import UserProfile from './components/UserProfile';
 import { useUserContext } from './context/UserContext';
-import { DEFAULT_USER_PREFERENCES } from './types';
+import DockerPage from './pages/Docker';
+import { theme } from './styles/theme';
 
 const App: React.FC = () => {
   const { user, setUser } = useUserContext();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token && !user) {
-      // TODO: Implement token validation and user fetch
-      // For now, just set a placeholder user
-      setUser({
-        id: 1,
-        uuid: 'placeholder-uuid',
-        username: 'demo_user',
-        email: 'demo@example.com',
-        role: 'user',
-        preferredLanguage: 'en',
-        isActive: true,
-        lastLogin: new Date(),
-        mfaEnabled: false,
-        gdprCompliant: true,
-        preferences: DEFAULT_USER_PREFERENCES,
-      });
-    }
+    const validateUserToken = async (): Promise<void> => {
+      const token = localStorage.getItem('token');
+      if (token && !user) {
+        const result = await validateToken(token);
+        if (result.success && result.data) {
+          setUser(result.data);
+        } else {
+          // Token validation failed, remove the invalid token
+          localStorage.removeItem('token');
+        }
+      }
+    };
+
+    void validateUserToken();
   }, [user, setUser]);
 
   return (
@@ -82,6 +80,14 @@ const App: React.FC = () => {
                 element={
                   <PrivateRoute>
                     <PackageManager />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/docker"
+                element={
+                  <PrivateRoute>
+                    <DockerPage />
                   </PrivateRoute>
                 }
               />

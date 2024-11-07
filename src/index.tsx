@@ -1,11 +1,13 @@
-import React, { StrictMode } from 'react';
+// External dependencies
+import * as React from 'react';
 import { createRoot } from 'react-dom/client';
+
+// Internal dependencies
+import App from './App';
+import { UserContextProvider } from './context/UserContext';
 
 // Styles
 import './styles/global.css';
-
-// Main Application Component
-import App from './App';
 
 // Error Boundary Component
 interface ErrorBoundaryState {
@@ -84,9 +86,11 @@ const root = createRoot(rootElement);
 
 // Render the application
 root.render(
-  <StrictMode>
+  <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <UserContextProvider>
+        <App />
+      </UserContextProvider>
     </ErrorBoundary>
-  </StrictMode>,
+  </React.StrictMode>,
 );

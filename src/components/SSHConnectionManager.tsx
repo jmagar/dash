@@ -9,22 +9,53 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-type SSHConnectionManagerProps = Record<string, never>;
+import { connectHost, disconnectHost, getHostStatus } from '../api/hosts';
+import type { Host } from '../types';
 
-const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = () => {
+interface SSHConnectionManagerProps {
+  hostId: number;
+}
+
+const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = ({ hostId }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkStatus = async (): Promise<void> => {
+      try {
+        const result = await getHostStatus();
+        if (result.success && result.data) {
+          const host = result.data.find((h: Host) => h.id === hostId);
+          if (host) {
+            setIsConnected(host.isActive);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to check host status');
+      }
+    };
+
+    void checkStatus();
+    // Poll for status updates
+    const interval = setInterval(() => void checkStatus(), 30000);
+    return () => clearInterval(interval);
+  }, [hostId]);
 
   const connect = async (): Promise<void> => {
     try {
       setIsConnecting(true);
-      // TODO: Implement actual SSH connection logic
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate connection
-      setIsConnected(true);
-    } catch (error) {
-      console.error('Failed to connect:', error);
+      setError(null);
+      const result = await connectHost(hostId);
+      if (result.success) {
+        setIsConnected(true);
+      } else {
+        setError(result.error || 'Failed to connect');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect');
     } finally {
       setIsConnecting(false);
     }
@@ -33,11 +64,15 @@ const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = () => {
   const disconnect = async (): Promise<void> => {
     try {
       setIsConnecting(true);
-      // TODO: Implement actual SSH disconnection logic
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate disconnection
-      setIsConnected(false);
-    } catch (error) {
-      console.error('Failed to disconnect:', error);
+      setError(null);
+      const result = await disconnectHost(hostId);
+      if (result.success) {
+        setIsConnected(false);
+      } else {
+        setError(result.error || 'Failed to disconnect');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect');
     } finally {
       setIsConnecting(false);
     }
@@ -52,26 +87,30 @@ const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = () => {
           <Tooltip title="Connected">
             <ConnectedIcon color="success" />
           </Tooltip>
-          <IconButton
-            color="inherit"
-            onClick={() => void disconnect()}
-            title="Disconnect"
-          >
-            <PowerIcon />
-          </IconButton>
+          <Tooltip title={error || 'Disconnect'}>
+            <IconButton
+              color="inherit"
+              onClick={(): void => void disconnect()}
+              disabled={isConnecting}
+            >
+              <PowerIcon />
+            </IconButton>
+          </Tooltip>
         </>
       ) : (
         <>
           <Tooltip title="Disconnected">
             <DisconnectedIcon color="error" />
           </Tooltip>
-          <IconButton
-            color="inherit"
-            onClick={() => void connect()}
-            title="Connect"
-          >
-            <PowerIcon />
-          </IconButton>
+          <Tooltip title={error || 'Connect'}>
+            <IconButton
+              color="inherit"
+              onClick={(): void => void connect()}
+              disabled={isConnecting}
+            >
+              <PowerIcon />
+            </IconButton>
+          </Tooltip>
         </>
       )}
     </Box>

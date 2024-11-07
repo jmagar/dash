@@ -1,16 +1,51 @@
 import axios from 'axios';
+
 import { User, ApiResult, AuthResult, UserRegistration } from '../types';
 import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+
+// Configure axios defaults
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 responses globally
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401 && error.config && !error.config.__isRetryRequest) {
+      // Try to refresh the token
+      try {
+        const result = await refreshToken();
+        if (result.success && result.data) {
+          const token = result.data;
+          localStorage.setItem('token', token);
+          error.config.headers.Authorization = `Bearer ${token}`;
+          error.config.__isRetryRequest = true;
+          return axios(error.config);
+        }
+      } catch {
+        // If refresh fails, clear tokens and let the error propagate
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+      }
+    }
+    return Promise.reject(error);
+  },
+);
 
 export const login = async (
   username: string,
   password: string,
-  mfaToken?: string
+  mfaToken?: string,
 ): Promise<AuthResult> => {
   try {
     const { data } = await axios.post<AuthResult>(
       `${BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`,
-      { username, password, mfaToken }
+      { username, password, mfaToken },
     );
     return data;
   } catch (error) {
@@ -19,12 +54,12 @@ export const login = async (
 };
 
 export const registerUser = async (
-  registration: UserRegistration
+  registration: UserRegistration,
 ): Promise<ApiResult<User>> => {
   try {
     const { data } = await axios.post<User>(
       `${BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`,
-      registration
+      registration,
     );
     return {
       success: true,
@@ -36,12 +71,12 @@ export const registerUser = async (
 };
 
 export const validateToken = async (
-  token: string
+  token: string,
 ): Promise<ApiResult<User>> => {
   try {
     const { data } = await axios.post<User>(
       `${BASE_URL}${API_ENDPOINTS.AUTH.VALIDATE}`,
-      { token }
+      { token },
     );
     return {
       success: true,
@@ -55,7 +90,7 @@ export const validateToken = async (
 export const refreshToken = async (): Promise<ApiResult<string>> => {
   try {
     const { data } = await axios.post<{ token: string }>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`
+      `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
     );
     return {
       success: true,
@@ -69,6 +104,8 @@ export const refreshToken = async (): Promise<ApiResult<string>> => {
 export const logout = async (): Promise<ApiResult<void>> => {
   try {
     await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGOUT}`);
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     return {
       success: true,
     };
@@ -79,12 +116,12 @@ export const logout = async (): Promise<ApiResult<void>> => {
 
 export const updateUser = async (
   userId: number,
-  updates: Partial<User>
+  updates: Partial<User>,
 ): Promise<ApiResult<User>> => {
   try {
     const { data } = await axios.patch<User>(
       `${BASE_URL}${API_ENDPOINTS.AUTH.UPDATE(userId)}`,
-      updates
+      updates,
     );
     return {
       success: true,
@@ -97,12 +134,12 @@ export const updateUser = async (
 
 export const verifyMfa = async (
   token: string,
-  mfaCode: string
+  mfaCode: string,
 ): Promise<ApiResult<User>> => {
   try {
     const { data } = await axios.post<User>(
       `${BASE_URL}${API_ENDPOINTS.AUTH.VERIFY_MFA}`,
-      { token, mfaCode }
+      { token, mfaCode },
     );
     return {
       success: true,
@@ -116,7 +153,7 @@ export const verifyMfa = async (
 export const setupMfa = async (): Promise<ApiResult<{ qrCode: string; secret: string }>> => {
   try {
     const { data } = await axios.post<{ qrCode: string; secret: string }>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.SETUP_MFA}`
+      `${BASE_URL}${API_ENDPOINTS.AUTH.SETUP_MFA}`,
     );
     return {
       success: true,

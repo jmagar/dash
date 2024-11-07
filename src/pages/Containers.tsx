@@ -1,3 +1,7 @@
+import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
+import TerminalIcon from '@mui/icons-material/Terminal';
 import {
   Box,
   Dialog,
@@ -12,32 +16,68 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Alert,
 } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import DeleteIcon from '@mui/icons-material/Delete';
-import TerminalIcon from '@mui/icons-material/Terminal';
 import React, { useState } from 'react';
+
+import { startContainer, stopContainer, deleteContainer } from '../api/docker';
 import Terminal from '../components/Terminal';
 import { useDockerUpdates } from '../hooks/useDockerUpdates';
-import { Container } from '../types';
+import type { Container } from '../types';
 
-export default function ContainersPage() {
-  const { data: containers, loading, error } = useDockerUpdates({
+export default function ContainersPage(): JSX.Element {
+  const { data: containers, loading, error, refetch } = useDockerUpdates({
     enabled: true,
-    onUpdate: (data) => console.log('Containers updated:', data),
+    type: 'containers',
   });
+
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const handleTerminalOpen = (containerId: string) => {
+  const handleTerminalOpen = (containerId: string): void => {
     setSelectedContainerId(containerId);
     setTerminalOpen(true);
   };
 
-  const handleTerminalClose = () => {
+  const handleTerminalClose = (): void => {
     setTerminalOpen(false);
     setSelectedContainerId(null);
+  };
+
+  const handleContainerAction = async (id: string, action: 'start' | 'stop'): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await (action === 'start' ? startContainer(id) : stopContainer(id));
+      if (result.success) {
+        void refetch();
+      } else {
+        setActionError(result.error || `Failed to ${action} container`);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : `Failed to ${action} container`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteContainer = async (id: string): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await deleteContainer(id);
+      if (result.success) {
+        void refetch();
+      } else {
+        setActionError(result.error || 'Failed to delete container');
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete container');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -62,6 +102,12 @@ export default function ContainersPage() {
         <Typography variant="h5" gutterBottom>
           Containers
         </Typography>
+
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={(): void => setActionError(null)}>
+            {actionError}
+          </Alert>
+        )}
 
         <TableContainer component={Paper}>
           <Table>
@@ -92,6 +138,11 @@ export default function ContainersPage() {
                   <TableCell align="right">
                     <IconButton
                       color="primary"
+                      onClick={(): void => void handleContainerAction(
+                        container.id,
+                        container.state === 'running' ? 'stop' : 'start',
+                      )}
+                      disabled={actionLoading}
                       title={container.state === 'running' ? 'Stop' : 'Start'}
                     >
                       {container.state === 'running' ? (
@@ -102,13 +153,16 @@ export default function ContainersPage() {
                     </IconButton>
                     <IconButton
                       color="primary"
-                      onClick={() => handleTerminalOpen(container.id)}
+                      onClick={(): void => handleTerminalOpen(container.id)}
+                      disabled={actionLoading}
                       title="Open Terminal"
                     >
                       <TerminalIcon />
                     </IconButton>
                     <IconButton
                       color="error"
+                      onClick={(): void => void handleDeleteContainer(container.id)}
+                      disabled={actionLoading}
                       title="Delete"
                     >
                       <DeleteIcon />
@@ -116,6 +170,15 @@ export default function ContainersPage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {(!containers || containers.length === 0) && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center">
+                    <Typography color="textSecondary">
+                      No containers found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -129,7 +192,18 @@ export default function ContainersPage() {
       >
         <DialogTitle>Terminal - Container {selectedContainerId}</DialogTitle>
         <DialogContent>
-          {selectedContainerId && <Terminal host={{ id: 1, name: selectedContainerId, hostname: 'localhost', port: 22, ip: '127.0.0.1', isActive: true }} />}
+          {selectedContainerId && (
+            <Terminal
+              host={{
+                id: 1,
+                name: selectedContainerId,
+                hostname: 'localhost',
+                port: 22,
+                ip: '127.0.0.1',
+                isActive: true,
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </React.Fragment>

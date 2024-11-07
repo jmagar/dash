@@ -1,4 +1,8 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import {
+  ZoomIn as ZoomInIcon,
+  ZoomOut as ZoomOutIcon,
+  Settings as SettingsIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -6,19 +10,16 @@ import {
   Typography,
   IconButton,
 } from '@mui/material';
-import {
-  ZoomIn as ZoomInIcon,
-  ZoomOut as ZoomOutIcon,
-  Settings as SettingsIcon,
-} from '@mui/icons-material';
-import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
+import type { FitAddon } from '@xterm/addon-fit';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { Terminal as XTerm } from 'xterm';
+
 import { useAsync, useKeyPress, useLocalStorage } from '../hooks';
 import { Host } from '../types';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
+
 import 'xterm/css/xterm.css';
 
 const MIN_FONT_SIZE = 8;
@@ -29,16 +30,16 @@ interface TerminalProps {
   host?: Host;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
+const Terminal: React.FC<TerminalProps> = ({ host: initialHost }): JSX.Element => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm>();
   const socketRef = useRef<Socket>();
-  const fitAddonRef = useRef(new FitAddon());
-  const [selectedHost, setSelectedHost] = React.useState<Host | null>(initialHost || null);
-  const [hostSelectorOpen, setHostSelectorOpen] = React.useState(false);
+  const fitAddonRef = useRef<FitAddon>();
+  const [selectedHost, setSelectedHost] = useState<Host | null>(initialHost || null);
+  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const [fontSize, setFontSize] = useLocalStorage('terminal.fontSize', DEFAULT_FONT_SIZE);
 
-  const setupTerminal = useCallback(async () => {
+  const setupTerminal = useCallback(async (): Promise<() => void> => {
     if (!selectedHost || !terminalRef.current) {
       throw new Error('Host or terminal element not available');
     }
@@ -53,9 +54,20 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
       },
     });
 
+    // Load addons dynamically
+    const [{ FitAddon }, { WebLinksAddon }] = await Promise.all([
+      import('@xterm/addon-fit'),
+      import('@xterm/addon-web-links'),
+    ]);
+
+    // Initialize addons
+    const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
+    fitAddonRef.current = fitAddon;
+
     // Add addons
-    term.loadAddon(fitAddonRef.current);
-    term.loadAddon(new WebLinksAddon());
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
 
     // Clear previous terminal if it exists
     if (xtermRef.current) {
@@ -65,7 +77,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
     // Open terminal
     term.open(terminalRef.current);
     xtermRef.current = term;
-    fitAddonRef.current.fit();
+    fitAddon.fit();
 
     // Connect to WebSocket
     socketRef.current = io(`${process.env.REACT_APP_WS_URL}/terminal`, {
@@ -88,7 +100,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
 
     // Handle resize
     const handleResize = (): void => {
-      fitAddonRef.current.fit();
+      fitAddon.fit();
       const { rows, cols } = term;
       socketRef.current?.emit('resize', { rows, cols });
     };
@@ -100,6 +112,8 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
       window.removeEventListener('resize', handleResize);
       socketRef.current?.disconnect();
       term.dispose();
+      fitAddon.dispose();
+      webLinksAddon.dispose();
     };
 
     return cleanup;
@@ -116,7 +130,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
     },
     {
       deps: [setupTerminal],
-    }
+    },
   );
 
   useEffect(() => {
@@ -133,7 +147,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
   const handleFontSizeChange = (delta: number): void => {
     setFontSize((prev) => {
       const newSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, prev + delta));
-      if (xtermRef.current) {
+      if (xtermRef.current && fitAddonRef.current) {
         xtermRef.current.options.fontSize = newSize;
         fitAddonRef.current.fit();
       }
@@ -158,12 +172,12 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
   if (!selectedHost) {
     return (
       <Box sx={{ p: 3 }}>
-        <Button variant="contained" onClick={() => setHostSelectorOpen(true)}>
+        <Button variant="contained" onClick={(): void => setHostSelectorOpen(true)}>
           Select Host
         </Button>
         <HostSelector
           open={hostSelectorOpen}
-          onClose={() => setHostSelectorOpen(false)}
+          onClose={(): void => setHostSelectorOpen(false)}
           onSelect={handleHostSelect}
           multiSelect={false}
         />
@@ -179,7 +193,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
     return (
       <Box sx={{ p: 3 }}>
         <Typography color="error">{error}</Typography>
-        <Button variant="contained" onClick={() => void connectToTerminal()}>
+        <Button variant="contained" onClick={(): void => void connectToTerminal()}>
           Retry Connection
         </Button>
       </Box>
@@ -195,7 +209,7 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         <IconButton
-          onClick={() => handleFontSizeChange(-1)}
+          onClick={(): void => handleFontSizeChange(-1)}
           disabled={fontSize <= MIN_FONT_SIZE}
           title="Decrease font size (Ctrl+-)"
         >
@@ -203,13 +217,13 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
         </IconButton>
         <Typography variant="body2">{fontSize}px</Typography>
         <IconButton
-          onClick={() => handleFontSizeChange(1)}
+          onClick={(): void => handleFontSizeChange(1)}
           disabled={fontSize >= MAX_FONT_SIZE}
           title="Increase font size (Ctrl++)"
         >
           <ZoomInIcon />
         </IconButton>
-        <IconButton onClick={() => setHostSelectorOpen(true)}>
+        <IconButton onClick={(): void => setHostSelectorOpen(true)}>
           <SettingsIcon />
         </IconButton>
       </Box>

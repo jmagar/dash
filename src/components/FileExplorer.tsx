@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import {
+  ArrowUpward as UpIcon,
+  Add as AddIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -15,18 +19,16 @@ import {
   Typography,
   InputAdornment,
   Theme,
+  Alert,
 } from '@mui/material';
-import {
-  ArrowUpward as UpIcon,
-  Add as AddIcon,
-  Search as SearchIcon,
-} from '@mui/icons-material';
-import { useAsync, useDebounce, useKeyPress, useClickOutside } from '../hooks';
+import React, { useState } from 'react';
+
 import { listFiles, deleteFile, createDirectory } from '../api/fileExplorer';
-import { FileItem, Host } from '../types';
+import { useAsync, useDebounce, useKeyPress, useClickOutside } from '../hooks';
+import type { FileItem, Host } from '../types';
+import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
-import FileListItem from './FileListItem';
 
 interface CreateFolderDialogProps {
   open: boolean;
@@ -56,13 +58,13 @@ const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({ open, onClose, 
           label="Folder Name"
           fullWidth
           value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
+          onChange={(e): void => setFolderName(e.target.value)}
         />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
-          onClick={() => {
+          onClick={(): void => {
             if (folderName.trim()) {
               onConfirm(folderName.trim());
               setFolderName('');
@@ -84,12 +86,13 @@ const FileExplorer: React.FC = () => {
   const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
 
   const {
     data: files,
     loading,
-    error,
+    error: loadError,
     execute: loadFiles,
   } = useAsync<FileItem[]>(
     async () => {
@@ -100,11 +103,11 @@ const FileExplorer: React.FC = () => {
     {
       deps: [selectedHost?.id, currentPath],
       immediate: !!selectedHost,
-    }
+    },
   );
 
   const filteredFiles = files?.filter(file =>
-    file.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+    file.name.toLowerCase().includes(debouncedSearch.toLowerCase()),
   );
 
   const handleHostSelect = (hosts: Host[]): void => {
@@ -126,11 +129,15 @@ const FileExplorer: React.FC = () => {
 
     try {
       const newPath = `${currentPath}/${name}`.replace(/\/+/g, '/');
-      await createDirectory(selectedHost.id, newPath);
-      setCreateFolderDialogOpen(false);
-      void loadFiles();
+      const result = await createDirectory(selectedHost.id, newPath);
+      if (result.success) {
+        setCreateFolderDialogOpen(false);
+        void loadFiles();
+      } else {
+        setError(result.error || 'Failed to create folder');
+      }
     } catch (err) {
-      console.error('Failed to create folder:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create folder');
     }
   };
 
@@ -138,10 +145,14 @@ const FileExplorer: React.FC = () => {
     if (!selectedHost) return;
 
     try {
-      await deleteFile(selectedHost.id, path);
-      void loadFiles();
+      const result = await deleteFile(selectedHost.id, path);
+      if (result.success) {
+        void loadFiles();
+      } else {
+        setError(result.error || 'Failed to delete file');
+      }
     } catch (err) {
-      console.error('Failed to delete file:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete file');
     }
   };
 
@@ -155,12 +166,12 @@ const FileExplorer: React.FC = () => {
   if (!selectedHost) {
     return (
       <Box sx={{ p: 3 }}>
-        <Button variant="contained" onClick={() => setHostSelectorOpen(true)}>
+        <Button variant="contained" onClick={(): void => setHostSelectorOpen(true)}>
           Select Host
         </Button>
         <HostSelector
           open={hostSelectorOpen}
-          onClose={() => setHostSelectorOpen(false)}
+          onClose={(): void => setHostSelectorOpen(false)}
           onSelect={handleHostSelect}
           multiSelect={false}
         />
@@ -172,11 +183,11 @@ const FileExplorer: React.FC = () => {
     return <LoadingScreen fullscreen={false} message="Loading files..." />;
   }
 
-  if (error) {
+  if (loadError) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
-        <Button variant="contained" onClick={() => void loadFiles()}>
+        <Typography color="error">{loadError}</Typography>
+        <Button variant="contained" onClick={(): void => void loadFiles()}>
           Retry
         </Button>
       </Box>
@@ -195,7 +206,7 @@ const FileExplorer: React.FC = () => {
             size="small"
             placeholder="Search files..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e): void => setSearchTerm(e.target.value)}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -209,11 +220,17 @@ const FileExplorer: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => setCreateFolderDialogOpen(true)}
+          onClick={(): void => setCreateFolderDialogOpen(true)}
         >
           New Folder
         </Button>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={(): void => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
       <Paper>
         <List>
@@ -237,8 +254,10 @@ const FileExplorer: React.FC = () => {
             <FileListItem
               key={file.path}
               file={file}
+              hostId={selectedHost.id}
               onNavigate={handleNavigate}
               onDelete={handleDeleteFile}
+              onError={setError}
             />
           ))}
         </List>
@@ -246,7 +265,7 @@ const FileExplorer: React.FC = () => {
 
       <CreateFolderDialog
         open={createFolderDialogOpen}
-        onClose={() => setCreateFolderDialogOpen(false)}
+        onClose={(): void => setCreateFolderDialogOpen(false)}
         onConfirm={handleCreateFolder}
       />
     </Box>

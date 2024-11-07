@@ -1,3 +1,8 @@
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
 import {
   Box,
   Button,
@@ -14,30 +19,126 @@ import {
   TableRow,
   TextField,
   Typography,
+  Alert,
+  IconButton,
 } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import React, { useState } from 'react';
-import { useDockerUpdates } from '../hooks/useDockerUpdates';
-import { Stack } from '../types';
+import React, { useState, useMemo } from 'react';
 
-export default function ComposePage() {
-  const { data: stacks, loading, error } = useDockerUpdates({
+import {
+  createStack,
+  deleteStack,
+  startStack,
+  stopStack,
+  getStackComposeFile,
+  updateStackComposeFile,
+} from '../api/docker';
+import CodeEditor from '../components/CodeEditor';
+import { useDockerUpdates } from '../hooks/useDockerUpdates';
+import type { Stack } from '../types';
+
+export default function ComposePage(): JSX.Element {
+  const { data: rawStacks, loading, error, refetch } = useDockerUpdates({
     enabled: true,
-    onUpdate: (data) => console.log('Stacks updated:', data),
+    type: 'stacks',
   });
+
+  const stacks = useMemo(() => {
+    return Array.isArray(rawStacks) ? rawStacks as Stack[] : [];
+  }, [rawStacks]);
+
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [selectedStack, setSelectedStack] = useState<Stack | null>(null);
   const [newStackName, setNewStackName] = useState('');
   const [composeFile, setComposeFile] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const handleCreateStack = () => {
-    // TODO: Implement stack creation
-    console.log('Creating stack:', { name: newStackName, compose: composeFile });
-    setOpenCreateDialog(false);
-    setNewStackName('');
-    setComposeFile('');
+  const handleCreateStack = async (): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await createStack(newStackName, composeFile);
+      if (result.success) {
+        setOpenCreateDialog(false);
+        setNewStackName('');
+        setComposeFile('');
+        void refetch();
+      } else {
+        setActionError(result.error || 'Failed to create stack');
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to create stack');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteStack = async (name: string): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await deleteStack(name);
+      if (result.success) {
+        void refetch();
+      } else {
+        setActionError(result.error || 'Failed to delete stack');
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete stack');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStackAction = async (name: string, action: 'start' | 'stop'): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await (action === 'start' ? startStack(name) : stopStack(name));
+      if (result.success) {
+        void refetch();
+      } else {
+        setActionError(result.error || `Failed to ${action} stack`);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : `Failed to ${action} stack`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEditStack = async (stack: Stack): Promise<void> => {
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      const result = await getStackComposeFile(stack.name);
+      if (result.success && result.data) {
+        setSelectedStack(stack);
+        setComposeFile(result.data);
+        setOpenEditDialog(true);
+      } else {
+        setActionError(result.error || 'Failed to load compose file');
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to load compose file');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSaveComposeFile = async (content: string): Promise<void> => {
+    if (!selectedStack) return;
+
+    try {
+      const result = await updateStackComposeFile(selectedStack.name, content);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update compose file');
+      }
+      void refetch();
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to update compose file');
+    }
   };
 
   if (loading) {
@@ -65,11 +166,18 @@ export default function ComposePage() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => setOpenCreateDialog(true)}
+            onClick={(): void => setOpenCreateDialog(true)}
+            disabled={actionLoading}
           >
             Create Stack
           </Button>
         </Box>
+
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={(): void => setActionError(null)}>
+            {actionError}
+          </Alert>
+        )}
 
         <TableContainer component={Paper}>
           <Table>
@@ -83,7 +191,7 @@ export default function ComposePage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(stacks as Stack[])?.map((stack) => (
+              {stacks.map((stack) => (
                 <TableRow key={stack.name}>
                   <TableCell>{stack.name}</TableCell>
                   <TableCell>{stack.services}</TableCell>
@@ -92,21 +200,45 @@ export default function ComposePage() {
                     {new Date(stack.created).toLocaleString()}
                   </TableCell>
                   <TableCell align="right">
+                    <IconButton
+                      color="primary"
+                      onClick={(): void => void handleEditStack(stack)}
+                      disabled={actionLoading}
+                      title="Edit compose file"
+                    >
+                      <EditIcon />
+                    </IconButton>
                     <Button
                       startIcon={stack.status === 'running' ? <StopIcon /> : <PlayArrowIcon />}
                       color="primary"
+                      onClick={(): void => void handleStackAction(
+                        stack.name,
+                        stack.status === 'running' ? 'stop' : 'start',
+                      )}
+                      disabled={actionLoading}
                     >
                       {stack.status === 'running' ? 'Stop' : 'Start'}
                     </Button>
                     <Button
                       startIcon={<DeleteIcon />}
                       color="error"
+                      onClick={(): void => void handleDeleteStack(stack.name)}
+                      disabled={actionLoading}
                     >
                       Delete
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
+              {stacks.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    <Typography color="textSecondary">
+                      No stacks found. Create one to get started.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -114,7 +246,7 @@ export default function ComposePage() {
 
       <Dialog
         open={openCreateDialog}
-        onClose={() => setOpenCreateDialog(false)}
+        onClose={(): void => setOpenCreateDialog(false)}
         maxWidth="md"
         fullWidth
       >
@@ -126,8 +258,9 @@ export default function ComposePage() {
             label="Stack Name"
             fullWidth
             value={newStackName}
-            onChange={(e) => setNewStackName(e.target.value)}
+            onChange={(e): void => setNewStackName(e.target.value)}
             sx={{ mb: 2 }}
+            disabled={actionLoading}
           />
           <TextField
             label="Docker Compose File"
@@ -135,21 +268,50 @@ export default function ComposePage() {
             rows={10}
             fullWidth
             value={composeFile}
-            onChange={(e) => setComposeFile(e.target.value)}
+            onChange={(e): void => setComposeFile(e.target.value)}
             placeholder="version: '3'\nservices:\n  ..."
+            disabled={actionLoading}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenCreateDialog(false)}>Cancel</Button>
+          <Button onClick={(): void => setOpenCreateDialog(false)} disabled={actionLoading}>
+            Cancel
+          </Button>
           <Button
-            onClick={handleCreateStack}
+            onClick={(): void => void handleCreateStack()}
             variant="contained"
-            disabled={!newStackName || !composeFile}
+            disabled={actionLoading || !newStackName || !composeFile}
           >
             Create
           </Button>
         </DialogActions>
       </Dialog>
+
+      {selectedStack && (
+        <CodeEditor
+          open={openEditDialog}
+          onClose={(): void => {
+            setOpenEditDialog(false);
+            setSelectedStack(null);
+            setComposeFile('');
+          }}
+          onSave={handleSaveComposeFile}
+          initialContent={composeFile}
+          title={`${selectedStack.name} - docker-compose.yml`}
+          language="yaml"
+          files={stacks.map((stack) => ({
+            name: `${stack.name} - docker-compose.yml`,
+            content: '', // Content will be loaded when selected
+          }))}
+          onFileChange={(fileName: string): void => {
+            const stackName = fileName.split(' - ')[0];
+            const stack = stacks.find((s) => s.name === stackName);
+            if (stack) {
+              void handleEditStack(stack);
+            }
+          }}
+        />
+      )}
     </React.Fragment>
   );
 }

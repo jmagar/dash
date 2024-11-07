@@ -1,4 +1,15 @@
-import React from 'react';
+import {
+  Menu as MenuIcon,
+  Dashboard as DashboardIcon,
+  Storage as StorageIcon,
+  Terminal as TerminalIcon,
+  Code as CodeIcon,
+  Settings as SettingsIcon,
+  Person as PersonIcon,
+  Folder as FolderIcon,
+  Archive as PackageIcon,
+  ViewInAr as DockerIcon,
+} from '@mui/icons-material';
 import {
   AppBar,
   Box,
@@ -13,19 +24,10 @@ import {
   useTheme,
   Theme,
 } from '@mui/material';
-import {
-  Menu as MenuIcon,
-  Dashboard as DashboardIcon,
-  Storage as StorageIcon,
-  Terminal as TerminalIcon,
-  Code as CodeIcon,
-  Settings as SettingsIcon,
-  Person as PersonIcon,
-  Folder as FolderIcon,
-  Archive as PackageIcon,
-} from '@mui/icons-material';
+import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useKeyPress, useLocalStorage } from '../hooks';
+
+import { useLocalStorage } from '../hooks';
 
 const DRAWER_WIDTH = 240;
 
@@ -43,6 +45,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Packages', path: '/packages', icon: <PackageIcon />, shortcut: 'p', requiredRole: 'user' },
   { text: 'Terminal', path: '/terminal', icon: <TerminalIcon />, shortcut: 't', requiredRole: 'user' },
   { text: 'Execute', path: '/execute', icon: <CodeIcon />, shortcut: 'e', requiredRole: 'user' },
+  { text: 'Docker', path: '/docker', icon: <DockerIcon />, shortcut: 'k', requiredRole: 'user' },
   { text: 'Storage', path: '/storage', icon: <StorageIcon />, shortcut: 's', requiredRole: 'user' },
   { text: 'Settings', path: '/settings', icon: <SettingsIcon />, requiredRole: 'admin' },
   { text: 'Profile', path: '/profile', icon: <PersonIcon /> },
@@ -53,25 +56,35 @@ const Navigation: React.FC = () => {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useLocalStorage('navigation.drawerOpen', true);
 
-  // Add keyboard shortcuts for navigation
-  navigationItems.forEach((item) => {
-    if (item.shortcut) {
-      useKeyPress(item.shortcut, (e) => {
-        if (e.altKey) {
-          e.preventDefault();
-          window.location.href = item.path;
-        }
-      });
-    }
-  });
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent): void => {
+      if (!e.altKey) return;
 
-  // Toggle drawer with Alt+M
-  useKeyPress('m', (e) => {
-    if (e.altKey) {
-      e.preventDefault();
-      setDrawerOpen((prev) => !prev);
-    }
-  });
+      // Handle drawer toggle
+      if (e.key === 'm') {
+        e.preventDefault();
+        setDrawerOpen((prev) => !prev);
+        return;
+      }
+
+      // Handle navigation shortcuts
+      const item = navigationItems.find(
+        (item) => item.shortcut && item.shortcut.toLowerCase() === e.key.toLowerCase(),
+      );
+      if (item) {
+        e.preventDefault();
+        window.location.href = item.path;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [setDrawerOpen]);
+
+  const handleDrawerToggle = (): void => {
+    setDrawerOpen((prev) => !prev);
+  };
 
   const drawer = (
     <Box>
@@ -118,7 +131,7 @@ const Navigation: React.FC = () => {
           <IconButton
             color="inherit"
             edge="start"
-            onClick={() => setDrawerOpen((prev) => !prev)}
+            onClick={handleDrawerToggle}
             sx={{ mr: 2 }}
             title="Toggle navigation (Alt+M)"
           >
