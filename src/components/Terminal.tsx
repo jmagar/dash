@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Button,
   Paper,
   Typography,
   IconButton,
-  Theme,
 } from '@mui/material';
 import {
   ZoomIn as ZoomInIcon,
@@ -26,86 +25,105 @@ const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 32;
 const DEFAULT_FONT_SIZE = 14;
 
-const Terminal: React.FC = () => {
+interface TerminalProps {
+  host?: Host;
+}
+
+const Terminal: React.FC<TerminalProps> = ({ host: initialHost }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm>();
   const socketRef = useRef<Socket>();
   const fitAddonRef = useRef(new FitAddon());
-  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
-  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
+  const [selectedHost, setSelectedHost] = React.useState<Host | null>(initialHost || null);
+  const [hostSelectorOpen, setHostSelectorOpen] = React.useState(false);
   const [fontSize, setFontSize] = useLocalStorage('terminal.fontSize', DEFAULT_FONT_SIZE);
+
+  const setupTerminal = useCallback(async () => {
+    if (!selectedHost || !terminalRef.current) {
+      throw new Error('Host or terminal element not available');
+    }
+
+    // Initialize xterm
+    const term = new XTerm({
+      fontSize,
+      fontFamily: 'monospace',
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+      },
+    });
+
+    // Add addons
+    term.loadAddon(fitAddonRef.current);
+    term.loadAddon(new WebLinksAddon());
+
+    // Clear previous terminal if it exists
+    if (xtermRef.current) {
+      xtermRef.current.dispose();
+    }
+
+    // Open terminal
+    term.open(terminalRef.current);
+    xtermRef.current = term;
+    fitAddonRef.current.fit();
+
+    // Connect to WebSocket
+    socketRef.current = io(`${process.env.REACT_APP_WS_URL}/terminal`, {
+      query: { hostId: selectedHost.id },
+    });
+
+    // Handle terminal data
+    term.onData((data) => {
+      socketRef.current?.emit('data', data);
+    });
+
+    // Handle socket events
+    socketRef.current.on('data', (data: string) => {
+      term.write(data);
+    });
+
+    socketRef.current.on('error', (err: string) => {
+      term.writeln(`\r\nError: ${err}\r\n`);
+    });
+
+    // Handle resize
+    const handleResize = (): void => {
+      fitAddonRef.current.fit();
+      const { rows, cols } = term;
+      socketRef.current?.emit('resize', { rows, cols });
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup function
+    const cleanup = (): void => {
+      window.removeEventListener('resize', handleResize);
+      socketRef.current?.disconnect();
+      term.dispose();
+    };
+
+    return cleanup;
+  }, [selectedHost, fontSize]);
 
   const {
     loading,
     error,
-    execute: connectToHost,
+    execute: connectToTerminal,
   } = useAsync<void>(
     async () => {
-      if (!selectedHost || !terminalRef.current) return;
-
-      // Initialize xterm
-      const term = new XTerm({
-        fontSize,
-        fontFamily: 'monospace',
-        theme: {
-          background: '#1e1e1e',
-          foreground: '#d4d4d4',
-        },
-      });
-
-      // Add addons
-      term.loadAddon(fitAddonRef.current);
-      term.loadAddon(new WebLinksAddon());
-
-      // Clear previous terminal if it exists
-      if (xtermRef.current) {
-        xtermRef.current.dispose();
-      }
-
-      // Open terminal
-      term.open(terminalRef.current);
-      xtermRef.current = term;
-      fitAddonRef.current.fit();
-
-      // Connect to WebSocket
-      socketRef.current = io(`${process.env.REACT_APP_WS_URL}/terminal`, {
-        query: { hostId: selectedHost.id },
-      });
-
-      // Handle terminal data
-      term.onData((data) => {
-        socketRef.current?.emit('data', data);
-      });
-
-      // Handle socket events
-      socketRef.current.on('data', (data: string) => {
-        term.write(data);
-      });
-
-      socketRef.current.on('error', (err: string) => {
-        term.writeln(`\r\nError: ${err}\r\n`);
-      });
-
-      // Handle resize
-      const handleResize = (): void => {
-        fitAddonRef.current.fit();
-        const { rows, cols } = term;
-        socketRef.current?.emit('resize', { rows, cols });
-      };
-
-      window.addEventListener('resize', handleResize);
-
-      // Return cleanup function
-      return (): void => {
-        window.removeEventListener('resize', handleResize);
-        socketRef.current?.disconnect();
-        term.dispose();
-      };
+      const cleanup = await setupTerminal();
+      return cleanup();
     },
     {
-      deps: [selectedHost?.id, fontSize],
+      deps: [setupTerminal],
     }
   );
+
+  useEffect(() => {
+    if (selectedHost) {
+      void connectToTerminal();
+    }
+  }, [selectedHost, connectToTerminal]);
 
   const handleHostSelect = (hosts: Host[]): void => {
     setSelectedHost(hosts[0]);
@@ -137,12 +155,6 @@ const Terminal: React.FC = () => {
     }
   });
 
-  useEffect(() => {
-    if (selectedHost) {
-      void connectToHost();
-    }
-  }, [selectedHost, connectToHost]);
-
   if (!selectedHost) {
     return (
       <Box sx={{ p: 3 }}>
@@ -167,7 +179,7 @@ const Terminal: React.FC = () => {
     return (
       <Box sx={{ p: 3 }}>
         <Typography color="error">{error}</Typography>
-        <Button variant="contained" onClick={() => void connectToHost()}>
+        <Button variant="contained" onClick={() => void connectToTerminal()}>
           Retry Connection
         </Button>
       </Box>

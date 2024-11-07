@@ -1,117 +1,138 @@
 import axios from 'axios';
-import type { User, AuthToken } from '../types';
-import type { ApiResponse, ApiResult } from '../types';
-import { handleApiError } from '../types';
+import { User, ApiResult, AuthResult, UserRegistration } from '../types';
+import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
-const BASE_URL = process.env.REACT_APP_API_URL || '';
-
-interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-interface LoginResponse {
-  user: User;
-  token: AuthToken;
-}
-
-export const login = async (credentials: LoginCredentials): ApiResult<LoginResponse> => {
+export const login = async (
+  username: string,
+  password: string,
+  mfaToken?: string
+): Promise<AuthResult> => {
   try {
-    const { data } = await axios.post<LoginResponse>(`${BASE_URL}/api/auth/login`, credentials);
-    return {
-      success: true,
-      data,
-    } as ApiResponse<LoginResponse>;
-  } catch (error) {
-    return handleApiError<LoginResponse>(error);
-  }
-};
-
-export const logout = async (): ApiResult<void> => {
-  try {
-    await axios.post(`${BASE_URL}/api/auth/logout`);
-    return {
-      success: true,
-      data: undefined,
-    } as ApiResponse<void>;
-  } catch (error) {
-    return handleApiError<void>(error);
-  }
-};
-
-export const refreshToken = async (token: string): ApiResult<AuthToken> => {
-  try {
-    const { data } = await axios.post<AuthToken>(`${BASE_URL}/api/auth/refresh`, { token });
-    return {
-      success: true,
-      data,
-    } as ApiResponse<AuthToken>;
-  } catch (error) {
-    return handleApiError<AuthToken>(error);
-  }
-};
-
-export const updateUser = async (userId: number, updates: Partial<User>): ApiResult<User> => {
-  try {
-    const { data } = await axios.patch<User>(`${BASE_URL}/api/users/${userId}`, updates);
-    return {
-      success: true,
-      data,
-    } as ApiResponse<User>;
+    const { data } = await axios.post<AuthResult>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`,
+      { username, password, mfaToken }
+    );
+    return data;
   } catch (error) {
     return handleApiError<User>(error);
   }
 };
 
-export const changePassword = async (userId: number, currentPassword: string, newPassword: string): ApiResult<void> => {
+export const registerUser = async (
+  registration: UserRegistration
+): Promise<ApiResult<User>> => {
   try {
-    await axios.post(`${BASE_URL}/api/users/${userId}/password`, {
-      currentPassword,
-      newPassword,
-    });
+    const { data } = await axios.post<User>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`,
+      registration
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+      data,
+    };
+  } catch (error) {
+    return handleApiError<User>(error);
+  }
+};
+
+export const validateToken = async (
+  token: string
+): Promise<ApiResult<User>> => {
+  try {
+    const { data } = await axios.post<User>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.VALIDATE}`,
+      { token }
+    );
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    return handleApiError<User>(error);
+  }
+};
+
+export const refreshToken = async (): Promise<ApiResult<string>> => {
+  try {
+    const { data } = await axios.post<{ token: string }>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`
+    );
+    return {
+      success: true,
+      data: data.token,
+    };
+  } catch (error) {
+    return handleApiError<string>(error);
+  }
+};
+
+export const logout = async (): Promise<ApiResult<void>> => {
+  try {
+    await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGOUT}`);
+    return {
+      success: true,
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const requestPasswordReset = async (email: string): ApiResult<void> => {
+export const updateUser = async (
+  userId: number,
+  updates: Partial<User>
+): Promise<ApiResult<User>> => {
   try {
-    await axios.post(`${BASE_URL}/api/auth/password-reset/request`, { email });
+    const { data } = await axios.patch<User>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.UPDATE(userId)}`,
+      updates
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+      data,
+    };
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError<User>(error);
   }
 };
 
-export const resetPassword = async (token: string, newPassword: string): ApiResult<void> => {
+export const verifyMfa = async (
+  token: string,
+  mfaCode: string
+): Promise<ApiResult<User>> => {
   try {
-    await axios.post(`${BASE_URL}/api/auth/password-reset/confirm`, {
-      token,
-      newPassword,
-    });
+    const { data } = await axios.post<User>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.VERIFY_MFA}`,
+      { token, mfaCode }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+      data,
+    };
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError<User>(error);
   }
 };
 
-export const verifyEmail = async (token: string): ApiResult<void> => {
+export const setupMfa = async (): Promise<ApiResult<{ qrCode: string; secret: string }>> => {
   try {
-    await axios.post(`${BASE_URL}/api/auth/verify-email`, { token });
+    const { data } = await axios.post<{ qrCode: string; secret: string }>(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.SETUP_MFA}`
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+      data,
+    };
+  } catch (error) {
+    return handleApiError<{ qrCode: string; secret: string }>(error);
+  }
+};
+
+export const disableMfa = async (): Promise<ApiResult<void>> => {
+  try {
+    await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.DISABLE_MFA}`);
+    return {
+      success: true,
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }

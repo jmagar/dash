@@ -1,6 +1,6 @@
-import { createTheme, Theme } from '@mui/material';
+import { createTheme, ThemeOptions } from '@mui/material/styles';
 
-export const theme = createTheme({
+const themeOptions: ThemeOptions = {
   palette: {
     mode: 'dark',
     primary: {
@@ -100,7 +100,21 @@ export const theme = createTheme({
         },
       },
     },
+    MuiListItem: {
+      styleOverrides: {
+        root: {
+          '&.Mui-selected': {
+            backgroundColor: 'rgba(144, 202, 249, 0.08)',
+            '&:hover': {
+              backgroundColor: 'rgba(144, 202, 249, 0.12)',
+            },
+          },
+        },
+      },
+    },
   },
-});
+};
 
-export type AppTheme = Theme;
+export const theme = createTheme(themeOptions);
+
+export type AppTheme = typeof theme;

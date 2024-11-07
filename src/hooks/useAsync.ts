@@ -1,86 +1,68 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
-export interface UseAsyncOptions {
-  onSuccess?: (data: unknown) => void;
-  onError?: (error: Error) => void;
+export interface UseAsyncOptions<T> {
   immediate?: boolean;
-  deps?: unknown[];
+  deps?: any[];
+  onSuccess?: (data: T) => void;
+  onError?: (error: string) => void;
 }
 
 export interface UseAsyncResult<T> {
+  data: T | null;
   loading: boolean;
   error: string | null;
-  data: T | null;
-  execute: (...args: unknown[]) => Promise<T>;
+  execute: (...args: any[]) => Promise<T>;
+  setError: (error: string | null) => void;
   clearError: () => void;
-  setError: (error: string) => void;
 }
 
 export function useAsync<T>(
-  asyncFunction: (...args: unknown[]) => Promise<T>,
-  options: UseAsyncOptions = {}
+  asyncFunction: (...args: any[]) => Promise<T>,
+  options: UseAsyncOptions<T> = {}
 ): UseAsyncResult<T> {
-  const { onSuccess, onError, immediate = false, deps = [] } = options;
+  const { immediate = false, deps = [], onSuccess, onError } = options;
   const [loading, setLoading] = useState<boolean>(immediate);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<T | null>(null);
-  const mounted = useRef<boolean>(true);
-
-  // Store the options in a ref to avoid unnecessary reruns of useEffect
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   const execute = useCallback(
-    async (...args: unknown[]): Promise<T> => {
+    async (...args: any[]): Promise<T> => {
       try {
         setLoading(true);
         setError(null);
         const result = await asyncFunction(...args);
-        if (mounted.current) {
-          setData(result);
-          optionsRef.current.onSuccess?.(result);
-        }
+        setData(result);
+        onSuccess?.(result);
         return result;
       } catch (err) {
-        if (mounted.current) {
-          const error = err instanceof Error ? err : new Error('An error occurred');
-          setError(error.message);
-          optionsRef.current.onError?.(error);
-        }
+        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+        setError(errorMessage);
+        onError?.(errorMessage);
         throw err;
       } finally {
-        if (mounted.current) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     },
-    [asyncFunction]
+    [asyncFunction, onSuccess, onError]
   );
-
-  const clearError = useCallback((): void => {
-    setError(null);
-  }, []);
 
   useEffect(() => {
     if (immediate) {
       void execute();
     }
-  }, [...deps, execute]);
+  }, [immediate, execute, ...deps]);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   return {
+    data,
     loading,
     error,
-    data,
     execute,
-    clearError,
     setError,
+    clearError,
   };
 }
 

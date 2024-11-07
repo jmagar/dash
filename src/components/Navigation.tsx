@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   AppBar,
   Box,
@@ -34,16 +34,17 @@ interface NavigationItem {
   path: string;
   icon: React.ReactNode;
   shortcut?: string;
+  requiredRole?: 'admin' | 'user' | 'viewer';
 }
 
 const navigationItems: NavigationItem[] = [
   { text: 'Dashboard', path: '/', icon: <DashboardIcon />, shortcut: 'd' },
   { text: 'Files', path: '/files', icon: <FolderIcon />, shortcut: 'f' },
-  { text: 'Packages', path: '/packages', icon: <PackageIcon />, shortcut: 'p' },
-  { text: 'Terminal', path: '/terminal', icon: <TerminalIcon />, shortcut: 't' },
-  { text: 'Execute', path: '/execute', icon: <CodeIcon />, shortcut: 'e' },
-  { text: 'Storage', path: '/storage', icon: <StorageIcon />, shortcut: 's' },
-  { text: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+  { text: 'Packages', path: '/packages', icon: <PackageIcon />, shortcut: 'p', requiredRole: 'user' },
+  { text: 'Terminal', path: '/terminal', icon: <TerminalIcon />, shortcut: 't', requiredRole: 'user' },
+  { text: 'Execute', path: '/execute', icon: <CodeIcon />, shortcut: 'e', requiredRole: 'user' },
+  { text: 'Storage', path: '/storage', icon: <StorageIcon />, shortcut: 's', requiredRole: 'user' },
+  { text: 'Settings', path: '/settings', icon: <SettingsIcon />, requiredRole: 'admin' },
   { text: 'Profile', path: '/profile', icon: <PersonIcon /> },
 ];
 

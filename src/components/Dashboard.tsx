@@ -12,7 +12,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Theme,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -77,7 +76,9 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
     execute: loadStats,
   } = useAsync<SystemStats>(
     async () => {
-      if (!isVisible) throw new Error('Host card not visible');
+      if (!isVisible) {
+        throw new Error('Host card not visible');
+      }
       const response = await getSystemStats(host.id);
       if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to load system stats');

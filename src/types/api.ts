@@ -1,77 +1,59 @@
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
+import { ApiResult } from './index';
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export type ApiResult<T> = Promise<ApiResponse<T>>;
-
-export const handleApiError = <T>(error: unknown): ApiResponse<T> => {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<{ message?: string }>;
-    return {
-      success: false,
-      error: axiosError.response?.data?.message || axiosError.message,
-    };
-  }
-
-  if (error instanceof Error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-
-  return {
-    success: false,
-    error: 'An unknown error occurred',
-  };
-};
-
-export const BASE_URL = process.env.REACT_APP_API_URL || '';
+export const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
+    REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/refresh',
-    VERIFY: '/auth/verify',
+    VALIDATE: '/auth/validate',
+    UPDATE: (userId: number) => `/auth/users/${userId}`,
+    VERIFY_MFA: '/auth/mfa/verify',
+    SETUP_MFA: '/auth/mfa/setup',
+    DISABLE_MFA: '/auth/mfa/disable',
+  },
+  FILES: {
+    LIST: (hostId: number) => `/hosts/${hostId}/files`,
+    DOWNLOAD: (hostId: number) => `/hosts/${hostId}/files/download`,
+    UPLOAD: (hostId: number) => `/hosts/${hostId}/files/upload`,
+    DELETE: (hostId: number) => `/hosts/${hostId}/files/delete`,
   },
   HOSTS: {
     LIST: '/hosts',
-    STATUS: '/hosts/status',
-    STATS: (id: number) => `/hosts/${id}/stats`,
-    CONNECT: (id: number) => `/hosts/${id}/connect`,
-    DISCONNECT: (id: number) => `/hosts/${id}/disconnect`,
-  },
-  FILES: {
-    LIST: (hostId: number) => `/files/${hostId}/list`,
-    DOWNLOAD: (hostId: number) => `/files/${hostId}/download`,
-    UPLOAD: (hostId: number) => `/files/${hostId}/upload`,
-    DELETE: (hostId: number) => `/files/${hostId}/delete`,
+    CREATE: '/hosts',
+    UPDATE: (hostId: number) => `/hosts/${hostId}`,
+    DELETE: (hostId: number) => `/hosts/${hostId}`,
+    STATS: (hostId: number) => `/hosts/${hostId}/stats`,
   },
   PACKAGES: {
-    LIST: (hostId: number) => `/packages/${hostId}/list`,
-    INSTALL: (hostId: number) => `/packages/${hostId}/install`,
-    UNINSTALL: (hostId: number) => `/packages/${hostId}/uninstall`,
-    UPDATE: (hostId: number) => `/packages/${hostId}/update`,
+    LIST: (hostId: number) => `/hosts/${hostId}/packages`,
+    INSTALL: (hostId: number) => `/hosts/${hostId}/packages/install`,
+    UNINSTALL: (hostId: number) => `/hosts/${hostId}/packages/uninstall`,
+    UPDATE: (hostId: number) => `/hosts/${hostId}/packages/update`,
   },
-  EXECUTE: {
-    COMMAND: (hostId: number) => `/execute/${hostId}/command`,
-    SCRIPT: (hostId: number) => `/execute/${hostId}/script`,
-    HISTORY: (hostId: number) => `/execute/${hostId}/history`,
+  DOCKER: {
+    CONTAINERS: '/docker/containers',
+    CONTAINER: (id: string) => `/docker/containers/${id}`,
+    CONTAINER_LOGS: (id: string) => `/docker/containers/${id}/logs`,
+    CONTAINER_STATS: (id: string) => `/docker/containers/${id}/stats`,
+    CONTAINER_EXEC: (id: string) => `/docker/containers/${id}/exec`,
+    STACKS: '/docker/stacks',
+    STACK: (name: string) => `/docker/stacks/${name}`,
   },
-  TERMINAL: {
-    CREATE: (hostId: number) => `/terminal/${hostId}/create`,
-    RESIZE: (hostId: number, sessionId: string) => `/terminal/${hostId}/${sessionId}/resize`,
-    CLOSE: (hostId: number, sessionId: string) => `/terminal/${hostId}/${sessionId}/close`,
-  },
-  USER: {
-    PROFILE: '/user/profile',
-    PREFERENCES: '/user/preferences',
-    PASSWORD: '/user/password',
-  },
+};
+
+export const handleApiError = <T>(error: unknown): ApiResult<T> => {
+  if (error instanceof AxiosError) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message,
+    };
+  }
+  return {
+    success: false,
+    error: error instanceof Error ? error.message : 'An unknown error occurred',
+  };
 };

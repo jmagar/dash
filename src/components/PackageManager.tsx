@@ -3,39 +3,32 @@ import {
   Box,
   Button,
   IconButton,
-  List,
-  ListItem,
-  ListItemSecondaryAction,
-  ListItemText,
   Paper,
   TextField,
   Typography,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
   InputAdornment,
-  Theme,
 } from '@mui/material';
 import {
-  Refresh as RefreshIcon,
+  PlayArrow as PlayIcon,
+  Stop as StopIcon,
   Delete as DeleteIcon,
+  Search as SearchIcon,
+  History as HistoryIcon,
   Add as AddIcon,
   Update as UpdateIcon,
-  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useAsync, useDebounce, useKeyPress } from '../hooks';
-import { fetchPackages, installPackage, uninstallPackage, updatePackage } from '../api/packageManager';
-import { Host } from '../types';
+import { installPackage, uninstallPackage, updatePackage } from '../api/packageManager';
+import { Host, Package } from '../types';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
 
-interface Package {
-  name: string;
-  version: string;
-  description?: string;
-  installed: boolean;
-  updateAvailable: boolean;
-}
-
 const PackageManager: React.FC = () => {
-  const [selectedHosts, setSelectedHosts] = useState<Host[]>([]);
+  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
   const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
@@ -47,71 +40,73 @@ const PackageManager: React.FC = () => {
     execute: loadPackages,
   } = useAsync<Package[]>(
     async () => {
-      if (selectedHosts.length === 0) return [];
-      const responses = await Promise.all(selectedHosts.map((host) => fetchPackages(host.id)));
-      return responses.flatMap((response) => response.success && response.data ? response.data : []);
+      if (!selectedHost) {
+        throw new Error('No host selected');
+      }
+      const response = await fetch(`/api/packages/${selectedHost.id}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load packages');
+      }
+      return data;
     },
     {
-      deps: [selectedHosts],
-      immediate: selectedHosts.length > 0,
+      deps: [selectedHost?.id],
+      immediate: !!selectedHost,
     }
   );
+
+  const handleHostSelect = (hosts: Host[]): void => {
+    setSelectedHost(hosts[0]);
+    setHostSelectorOpen(false);
+  };
+
+  const handleInstall = async (pkg: Package): Promise<void> => {
+    if (!selectedHost) return;
+    try {
+      await installPackage(selectedHost.id, pkg.name);
+      void loadPackages();
+    } catch (error) {
+      console.error('Failed to install package:', error);
+    }
+  };
+
+  const handleUninstall = async (pkg: Package): Promise<void> => {
+    if (!selectedHost) return;
+    try {
+      await uninstallPackage(selectedHost.id, pkg.name);
+      void loadPackages();
+    } catch (error) {
+      console.error('Failed to uninstall package:', error);
+    }
+  };
+
+  const handleUpdate = async (pkg: Package): Promise<void> => {
+    if (!selectedHost) return;
+    try {
+      await updatePackage(selectedHost.id, pkg.name);
+      void loadPackages();
+    } catch (error) {
+      console.error('Failed to update package:', error);
+    }
+  };
 
   const filteredPackages = packages?.filter(pkg =>
     pkg.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
     pkg.description?.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
-  const handleHostSelect = (hosts: Host[]): void => {
-    setSelectedHosts(hosts);
-    setHostSelectorOpen(false);
-  };
-
-  const handleInstall = async (pkg: Package): Promise<void> => {
-    try {
-      await Promise.all(selectedHosts.map((host) => installPackage(host.id, pkg.name)));
-      void loadPackages();
-    } catch (err) {
-      console.error('Failed to install package:', err);
-    }
-  };
-
-  const handleUninstall = async (pkg: Package): Promise<void> => {
-    try {
-      await Promise.all(selectedHosts.map((host) => uninstallPackage(host.id, pkg.name)));
-      void loadPackages();
-    } catch (err) {
-      console.error('Failed to uninstall package:', err);
-    }
-  };
-
-  const handleUpdate = async (pkg: Package): Promise<void> => {
-    try {
-      await Promise.all(selectedHosts.map((host) => updatePackage(host.id, pkg.name)));
-      void loadPackages();
-    } catch (err) {
-      console.error('Failed to update package:', err);
-    }
-  };
-
-  useKeyPress('r', (e) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      void loadPackages();
-    }
-  });
-
-  if (selectedHosts.length === 0) {
+  if (!selectedHost) {
     return (
       <Box sx={{ p: 3 }}>
         <Button variant="contained" onClick={() => setHostSelectorOpen(true)}>
-          Select Hosts
+          Select Host
         </Button>
         <HostSelector
           open={hostSelectorOpen}
           onClose={() => setHostSelectorOpen(false)}
           onSelect={handleHostSelect}
-          multiSelect={true}
+          multiSelect={false}
         />
       </Box>
     );
@@ -137,7 +132,7 @@ const PackageManager: React.FC = () => {
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="h5">Package Manager</Typography>
         <Typography variant="subtitle1" color="textSecondary">
-          {selectedHosts.map(h => h.name).join(', ')}
+          {selectedHost.name} - {selectedHost.hostname}:{selectedHost.port}
         </Typography>
         <Box sx={{ flexGrow: 1 }}>
           <TextField
@@ -155,8 +150,8 @@ const PackageManager: React.FC = () => {
             fullWidth
           />
         </Box>
-        <IconButton onClick={() => void loadPackages()} title="Refresh (Ctrl+R)">
-          <RefreshIcon />
+        <IconButton onClick={() => void loadPackages()} title="Refresh packages">
+          <HistoryIcon />
         </IconButton>
       </Box>
 

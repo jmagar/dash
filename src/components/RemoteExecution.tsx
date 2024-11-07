@@ -11,19 +11,15 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   InputAdornment,
-  Theme,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
-  Stop as StopIcon,
-  Delete as DeleteIcon,
   Search as SearchIcon,
   History as HistoryIcon,
-  Save as SaveIcon,
 } from '@mui/icons-material';
-import { useAsync, useDebounce, useKeyPress, useLocalStorage } from '../hooks';
+import { useAsync, useDebounce, useKeyPress } from '../hooks';
 import { executeCommand, getCommandHistory } from '../api/remoteExecution';
-import { Host, CommandHistory, CommandResult } from '../types';
+import { Host, CommandHistory } from '../types';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
 
@@ -33,7 +29,6 @@ const RemoteExecution: React.FC = () => {
   const [command, setCommand] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
-  const [savedCommands, setSavedCommands] = useLocalStorage<CommandHistory[]>('command.history', []);
 
   const {
     data: history,
@@ -42,9 +37,14 @@ const RemoteExecution: React.FC = () => {
     execute: loadHistory,
   } = useAsync<CommandHistory[]>(
     async () => {
-      if (!selectedHost) return [];
+      if (!selectedHost) {
+        throw new Error('No host selected');
+      }
       const response = await getCommandHistory(selectedHost.id);
-      return response.success ? response.data || [] : [];
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to load command history');
+      }
+      return response.data;
     },
     {
       deps: [selectedHost?.id],
@@ -56,24 +56,19 @@ const RemoteExecution: React.FC = () => {
     loading: executeLoading,
     error: executeError,
     execute: runCommand,
-  } = useAsync<CommandResult>(
+  } = useAsync<void>(
     async () => {
       if (!selectedHost || !command.trim()) {
         throw new Error('Host or command not specified');
       }
 
       const response = await executeCommand(selectedHost.id, command);
-      if (!response.success || !response.data) {
+      if (!response.success) {
         throw new Error(response.error || 'Failed to execute command');
       }
 
-      const newCommand: CommandHistory = {
-        ...response.data,
-        timestamp: new Date(),
-      };
-      setSavedCommands((prev) => [newCommand, ...prev].slice(0, 100));
       setCommand('');
-      return response.data;
+      void loadHistory();
     },
     {
       onError: (error) => {
@@ -123,13 +118,32 @@ const RemoteExecution: React.FC = () => {
     );
   }
 
+  if (executeLoading || historyLoading) {
+    return <LoadingScreen fullscreen={false} message="Connecting to terminal..." />;
+  }
+
+  if (executeError || historyError) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{executeError || historyError}</Typography>
+        <Button variant="contained" onClick={() => void runCommand()}>
+          Retry Connection
+        </Button>
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="h5">Remote Execution</Typography>
         <Typography variant="subtitle1" color="textSecondary">
           {selectedHost.name} - {selectedHost.hostname}:{selectedHost.port}
         </Typography>
+        <Box sx={{ flexGrow: 1 }} />
+        <IconButton onClick={() => void loadHistory()} disabled={historyLoading}>
+          <HistoryIcon />
+        </IconButton>
       </Box>
 
       <Paper sx={{ mb: 3, p: 2 }}>
@@ -180,9 +194,6 @@ const RemoteExecution: React.FC = () => {
             }}
             sx={{ flexGrow: 1 }}
           />
-          <IconButton onClick={() => void loadHistory()} disabled={historyLoading}>
-            <HistoryIcon />
-          </IconButton>
         </Box>
 
         {historyLoading ? (

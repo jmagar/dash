@@ -1,27 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
+  Box,
+  Button,
+  IconButton,
+  Paper,
+  TextField,
+  Typography,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  ListItemIcon,
+  InputAdornment,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Checkbox,
-  IconButton,
-  TextField,
-  InputAdornment,
-  Box,
-  Typography,
-  Theme,
 } from '@mui/material';
 import {
   Computer as ComputerIcon,
   Search as SearchIcon,
-  Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAsync, useDebounce, useClickOutside } from '../hooks';
@@ -44,8 +42,8 @@ const HostSelector: React.FC<HostSelectorProps> = ({
   multiSelect = false,
   selectedHosts = [],
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selected, setSelected] = useState<Host[]>(selectedHosts);
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [selected, setSelected] = React.useState<Host[]>(selectedHosts);
   const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
   const dialogRef = useClickOutside<HTMLDivElement>(onClose);
 
@@ -155,20 +153,14 @@ const HostSelector: React.FC<HostSelectorProps> = ({
               <ListItem
                 key={host.id}
                 onClick={() => handleSelect(host)}
+                selected={selected.some((h) => h.id === host.id)}
                 sx={{
                   cursor: 'pointer',
                   '&:hover': {
-                    backgroundColor: (theme: Theme) => theme.palette.action.hover,
+                    backgroundColor: 'action.hover',
                   },
                 }}
               >
-                {multiSelect && (
-                  <Checkbox
-                    checked={selected.some((h) => h.id === host.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => handleSelect(host)}
-                  />
-                )}
                 <ListItemIcon>
                   <ComputerIcon color={host.isActive ? 'success' : 'error'} />
                 </ListItemIcon>
@@ -176,12 +168,14 @@ const HostSelector: React.FC<HostSelectorProps> = ({
                   primary={host.name}
                   secondary={`${host.hostname}:${host.port} - ${host.ip}`}
                 />
-                <IconButton
-                  onClick={(e) => void handleDelete(host, e)}
-                  title="Delete host"
-                >
-                  <DeleteIcon />
-                </IconButton>
+                <ListItemSecondaryAction>
+                  <IconButton
+                    onClick={(e) => void handleDelete(host, e)}
+                    title="Delete host"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
               </ListItem>
             ))}
           </List>

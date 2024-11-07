@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   Button,
@@ -10,15 +10,11 @@ import {
   Select,
   TextField,
   Typography,
-  IconButton,
-  Alert,
-  Theme,
 } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
-import { useAsync, useDebounce, useKeyPress, useLocalStorage } from '../hooks';
+import { useAsync } from '../hooks';
 import { updateUser } from '../api/auth';
 import { useUserContext } from '../context/UserContext';
-import { User, UserPreferences, DEFAULT_USER_PREFERENCES } from '../types';
+import { User, UserPreferences } from '../types';
 import LoadingScreen from './LoadingScreen';
 
 const AVAILABLE_THEMES = [
@@ -42,13 +38,7 @@ const TERMINAL_FONTS = [
 ];
 
 const UserProfile: React.FC = () => {
-  const { user, updateUserContext } = useUserContext();
-  const [preferences, setPreferences] = useLocalStorage<UserPreferences>(
-    'user.preferences',
-    DEFAULT_USER_PREFERENCES
-  );
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const debouncedPreferences = useDebounce(preferences, { delay: 500 });
+  const { user, setUser } = useUserContext();
 
   const {
     loading,
@@ -59,17 +49,14 @@ const UserProfile: React.FC = () => {
       if (!user) throw new Error('No user logged in');
 
       const response = await updateUser(user.id, {
-        ...user,
-        preferences: debouncedPreferences,
+        preferences: user.preferences,
       });
 
       if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to update preferences');
       }
 
-      updateUserContext(response.data);
-      setSuccessMessage('Preferences saved successfully');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setUser(response.data);
       return response.data;
     },
     {
@@ -83,18 +70,16 @@ const UserProfile: React.FC = () => {
     key: K,
     value: UserPreferences[K]
   ): void => {
-    setPreferences((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
+    if (!user) return;
 
-  useKeyPress('s', (e) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      void savePreferences();
-    }
-  });
+    setUser({
+      ...user,
+      preferences: {
+        ...user.preferences,
+        [key]: value,
+      },
+    });
+  };
 
   if (!user) {
     return (
@@ -115,24 +100,17 @@ const UserProfile: React.FC = () => {
         <Box sx={{ flexGrow: 1 }} />
         <Button
           variant="contained"
-          startIcon={<SaveIcon />}
           onClick={() => void savePreferences()}
           disabled={loading}
         >
-          Save Preferences (Ctrl+S)
+          Save Preferences
         </Button>
       </Box>
 
-      {successMessage && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {successMessage}
-        </Alert>
-      )}
-
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Typography color="error" sx={{ mb: 2 }}>
           {error}
-        </Alert>
+        </Typography>
       )}
 
       <Card>
@@ -170,7 +148,7 @@ const UserProfile: React.FC = () => {
             <FormControl>
               <InputLabel>Theme</InputLabel>
               <Select
-                value={preferences.theme}
+                value={user.preferences.theme}
                 label="Theme"
                 onChange={(e) => handlePreferenceChange('theme', e.target.value as UserPreferences['theme'])}
               >
@@ -185,7 +163,7 @@ const UserProfile: React.FC = () => {
             <FormControl>
               <InputLabel>Language</InputLabel>
               <Select
-                value={preferences.language}
+                value={user.preferences.language}
                 label="Language"
                 onChange={(e) => handlePreferenceChange('language', e.target.value)}
               >
@@ -200,7 +178,7 @@ const UserProfile: React.FC = () => {
             <FormControl>
               <InputLabel>Terminal Font</InputLabel>
               <Select
-                value={preferences.terminalFontFamily}
+                value={user.preferences.terminalFontFamily}
                 label="Terminal Font"
                 onChange={(e) => handlePreferenceChange('terminalFontFamily', e.target.value)}
               >
@@ -215,7 +193,7 @@ const UserProfile: React.FC = () => {
             <TextField
               type="number"
               label="Terminal Font Size"
-              value={preferences.terminalFontSize}
+              value={user.preferences.terminalFontSize}
               onChange={(e) => handlePreferenceChange('terminalFontSize', parseInt(e.target.value, 10))}
               inputProps={{ min: 8, max: 32 }}
             />

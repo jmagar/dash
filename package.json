@@ -1,88 +1,39 @@
 {
-  "name": "shh-remote-management",
-  "version": "1.0.0",
-  "description": "SSH and Docker Management Application",
-  "main": "src/index.tsx",
-  "type": "commonjs",
-  "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+  "name": "shh",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.3",
+    "@mui/material": "^5.15.3",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.70",
+    "@types/react": "^18.2.47",
+    "@types/react-dom": "^18.2.18",
+    "axios": "^1.6.5",
+    "bcrypt": "^5.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1",
+    "react-scripts": "5.0.1",
+    "socket.io-client": "^4.7.4",
+    "typescript": "^4.9.5",
+    "web-vitals": "^2.1.4",
+    "@xterm/addon-fit": "^0.9.0",
+    "@xterm/addon-web-links": "^0.10.0",
+    "xterm": "^5.3.0"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.{js,cjs}\" \"backend/**/*.js\"",
-    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.{js,cjs}\" \"backend/**/*.js\" --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css}\" \"scripts/**/*.{js,cjs}\" \"backend/**/*.js\"",
-    "backend": "nodemon backend/server.js",
-    "start:prod": "node backend/server.js",
-    "db:migrate": "node scripts/migrate.cjs",
-    "db:seed": "node scripts/seed.js",
-    "docker:build": "docker-compose build",
-    "docker:up": "docker-compose up",
-    "docker:down": "docker-compose down",
-    "prepare": "husky install"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.11.1",
-    "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.14.9",
-    "@mui/material": "^5.14.9",
-    "axios": "^1.5.0",
-    "bcrypt": "^5.1.1",
-    "compression": "^1.7.4",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.0.2",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.16.0",
-    "socket.io": "^4.7.2",
-    "socket.io-client": "^4.7.2",
-    "winston": "^3.10.0",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.7.0",
-    "xterm-addon-web-links": "^0.8.0"
-  },
-  "devDependencies": {
-    "@babel/plugin-transform-private-property-in-object": "^7.22.11",
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^14.3.1",
-    "@testing-library/user-event": "^14.5.2",
-    "@types/bcrypt": "^5.0.1",
-    "@types/compression": "^1.7.4",
-    "@types/cors": "^2.8.15",
-    "@types/express": "^4.17.20",
-    "@types/jest": "^29.5.14",
-    "@types/jsonwebtoken": "^9.0.4",
-    "@types/node": "^20.8.7",
-    "@types/pg": "^8.10.7",
-    "@types/react": "^18.2.31",
-    "@types/react-dom": "^18.2.14",
-    "@types/socket.io-client": "^3.0.0",
-    "@types/testing-library__jest-dom": "^5.14.9",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
-    "eslint": "^8.52.0",
-    "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-import": "^2.29.1",
-    "eslint-plugin-react": "^7.33.2",
-    "eslint-plugin-unused-imports": "^3.0.0",
-    "husky": "^8.0.3",
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "lint-staged": "^15.0.2",
-    "nodemon": "^3.0.1",
-    "prettier": "^3.0.3",
-    "react-scripts": "^5.0.1",
-    "ts-jest": "^29.2.5",
-    "ts-node": "^10.9.1",
-    "typescript": "^4.9.5"
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "eslintConfig": {
     "extends": [
@@ -102,14 +53,15 @@
       "last 1 safari version"
     ]
   },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "jsdom",
-    "setupFilesAfterEnv": [
-      "@testing-library/jest-dom/extend-expect"
-    ],
-    "moduleNameMapper": {
-      "\\.(css|less|scss|sass)$": "identity-obj-proxy"
-    }
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.2",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.1.1"
   }
 }

@@ -1,72 +1,25 @@
-import { Box } from '@mui/material';
-import CssBaseline from '@mui/material/CssBaseline';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import React, { useState, useEffect } from 'react';
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from 'react-router-dom';
-
-// Components
-import Dashboard from 'src/components/Dashboard';
-import FileExplorer from 'src/components/FileExplorer';
-import Login from 'src/components/Login';
-import Navigation from 'src/components/Navigation';
-import PackageManager from 'src/components/PackageManager';
-import RemoteExecution from 'src/components/RemoteExecution';
-import Terminal from 'src/components/Terminal';
-import UserProfile from 'src/components/UserProfile';
-
-// Types
-import { User } from 'src/types';
-
-// Utility for theme creation
-const createAppTheme = (mode: 'light' | 'dark') => createTheme({
-  palette: {
-    mode,
-    primary: {
-      main: mode === 'dark' ? '#90caf9' : '#1976d2',
-    },
-    background: {
-      default: mode === 'dark' ? '#121212' : '#f4f4f4',
-      paper: mode === 'dark' ? '#1d1d1d' : '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: 'Roboto, Arial, sans-serif',
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: `
-        body {
-          scrollbar-width: thin;
-          scrollbar-color: ${mode === 'dark' ? '#6b6b6b #2b2b2b' : '#d1d1d1 #f4f4f4'};
-        }
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: ${mode === 'dark' ? '#2b2b2b' : '#f4f4f4'};
-        }
-        ::-webkit-scrollbar-thumb {
-          background-color: ${mode === 'dark' ? '#6b6b6b' : '#d1d1d1'};
-          border-radius: 4px;
-        }
-      `,
-    },
-  },
-});
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { theme } from './styles/theme';
+import Layout from './components/Layout';
+import Dashboard from './components/Dashboard';
+import FileExplorer from './components/FileExplorer';
+import Terminal from './components/Terminal';
+import RemoteExecution from './components/RemoteExecution';
+import PackageManager from './components/PackageManager';
+import UserProfile from './components/UserProfile';
+import Login from './components/Login';
+import PrivateRoute from './components/PrivateRoute';
+import { useUserContext } from './context/UserContext';
+import { DEFAULT_USER_PREFERENCES } from './types';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const { user, setUser } = useUserContext();
 
-  // Check authentication on app load
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && !user) {
       // TODO: Implement token validation and user fetch
       // For now, just set a placeholder user
       setUser({
@@ -80,69 +33,73 @@ const App: React.FC = () => {
         lastLogin: new Date(),
         mfaEnabled: false,
         gdprCompliant: true,
+        preferences: DEFAULT_USER_PREFERENCES,
       });
     }
-  }, []);
-
-  // Update theme based on user preferences
-  useEffect(() => {
-    if (user) {
-      // TODO: Implement actual theme preference retrieval
-      setTheme('light');
-    }
-  }, [user]);
-
-  const handleUpdateUser = (updatedUser: User) => {
-    setUser(updatedUser);
-  };
-
-  const appTheme = createAppTheme(theme);
+  }, [user, setUser]);
 
   return (
-    <ThemeProvider theme={appTheme}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Box sx={{ display: 'flex' }}>
-          {user && <Navigation />}
-          <Box
-            component="main"
-            sx={{
-              flexGrow: 1,
-              p: 3,
-              backgroundColor: appTheme.palette.background.default,
-              minHeight: '100vh',
-            }}
-          >
+        {user ? (
+          <Layout>
             <Routes>
-              <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-
-              {user && (
-                <>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/file-explorer" element={<FileExplorer />} />
-                  <Route path="/package-manager" element={<PackageManager />} />
-                  <Route path="/remote-execution" element={<RemoteExecution />} />
-                  <Route path="/terminal" element={<Terminal />} />
-                  <Route
-                    path="/profile"
-                    element={
-                      <UserProfile
-                        user={user}
-                        onUpdateUser={handleUpdateUser}
-                      />
-                    }
-                  />
-                </>
-              )}
-
-              {/* Catch-all route */}
               <Route
-                path="*"
-                element={user ? <Navigate to="/" /> : <Navigate to="/login" />}
+                path="/"
+                element={
+                  <PrivateRoute>
+                    <Dashboard />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/files"
+                element={
+                  <PrivateRoute>
+                    <FileExplorer />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/terminal"
+                element={
+                  <PrivateRoute>
+                    <Terminal />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/execute"
+                element={
+                  <PrivateRoute>
+                    <RemoteExecution />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/packages"
+                element={
+                  <PrivateRoute>
+                    <PackageManager />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <PrivateRoute>
+                    <UserProfile />
+                  </PrivateRoute>
+                }
               />
             </Routes>
-          </Box>
-        </Box>
+          </Layout>
+        ) : (
+          <Routes>
+            <Route path="*" element={<Login />} />
+          </Routes>
+        )}
       </Router>
     </ThemeProvider>
   );

@@ -1,56 +1,47 @@
-import React from 'react';
-import { render, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { useIntersectionObserver } from '../useIntersectionObserver';
 
-// Mock IntersectionObserver
-const mockIntersectionObserver = jest.fn();
-const mockDisconnect = jest.fn();
-const mockObserve = jest.fn();
-const mockUnobserve = jest.fn();
-
-beforeEach(() => {
-  // Reset all mocks
-  mockIntersectionObserver.mockClear();
-  mockDisconnect.mockClear();
-  mockObserve.mockClear();
-  mockUnobserve.mockClear();
-
-  // Setup IntersectionObserver mock
-  mockIntersectionObserver.mockImplementation((callback) => ({
-    disconnect: mockDisconnect,
-    observe: mockObserve,
-    unobserve: mockUnobserve,
-    takeRecords: jest.fn(),
-    root: null,
-    rootMargin: '',
-    thresholds: [0],
-  }));
-
-  window.IntersectionObserver = mockIntersectionObserver;
+const createMockEntry = (isIntersecting: boolean, target: Element): IntersectionObserverEntry => ({
+  isIntersecting,
+  target,
+  boundingClientRect: new DOMRect(),
+  intersectionRatio: isIntersecting ? 1 : 0,
+  intersectionRect: new DOMRect(),
+  rootBounds: new DOMRect(),
+  time: Date.now(),
 });
 
-const TestComponent: React.FC<{ onVisibilityChange?: (visible: boolean) => void }> = ({
-  onVisibilityChange
-}) => {
-  const [ref, isVisible] = useIntersectionObserver({
-    onVisibilityChange,
-  });
-
-  return (
-    <div ref={ref} data-testid="test-element">
-      {isVisible ? 'Visible' : 'Not visible'}
-    </div>
-  );
-};
-
 describe('useIntersectionObserver', () => {
-  it('should initialize with isVisible as false', () => {
-    const { getByTestId } = render(<TestComponent />);
-    expect(getByTestId('test-element')).toHaveTextContent('Not visible');
+  let mockIntersectionObserver: jest.Mock;
+  let mockDisconnect: jest.Mock;
+  let mockObserve: jest.Mock;
+  let mockUnobserve: jest.Mock;
+  let intersectionCallback: IntersectionObserverCallback;
+
+  beforeEach(() => {
+    mockDisconnect = jest.fn();
+    mockObserve = jest.fn();
+    mockUnobserve = jest.fn();
+
+    mockIntersectionObserver = jest.fn((callback) => {
+      intersectionCallback = callback;
+      return {
+        disconnect: mockDisconnect,
+        observe: mockObserve,
+        unobserve: mockUnobserve,
+      };
+    });
+
+    window.IntersectionObserver = mockIntersectionObserver;
   });
 
-  it('should create an IntersectionObserver with default options', () => {
-    render(<TestComponent />);
+  it('should initialize with default options', () => {
+    const { result } = renderHook(() => useIntersectionObserver<HTMLDivElement>());
+    const [ref, isVisible] = result.current;
+
+    expect(ref.current).toBeNull();
+    expect(isVisible).toBe(false);
     expect(mockIntersectionObserver).toHaveBeenCalledWith(
       expect.any(Function),
       {
@@ -61,89 +52,111 @@ describe('useIntersectionObserver', () => {
     );
   });
 
-  it('should observe the element when mounted', () => {
-    render(<TestComponent />);
-    expect(mockObserve).toHaveBeenCalled();
+  it('should accept custom options', () => {
+    const options = {
+      threshold: 0.5,
+      root: document.createElement('div'),
+      rootMargin: '10px',
+    };
+
+    renderHook(() => useIntersectionObserver<HTMLDivElement>(options));
+
+    expect(mockIntersectionObserver).toHaveBeenCalledWith(
+      expect.any(Function),
+      options
+    );
   });
 
-  it('should disconnect the observer when unmounted', () => {
-    const { unmount } = render(<TestComponent />);
+  it('should handle intersection changes', () => {
+    const { result } = renderHook(() => useIntersectionObserver<HTMLDivElement>());
+    const [ref] = result.current;
+
+    // Simulate element being set
+    const element = document.createElement('div');
+    Object.defineProperty(ref, 'current', {
+      value: element,
+      writable: true,
+    });
+
+    // Simulate intersection
+    intersectionCallback(
+      [createMockEntry(true, element)],
+      {} as IntersectionObserver
+    );
+
+    expect(result.current[1]).toBe(true);
+
+    // Simulate no intersection
+    intersectionCallback(
+      [createMockEntry(false, element)],
+      {} as IntersectionObserver
+    );
+
+    expect(result.current[1]).toBe(false);
+  });
+
+  it('should handle freezeOnceVisible option', () => {
+    const { result } = renderHook(() =>
+      useIntersectionObserver<HTMLDivElement>({ freezeOnceVisible: true })
+    );
+    const [ref] = result.current;
+
+    // Simulate element being set
+    const element = document.createElement('div');
+    Object.defineProperty(ref, 'current', {
+      value: element,
+      writable: true,
+    });
+
+    // Simulate intersection
+    intersectionCallback(
+      [createMockEntry(true, element)],
+      {} as IntersectionObserver
+    );
+
+    expect(result.current[1]).toBe(true);
+    expect(mockUnobserve).toHaveBeenCalledWith(element);
+
+    // Simulate no intersection - should still be true due to freezing
+    intersectionCallback(
+      [createMockEntry(false, element)],
+      {} as IntersectionObserver
+    );
+
+    expect(result.current[1]).toBe(true);
+  });
+
+  it('should cleanup on unmount', () => {
+    const { unmount } = renderHook(() => useIntersectionObserver<HTMLDivElement>());
     unmount();
     expect(mockDisconnect).toHaveBeenCalled();
   });
 
-  it('should update isVisible when intersection changes', () => {
-    const { getByTestId } = render(<TestComponent />);
-
-    // Simulate intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: true }]);
-    });
-
-    expect(getByTestId('test-element')).toHaveTextContent('Visible');
-
-    // Simulate leaving intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: false }]);
-    });
-
-    expect(getByTestId('test-element')).toHaveTextContent('Not visible');
-  });
-
-  it('should call onVisibilityChange when visibility changes', () => {
+  it('should handle onVisibilityChange callback', () => {
     const onVisibilityChange = jest.fn();
-    render(<TestComponent onVisibilityChange={onVisibilityChange} />);
+    const { result } = renderHook(() =>
+      useIntersectionObserver<HTMLDivElement>({ onVisibilityChange })
+    );
+    const [ref] = result.current;
 
-    // Simulate intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: true }]);
+    const element = document.createElement('div');
+    Object.defineProperty(ref, 'current', {
+      value: element,
+      writable: true,
     });
+
+    intersectionCallback(
+      [createMockEntry(true, element)],
+      {} as IntersectionObserver
+    );
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
 
-    // Simulate leaving intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: false }]);
-    });
+    intersectionCallback(
+      [createMockEntry(false, element)],
+      {} as IntersectionObserver
+    );
 
     expect(onVisibilityChange).toHaveBeenCalledWith(false);
-  });
-
-  it('should freeze observations when freezeOnceVisible is true', () => {
-    const TestComponentWithFreeze: React.FC = () => {
-      const [ref, isVisible] = useIntersectionObserver({
-        freezeOnceVisible: true,
-      });
-
-      return (
-        <div ref={ref} data-testid="test-element">
-          {isVisible ? 'Visible' : 'Not visible'}
-        </div>
-      );
-    };
-
-    const { getByTestId } = render(<TestComponentWithFreeze />);
-
-    // Simulate intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: true }]);
-    });
-
-    expect(getByTestId('test-element')).toHaveTextContent('Visible');
-    expect(mockUnobserve).toHaveBeenCalled();
-
-    // Simulate leaving intersection
-    act(() => {
-      const [[callback]] = mockIntersectionObserver.mock.calls;
-      callback([{ isIntersecting: false }]);
-    });
-
-    // Should still be visible due to freezing
-    expect(getByTestId('test-element')).toHaveTextContent('Visible');
   });
 });

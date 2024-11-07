@@ -10,6 +10,7 @@ describe('useThrottle', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    jest.clearAllMocks();
   });
 
   it('should return initial value immediately', () => {

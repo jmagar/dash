@@ -4,105 +4,129 @@ import { usePrevious } from '../usePrevious';
 
 describe('usePrevious', () => {
   it('should return undefined on first render', () => {
-    const { result } = renderHook(() => usePrevious('initial'));
+    const { result } = renderHook(() => usePrevious(0));
     expect(result.current).toBeUndefined();
   });
 
-  it('should return previous value after update', () => {
+  it('should return previous number value', () => {
     const { result, rerender } = renderHook(
       ({ value }) => usePrevious(value),
-      { initialProps: { value: 'initial' } }
+      {
+        initialProps: { value: 0 },
+      }
     );
 
-    // First render should return undefined
     expect(result.current).toBeUndefined();
 
-    // Update value
+    rerender({ value: 1 });
+    expect(result.current).toBe(0);
+
+    rerender({ value: 2 });
+    expect(result.current).toBe(1);
+  });
+
+  it('should return previous string value', () => {
+    const { result, rerender } = renderHook(
+      ({ value }) => usePrevious(value),
+      {
+        initialProps: { value: 'initial' },
+      }
+    );
+
+    expect(result.current).toBeUndefined();
+
     rerender({ value: 'updated' });
     expect(result.current).toBe('initial');
 
-    // Update again
-    rerender({ value: 'updated again' });
+    rerender({ value: 'final' });
     expect(result.current).toBe('updated');
   });
 
-  it('should handle different value types', () => {
+  it('should handle boolean values', () => {
     const { result, rerender } = renderHook(
-      ({ value }: { value: unknown }) => usePrevious(value),
-      { initialProps: { value: 42 } }
+      ({ value }) => usePrevious(value),
+      {
+        initialProps: { value: false },
+      }
     );
 
-    // First render should return undefined
     expect(result.current).toBeUndefined();
 
-    // Update with number
-    rerender({ value: 43 });
-    expect(result.current).toBe(42);
+    rerender({ value: true });
+    expect(result.current).toBe(false);
 
-    // Update with object
-    const obj = { test: true };
-    rerender({ value: obj });
-    expect(result.current).toBe(43);
-
-    // Update with array
-    const arr = [1, 2, 3];
-    rerender({ value: arr });
-    expect(result.current).toEqual(obj);
+    rerender({ value: false });
+    expect(result.current).toBe(true);
   });
 
-  it('should handle null and undefined values', () => {
+  it('should handle object values', () => {
+    type TestObject = { test: boolean };
     const { result, rerender } = renderHook(
-      ({ value }: { value: unknown }) => usePrevious(value),
-      { initialProps: { value: 'initial' } }
+      ({ value }) => usePrevious<TestObject>(value),
+      {
+        initialProps: { value: { test: false } },
+      }
     );
 
-    // Update with undefined
-    rerender({ value: undefined });
-    expect(result.current).toBe('initial');
-
-    // Update with null
-    rerender({ value: null });
     expect(result.current).toBeUndefined();
 
-    // Update with value again
-    rerender({ value: 'final' });
-    expect(result.current).toBeNull();
+    const nextValue = { test: true };
+    rerender({ value: nextValue });
+    expect(result.current).toEqual({ test: false });
   });
 
-  it('should handle complex objects', () => {
-    interface ComplexObject {
-      id: number;
-      name: string;
-      data: {
-        value: number;
-        items: string[];
-      };
-    }
-
-    const initialValue: ComplexObject = {
-      id: 1,
-      name: 'test',
-      data: {
-        value: 42,
-        items: ['a', 'b'],
-      },
-    };
-
+  it('should handle array values', () => {
+    type TestArray = number[];
     const { result, rerender } = renderHook(
-      (props: { value: ComplexObject }) => usePrevious(props.value),
-      { initialProps: { value: initialValue } }
+      ({ value }) => usePrevious<TestArray>(value),
+      {
+        initialProps: { value: [1, 2, 3] },
+      }
     );
 
-    const updatedValue: ComplexObject = {
-      id: 2,
-      name: 'updated',
-      data: {
-        value: 43,
-        items: ['c', 'd'],
-      },
-    };
+    expect(result.current).toBeUndefined();
 
-    rerender({ value: updatedValue });
-    expect(result.current).toEqual(initialValue);
+    rerender({ value: [4, 5, 6] });
+    expect(result.current).toEqual([1, 2, 3]);
+  });
+
+  it('should handle nullable values', () => {
+    const initialValue = 'test';
+    const { result, rerender } = renderHook(
+      ({ value }) => usePrevious(value),
+      {
+        initialProps: { value: initialValue as string | null },
+      }
+    );
+
+    expect(result.current).toBeUndefined();
+
+    const nullValue = null as string | null;
+    rerender({ value: nullValue });
+    expect(result.current).toBe(initialValue);
+
+    const newValue = 'new value' as string | null;
+    rerender({ value: newValue });
+    expect(result.current).toBe(nullValue);
+  });
+
+  it('should handle optional values', () => {
+    const initialValue = 'test';
+    const { result, rerender } = renderHook(
+      ({ value }) => usePrevious(value),
+      {
+        initialProps: { value: initialValue as string | undefined },
+      }
+    );
+
+    expect(result.current).toBeUndefined();
+
+    const undefinedValue = undefined as string | undefined;
+    rerender({ value: undefinedValue });
+    expect(result.current).toBe(initialValue);
+
+    const newValue = 'new value' as string | undefined;
+    rerender({ value: newValue });
+    expect(result.current).toBe(undefinedValue);
   });
 });

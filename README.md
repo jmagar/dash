@@ -1,146 +1,155 @@
-# SHH: SSH and Docker Management Application
+# SSH Remote Management
 
-## Overview
-
-SHH is a comprehensive remote management application designed to provide seamless SSH and Docker management across multiple hosts.
+A modern web interface for managing remote servers through SSH, with support for file management, package management, and Docker containers.
 
 ## Features
 
-- 🖥️ Multi-Host Management
-- 🔒 Secure SSH Connections
-- 🐳 Docker Resource Tracking
-- 📂 File Explorer
-- 📦 Package Management
-- 🖲️ Remote Command Execution
-- 👤 User Authentication
-- 🌓 Dark/Light Mode Support
+- 🔒 Secure Authentication with JWT and MFA
+- 🖥️ Interactive SSH Terminal
+- 📁 SFTP File Management
+- 📦 Package Management (APT/YUM)
+- 🐳 Docker Container Management
+- 🚀 Real-time Updates
+- 🎨 Material-UI Design
+- 🌙 Dark/Light Theme
 
-## Technology Stack
+## Tech Stack
 
 ### Frontend
 
-- React (TypeScript)
-- Material-UI
-- Socket.IO Client
-- Axios
+- React with TypeScript
+- Material-UI Components
+- WebSocket for Real-time Updates
+- Custom React Hooks
+- Context API for State Management
 
 ### Backend
 
-- Node.js
-- Express
-- Socket.IO
-- PostgreSQL
-- Redis
+- Node.js/Express
+- PostgreSQL Database
+- Redis Caching
+- WebSocket Server
+- SSH2 for Remote Access
 
-## Prerequisites
+## Quick Start
 
-- Node.js (v16+)
-- npm (v8+)
-- PostgreSQL
-- Redis
-
-## Installation
-
-### 1. Clone the Repository
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/yourusername/shh.git
 cd shh
 ```
 
-### 2. Install Dependencies
+1. Install dependencies:
 
 ```bash
+# Frontend dependencies
 npm install
+
+# Backend dependencies
+cd backend
+npm install
+cd ..
 ```
 
-### 3. Environment Configuration
-
-Create a `.env` file in the root directory:
+1. Set up environment variables:
 
 ```bash
-# Backend Configuration
-PORT=3001
-DATABASE_URL=postgresql://username:password@localhost:5432/shh_db
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your_jwt_secret
+# Frontend
+cp .env.example .env
 
-# Frontend Configuration
-REACT_APP_API_URL=http://localhost:3001/api
-REACT_APP_SOCKET_URL=http://localhost:3001
+# Backend
+cd backend
+cp .env.example .env
+cd ..
 ```
 
-### 4. Database Setup
+1. Start the services:
 
 ```bash
-# Create PostgreSQL database
-createdb shh_db
-
-# Run database migrations
-npm run db:migrate
+docker compose up
 ```
 
-### 5. Start Development Servers
+The application will be available at:
+
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:4000`
+
+## Development
+
+Start the development server:
 
 ```bash
-# Start backend server
-npm run backend
+# Frontend
+npm start
 
-# Start frontend development server
+# Backend
+cd backend
 npm run dev
 ```
 
 ## Project Structure
 
-```
-shh/
-├── backend/             # Backend server
-├── src/
-│   ├── api/             # API service layers
-│   ├── components/      # React components
-│   ├── hooks/           # Custom React hooks
-│   ├── styles/          # Global styles
-│   ├── types/           # TypeScript type definitions
-│   └── utils/           # Utility functions
+```plaintext
+.
+├── src/                    # Frontend source code
+│   ├── api/               # API client functions
+│   ├── components/        # React components
+│   ├── context/          # React context providers
+│   ├── hooks/            # Custom React hooks
+│   ├── pages/            # Page components
+│   ├── styles/           # Global styles
+│   └── types/            # TypeScript definitions
+├── backend/              # Backend source code
+│   ├── routes/           # API routes
+│   ├── middleware/       # Express middleware
+│   ├── db/              # Database setup
+│   └── cache/           # Redis cache setup
 ├── db/                  # Database migrations
-└── docker/              # Docker-related configurations
+└── docker-compose.yml   # Docker services config
 ```
 
-## Authentication
+## Available Scripts
 
-- Default Admin Credentials
-  - Username: admin
-  - Password: admin123
+Frontend:
 
-## Security Features
+```bash
+npm start          # Start development server
+npm run build      # Build for production
+npm run lint       # Run ESLint
+npm run format     # Run Prettier
+```
+
+Backend:
+
+```bash
+npm run dev        # Start development server
+npm start          # Start production server
+npm run migrate    # Run database migrations
+```
+
+## Environment Variables
+
+See `.env.example` and `backend/.env.example` for required environment variables.
+
+## Security
 
 - JWT-based authentication
-- Multi-factor authentication
-- Role-based access control
-- Encrypted connections
-- Comprehensive audit logging
-
-## Performance Optimization
-
-- Redis caching
-- Socket.IO real-time updates
-- Efficient database queries
-- Lazy loading
+- MFA support
+- Rate limiting
+- CORS configuration
+- SSH key management
+- Input validation
+- Path traversal prevention
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Create your feature branch
+1. Commit your changes
+1. Push to the branch
+1. Create a Pull Request
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## Contact
-
-Your Name - your.email@example.com
-
-Project Link: [https://github.com/yourusername/shh](https://github.com/yourusername/shh)
+MIT License - see LICENSE for details

@@ -1,120 +1,141 @@
 import axios from 'axios';
-import type { FileItem, FileOperationResult } from '../types';
-import type { ApiResponse, ApiResult } from '../types';
-import { handleApiError } from '../types';
+import { FileItem, ApiResponse, ApiResult } from '../types';
+import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
-const BASE_URL = process.env.REACT_APP_API_URL || '';
-
-export const listFiles = async (hostId: number, path: string): ApiResult<FileItem[]> => {
+export const listFiles = async (
+  hostId: number,
+  path: string
+): ApiResult<FileItem[]> => {
   try {
-    const { data } = await axios.get<FileItem[]>(`${BASE_URL}/api/files/${hostId}/list`, {
-      params: { path },
-    });
+    const { data } = await axios.get<FileItem[]>(
+      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
+      {
+        params: { path },
+      }
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<FileItem[]>;
+    };
   } catch (error) {
     return handleApiError<FileItem[]>(error);
   }
 };
 
-export const readFile = async (hostId: number, path: string): ApiResult<string> => {
+export const downloadFile = async (
+  hostId: number,
+  path: string
+): ApiResult<string> => {
   try {
-    const { data } = await axios.get<{ content: string }>(`${BASE_URL}/api/files/${hostId}/read`, {
-      params: { path },
-    });
+    const { data } = await axios.get<string>(
+      `${BASE_URL}${API_ENDPOINTS.FILES.DOWNLOAD(hostId)}`,
+      {
+        params: { path },
+        responseType: 'text',
+      }
+    );
     return {
       success: true,
-      data: data.content,
-    } as ApiResponse<string>;
+      data,
+    };
   } catch (error) {
     return handleApiError<string>(error);
   }
 };
 
-export const writeFile = async (hostId: number, path: string, content: string): ApiResult<void> => {
+export const uploadFile = async (
+  hostId: number,
+  path: string,
+  content: string
+): ApiResult<void> => {
   try {
-    await axios.post(`${BASE_URL}/api/files/${hostId}/write`, {
-      path,
-      content,
-    });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.FILES.UPLOAD(hostId)}`,
+      { path, content }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const deleteFile = async (hostId: number, path: string): ApiResult<void> => {
+export const deleteFile = async (
+  hostId: number,
+  path: string
+): ApiResult<void> => {
   try {
-    await axios.delete(`${BASE_URL}/api/files/${hostId}/delete`, {
-      params: { path },
-    });
+    await axios.delete(
+      `${BASE_URL}${API_ENDPOINTS.FILES.DELETE(hostId)}`,
+      {
+        params: { path },
+      }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const createDirectory = async (hostId: number, path: string): ApiResult<void> => {
+export const createDirectory = async (
+  hostId: number,
+  path: string
+): ApiResult<void> => {
   try {
-    await axios.post(`${BASE_URL}/api/files/${hostId}/mkdir`, {
-      path,
-    });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
+      { path, type: 'directory' }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const deleteDirectory = async (hostId: number, path: string): ApiResult<void> => {
+export const moveFile = async (
+  hostId: number,
+  sourcePath: string,
+  destinationPath: string
+): ApiResult<void> => {
   try {
-    await axios.delete(`${BASE_URL}/api/files/${hostId}/rmdir`, {
-      params: { path },
-    });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
+      {
+        sourcePath,
+        destinationPath,
+        type: 'move',
+      }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const moveFile = async (hostId: number, sourcePath: string, targetPath: string): ApiResult<void> => {
+export const copyFile = async (
+  hostId: number,
+  sourcePath: string,
+  destinationPath: string
+): ApiResult<void> => {
   try {
-    await axios.post(`${BASE_URL}/api/files/${hostId}/move`, {
-      sourcePath,
-      targetPath,
-    });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
+      {
+        sourcePath,
+        destinationPath,
+        type: 'copy',
+      }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
-  } catch (error) {
-    return handleApiError<void>(error);
-  }
-};
-
-export const copyFile = async (hostId: number, sourcePath: string, targetPath: string): ApiResult<void> => {
-  try {
-    await axios.post(`${BASE_URL}/api/files/${hostId}/copy`, {
-      sourcePath,
-      targetPath,
-    });
-    return {
-      success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }

@@ -1,118 +1,135 @@
-import DeleteIcon from '@mui/icons-material/Delete';
+import {
+  Box,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import DeleteIcon from '@mui/icons-material/Delete';
 import TerminalIcon from '@mui/icons-material/Terminal';
-import { Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, Dialog, DialogTitle, DialogContent } from '@mui/material';
 import React, { useState } from 'react';
-import Terminal from 'src/components/Terminal';
-import { useDockerUpdates, Container } from 'src/hooks/useDockerUpdates';
+import Terminal from '../components/Terminal';
+import { useDockerUpdates } from '../hooks/useDockerUpdates';
+import { Container } from '../types';
 
 export default function ContainersPage() {
-  const { data: containersData, loading, error } = useDockerUpdates('containers');
+  const { data: containers, loading, error } = useDockerUpdates({
+    enabled: true,
+    onUpdate: (data) => console.log('Containers updated:', data),
+  });
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
 
-  const handleAction = async (id: string, action: string) => {
-    try {
-      const response = await fetch(`/api/containers/${id}/${action}`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to ${action} container`);
-      }
-    } catch (error) {
-      console.error(`Error ${action} container:`, error);
-    }
-  };
-
-  const handleOpenTerminal = (id: string) => {
-    setSelectedContainerId(id);
+  const handleTerminalOpen = (containerId: string) => {
+    setSelectedContainerId(containerId);
     setTerminalOpen(true);
   };
 
-  // Type guard to ensure we're working with Container type
-  const isContainer = (item: unknown): item is Container =>
-    typeof item === 'object' &&
-    item !== null &&
-    'id' in item &&
-    'name' in item &&
-    'image' in item &&
-    'status' in item &&
-    'state' in item;
+  const handleTerminalClose = () => {
+    setTerminalOpen(false);
+    setSelectedContainerId(null);
+  };
 
-  const containers = containersData.filter(isContainer);
+  if (loading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>Loading containers...</Typography>
+      </Box>
+    );
+  }
 
-  if (loading) return <Typography>Loading...</Typography>;
-  if (error) return <Typography color="error">Error: {error}</Typography>;
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
 
   return (
     <React.Fragment>
-      <Typography variant="h4" gutterBottom>
-        Containers
-      </Typography>
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Image</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {containers.map((container: Container) => (
-              <TableRow key={container.id}>
-                <TableCell>{container.id.substring(0, 12)}</TableCell>
-                <TableCell>{container.name}</TableCell>
-                <TableCell>{container.image}</TableCell>
-                <TableCell>{container.status}</TableCell>
-                <TableCell>
-                  <Button
-                    startIcon={<PlayArrowIcon />}
-                    onClick={() => handleAction(container.id, 'start')}
-                    disabled={container.state === 'running'}
-                  >
-                    Start
-                  </Button>
-                  <Button
-                    startIcon={<StopIcon />}
-                    onClick={() => handleAction(container.id, 'stop')}
-                    disabled={container.state !== 'running'}
-                  >
-                    Stop
-                  </Button>
-                  <Button
-                    startIcon={<DeleteIcon />}
-                    onClick={() => handleAction(container.id, 'remove')}
-                    disabled={container.state === 'running'}
-                  >
-                    Remove
-                  </Button>
-                  <Button
-                    startIcon={<TerminalIcon />}
-                    onClick={() => handleOpenTerminal(container.id)}
-                    disabled={container.state !== 'running'}
-                  >
-                    Terminal
-                  </Button>
-                </TableCell>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5" gutterBottom>
+          Containers
+        </Typography>
+
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Image</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>State</TableCell>
+                <TableCell>Created</TableCell>
+                <TableCell>Ports</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {(containers as Container[])?.map((container) => (
+                <TableRow key={container.id}>
+                  <TableCell>{container.name}</TableCell>
+                  <TableCell>{container.image}</TableCell>
+                  <TableCell>{container.status}</TableCell>
+                  <TableCell>{container.state}</TableCell>
+                  <TableCell>
+                    {new Date(container.created).toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    {container.ports.join(', ')}
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      color="primary"
+                      title={container.state === 'running' ? 'Stop' : 'Start'}
+                    >
+                      {container.state === 'running' ? (
+                        <StopIcon />
+                      ) : (
+                        <PlayArrowIcon />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleTerminalOpen(container.id)}
+                      title="Open Terminal"
+                    >
+                      <TerminalIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      title="Delete"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
 
       <Dialog
         open={terminalOpen}
-        onClose={() => setTerminalOpen(false)}
+        onClose={handleTerminalClose}
+        maxWidth="lg"
         fullWidth
-        maxWidth="md"
       >
         <DialogTitle>Terminal - Container {selectedContainerId}</DialogTitle>
         <DialogContent>
-          {selectedContainerId && <Terminal containerId={selectedContainerId} />}
+          {selectedContainerId && <Terminal host={{ id: 1, name: selectedContainerId, hostname: 'localhost', port: 22, ip: '127.0.0.1', isActive: true }} />}
         </DialogContent>
       </Dialog>
     </React.Fragment>
