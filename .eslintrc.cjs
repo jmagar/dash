@@ -30,17 +30,9 @@ module.exports = {
     react: {
       version: 'detect',
     },
-    'import/parsers': {
-      '@typescript-eslint/parser': ['.ts', '.tsx'],
-    },
     'import/resolver': {
       typescript: {
-        project: './tsconfig.json',
         alwaysTryTypes: true,
-      },
-      node: {
-        extensions: ['.js', '.jsx', '.ts', '.tsx'],
-        moduleDirectory: ['node_modules', 'src/'],
       },
     },
   },
@@ -69,10 +61,10 @@ module.exports = {
         caseInsensitive: true,
       },
     }],
-    'import/no-unresolved': 'off', // Disable since TypeScript handles this
-    'import/named': 'off', // Disable since TypeScript handles this
-    'import/namespace': 'off', // Disable since TypeScript handles this
-    'import/default': 'off', // Disable since TypeScript handles this
+    'import/no-unresolved': 'error',
+    'import/named': 'error',
+    'import/namespace': 'error',
+    'import/default': 'error',
 
     // React-specific rules
     'react/prop-types': 'off',
