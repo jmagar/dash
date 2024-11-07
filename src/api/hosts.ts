@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { Host, SystemStats, ApiResponse, ApiResult } from '../types';
+import { Host, SystemStats, ApiResult } from '../types';
 import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
-export const getHostStatus = async (): ApiResult<Host[]> => {
+export const getHostStatus = async (): Promise<ApiResult<Host[]>> => {
   try {
     const { data } = await axios.get<Host[]>(`${BASE_URL}${API_ENDPOINTS.HOSTS.STATUS}`);
     return {
@@ -14,7 +14,7 @@ export const getHostStatus = async (): ApiResult<Host[]> => {
   }
 };
 
-export const getSystemStats = async (hostId: number): ApiResult<SystemStats> => {
+export const getSystemStats = async (hostId: number): Promise<ApiResult<SystemStats>> => {
   try {
     const { data } = await axios.get<SystemStats>(
       `${BASE_URL}${API_ENDPOINTS.HOSTS.STATS(hostId)}`
@@ -28,7 +28,7 @@ export const getSystemStats = async (hostId: number): ApiResult<SystemStats> => 
   }
 };
 
-export const connectHost = async (hostId: number): ApiResult<void> => {
+export const connectHost = async (hostId: number): Promise<ApiResult<void>> => {
   try {
     await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.CONNECT(hostId)}`);
     return {
@@ -39,7 +39,7 @@ export const connectHost = async (hostId: number): ApiResult<void> => {
   }
 };
 
-export const disconnectHost = async (hostId: number): ApiResult<void> => {
+export const disconnectHost = async (hostId: number): Promise<ApiResult<void>> => {
   try {
     await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.DISCONNECT(hostId)}`);
     return {
@@ -50,7 +50,7 @@ export const disconnectHost = async (hostId: number): ApiResult<void> => {
   }
 };
 
-export const addHost = async (host: Omit<Host, 'id'>): ApiResult<Host> => {
+export const addHost = async (host: Omit<Host, 'id'>): Promise<ApiResult<Host>> => {
   try {
     const { data } = await axios.post<Host>(`${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}`, host);
     return {
@@ -62,7 +62,7 @@ export const addHost = async (host: Omit<Host, 'id'>): ApiResult<Host> => {
   }
 };
 
-export const updateHost = async (hostId: number, host: Partial<Host>): ApiResult<Host> => {
+export const updateHost = async (hostId: number, host: Partial<Host>): Promise<ApiResult<Host>> => {
   try {
     const { data } = await axios.put<Host>(
       `${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}/${hostId}`,
@@ -77,7 +77,7 @@ export const updateHost = async (hostId: number, host: Partial<Host>): ApiResult
   }
 };
 
-export const deleteHost = async (hostId: number): ApiResult<void> => {
+export const deleteHost = async (hostId: number): Promise<ApiResult<void>> => {
   try {
     await axios.delete(`${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}/${hostId}`);
     return {
@@ -88,7 +88,7 @@ export const deleteHost = async (hostId: number): ApiResult<void> => {
   }
 };
 
-export const testConnection = async (host: Partial<Host>): ApiResult<void> => {
+export const testConnection = async (host: Partial<Host>): Promise<ApiResult<void>> => {
   try {
     await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}/test`, host);
     return {
@@ -99,7 +99,7 @@ export const testConnection = async (host: Partial<Host>): ApiResult<void> => {
   }
 };
 
-export const getHostLogs = async (hostId: number): ApiResult<string[]> => {
+export const getHostLogs = async (hostId: number): Promise<ApiResult<string[]>> => {
   try {
     const { data } = await axios.get<string[]>(
       `${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}/${hostId}/logs`

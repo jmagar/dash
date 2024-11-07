@@ -1,79 +1,90 @@
 import axios from 'axios';
 import type { Package } from '../types/models';
-import type { ApiResponse, ApiResult } from '../types/api';
-import { handleApiError } from '../types/api';
+import type { ApiResult } from '../types';
+import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
-const BASE_URL = process.env.REACT_APP_API_URL || '';
-
-export const fetchPackages = async (hostId: number): ApiResult<Package[]> => {
+export const fetchPackages = async (hostId: number): Promise<ApiResult<Package[]>> => {
   try {
-    const { data } = await axios.get<Package[]>(`${BASE_URL}/api/packages/${hostId}/list`);
+    const { data } = await axios.get<Package[]>(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.LIST(hostId)}`
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<Package[]>;
+    };
   } catch (error) {
     return handleApiError<Package[]>(error);
   }
 };
 
-export const installPackage = async (hostId: number, packageName: string): ApiResult<void> => {
+export const installPackage = async (hostId: number, packageName: string): Promise<ApiResult<void>> => {
   try {
-    await axios.post(`${BASE_URL}/api/packages/${hostId}/install`, { packageName });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.INSTALL(hostId)}`,
+      { packageName }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const uninstallPackage = async (hostId: number, packageName: string): ApiResult<void> => {
+export const uninstallPackage = async (hostId: number, packageName: string): Promise<ApiResult<void>> => {
   try {
-    await axios.post(`${BASE_URL}/api/packages/${hostId}/uninstall`, { packageName });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.UNINSTALL(hostId)}`,
+      { packageName }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const updatePackage = async (hostId: number, packageName: string): ApiResult<void> => {
+export const updatePackage = async (hostId: number, packageName: string): Promise<ApiResult<void>> => {
   try {
-    await axios.post(`${BASE_URL}/api/packages/${hostId}/update`, { packageName });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.UPDATE(hostId)}`,
+      { packageName }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const checkForUpdates = async (hostId: number): ApiResult<Package[]> => {
+export const checkForUpdates = async (hostId: number): Promise<ApiResult<Package[]>> => {
   try {
-    const { data } = await axios.get<Package[]>(`${BASE_URL}/api/packages/${hostId}/updates`);
+    const { data } = await axios.get<Package[]>(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.LIST(hostId)}/updates`
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<Package[]>;
+    };
   } catch (error) {
     return handleApiError<Package[]>(error);
   }
 };
 
-export const searchPackages = async (hostId: number, query: string): ApiResult<Package[]> => {
+export const searchPackages = async (hostId: number, query: string): Promise<ApiResult<Package[]>> => {
   try {
-    const { data } = await axios.get<Package[]>(`${BASE_URL}/api/packages/${hostId}/search`, {
-      params: { query },
-    });
+    const { data } = await axios.get<Package[]>(
+      `${BASE_URL}${API_ENDPOINTS.PACKAGES.LIST(hostId)}/search`,
+      {
+        params: { query },
+      }
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<Package[]>;
+    };
   } catch (error) {
     return handleApiError<Package[]>(error);
   }

@@ -13,15 +13,13 @@ import {
   InputAdornment,
 } from '@mui/material';
 import {
-  PlayArrow as PlayIcon,
-  Stop as StopIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
   History as HistoryIcon,
   Add as AddIcon,
   Update as UpdateIcon,
 } from '@mui/icons-material';
-import { useAsync, useDebounce, useKeyPress } from '../hooks';
+import { useAsync, useDebounce } from '../hooks';
 import { installPackage, uninstallPackage, updatePackage } from '../api/packageManager';
 import { Host, Package } from '../types';
 import HostSelector from './HostSelector';

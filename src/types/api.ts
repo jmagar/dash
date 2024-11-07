@@ -27,12 +27,22 @@ export const API_ENDPOINTS = {
     UPDATE: (hostId: number) => `/hosts/${hostId}`,
     DELETE: (hostId: number) => `/hosts/${hostId}`,
     STATS: (hostId: number) => `/hosts/${hostId}/stats`,
+    STATUS: '/hosts/status',
+    CONNECT: (hostId: number) => `/hosts/${hostId}/connect`,
+    DISCONNECT: (hostId: number) => `/hosts/${hostId}/disconnect`,
   },
   PACKAGES: {
     LIST: (hostId: number) => `/hosts/${hostId}/packages`,
     INSTALL: (hostId: number) => `/hosts/${hostId}/packages/install`,
     UNINSTALL: (hostId: number) => `/hosts/${hostId}/packages/uninstall`,
     UPDATE: (hostId: number) => `/hosts/${hostId}/packages/update`,
+  },
+  EXECUTE: {
+    COMMAND: (hostId: number) => `/execute/${hostId}`,
+    HISTORY: (hostId: number) => `/execute/${hostId}/history`,
+    SAVED: (hostId: number) => `/execute/${hostId}/saved`,
+    SAVED_COMMAND: (hostId: number, commandId: string) => `/execute/${hostId}/saved/${commandId}`,
+    SCRIPT: (hostId: number) => `/execute/${hostId}/script`,
   },
   DOCKER: {
     CONTAINERS: '/docker/containers',

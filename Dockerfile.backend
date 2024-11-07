@@ -9,9 +9,12 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Install app dependencies
+# Install nodemon globally
+RUN npm install -g nodemon
+
+# Install app dependencies including devDependencies
 COPY backend/package*.json ./
-RUN npm install
+RUN npm install --include=dev
 
 # Copy source code
 COPY backend/ .
@@ -24,5 +27,5 @@ RUN mkdir -p /root/.ssh && \
 # Expose port
 EXPOSE 4000
 
-# Start app
-CMD ["npm", "start"]
+# Start app in development mode
+CMD ["npm", "run", "dev"]

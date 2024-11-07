@@ -1,11 +1,11 @@
 import axios from 'axios';
-import { FileItem, ApiResponse, ApiResult } from '../types';
+import { FileItem, ApiResult } from '../types';
 import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
 export const listFiles = async (
   hostId: number,
   path: string
-): ApiResult<FileItem[]> => {
+): Promise<ApiResult<FileItem[]>> => {
   try {
     const { data } = await axios.get<FileItem[]>(
       `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
@@ -25,7 +25,7 @@ export const listFiles = async (
 export const downloadFile = async (
   hostId: number,
   path: string
-): ApiResult<string> => {
+): Promise<ApiResult<string>> => {
   try {
     const { data } = await axios.get<string>(
       `${BASE_URL}${API_ENDPOINTS.FILES.DOWNLOAD(hostId)}`,
@@ -47,7 +47,7 @@ export const uploadFile = async (
   hostId: number,
   path: string,
   content: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
     await axios.post(
       `${BASE_URL}${API_ENDPOINTS.FILES.UPLOAD(hostId)}`,
@@ -64,7 +64,7 @@ export const uploadFile = async (
 export const deleteFile = async (
   hostId: number,
   path: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
     await axios.delete(
       `${BASE_URL}${API_ENDPOINTS.FILES.DELETE(hostId)}`,
@@ -83,7 +83,7 @@ export const deleteFile = async (
 export const createDirectory = async (
   hostId: number,
   path: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
     await axios.post(
       `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
@@ -101,7 +101,7 @@ export const moveFile = async (
   hostId: number,
   sourcePath: string,
   destinationPath: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
     await axios.post(
       `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
@@ -123,7 +123,7 @@ export const copyFile = async (
   hostId: number,
   sourcePath: string,
   destinationPath: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
     await axios.post(
       `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,

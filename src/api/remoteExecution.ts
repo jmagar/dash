@@ -1,9 +1,7 @@
 import axios from 'axios';
 import type { Command, CommandResult } from '../types/models';
-import type { ApiResponse, ApiResult } from '../types/api';
-import { handleApiError } from '../types/api';
-
-const BASE_URL = process.env.REACT_APP_API_URL || '';
+import type { ApiResult } from '../types';
+import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
 
 interface CommandHistory extends CommandResult {
   timestamp: Date;
@@ -13,40 +11,44 @@ export const executeCommand = async (
   hostId: number,
   command: string,
   options?: Partial<Command>
-): ApiResult<CommandResult> => {
+): Promise<ApiResult<CommandResult>> => {
   try {
-    const { data } = await axios.post<CommandResult>(`${BASE_URL}/api/execute/${hostId}`, {
-      command,
-      ...options,
-    });
+    const { data } = await axios.post<CommandResult>(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.COMMAND(hostId)}`,
+      {
+        command,
+        ...options,
+      }
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<CommandResult>;
+    };
   } catch (error) {
     return handleApiError<CommandResult>(error);
   }
 };
 
-export const getCommandHistory = async (hostId: number): ApiResult<CommandHistory[]> => {
+export const getCommandHistory = async (hostId: number): Promise<ApiResult<CommandHistory[]>> => {
   try {
-    const { data } = await axios.get<CommandHistory[]>(`${BASE_URL}/api/execute/${hostId}/history`);
+    const { data } = await axios.get<CommandHistory[]>(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.HISTORY(hostId)}`
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<CommandHistory[]>;
+    };
   } catch (error) {
     return handleApiError<CommandHistory[]>(error);
   }
 };
 
-export const clearCommandHistory = async (hostId: number): ApiResult<void> => {
+export const clearCommandHistory = async (hostId: number): Promise<ApiResult<void>> => {
   try {
-    await axios.delete(`${BASE_URL}/api/execute/${hostId}/history`);
+    await axios.delete(`${BASE_URL}${API_ENDPOINTS.EXECUTE.HISTORY(hostId)}`);
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
@@ -56,36 +58,36 @@ export const saveCommand = async (
   hostId: number,
   name: string,
   command: string
-): ApiResult<void> => {
+): Promise<ApiResult<void>> => {
   try {
-    await axios.post(`${BASE_URL}/api/execute/${hostId}/saved`, {
-      name,
-      command,
-    });
+    await axios.post(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED(hostId)}`,
+      {
+        name,
+        command,
+      }
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
 };
 
-export const getSavedCommands = async (hostId: number): ApiResult<Array<{
+export const getSavedCommands = async (hostId: number): Promise<ApiResult<Array<{
   id: string;
   name: string;
   command: string;
-}>> => {
+}>>> => {
   try {
-    const { data } = await axios.get(`${BASE_URL}/api/execute/${hostId}/saved`);
+    const { data } = await axios.get(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED(hostId)}`
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<Array<{
-      id: string;
-      name: string;
-      command: string;
-    }>>;
+    };
   } catch (error) {
     return handleApiError<Array<{
       id: string;
@@ -95,13 +97,14 @@ export const getSavedCommands = async (hostId: number): ApiResult<Array<{
   }
 };
 
-export const deleteSavedCommand = async (hostId: number, commandId: string): ApiResult<void> => {
+export const deleteSavedCommand = async (hostId: number, commandId: string): Promise<ApiResult<void>> => {
   try {
-    await axios.delete(`${BASE_URL}/api/execute/${hostId}/saved/${commandId}`);
+    await axios.delete(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED_COMMAND(hostId, commandId)}`
+    );
     return {
       success: true,
-      data: undefined,
-    } as ApiResponse<void>;
+    };
   } catch (error) {
     return handleApiError<void>(error);
   }
@@ -115,16 +118,19 @@ export const executeScript = async (
     args?: string[];
     env?: Record<string, string>;
   }
-): ApiResult<CommandResult> => {
+): Promise<ApiResult<CommandResult>> => {
   try {
-    const { data } = await axios.post<CommandResult>(`${BASE_URL}/api/execute/${hostId}/script`, {
-      script,
-      ...options,
-    });
+    const { data } = await axios.post<CommandResult>(
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SCRIPT(hostId)}`,
+      {
+        script,
+        ...options,
+      }
+    );
     return {
       success: true,
       data,
-    } as ApiResponse<CommandResult>;
+    };
   } catch (error) {
     return handleApiError<CommandResult>(error);
   }

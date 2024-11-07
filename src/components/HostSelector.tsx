@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   IconButton,
-  Paper,
   TextField,
   Typography,
   List,
