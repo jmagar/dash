@@ -1,0 +1,130 @@
+groups:
+- name: infrastructure_alerts
+  rules:
+  # High CPU Usage Alert
+  - alert: HighCPUUsage
+    expr: node_cpu_seconds_total{mode!='idle'} / node_cpu_seconds_total{mode='idle'} > 0.8
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU Usage Detected"
+      description: "CPU usage is above 80% for more than 5 minutes"
+
+  # High Memory Usage Alert
+  - alert: HighMemoryUsage
+    expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 20
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Low Memory Available"
+      description: "Less than 20% memory available for more than 5 minutes"
+
+  # Disk Space Alert
+  - alert: LowDiskSpace
+    expr: node_filesystem_avail_bytes{mountpoint='/'} / node_filesystem_size_bytes{mountpoint='/'} * 100 < 10
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Low Disk Space"
+      description: "Less than 10% disk space available on root filesystem"
+
+- name: application_alerts
+  rules:
+  # Backend Service Down
+  - alert: BackendServiceDown
+    expr: up{job='backend'} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Backend Service Down"
+      description: "Backend service has been down for more than 2 minutes"
+
+  # High Error Rate
+  - alert: HighErrorRate
+    expr: sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m])) / sum(rate(http_request_duration_seconds_count[5m])) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Error Rate"
+      description: "More than 5% of requests are returning server errors"
+
+  # Slow Responses
+  - alert: SlowResponses
+    expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Slow API Responses"
+      description: "95% of requests taking longer than 2 seconds"
+
+- name: database_alerts
+  rules:
+  # PostgreSQL Connection Alerts
+  - alert: PostgreSQLTooManyConnections
+    expr: pg_stat_activity_count > pg_settings_max_connections * 0.8
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High PostgreSQL Connections"
+      description: "More than 80% of max connections are in use"
+
+  # Redis Memory Usage
+  - alert: RedisHighMemoryUsage
+    expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High Redis Memory Usage"
+      description: "Redis memory usage above 90%"
+
+- name: security_alerts
+  rules:
+  # Unusual Login Activity
+  - alert: UnusualLoginActivity
+    expr: sum(increase(failed_login_attempts[1h])) > 10
+    for: 10m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Unusual Login Activity"
+      description: "More than 10 failed login attempts in the last hour"
+
+  # Unauthorized Access Attempts
+  - alert: UnauthorizedAccessAttempts
+    expr: sum(increase(unauthorized_access_attempts[30m])) > 5
+    for: 15m
+    labels:
+      severity: high
+    annotations:
+      summary: "Multiple Unauthorized Access Attempts"
+      description: "More than 5 unauthorized access attempts in 30 minutes"
+
+- name: docker_alerts
+  rules:
+  # Container Restart Alerts
+  - alert: ContainerRestartFrequency
+    expr: sum(increase(container_last_seen[1h])) by (name) > 3
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Frequent Container Restarts"
+      description: "Container {{ $labels.name }} has restarted more than 3 times in the last hour"
+
+  # Container Resource Limits
+  - alert: ContainerResourceLimits
+    expr: container_memory_usage_bytes / container_spec_memory_limit_bytes * 100 > 90
+    for: 10m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Container Approaching Resource Limits"
+      description: "Container memory usage above 90% of limit for more than 10 minutes"

@@ -1,0 +1,213 @@
+/* Global Styles for SHH Remote Management Application */
+
+/* Import Noto Sans and Noto Sans Mono from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Noto+Sans+Mono:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+:root {
+  /* Color Palette */
+  --primary-color: #1976d2;
+  --secondary-color: #dc004e;
+  --background-light: #f4f4f4;
+  --background-dark: #121212;
+  --text-primary: #000000;
+  --text-secondary: #666666;
+
+  /* Typography */
+  --font-family-primary: 'Noto Sans', 'Helvetica', 'Arial', sans-serif;
+  --font-family-mono: 'Noto Sans Mono', 'Courier New', monospace;
+  --font-size-base: 16px;
+
+  /* Spacing */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+
+  /* Transitions */
+  --transition-speed-fast: 0.2s;
+  --transition-speed-medium: 0.3s;
+
+  /* Shadows */
+  --shadow-subtle: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark Mode Overrides */
+[data-theme='dark'] {
+  --primary-color: #90caf9;
+  --background-light: #1d1d1d;
+  --background-dark: #121212;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+}
+
+/* Reset and Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  color: var(--text-primary);
+  background-color: var(--background-light);
+  transition: background-color var(--transition-speed-medium), color var(--transition-speed-medium);
+}
+
+/* Code and Monospace Elements */
+code, pre, .monospace {
+  font-family: var(--font-family-mono);
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+}
+
+pre {
+  overflow-x: auto;
+  padding: var(--spacing-sm);
+}
+
+/* Terminal and Command-line Specific */
+.terminal, .command-line {
+  font-family: var(--font-family-mono);
+  background-color: var(--background-dark);
+  color: #f0f0f0;
+  padding: var(--spacing-sm);
+  border-radius: 4px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--primary-color);
+  border-radius: 4px;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin-bottom: var(--spacing-sm);
+  font-weight: 500;
+}
+
+/* Links */
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color var(--transition-speed-fast);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Utility Classes */
+.text-primary {
+  color: var(--primary-color);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.bg-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-speed-medium) ease-in;
+}
+
+/* Responsive Typography */
+@media (max-width: 768px) {
+  :root {
+    --font-size-base: 14px;
+  }
+}
+
+/* Error and Status States */
+.error {
+  color: var(--secondary-color);
+}
+
+.success {
+  color: green;
+}
+
+/* Form Inputs */
+input, textarea, select {
+  width: 100%;
+  padding: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: border-color var(--transition-speed-fast);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-speed-fast),
+    transform var(--transition-speed-fast);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+/* Loading and Skeleton States */
+.loading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
