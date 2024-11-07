@@ -7,39 +7,40 @@ module.exports = {
     sourceType: 'module',
     project: './tsconfig.json',
     tsconfigRootDir: __dirname,
-    extraFileExtensions: ['.cjs']
+    ecmaFeatures: {
+      jsx: true,
+    },
   },
   plugins: [
     '@typescript-eslint',
     'react',
     'react-hooks',
     'import',
-    'unused-imports'
+    'unused-imports',
   ],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'plugin:react/recommended',
     'plugin:react-hooks/recommended',
     'plugin:import/recommended',
-    'plugin:import/typescript'
+    'plugin:import/typescript',
   ],
   settings: {
     react: {
-      version: 'detect'
+      version: 'detect',
     },
     'import/parsers': {
-      '@typescript-eslint/parser': ['.ts', '.tsx', '.cjs']
+      '@typescript-eslint/parser': ['.ts', '.tsx'],
     },
     'import/resolver': {
       typescript: {
-        project: './tsconfig.json'
+        project: './tsconfig.json',
       },
       node: {
-        extensions: ['.js', '.jsx', '.ts', '.tsx', '.cjs']
-      }
-    }
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      },
+    },
   },
   rules: {
     // TypeScript-specific rules
@@ -48,7 +49,7 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', {
       argsIgnorePattern: '^_',
       varsIgnorePattern: '^_',
-      destructuredArrayIgnorePattern: '^_'
+      destructuredArrayIgnorePattern: '^_',
     }],
     'unused-imports/no-unused-imports': 'error',
 
@@ -58,16 +59,16 @@ module.exports = {
         'builtin',
         'external',
         'internal',
-        ['parent', 'sibling', 'index']
+        ['parent', 'sibling', 'index'],
       ],
       'newlines-between': 'always',
       alphabetize: {
         order: 'asc',
-        caseInsensitive: true
-      }
+        caseInsensitive: true,
+      },
     }],
     'import/no-unresolved': ['error', {
-      ignore: ['\\.css$', '^@/']
+      ignore: ['\\.css$'],
     }],
     'import/named': 'error',
     'import/default': 'error',
@@ -80,7 +81,7 @@ module.exports = {
     'react-hooks/exhaustive-deps': 'warn',
     'react/self-closing-comp': ['error', {
       component: true,
-      html: true
+      html: true,
     }],
 
     // General best practices
@@ -94,7 +95,7 @@ module.exports = {
     // Stylistic rules
     'indent': ['error', 2, {
       SwitchCase: 1,
-      ignoredNodes: ['ConditionalExpression']
+      ignoredNodes: ['ConditionalExpression'],
     }],
     'max-len': ['warn', {
       code: 120,
@@ -102,11 +103,11 @@ module.exports = {
       ignoreComments: true,
       ignoreUrls: true,
       ignoreStrings: true,
-      ignoreTemplateLiterals: true
+      ignoreTemplateLiterals: true,
     }],
     'quotes': ['error', 'single', {
       avoidEscape: true,
-      allowTemplateLiterals: true
+      allowTemplateLiterals: true,
     }],
     'semi': ['error', 'always'],
     'comma-dangle': ['error', {
@@ -114,31 +115,25 @@ module.exports = {
       objects: 'always-multiline',
       imports: 'always-multiline',
       exports: 'always-multiline',
-      functions: 'always-multiline'
-    }]
+      functions: 'always-multiline',
+    }],
   },
   overrides: [
     {
       files: ['**/*.test.ts', '**/*.test.tsx'],
       env: {
-        jest: true
+        jest: true,
       },
       rules: {
-        '@typescript-eslint/no-explicit-any': 'off'
-      }
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
     },
     {
       files: ['scripts/**/*.ts', 'backend/**/*.js'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
-        'no-console': 'off'
-      }
+        'no-console': 'off',
+      },
     },
-    {
-      files: ['.eslintrc.cjs'],
-      rules: {
-        '@typescript-eslint/no-var-requires': 'off'
-      }
-    }
-  ]
+  ],
 };
