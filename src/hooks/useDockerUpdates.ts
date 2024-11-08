@@ -17,7 +17,7 @@ interface DockerUpdatesResult {
   refetch: () => Promise<void>;
 }
 
-export const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesResult => {
+const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesResult => {
   const { enabled = true, type = 'containers' } = options;
   const [socket, setSocket] = useState<Socket | null>(null);
   const [data, setData] = useState<Container[] | Stack[] | null>(null);
@@ -125,3 +125,5 @@ export const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerU
     refetch,
   };
 };
+
+export default useDockerUpdates;

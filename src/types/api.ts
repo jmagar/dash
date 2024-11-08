@@ -47,6 +47,7 @@ export const API_ENDPOINTS = {
     LIST: (hostId: number): string => `/hosts/${hostId}/files`,
     UPLOAD: (hostId: number): string => `/hosts/${hostId}/files/upload`,
     DOWNLOAD: (hostId: number): string => `/hosts/${hostId}/files/download`,
+    DELETE: (hostId: number): string => `/hosts/${hostId}/files/delete`, // Added DELETE endpoint
   },
   DOCKER: {
     CONTAINERS: '/docker/containers',

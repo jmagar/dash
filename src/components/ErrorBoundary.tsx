@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, createElement, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -26,7 +26,7 @@ class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      return this.props.fallback || <h1>Something went wrong.</h1>;
+      return this.props.fallback || createElement('div', null, 'Something went wrong.');
     }
 
     return this.props.children;

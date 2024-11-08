@@ -2,11 +2,12 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Clean npm cache and install dependencies
+# Clean npm cache and install dependencies with legacy peer deps
 COPY package*.json ./
 RUN npm cache clean --force && \
-    npm install && \
-    npm install --save-dev \
+    npm install --legacy-peer-deps && \
+    npm install --legacy-peer-deps --save-dev \
+    @testing-library/react-hooks@8.0.1 \
     @babel/plugin-proposal-private-property-in-object \
     @babel/plugin-transform-private-property-in-object \
     eslint-plugin-unused-imports

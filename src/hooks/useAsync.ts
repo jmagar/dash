@@ -5,15 +5,17 @@ export interface UseAsyncOptions<_T> {
   deps?: DependencyList;
 }
 
-export function useAsync<T>(
-  asyncFunction: () => Promise<T>,
-  options: UseAsyncOptions<T> = {},
-): {
+export interface UseAsyncResult<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
   execute: () => Promise<T>;
-} {
+}
+
+export function useAsync<T>(
+  asyncFunction: () => Promise<T>,
+  options: UseAsyncOptions<T> = {},
+): UseAsyncResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,3 +51,5 @@ export function useAsync<T>(
     execute,
   };
 }
+
+export default useAsync;

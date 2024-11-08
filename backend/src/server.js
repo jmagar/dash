@@ -1,26 +1,30 @@
 const express = require('express');
+
 const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
+
 const bodyParser = require('body-parser');
-const { Client } = require('ssh2');
-const multer = require('multer');
+
 const fs = require('fs').promises;
 const path = require('path');
 const { promisify } = require('util');
-const jwt = require('jsonwebtoken');
+
 const bcrypt = require('bcrypt');
 const compression = require('compression');
+const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const Redis = require('ioredis');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const { Server } = require('socket.io');
+const { Client } = require('ssh2');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL,
-    methods: ['GET', 'POST']
-  }
+    methods: ['GET', 'POST'],
+  },
 });
 
 app.use(cors());
@@ -29,7 +33,7 @@ app.use(compression());
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
 });
 app.use(limiter);
 
@@ -63,7 +67,7 @@ const createSSHConnection = (host) => {
       host: host.ip,
       port: 22,
       username: host.username,
-      privateKey: require('fs').readFileSync(host.privateKeyPath)
+      privateKey: require('fs').readFileSync(host.privateKeyPath),
     });
   });
 };
@@ -114,7 +118,7 @@ app.post('/api/sftp/list', authenticateToken, async (req, res) => {
       name: item.filename,
       isDirectory: item.attrs.isDirectory(),
       size: item.attrs.size,
-      modifyTime: new Date(item.attrs.mtime * 1000).toISOString()
+      modifyTime: new Date(item.attrs.mtime * 1000).toISOString(),
     })));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -337,7 +341,7 @@ async function getHostById(hostId) {
 async function getUserByUsername(username) {
   // In a real application, you would fetch this from a database
   const users = [
-    { id: 1, username: 'admin', password: await bcrypt.hash('password', 10) }
+    { id: 1, username: 'admin', password: await bcrypt.hash('password', 10) },
   ];
   return users.find(u => u.username === username);
 }
