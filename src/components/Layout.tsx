@@ -1,120 +1,141 @@
-import BuildIcon from '@mui/icons-material/Build';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import ImageIcon from '@mui/icons-material/Image';
-import MenuIcon from '@mui/icons-material/Menu';
-import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
-import StorageIcon from '@mui/icons-material/Storage';
-import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Box } from '@mui/material';
-import React, { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import {
+  Menu as MenuIcon,
+  Dashboard as DashboardIcon,
+  Computer as ComputerIcon,
+  Storage as StorageIcon,
+  Settings as SettingsIcon,
+  ExitToApp as LogoutIcon,
+} from '@mui/icons-material';
+import {
+  AppBar,
+  Box,
+  Drawer,
+  IconButton,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Toolbar,
+  Typography,
+} from '@mui/material';
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import SSHConnectionManager from './SSHConnectionManager';
+import { logout } from '../api/auth';
+import { useUserContext } from '../context/UserContext';
 
-// Define the props for the Layout component
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-// Define the structure for navigation items
-interface NavItem {
-  text: string;
-  icon: React.ReactElement;
-  path: string;
-}
-
-// Array of navigation items
-const navItems: NavItem[] = [
-  { text: 'Containers', icon: <DashboardIcon />, path: '/' },
-  { text: 'Images', icon: <ImageIcon />, path: '/images' },
-  { text: 'Volumes', icon: <StorageIcon />, path: '/volumes' },
-  { text: 'Networks', icon: <NetworkCheckIcon />, path: '/networks' },
-  { text: 'Compose', icon: <BuildIcon />, path: '/compose' },
-];
-
-export default function Layout({ children }: LayoutProps) {
-  // State to control the open/closed state of the drawer
+const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, setUser } = useUserContext();
 
   // Toggle drawer open/closed
-  const toggleDrawer = () => {
-    setDrawerOpen(!drawerOpen);
+  const _toggleDrawer = useCallback((): void => {
+    setDrawerOpen((prevOpen: boolean): boolean => !prevOpen);
+  }, []);
+
+  const handleNavigation = (path: string): void => {
+    navigate(path);
+    setDrawerOpen(false);
+  };
+
+  const handleLogout = async (): Promise<void> => {
+    try {
+      await logout();
+      setUser(null);
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed', error);
+    }
   };
 
   return (
     <Box sx={{ display: 'flex' }}>
-      {/* App Bar */}
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <IconButton
             color="inherit"
             aria-label="open drawer"
             edge="start"
-            onClick={toggleDrawer}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            onClick={_toggleDrawer}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Docker Management UI
+            SSH Remote Management
           </Typography>
-          <SSHConnectionManager />
+          {user && (
+            <Typography variant="subtitle1" noWrap>
+              {user.username}
+            </Typography>
+          )}
         </Toolbar>
       </AppBar>
 
-      {/* Navigation Drawer */}
       <Drawer
-        variant="permanent"
+        variant="persistent"
+        anchor="left"
+        open={drawerOpen}
         sx={{
           width: 240,
           flexShrink: 0,
-          [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box' },
-          display: { xs: 'none', sm: 'block' },
+          '& .MuiDrawer-paper': {
+            width: 240,
+            boxSizing: 'border-box',
+            top: 64,
+          },
         }}
       >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List>
-            {navItems.map((item) => (
-              <ListItem button key={item.text} component={RouterLink} to={item.path}>
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
+        <List>
+          <ListItem button onClick={(): void => handleNavigation('/')}>
+            <ListItemIcon>
+              <DashboardIcon />
+            </ListItemIcon>
+            <ListItemText primary="Dashboard" />
+          </ListItem>
+          <ListItem button onClick={(): void => handleNavigation('/hosts')}>
+            <ListItemIcon>
+              <ComputerIcon />
+            </ListItemIcon>
+            <ListItemText primary="Hosts" />
+          </ListItem>
+          <ListItem button onClick={(): void => handleNavigation('/containers')}>
+            <ListItemIcon>
+              <StorageIcon />
+            </ListItemIcon>
+            <ListItemText primary="Containers" />
+          </ListItem>
+          <ListItem button onClick={(): void => handleNavigation('/settings')}>
+            <ListItemIcon>
+              <SettingsIcon />
+            </ListItemIcon>
+            <ListItemText primary="Settings" />
+          </ListItem>
+          <ListItem button onClick={handleLogout}>
+            <ListItemIcon>
+              <LogoutIcon />
+            </ListItemIcon>
+            <ListItemText primary="Logout" />
+          </ListItem>
+        </List>
       </Drawer>
 
-      {/* Mobile Drawer */}
-      <Drawer
-        variant="temporary"
-        open={drawerOpen}
-        onClose={toggleDrawer}
-        ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
-        }}
+      <Box
+        component="main"
         sx={{
-          display: { xs: 'block', sm: 'none' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 240 },
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - ${drawerOpen ? 240 : 0}px)` },
+          ml: { sm: `${drawerOpen ? 240 : 0}px` },
+          mt: ['64px', '64px'],
         }}
       >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List>
-            {navItems.map((item) => (
-              <ListItem button key={item.text} component={RouterLink} to={item.path} onClick={toggleDrawer}>
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </Drawer>
-
-      {/* Main content */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         {children}
       </Box>
     </Box>
   );
-}
+};
+
+export default Layout;

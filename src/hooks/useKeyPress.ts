@@ -13,7 +13,7 @@ type KeyFilter = string | ((event: KeyboardEvent) => boolean);
 export function useKeyPress(
   key: KeyFilter,
   handler: KeyHandler,
-  options: UseKeyPressOptions = {}
+  options: UseKeyPressOptions = {},
 ): void {
   const {
     event = 'keydown',

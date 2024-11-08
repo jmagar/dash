@@ -1,7 +1,8 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useUserContext } from '../context/UserContext';
+
 import LoadingScreen from './LoadingScreen';
+import { useUserContext } from '../context/UserContext';
 
 interface PrivateRouteProps {
   children: React.ReactElement;

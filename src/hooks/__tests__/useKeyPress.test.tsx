@@ -1,5 +1,6 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
+import React from 'react';
+
 import '@testing-library/jest-dom';
 import { useKeyPress, isEnter, withCtrl } from '../useKeyPress';
 
@@ -57,7 +58,7 @@ describe('useKeyPress', () => {
         keyFilter="Enter"
         onKeyPress={onKeyPress}
         options={{ preventDefault: true }}
-      />
+      />,
     );
 
     fireEvent.keyDown(window, { key: 'Enter', preventDefault });
@@ -73,7 +74,7 @@ describe('useKeyPress', () => {
         keyFilter="Enter"
         onKeyPress={onKeyPress}
         options={{ stopPropagation: true }}
-      />
+      />,
     );
 
     fireEvent.keyDown(window, { key: 'Enter', stopPropagation });
@@ -88,7 +89,7 @@ describe('useKeyPress', () => {
         keyFilter="Enter"
         onKeyPress={onKeyPress}
         options={{ event: 'keyup' }}
-      />
+      />,
     );
 
     fireEvent.keyUp(window, { key: 'Enter' });
@@ -105,7 +106,7 @@ describe('useKeyPress', () => {
         keyFilter="Enter"
         onKeyPress={onKeyPress}
         options={{ target: document.body }}
-      />
+      />,
     );
 
     const element = getByTestId('test-element');
@@ -118,7 +119,7 @@ describe('useKeyPress', () => {
     const onKeyPress = jest.fn();
 
     const { unmount } = render(
-      <TestComponent keyFilter="Enter" onKeyPress={onKeyPress} />
+      <TestComponent keyFilter="Enter" onKeyPress={onKeyPress} />,
     );
 
     unmount();

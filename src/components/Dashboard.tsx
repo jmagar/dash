@@ -1,4 +1,10 @@
-import React from 'react';
+import {
+  Refresh as RefreshIcon,
+  Computer as ComputerIcon,
+  Storage as StorageIcon,
+  Memory as MemoryIcon,
+  NetworkCheck as NetworkIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -13,17 +19,12 @@ import {
   ListItemText,
   ListItemIcon,
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  Computer as ComputerIcon,
-  Storage as StorageIcon,
-  Memory as MemoryIcon,
-  NetworkCheck as NetworkIcon,
-} from '@mui/icons-material';
-import { useAsync, useThrottle, useIntersectionObserver } from '../hooks';
+import React from 'react';
+
 import { getSystemStats, getHostStatus } from '../api/hosts';
-import { Host, SystemStats } from '../types';
+import { useAsync, useThrottle, useIntersectionObserver } from '../hooks';
 import LoadingScreen from './LoadingScreen';
+import type { Host, SystemStats } from '../types/models';
 
 const formatBytes = (bytes: number): string => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -45,7 +46,12 @@ interface StatItemProps {
   progress?: number;
 }
 
-const StatItem: React.FC<StatItemProps> = ({ icon, label, value, progress }) => (
+const StatItem: React.FC<StatItemProps> = ({
+  icon,
+  label,
+  value,
+  progress,
+}) => (
   <ListItem>
     <ListItemIcon>{icon}</ListItemIcon>
     <ListItemText primary={label} secondary={value} />
@@ -88,7 +94,7 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
     {
       deps: [isVisible],
       immediate: isVisible,
-    }
+    },
   );
 
   const throttledStats = useThrottle(stats, 1000);
@@ -101,7 +107,7 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
           <Typography variant="h6">{host.name}</Typography>
           <Box sx={{ flexGrow: 1 }} />
           <IconButton
-            onClick={() => void loadStats()}
+            onClick={(): void => void loadStats()}
             disabled={loading}
             title="Refresh stats"
           >
@@ -125,7 +131,7 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
               icon={<StorageIcon />}
               label="Memory"
               value={`${formatBytes(throttledStats.memory.used)} / ${formatBytes(
-                throttledStats.memory.total
+                throttledStats.memory.total,
               )}`}
               progress={(throttledStats.memory.used / throttledStats.memory.total) * 100}
             />
@@ -133,7 +139,7 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
               icon={<StorageIcon />}
               label="Disk"
               value={`${formatBytes(throttledStats.disk.used)} / ${formatBytes(
-                throttledStats.disk.total
+                throttledStats.disk.total,
               )}`}
               progress={(throttledStats.disk.used / throttledStats.disk.total) * 100}
             />
@@ -141,7 +147,7 @@ const HostCard: React.FC<HostCardProps> = ({ host }) => {
               icon={<NetworkIcon />}
               label="Network"
               value={`↓ ${formatBytes(throttledStats.network.rx)}/s  ↑ ${formatBytes(
-                throttledStats.network.tx
+                throttledStats.network.tx,
               )}/s`}
             />
           </List>
@@ -167,7 +173,7 @@ const Dashboard: React.FC = () => {
     },
     {
       immediate: true,
-    }
+    },
   );
 
   if (loading) {
@@ -178,7 +184,10 @@ const Dashboard: React.FC = () => {
     return (
       <Box sx={{ p: 3 }}>
         <Typography color="error">{error}</Typography>
-        <Button variant="contained" onClick={() => void loadHosts()}>
+        <Button
+          variant="contained"
+          onClick={(): void => void loadHosts()}
+        >
           Retry
         </Button>
       </Box>

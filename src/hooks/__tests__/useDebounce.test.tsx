@@ -1,4 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
+
 import '@testing-library/jest-dom';
 import { useDebounce } from '../useDebounce';
 
@@ -21,7 +22,7 @@ describe('useDebounce', () => {
   it('should debounce value updates with delay', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, { delay: 500 }),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Update value
@@ -44,7 +45,7 @@ describe('useDebounce', () => {
   it('should handle leading option', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, { delay: 500, leading: true }),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Update value - should update immediately due to leading
@@ -65,7 +66,7 @@ describe('useDebounce', () => {
   it('should handle trailing option', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, { delay: 500, trailing: false, leading: true }),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Update value - should update immediately due to leading
@@ -86,7 +87,7 @@ describe('useDebounce', () => {
   it('should handle maxWait option', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, { delay: 1000, maxWait: 500 }),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Update value
@@ -103,7 +104,7 @@ describe('useDebounce', () => {
   it('should handle number as delay option', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, 500),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Update value
@@ -128,7 +129,7 @@ describe('useDebounce', () => {
   it('should handle rapid value changes', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useDebounce(value, { delay: 500 }),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     // Simulate rapid value changes

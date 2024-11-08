@@ -1,34 +1,38 @@
-import React, { useState } from 'react';
+
+import DeleteIcon from '@mui/icons-material/Delete';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import UpdateIcon from '@mui/icons-material/Update';
 import {
   Box,
-  Button,
+  CircularProgress,
   IconButton,
+  List,
+  ListItem,
+  ListItemSecondaryAction,
+  ListItemText,
   Paper,
   TextField,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  InputAdornment,
 } from '@mui/material';
-import {
-  Delete as DeleteIcon,
-  Search as SearchIcon,
-  History as HistoryIcon,
-  Add as AddIcon,
-  Update as UpdateIcon,
-} from '@mui/icons-material';
-import { useAsync, useDebounce } from '../hooks';
-import { installPackage, uninstallPackage, updatePackage } from '../api/packageManager';
-import { Host, Package } from '../types';
-import HostSelector from './HostSelector';
-import LoadingScreen from './LoadingScreen';
+import React, { useState } from 'react';
 
-const PackageManager: React.FC = () => {
-  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
-  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+import {
+  installPackage,
+  listInstalledPackages,
+  searchPackages,
+  uninstallPackage,
+  updatePackage,
+} from '../api/packageManager';
+import { useAsync, useDebounce } from '../hooks';
+import type { Package } from '../types';
+
+interface PackageManagerProps {
+  hostId: number;
+}
+
+export default function PackageManager({ hostId }: PackageManagerProps): JSX.Element {
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
 
   const {
@@ -37,166 +41,148 @@ const PackageManager: React.FC = () => {
     error,
     execute: loadPackages,
   } = useAsync<Package[]>(
-    async () => {
-      if (!selectedHost) {
-        throw new Error('No host selected');
+    async (): Promise<Package[]> => {
+      if (!debouncedSearch) {
+        const result = await listInstalledPackages(hostId);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load packages');
+        }
+        return result.data || [];
       }
-      const response = await fetch(`/api/packages/${selectedHost.id}`);
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load packages');
+      const result = await searchPackages(hostId, debouncedSearch);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to search packages');
       }
-      return data;
+      return result.data || [];
     },
     {
-      deps: [selectedHost?.id],
-      immediate: !!selectedHost,
-    }
+      deps: [hostId, debouncedSearch],
+      immediate: true,
+    },
   );
 
-  const handleHostSelect = (hosts: Host[]): void => {
-    setSelectedHost(hosts[0]);
-    setHostSelectorOpen(false);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setSearchTerm(e.target.value);
   };
 
-  const handleInstall = async (pkg: Package): Promise<void> => {
-    if (!selectedHost) return;
+  const handleInstall = async (name: string): Promise<void> => {
     try {
-      await installPackage(selectedHost.id, pkg.name);
-      void loadPackages();
-    } catch (error) {
-      console.error('Failed to install package:', error);
+      const result = await installPackage(hostId, name);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to install package');
+      }
+      await loadPackages();
+    } catch (err) {
+      console.error('Failed to install package:', err);
     }
   };
 
-  const handleUninstall = async (pkg: Package): Promise<void> => {
-    if (!selectedHost) return;
+  const handleUninstall = async (name: string): Promise<void> => {
     try {
-      await uninstallPackage(selectedHost.id, pkg.name);
-      void loadPackages();
-    } catch (error) {
-      console.error('Failed to uninstall package:', error);
+      const result = await uninstallPackage(hostId, name);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to uninstall package');
+      }
+      await loadPackages();
+    } catch (err) {
+      console.error('Failed to uninstall package:', err);
     }
   };
 
-  const handleUpdate = async (pkg: Package): Promise<void> => {
-    if (!selectedHost) return;
+  const handleUpdate = async (name: string): Promise<void> => {
     try {
-      await updatePackage(selectedHost.id, pkg.name);
-      void loadPackages();
-    } catch (error) {
-      console.error('Failed to update package:', error);
+      const result = await updatePackage(hostId, name);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update package');
+      }
+      await loadPackages();
+    } catch (err) {
+      console.error('Failed to update package:', err);
     }
   };
 
-  const filteredPackages = packages?.filter(pkg =>
-    pkg.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-    pkg.description?.toLowerCase().includes(debouncedSearch.toLowerCase())
-  );
-
-  if (!selectedHost) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Button variant="contained" onClick={() => setHostSelectorOpen(true)}>
-          Select Host
-        </Button>
-        <HostSelector
-          open={hostSelectorOpen}
-          onClose={() => setHostSelectorOpen(false)}
-          onSelect={handleHostSelect}
-          multiSelect={false}
-        />
-      </Box>
-    );
-  }
-
-  if (loading) {
-    return <LoadingScreen fullscreen={false} message="Loading packages..." />;
-  }
+  const handleRefresh = async (): Promise<void> => {
+    await loadPackages();
+  };
 
   if (error) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
-        <Button variant="contained" onClick={() => void loadPackages()}>
-          Retry
-        </Button>
-      </Box>
+      <Typography color="error">
+        Error loading packages: {error}
+      </Typography>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="h5">Package Manager</Typography>
-        <Typography variant="subtitle1" color="textSecondary">
-          {selectedHost.name} - {selectedHost.hostname}:{selectedHost.port}
-        </Typography>
-        <Box sx={{ flexGrow: 1 }}>
-          <TextField
-            size="small"
-            placeholder="Search packages..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-            fullWidth
-          />
-        </Box>
-        <IconButton onClick={() => void loadPackages()} title="Refresh packages">
-          <HistoryIcon />
+        <TextField
+          fullWidth
+          label="Search Packages"
+          value={searchTerm}
+          onChange={handleSearchChange}
+          disabled={loading}
+        />
+        <IconButton
+          onClick={handleRefresh}
+          disabled={loading}
+        >
+          <RefreshIcon />
         </IconButton>
       </Box>
 
       <Paper>
         <List>
-          {filteredPackages?.map((pkg) => (
-            <ListItem key={pkg.name}>
-              <ListItemText
-                primary={pkg.name}
-                secondary={`${pkg.version}${pkg.description ? ` - ${pkg.description}` : ''}`}
-              />
-              <ListItemSecondaryAction>
-                {pkg.installed ? (
-                  <>
-                    {pkg.updateAvailable && (
+          {loading ? (
+            <ListItem>
+              <CircularProgress />
+            </ListItem>
+          ) : packages?.length ? (
+            packages.map((pkg) => (
+              <ListItem key={pkg.name}>
+                <ListItemText
+                  primary={pkg.name}
+                  secondary={`Version: ${pkg.version}${pkg.updateAvailable ? ' (Update available)' : ''}`}
+                />
+                <ListItemSecondaryAction>
+                  {pkg.installed ? (
+                    <>
+                      {pkg.updateAvailable && (
+                        <IconButton
+                          edge="end"
+                          onClick={(): Promise<void> => handleUpdate(pkg.name)}
+                          title="Update package"
+                        >
+                          <UpdateIcon />
+                        </IconButton>
+                      )}
                       <IconButton
                         edge="end"
-                        onClick={() => void handleUpdate(pkg)}
-                        title="Update package"
+                        onClick={(): Promise<void> => handleUninstall(pkg.name)}
+                        title="Uninstall package"
                       >
-                        <UpdateIcon />
+                        <DeleteIcon />
                       </IconButton>
-                    )}
+                    </>
+                  ) : (
                     <IconButton
                       edge="end"
-                      onClick={() => void handleUninstall(pkg)}
-                      title="Uninstall package"
+                      onClick={(): Promise<void> => handleInstall(pkg.name)}
+                      title="Install package"
                     >
-                      <DeleteIcon />
+                      <GetAppIcon />
                     </IconButton>
-                  </>
-                ) : (
-                  <IconButton
-                    edge="end"
-                    onClick={() => void handleInstall(pkg)}
-                    title="Install package"
-                  >
-                    <AddIcon />
-                  </IconButton>
-                )}
-              </ListItemSecondaryAction>
+                  )}
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))
+          ) : (
+            <ListItem>
+              <ListItemText primary="No packages found" />
             </ListItem>
-          ))}
+          )}
         </List>
       </Paper>
     </Box>
   );
-};
-
-export default PackageManager;
+}

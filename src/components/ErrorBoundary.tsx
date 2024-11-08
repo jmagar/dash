@@ -1,4 +1,3 @@
-import React, { Component, ErrorInfo } from 'react';
 import {
   Box,
   Button,
@@ -8,6 +7,7 @@ import {
   Theme,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import React, { Component, ErrorInfo } from 'react';
 
 interface Props {
   children: React.ReactNode;

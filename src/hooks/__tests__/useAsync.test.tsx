@@ -1,4 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
+
 import '@testing-library/jest-dom';
 import { useAsync } from '../useAsync';
 
@@ -59,7 +60,7 @@ describe('useAsync', () => {
     const mockFn = jest.fn().mockResolvedValue(mockData);
 
     const { result } = renderHook(() =>
-      useAsync(mockFn, { immediate: true })
+      useAsync(mockFn, { immediate: true }),
     );
 
     expect(result.current.loading).toBe(true);
@@ -79,7 +80,7 @@ describe('useAsync', () => {
       ({ deps }) => useAsync(mockFn, { deps, immediate: true }),
       {
         initialProps: { deps: [1] },
-      }
+      },
     );
 
     expect(mockFn).toHaveBeenCalledTimes(1);
@@ -94,7 +95,7 @@ describe('useAsync', () => {
   it('should handle cleanup on unmount', async () => {
     const mockFn = jest.fn().mockResolvedValue(null);
     const { unmount } = renderHook(() =>
-      useAsync(mockFn, { immediate: true })
+      useAsync(mockFn, { immediate: true }),
     );
 
     unmount();

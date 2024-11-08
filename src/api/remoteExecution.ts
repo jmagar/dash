@@ -1,7 +1,8 @@
 import axios from 'axios';
-import type { Command, CommandResult } from '../types/models';
+
 import type { ApiResult } from '../types';
 import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+import type { Command, CommandResult } from '../types/models';
 
 interface CommandHistory extends CommandResult {
   timestamp: Date;
@@ -10,7 +11,7 @@ interface CommandHistory extends CommandResult {
 export const executeCommand = async (
   hostId: number,
   command: string,
-  options?: Partial<Command>
+  options?: Partial<Command>,
 ): Promise<ApiResult<CommandResult>> => {
   try {
     const { data } = await axios.post<CommandResult>(
@@ -18,7 +19,7 @@ export const executeCommand = async (
       {
         command,
         ...options,
-      }
+      },
     );
     return {
       success: true,
@@ -32,7 +33,7 @@ export const executeCommand = async (
 export const getCommandHistory = async (hostId: number): Promise<ApiResult<CommandHistory[]>> => {
   try {
     const { data } = await axios.get<CommandHistory[]>(
-      `${BASE_URL}${API_ENDPOINTS.EXECUTE.HISTORY(hostId)}`
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.HISTORY(hostId)}`,
     );
     return {
       success: true,
@@ -57,7 +58,7 @@ export const clearCommandHistory = async (hostId: number): Promise<ApiResult<voi
 export const saveCommand = async (
   hostId: number,
   name: string,
-  command: string
+  command: string,
 ): Promise<ApiResult<void>> => {
   try {
     await axios.post(
@@ -65,7 +66,7 @@ export const saveCommand = async (
       {
         name,
         command,
-      }
+      },
     );
     return {
       success: true,
@@ -82,7 +83,7 @@ export const getSavedCommands = async (hostId: number): Promise<ApiResult<Array<
 }>>> => {
   try {
     const { data } = await axios.get(
-      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED(hostId)}`
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED(hostId)}`,
     );
     return {
       success: true,
@@ -100,7 +101,7 @@ export const getSavedCommands = async (hostId: number): Promise<ApiResult<Array<
 export const deleteSavedCommand = async (hostId: number, commandId: string): Promise<ApiResult<void>> => {
   try {
     await axios.delete(
-      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED_COMMAND(hostId, commandId)}`
+      `${BASE_URL}${API_ENDPOINTS.EXECUTE.SAVED_COMMAND(hostId, commandId)}`,
     );
     return {
       success: true,
@@ -117,7 +118,7 @@ export const executeScript = async (
     interpreter?: string;
     args?: string[];
     env?: Record<string, string>;
-  }
+  },
 ): Promise<ApiResult<CommandResult>> => {
   try {
     const { data } = await axios.post<CommandResult>(
@@ -125,7 +126,7 @@ export const executeScript = async (
       {
         script,
         ...options,
-      }
+      },
     );
     return {
       success: true,

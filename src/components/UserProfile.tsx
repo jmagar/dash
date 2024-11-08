@@ -1,207 +1,231 @@
-import React from 'react';
+import CancelIcon from '@mui/icons-material/Cancel';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
 import {
+  Avatar,
   Box,
   Button,
   Card,
   CardContent,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
+  Divider,
+  Grid,
+  IconButton,
   TextField,
   Typography,
 } from '@mui/material';
-import { useAsync } from '../hooks';
+import React, { useState } from 'react';
+
 import { updateUser } from '../api/auth';
 import { useUserContext } from '../context/UserContext';
-import { User, UserPreferences } from '../types';
-import LoadingScreen from './LoadingScreen';
+import type { User } from '../types';
 
-const AVAILABLE_THEMES = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
-];
-
-const AVAILABLE_LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-];
-
-const TERMINAL_FONTS = [
-  { value: 'monospace', label: 'Monospace' },
-  { value: 'Consolas', label: 'Consolas' },
-  { value: 'Courier New', label: 'Courier New' },
-  { value: 'Fira Code', label: 'Fira Code' },
-];
-
-const UserProfile: React.FC = () => {
+export default function UserProfile(): JSX.Element {
   const { user, setUser } = useUserContext();
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editedUser, setEditedUser] = useState<Partial<User>>({});
+  const [currentPassword, setCurrentPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const {
-    loading,
-    error,
-    execute: savePreferences,
-  } = useAsync<User>(
-    async () => {
-      if (!user) throw new Error('No user logged in');
+  const handleEditToggle = (): void => {
+    setIsEditing(!isEditing);
+    setEditedUser(user || {});
+  };
 
-      const response = await updateUser(user.id, {
-        preferences: user.preferences,
-      });
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const { name, value } = e.target;
+    setEditedUser((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to update preferences');
-      }
-
-      setUser(response.data);
-      return response.data;
-    },
-    {
-      onError: (error) => {
-        console.error('Failed to save preferences:', error);
-      },
-    }
-  );
-
-  const handlePreferenceChange = <K extends keyof UserPreferences>(
-    key: K,
-    value: UserPreferences[K]
-  ): void => {
+  const handleSaveProfile = async (): Promise<void> => {
     if (!user) return;
 
-    setUser({
-      ...user,
-      preferences: {
-        ...user.preferences,
-        [key]: value,
-      },
-    });
+    try {
+      setError(null);
+      const result = await updateUser(user.id, editedUser);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update profile');
+      }
+
+      if (result.data) {
+        setUser(result.data);
+        setIsEditing(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    }
+  };
+
+  const handleChangePassword = async (): Promise<void> => {
+    if (!user) return;
+
+    // Password validation
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters long');
+      return;
+    }
+
+    // Note: Implement actual password change API call when available
+    try {
+      setPasswordError(null);
+      // Placeholder for password change logic
+      console.warn('Password change not implemented');
+
+      // Reset password fields
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'An error occurred');
+    }
   };
 
   if (!user) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">No user logged in</Typography>
-      </Box>
+      <Typography color="error">No user logged in</Typography>
     );
   }
 
-  if (loading) {
-    return <LoadingScreen fullscreen={false} message="Saving preferences..." />;
-  }
-
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="h5">User Profile</Typography>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="contained"
-          onClick={() => void savePreferences()}
-          disabled={loading}
-        >
-          Save Preferences
-        </Button>
-      </Box>
-
-      {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
-          {error}
-        </Typography>
-      )}
-
+    <Box sx={{ maxWidth: 600, margin: 'auto', p: 3 }}>
       <Card>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            User Information
-          </Typography>
-          <Box sx={{ mb: 3 }}>
-            <TextField
-              fullWidth
-              label="Username"
-              value={user.username}
-              disabled
-              sx={{ mb: 2 }}
-            />
-            <TextField
-              fullWidth
-              label="Email"
-              value={user.email}
-              disabled
-              sx={{ mb: 2 }}
-            />
-            <TextField
-              fullWidth
-              label="Role"
-              value={user.role}
-              disabled
-            />
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Avatar
+              sx={{
+                width: 80,
+                height: 80,
+                mr: 3,
+                bgcolor: 'primary.main',
+              }}
+            >
+              {user.username.charAt(0).toUpperCase()}
+            </Avatar>
+            <Box>
+              <Typography variant="h5">{user.username}</Typography>
+              <Typography variant="subtitle1" color="textSecondary">
+                {user.email}
+              </Typography>
+            </Box>
+            <Box sx={{ ml: 'auto' }}>
+              <IconButton onClick={handleEditToggle}>
+                {isEditing ? <CancelIcon /> : <EditIcon />}
+              </IconButton>
+            </Box>
           </Box>
 
-          <Typography variant="h6" gutterBottom>
-            Preferences
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(2, 1fr)' }}>
-            <FormControl>
-              <InputLabel>Theme</InputLabel>
-              <Select
-                value={user.preferences.theme}
-                label="Theme"
-                onChange={(e) => handlePreferenceChange('theme', e.target.value as UserPreferences['theme'])}
-              >
-                {AVAILABLE_THEMES.map((theme) => (
-                  <MenuItem key={theme.value} value={theme.value}>
-                    {theme.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          {error && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {error}
+            </Typography>
+          )}
 
-            <FormControl>
-              <InputLabel>Language</InputLabel>
-              <Select
-                value={user.preferences.language}
-                label="Language"
-                onChange={(e) => handlePreferenceChange('language', e.target.value)}
-              >
-                {AVAILABLE_LANGUAGES.map((lang) => (
-                  <MenuItem key={lang.value} value={lang.value}>
-                    {lang.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          <Grid container spacing={2}>
+            {isEditing ? (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Username"
+                    name="username"
+                    value={editedUser.username || ''}
+                    onChange={handleInputChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Email"
+                    name="email"
+                    type="email"
+                    value={editedUser.email || ''}
+                    onChange={handleInputChange}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveProfile}
+                  >
+                    Save Profile
+                  </Button>
+                </Grid>
+              </>
+            ) : (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle1">Username</Typography>
+                  <Typography>{user.username}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle1">Email</Typography>
+                  <Typography>{user.email}</Typography>
+                </Grid>
+              </>
+            )}
+          </Grid>
 
-            <FormControl>
-              <InputLabel>Terminal Font</InputLabel>
-              <Select
-                value={user.preferences.terminalFontFamily}
-                label="Terminal Font"
-                onChange={(e) => handlePreferenceChange('terminalFontFamily', e.target.value)}
-              >
-                {TERMINAL_FONTS.map((font) => (
-                  <MenuItem key={font.value} value={font.value}>
-                    {font.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          <Divider sx={{ my: 3 }} />
 
-            <TextField
-              type="number"
-              label="Terminal Font Size"
-              value={user.preferences.terminalFontSize}
-              onChange={(e) => handlePreferenceChange('terminalFontSize', parseInt(e.target.value, 10))}
-              inputProps={{ min: 8, max: 32 }}
-            />
-          </Box>
+          <Typography variant="h6" sx={{ mb: 2 }}>Change Password</Typography>
+          {passwordError && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {passwordError}
+            </Typography>
+          )}
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="password"
+                label="Current Password"
+                value={currentPassword}
+                onChange={(e): void => setCurrentPassword(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="password"
+                label="New Password"
+                value={newPassword}
+                onChange={(e): void => setNewPassword(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="password"
+                label="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e): void => setConfirmPassword(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={handleChangePassword}
+                disabled={!currentPassword || !newPassword || !confirmPassword}
+              >
+                Change Password
+              </Button>
+            </Grid>
+          </Grid>
         </CardContent>
       </Card>
     </Box>
   );
-};
-
-export default UserProfile;
+}

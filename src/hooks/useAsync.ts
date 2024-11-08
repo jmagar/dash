@@ -18,7 +18,7 @@ export interface UseAsyncResult<T> {
 
 export function useAsync<T>(
   asyncFunction: (...args: any[]) => Promise<T>,
-  options: UseAsyncOptions<T> = {}
+  options: UseAsyncOptions<T> = {},
 ): UseAsyncResult<T> {
   const { immediate = false, deps = [], onSuccess, onError } = options;
   const [loading, setLoading] = useState<boolean>(immediate);
@@ -43,7 +43,7 @@ export function useAsync<T>(
         setLoading(false);
       }
     },
-    [asyncFunction, onSuccess, onError]
+    [asyncFunction, onSuccess, onError],
   );
 
   useEffect(() => {

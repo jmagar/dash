@@ -12,7 +12,7 @@ export interface UseIntersectionObserverResult<T extends HTMLElement> {
 }
 
 export function useIntersectionObserver<T extends HTMLElement = HTMLElement>(
-  options: UseIntersectionObserverOptions = {}
+  options: UseIntersectionObserverOptions = {},
 ): [RefObject<T>, boolean] {
   const {
     threshold = 0,
@@ -42,7 +42,7 @@ export function useIntersectionObserver<T extends HTMLElement = HTMLElement>(
           observer.unobserve(element);
         }
       },
-      { threshold, root, rootMargin }
+      { threshold, root, rootMargin },
     );
 
     observer.observe(element);

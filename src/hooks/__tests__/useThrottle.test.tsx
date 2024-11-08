@@ -1,4 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
+
 import '@testing-library/jest-dom';
 import { useThrottle } from '../useThrottle';
 
@@ -24,7 +25,7 @@ describe('useThrottle', () => {
       ({ value, limit }) => useThrottle(value, limit),
       {
         initialProps: { value: 'initial', limit: 1000 },
-      }
+      },
     );
 
     expect(result.current).toBe('initial');
@@ -61,7 +62,7 @@ describe('useThrottle', () => {
       ({ value, limit }) => useThrottle(value, limit),
       {
         initialProps: { value: 'initial', limit: 500 },
-      }
+      },
     );
 
     expect(result.current).toBe('initial');
@@ -97,7 +98,7 @@ describe('useThrottle', () => {
       ({ value, limit }) => useThrottle(value, limit),
       {
         initialProps: { value: 'initial', limit: 1000 },
-      }
+      },
     );
 
     // Simulate rapid value changes
@@ -120,7 +121,7 @@ describe('useThrottle', () => {
       ({ value, limit }) => useThrottle(value, limit),
       {
         initialProps: { value: initialValue, limit: 1000 },
-      }
+      },
     );
 
     expect(result.current).toEqual(initialValue);

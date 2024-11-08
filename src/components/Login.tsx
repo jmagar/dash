@@ -1,7 +1,3 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../api/auth';
-import { useUserContext } from '../context/UserContext';
 import {
   Box,
   Button,
@@ -13,19 +9,24 @@ import {
   Checkbox,
   CircularProgress,
 } from '@mui/material';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const Login: React.FC = () => {
+import { login } from '../api/auth';
+import { useUserContext } from '../context/UserContext';
+
+export default function Login(): JSX.Element {
   const navigate = useNavigate();
   const { setUser } = useUserContext();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [mfaToken, setMfaToken] = useState('');
-  const [showMfa, setShowMfa] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [mfaToken, setMfaToken] = useState<string>('');
+  const [showMfa, setShowMfa] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -59,6 +60,22 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setUsername(e.target.value);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setPassword(e.target.value);
+  };
+
+  const handleMfaTokenChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setMfaToken(e.target.value);
+  };
+
+  const handleRememberMeChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setRememberMe(e.target.checked);
+  };
+
   return (
     <Box
       sx={{
@@ -79,7 +96,7 @@ const Login: React.FC = () => {
               fullWidth
               label="Username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={handleUsernameChange}
               margin="normal"
               disabled={loading || showMfa}
               autoFocus
@@ -89,7 +106,7 @@ const Login: React.FC = () => {
               type="password"
               label="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={handlePasswordChange}
               margin="normal"
               disabled={loading || showMfa}
             />
@@ -98,7 +115,7 @@ const Login: React.FC = () => {
                 fullWidth
                 label="MFA Code"
                 value={mfaToken}
-                onChange={(e) => setMfaToken(e.target.value)}
+                onChange={handleMfaTokenChange}
                 margin="normal"
                 disabled={loading}
                 autoFocus
@@ -108,7 +125,7 @@ const Login: React.FC = () => {
               control={
                 <Checkbox
                   checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  onChange={handleRememberMeChange}
                   disabled={loading}
                 />
               }
@@ -134,6 +151,4 @@ const Login: React.FC = () => {
       </Card>
     </Box>
   );
-};
-
-export default Login;
+}

@@ -28,7 +28,7 @@ export interface UseThrottleOptions {
  */
 export function useThrottle<T>(
   value: T,
-  options: UseThrottleOptions | number
+  options: UseThrottleOptions | number,
 ): T {
   const [throttledValue, setThrottledValue] = useState<T>(value);
   const lastRan = useRef<number>(Date.now());

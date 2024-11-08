@@ -1,4 +1,5 @@
 import { renderHook } from '@testing-library/react';
+
 import '@testing-library/jest-dom';
 import { useIntersectionObserver } from '../useIntersectionObserver';
 
@@ -48,7 +49,7 @@ describe('useIntersectionObserver', () => {
         threshold: 0,
         root: null,
         rootMargin: '0px',
-      }
+      },
     );
   });
 
@@ -63,7 +64,7 @@ describe('useIntersectionObserver', () => {
 
     expect(mockIntersectionObserver).toHaveBeenCalledWith(
       expect.any(Function),
-      options
+      options,
     );
   });
 
@@ -81,7 +82,7 @@ describe('useIntersectionObserver', () => {
     // Simulate intersection
     intersectionCallback(
       [createMockEntry(true, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(result.current[1]).toBe(true);
@@ -89,7 +90,7 @@ describe('useIntersectionObserver', () => {
     // Simulate no intersection
     intersectionCallback(
       [createMockEntry(false, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(result.current[1]).toBe(false);
@@ -97,7 +98,7 @@ describe('useIntersectionObserver', () => {
 
   it('should handle freezeOnceVisible option', () => {
     const { result } = renderHook(() =>
-      useIntersectionObserver<HTMLDivElement>({ freezeOnceVisible: true })
+      useIntersectionObserver<HTMLDivElement>({ freezeOnceVisible: true }),
     );
     const [ref] = result.current;
 
@@ -111,7 +112,7 @@ describe('useIntersectionObserver', () => {
     // Simulate intersection
     intersectionCallback(
       [createMockEntry(true, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(result.current[1]).toBe(true);
@@ -120,7 +121,7 @@ describe('useIntersectionObserver', () => {
     // Simulate no intersection - should still be true due to freezing
     intersectionCallback(
       [createMockEntry(false, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(result.current[1]).toBe(true);
@@ -135,7 +136,7 @@ describe('useIntersectionObserver', () => {
   it('should handle onVisibilityChange callback', () => {
     const onVisibilityChange = jest.fn();
     const { result } = renderHook(() =>
-      useIntersectionObserver<HTMLDivElement>({ onVisibilityChange })
+      useIntersectionObserver<HTMLDivElement>({ onVisibilityChange }),
     );
     const [ref] = result.current;
 
@@ -147,14 +148,14 @@ describe('useIntersectionObserver', () => {
 
     intersectionCallback(
       [createMockEntry(true, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
 
     intersectionCallback(
       [createMockEntry(false, element)],
-      {} as IntersectionObserver
+      {} as IntersectionObserver,
     );
 
     expect(onVisibilityChange).toHaveBeenCalledWith(false);

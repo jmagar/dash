@@ -1,108 +1,120 @@
-import React from 'react';
 import {
   Box,
   Button,
-  IconButton,
-  TextField,
-  Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  ListItemIcon,
-  InputAdornment,
+  Checkbox,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Grid,
+  TextField,
 } from '@mui/material';
-import {
-  Computer as ComputerIcon,
-  Search as SearchIcon,
-  Delete as DeleteIcon,
-} from '@mui/icons-material';
-import { useAsync, useDebounce, useClickOutside } from '../hooks';
-import { getHostStatus, deleteHost } from '../api/hosts';
-import { Host } from '../types';
-import LoadingScreen from './LoadingScreen';
+import React, { useState } from 'react';
+
+import { addHost, testConnection } from '../api/hosts';
+import { useClickOutside } from '../hooks';
+import type { Host } from '../types/models';
 
 interface HostSelectorProps {
   open: boolean;
   onClose: () => void;
   onSelect: (hosts: Host[]) => void;
-  multiSelect?: boolean;
-  selectedHosts?: Host[];
+  _multiSelect?: boolean; // Prefixed with _ to silence unused var warning
 }
 
-const HostSelector: React.FC<HostSelectorProps> = ({
+interface HostFormData {
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  saveCredentials: boolean;
+  password?: string;
+  privateKey?: string;
+}
+
+const defaultFormData: HostFormData = {
+  name: '',
+  hostname: '',
+  port: 22,
+  username: '',
+  saveCredentials: false,
+  password: '',
+  privateKey: '',
+};
+
+export default function HostSelector({
   open,
   onClose,
   onSelect,
-  multiSelect = false,
-  selectedHosts = [],
-}) => {
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [selected, setSelected] = React.useState<Host[]>(selectedHosts);
-  const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
+  _multiSelect = false,
+}: HostSelectorProps): JSX.Element {
+  const [formData, setFormData] = useState<HostFormData>(defaultFormData);
+  const [_error, setError] = useState<string | null>(null); // Prefixed with _ to silence unused var warning
+  const [testing, setTesting] = useState<boolean>(false);
+
   const dialogRef = useClickOutside<HTMLDivElement>(onClose);
 
-  const {
-    data: hosts,
-    loading,
-    error,
-    execute: loadHosts,
-  } = useAsync<Host[]>(
-    async () => {
-      const response = await getHostStatus();
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to load hosts');
-      }
-      return response.data;
-    },
-    {
-      immediate: true,
-    }
-  );
-
-  const handleSelect = (host: Host): void => {
-    if (multiSelect) {
-      const isSelected = selected.some((h) => h.id === host.id);
-      if (isSelected) {
-        setSelected(selected.filter((h) => h.id !== host.id));
-      } else {
-        setSelected([...selected, host]);
-      }
-    } else {
-      setSelected([host]);
-      onSelect([host]);
-      onClose();
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
   };
 
-  const handleConfirm = (): void => {
-    onSelect(selected);
-    onClose();
-  };
-
-  const handleDelete = async (host: Host, e: React.MouseEvent): Promise<void> => {
-    e.stopPropagation();
+  const handleTest = async (): Promise<void> => {
     try {
-      const response = await deleteHost(host.id);
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete host');
+      setTesting(true);
+      setError(null);
+
+      const result = await testConnection({
+        name: formData.name,
+        hostname: formData.hostname,
+        port: Number(formData.port),
+        username: formData.username,
+        credentials: {
+          password: formData.password || undefined,
+          privateKey: formData.privateKey || undefined,
+        },
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Connection test failed');
       }
-      void loadHosts();
-    } catch (error) {
-      console.error('Failed to delete host:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connection test failed');
+    } finally {
+      setTesting(false);
     }
   };
 
-  const filteredHosts = hosts?.filter(
-    (host) =>
-      host.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      host.hostname.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      host.ip.includes(debouncedSearch)
-  );
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    try {
+      setError(null);
+
+      const result = await addHost({
+        name: formData.name,
+        hostname: formData.hostname,
+        port: Number(formData.port),
+        username: formData.username,
+        credentials: formData.saveCredentials ? {
+          password: formData.password,
+          privateKey: formData.privateKey,
+        } : undefined,
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to add host');
+      }
+
+      onSelect([result.data]);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add host');
+    }
+  };
 
   return (
     <Dialog
@@ -112,84 +124,107 @@ const HostSelector: React.FC<HostSelectorProps> = ({
       fullWidth
       ref={dialogRef}
       PaperProps={{
-        sx: {
-          minHeight: '60vh',
-          display: 'flex',
-          flexDirection: 'column',
-        },
+        component: 'form',
+        onSubmit: handleSubmit,
       }}
     >
-      <DialogTitle>Select Host</DialogTitle>
+      <DialogTitle>Add New Host</DialogTitle>
       <DialogContent>
         <Box sx={{ mb: 2 }}>
-          <TextField
-            fullWidth
-            placeholder="Search hosts..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="Hostname"
+                name="hostname"
+                value={formData.hostname}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Port"
+                name="port"
+                value={formData.port}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Username"
+                name="username"
+                value={formData.username}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="password"
+                label="Password"
+                name="password"
+                value={formData.password}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="Private Key"
+                name="privateKey"
+                value={formData.privateKey}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="saveCredentials"
+                    checked={formData.saveCredentials}
+                    onChange={handleInputChange}
+                  />
+                }
+                label="Save credentials"
+              />
+            </Grid>
+          </Grid>
         </Box>
-
-        {loading ? (
-          <LoadingScreen fullscreen={false} message="Loading hosts..." />
-        ) : error ? (
-          <Box sx={{ textAlign: 'center', py: 2 }}>
-            <Typography color="error">{error}</Typography>
-            <Button variant="contained" onClick={() => void loadHosts()} sx={{ mt: 1 }}>
-              Retry
-            </Button>
-          </Box>
-        ) : (
-          <List>
-            {filteredHosts?.map((host) => (
-              <ListItem
-                key={host.id}
-                onClick={() => handleSelect(host)}
-                selected={selected.some((h) => h.id === host.id)}
-                sx={{
-                  cursor: 'pointer',
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                }}
-              >
-                <ListItemIcon>
-                  <ComputerIcon color={host.isActive ? 'success' : 'error'} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={host.name}
-                  secondary={`${host.hostname}:${host.port} - ${host.ip}`}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    onClick={(e) => void handleDelete(host, e)}
-                    title="Delete host"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
-          </List>
-        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        {multiSelect && (
-          <Button onClick={handleConfirm} color="primary" disabled={selected.length === 0}>
-            Select ({selected.length})
-          </Button>
-        )}
+        <Button
+          onClick={handleTest}
+          disabled={testing}
+        >
+          Test Connection
+        </Button>
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={testing}
+        >
+          Add Host
+        </Button>
       </DialogActions>
     </Dialog>
   );
-};
-
-export default HostSelector;
+}

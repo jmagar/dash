@@ -1,4 +1,5 @@
 import { renderHook } from '@testing-library/react';
+
 import '@testing-library/jest-dom';
 import { usePrevious } from '../usePrevious';
 
@@ -13,7 +14,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious(value),
       {
         initialProps: { value: 0 },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -30,7 +31,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious(value),
       {
         initialProps: { value: 'initial' },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -47,7 +48,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious(value),
       {
         initialProps: { value: false },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -65,7 +66,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious<TestObject>(value),
       {
         initialProps: { value: { test: false } },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -81,7 +82,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious<TestArray>(value),
       {
         initialProps: { value: [1, 2, 3] },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -96,7 +97,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious(value),
       {
         initialProps: { value: initialValue as string | null },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();
@@ -116,7 +117,7 @@ describe('usePrevious', () => {
       ({ value }) => usePrevious(value),
       {
         initialProps: { value: initialValue as string | undefined },
-      }
+      },
     );
 
     expect(result.current).toBeUndefined();

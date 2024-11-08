@@ -1,9 +1,9 @@
-import React from 'react';
 import {
   Box,
   CircularProgress,
   Typography,
 } from '@mui/material';
+import React from 'react';
 
 interface LoadingScreenProps {
   message?: string;
@@ -14,27 +14,25 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
   message = 'Loading...',
   fullscreen = true,
 }) => {
-  const content = (
-    <Box
-      sx={{
+  const boxProps = fullscreen ? {
+    height: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  } : {};
+
+  return (
+    <Box sx={boxProps}>
+      <Box sx={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        p: 3,
-        height: fullscreen ? '100vh' : '100%',
-        width: '100%',
-      }}
-    >
-      <CircularProgress size={40} />
-      <Typography variant="h6" color="textSecondary">
-        {message}
-      </Typography>
+      }}>
+        <CircularProgress sx={{ mb: 2 }} />
+        <Typography variant="body1">{message}</Typography>
+      </Box>
     </Box>
   );
-
-  return content;
 };
 
 export default LoadingScreen;
