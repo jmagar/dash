@@ -26,6 +26,7 @@ services:
       - ./backend:/app/backend
       - /var/run/docker.sock:/var/run/docker.sock
       - /app/node_modules
+      - ./logs:/app/logs
     environment:
       - NODE_ENV=development
       - DB_HOST=db

@@ -1,10 +1,14 @@
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
-  Computer as ComputerIcon,
   Storage as StorageIcon,
   Settings as SettingsIcon,
   ExitToApp as LogoutIcon,
+  Folder as FileIcon,
+  Code as CodeIcon,
+  Build as PackageIcon,
+  ViewInAr as ComposeIcon,
+  Cloud as DockerIcon,
 } from '@mui/icons-material';
 import {
   AppBar,
@@ -17,6 +21,7 @@ import {
   ListItemText,
   Toolbar,
   Typography,
+  Divider,
 } from '@mui/material';
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -94,11 +99,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </ListItemIcon>
             <ListItemText primary="Dashboard" />
           </ListItem>
-          <ListItem button onClick={(): void => handleNavigation('/hosts')}>
+
+          <Divider />
+
+          {/* Docker Management */}
+          <ListItem button onClick={(): void => handleNavigation('/docker')}>
             <ListItemIcon>
-              <ComputerIcon />
+              <DockerIcon />
             </ListItemIcon>
-            <ListItemText primary="Hosts" />
+            <ListItemText primary="Docker" />
           </ListItem>
           <ListItem button onClick={(): void => handleNavigation('/containers')}>
             <ListItemIcon>
@@ -106,11 +115,43 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </ListItemIcon>
             <ListItemText primary="Containers" />
           </ListItem>
-          <ListItem button onClick={(): void => handleNavigation('/settings')}>
+          <ListItem button onClick={(): void => handleNavigation('/compose')}>
+            <ListItemIcon>
+              <ComposeIcon />
+            </ListItemIcon>
+            <ListItemText primary="Compose" />
+          </ListItem>
+
+          <Divider />
+
+          {/* System Management */}
+          <ListItem button onClick={(): void => handleNavigation('/files')}>
+            <ListItemIcon>
+              <FileIcon />
+            </ListItemIcon>
+            <ListItemText primary="File Explorer" />
+          </ListItem>
+          <ListItem button onClick={(): void => handleNavigation('/packages')}>
+            <ListItemIcon>
+              <PackageIcon />
+            </ListItemIcon>
+            <ListItemText primary="Package Manager" />
+          </ListItem>
+          <ListItem button onClick={(): void => handleNavigation('/remote-execution')}>
+            <ListItemIcon>
+              <CodeIcon />
+            </ListItemIcon>
+            <ListItemText primary="Remote Execution" />
+          </ListItem>
+
+          <Divider />
+
+          {/* User */}
+          <ListItem button onClick={(): void => handleNavigation('/profile')}>
             <ListItemIcon>
               <SettingsIcon />
             </ListItemIcon>
-            <ListItemText primary="Settings" />
+            <ListItemText primary="Profile" />
           </ListItem>
           <ListItem button onClick={handleLogout}>
             <ListItemIcon>
