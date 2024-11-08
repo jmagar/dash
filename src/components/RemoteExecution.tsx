@@ -1,4 +1,3 @@
-
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
@@ -18,7 +17,7 @@ import React, { useState } from 'react';
 
 import { executeCommand } from '../api/remoteExecution';
 import { useAsync } from '../hooks';
-import type { CommandResult } from '../types';
+import type { CommandResult } from '../types/models';
 
 interface RemoteExecutionProps {
   hostId: number;

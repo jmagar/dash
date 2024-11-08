@@ -1,69 +1,51 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useCallback, DependencyList } from 'react';
 
-export interface UseAsyncOptions<T> {
+export interface UseAsyncOptions<_T> {
   immediate?: boolean;
-  deps?: any[];
-  onSuccess?: (data: T) => void;
-  onError?: (error: string) => void;
-}
-
-export interface UseAsyncResult<T> {
-  data: T | null;
-  loading: boolean;
-  error: string | null;
-  execute: (...args: any[]) => Promise<T>;
-  setError: (error: string | null) => void;
-  clearError: () => void;
+  deps?: DependencyList;
 }
 
 export function useAsync<T>(
-  asyncFunction: (...args: any[]) => Promise<T>,
+  asyncFunction: () => Promise<T>,
   options: UseAsyncOptions<T> = {},
-): UseAsyncResult<T> {
-  const { immediate = false, deps = [], onSuccess, onError } = options;
-  const [loading, setLoading] = useState<boolean>(immediate);
-  const [error, setError] = useState<string | null>(null);
+): {
+  data: T | null;
+  loading: boolean;
+  error: string | null;
+  execute: () => Promise<T>;
+} {
   const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const execute = useCallback(
-    async (...args: any[]): Promise<T> => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await asyncFunction(...args);
-        setData(result);
-        onSuccess?.(result);
-        return result;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-        setError(errorMessage);
-        onError?.(errorMessage);
-        throw err;
-      } finally {
+  const execute = useCallback((): Promise<T> => {
+    setLoading(true);
+    setError(null);
+
+    return asyncFunction()
+      .then((response) => {
+        setData(response);
         setLoading(false);
-      }
-    },
-    [asyncFunction, onSuccess, onError],
-  );
+        return response;
+      })
+      .catch((error) => {
+        setError(error.message || 'An error occurred');
+        setLoading(false);
+        throw error;
+      });
+  }, [asyncFunction]);
 
   useEffect(() => {
-    if (immediate) {
-      void execute();
+    if (options.immediate) {
+      execute();
     }
-  }, [immediate, execute, ...deps]);
-
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [execute, options.immediate, ...(options.deps || [])]);
 
   return {
     data,
     loading,
     error,
     execute,
-    setError,
-    clearError,
   };
 }
-
-export default useAsync;

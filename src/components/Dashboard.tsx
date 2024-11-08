@@ -69,7 +69,7 @@ interface HostCardProps {
   host: Host;
 }
 
-const HostCard: React.FC<HostCardProps> = ({ host }) => {
+const HostCard: React.FC<HostCardProps> = ({ host }: HostCardProps) => {
   const [ref, isVisible] = useIntersectionObserver<HTMLDivElement>({
     threshold: 0.1,
     rootMargin: '50px',
@@ -201,7 +201,7 @@ const Dashboard: React.FC = () => {
       </Typography>
 
       <Grid container spacing={3}>
-        {hosts?.map((host) => (
+        {hosts?.map((host: Host) => (
           <Grid item xs={12} md={6} lg={4} key={host.id}>
             <HostCard host={host} />
           </Grid>
