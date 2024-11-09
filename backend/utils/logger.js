@@ -1,134 +1,161 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 
 const winston = require('winston');
 require('winston-daily-rotate-file');
 
-// Ensure logs directory exists
-const logDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
+// Custom format for pretty printing objects
+const prettyJson = winston.format.printf(({ level, message, timestamp, ...meta }) => {
+  const metaString = Object.keys(meta).length ?
+    `\n${JSON.stringify(meta, null, 2)}` :
+    '';
 
-// Define custom log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
-};
+  return `${timestamp} ${level}: ${message}${metaString}`;
+});
 
-// Define level colors
-const colors = {
-  error: 'red',
-  warn: 'yellow',
-  info: 'green',
-  http: 'magenta',
-  debug: 'white',
-};
-
-// Add colors to Winston
-winston.addColors(colors);
-
-// Create custom format
+// Define log format
 const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.timestamp({
+    format: 'YYYY-MM-DD HH:mm:ss',
+  }),
   winston.format.errors({ stack: true }),
   winston.format.splat(),
   winston.format.json(),
 );
 
-// Create console format with colors
+// Console format with colors
 const consoleFormat = winston.format.combine(
-  winston.format.colorize({ all: true }),
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.printf(
-    (info) => `${info.timestamp} ${info.level}: ${info.message}${info.stack ? `\n${  info.stack}` : ''}${
-      Object.keys(info).length > 3 ? `\n${  JSON.stringify(info, null, 2)}` : ''
-    }`,
-  ),
+  winston.format.colorize(),
+  winston.format.timestamp({
+    format: 'YYYY-MM-DD HH:mm:ss',
+  }),
+  prettyJson,
 );
 
-// Create the logger
+// Create logger instance
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
-  levels,
   format: logFormat,
   transports: [
-    // Console transport
+    // Write all logs with level 'info' and below to combined.log
+    new winston.transports.File({
+      filename: path.join(__dirname, '../logs/combined.log'),
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json(),
+      ),
+    }),
+    // Write all logs with level 'error' and below to error.log
+    new winston.transports.File({
+      filename: path.join(__dirname, '../logs/error.log'),
+      level: 'error',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json(),
+      ),
+    }),
+    // Console transport with pretty formatting
     new winston.transports.Console({
       format: consoleFormat,
     }),
-    // Application logs
-    new winston.transports.DailyRotateFile({
-      filename: path.join(logDir, 'application-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      maxSize: '20m',
-      maxFiles: '14d',
-      format: logFormat,
-      level: 'debug',
-    }),
-    // Error logs
-    new winston.transports.DailyRotateFile({
-      filename: path.join(logDir, 'error-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      maxSize: '20m',
-      maxFiles: '14d',
-      level: 'error',
-      format: logFormat,
-    }),
   ],
-  // Handle uncaught exceptions and rejections
+  // Handle exceptions and rejections
   exceptionHandlers: [
-    new winston.transports.DailyRotateFile({
-      filename: path.join(logDir, 'exceptions-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      maxSize: '20m',
-      maxFiles: '14d',
-      format: logFormat,
+    new winston.transports.File({
+      filename: path.join(__dirname, '../logs/exceptions.log'),
     }),
   ],
   rejectionHandlers: [
-    new winston.transports.DailyRotateFile({
-      filename: path.join(logDir, 'rejections-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      maxSize: '20m',
-      maxFiles: '14d',
-      format: logFormat,
+    new winston.transports.File({
+      filename: path.join(__dirname, '../logs/rejections.log'),
     }),
   ],
 });
 
-// Helper methods
-logger.logDatabase = function(query, duration, rowCount) {
-  this.debug('Database Query', {
-    query,
-    duration: `${duration}ms`,
-    rowCount,
-    slow: duration > 100,
+// Add daily rotate file for application logs in production
+if (process.env.NODE_ENV === 'production') {
+  const dailyRotateFile = new winston.transports.DailyRotateFile({
+    filename: path.join(__dirname, '../logs/application-%DATE%.log'),
+    datePattern: 'YYYY-MM-DD',
+    maxSize: '20m',
+    maxFiles: '14d',
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.json(),
+    ),
   });
+
+  logger.add(dailyRotateFile);
+}
+
+// Add stream for Morgan middleware
+logger.stream = {
+  write: (message) => logger.info(message.trim()),
 };
 
-logger.logRequest = function(req) {
-  this.http('HTTP Request', {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
-    userId: req.user?.id,
-  });
-};
+// Export logger methods with metadata support
+module.exports = {
+  error: (message, meta = {}) => logger.error(message, meta),
+  warn: (message, meta = {}) => logger.warn(message, meta),
+  info: (message, meta = {}) => logger.info(message, meta),
+  http: (message, meta = {}) => logger.http(message, meta),
+  debug: (message, meta = {}) => logger.debug(message, meta),
+  stream: logger.stream,
 
-logger.logError = function(error, context = {}) {
-  this.error(error.message, {
-    ...context,
-    stack: error.stack,
-    code: error.code,
-    type: error.name,
-  });
-};
+  // Helper method for HTTP request logging
+  httpRequest: (req, res, duration) => {
+    const meta = {
+      method: req.method,
+      url: req.originalUrl,
+      ip: req.ip,
+      status: res.statusCode,
+      duration: `${duration}ms`,
+      userAgent: req.get('user-agent'),
+      contentLength: res.get('content-length'),
+    };
 
-module.exports = logger;
+    const level = res.statusCode >= 400 ? 'error' : 'info';
+    logger[level](`${req.method} ${req.originalUrl} completed`, meta);
+  },
+
+  // Helper method for error logging with stack traces
+  logError: (error, meta = {}) => {
+    logger.error(error.message, {
+      ...meta,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+    });
+  },
+
+  // Helper method for database query logging
+  logDatabase: (query, duration, rowCount) => {
+    const meta = {
+      query,
+      duration: `${duration}ms`,
+      rowCount,
+    };
+
+    // Log slow queries as warnings
+    if (duration > 100) {
+      logger.warn('Slow database query', meta);
+    } else {
+      logger.debug('Database query executed', meta);
+    }
+  },
+
+  // Helper method for request logging
+  logRequest: (req, message, meta = {}) => {
+    const requestMeta = {
+      method: req.method,
+      url: req.url,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+      userId: req.user?.id,
+      ...meta,
+    };
+
+    logger.info(message, requestMeta);
+  },
+};

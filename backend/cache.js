@@ -1,13 +1,82 @@
+'use strict';
+
 const Redis = require('ioredis');
 
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
+const logger = require('./utils/logger');
+
+// Redis configuration from environment variables
+const redisConfig = {
+  host: process.env.REDIS_HOST,
   port: parseInt(process.env.REDIS_PORT || '6379'),
+  username: process.env.REDIS_USERNAME,
+  password: process.env.REDIS_PASSWORD,
   retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
+    const maxRetryTime = 3000;
+    const delay = Math.min(times * 50, maxRetryTime);
+    logger.info(`Retrying Redis connection in ${delay}ms...`);
     return delay;
   },
-});
+  maxRetriesPerRequest: 3,
+  showFriendlyErrorStack: process.env.NODE_ENV !== 'production',
+  enableOfflineQueue: true,
+  connectTimeout: 10000,
+  lazyConnect: true,
+};
+
+// Create Redis client
+let redis = null;
+
+// Initialize Redis connection
+const initialize = async () => {
+  try {
+    if (!process.env.REDIS_HOST) {
+      throw new Error('REDIS_HOST environment variable is required');
+    }
+
+    redis = new Redis(redisConfig);
+
+    redis.on('connect', () => {
+      logger.info('Redis client connected', {
+        host: redisConfig.host,
+        port: redisConfig.port,
+      });
+    });
+
+    redis.on('error', (err) => {
+      logger.error('Redis client error', {
+        error: err.message,
+        host: redisConfig.host,
+        port: redisConfig.port,
+      });
+    });
+
+    redis.on('ready', () => {
+      logger.info('Redis client ready');
+    });
+
+    redis.on('close', () => {
+      logger.info('Redis client connection closed');
+    });
+
+    await redis.connect();
+
+    // Test connection
+    const pong = await redis.ping();
+    if (pong !== 'PONG') {
+      throw new Error('Redis ping failed');
+    }
+
+    logger.info('Redis initialized successfully');
+    return true;
+  } catch (err) {
+    logger.error('Redis initialization failed', {
+      error: err.message,
+      host: redisConfig.host,
+      port: redisConfig.port,
+    });
+    return false;
+  }
+};
 
 // Cache keys and expiration times
 const CACHE_KEYS = {
@@ -55,7 +124,6 @@ const getUser = async (userId) => {
 // Command history caching
 const cacheCommand = async (userId, hostId, command) => {
   const key = `${CACHE_KEYS.COMMAND}${userId}:${hostId}`;
-  const commands = await redis.lrange(key, 0, -1);
   await redis.lpush(key, JSON.stringify(command));
   await redis.ltrim(key, 0, 99); // Keep last 100 commands
   await redis.expire(key, CACHE_TTL.COMMAND);
@@ -64,7 +132,7 @@ const cacheCommand = async (userId, hostId, command) => {
 const getCommands = async (userId, hostId) => {
   const key = `${CACHE_KEYS.COMMAND}${userId}:${hostId}`;
   const commands = await redis.lrange(key, 0, -1);
-  return commands.map(cmd => JSON.parse(cmd));
+  return commands.map((cmd) => JSON.parse(cmd));
 };
 
 // Docker state caching
@@ -120,8 +188,29 @@ const invalidateHostCache = async (hostId) => {
   await redis.del(...keys);
 };
 
+// Health check
+const healthCheck = async () => {
+  if (!redis) {
+    logger.error('Redis client not initialized');
+    return false;
+  }
+
+  try {
+    const pong = await redis.ping();
+    return pong === 'PONG';
+  } catch (err) {
+    logger.error('Redis health check failed', {
+      error: err.message,
+      host: redisConfig.host,
+      port: redisConfig.port,
+    });
+    return false;
+  }
+};
+
 module.exports = {
-  redis,
+  initialize,
+  get redis() { return redis; },
   cacheSession,
   getSession,
   cacheUser,
@@ -136,4 +225,5 @@ module.exports = {
   getMfaCode,
   invalidateUserCache,
   invalidateHostCache,
+  healthCheck,
 };

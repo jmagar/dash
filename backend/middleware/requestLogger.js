@@ -3,30 +3,30 @@
 const logger = require('../utils/logger');
 
 const requestLogger = (req, res, next) => {
+  // Start timer
   const start = Date.now();
 
-  // Log request details
-  logger.info('Incoming request', {
+  // Log incoming request
+  logger.info(`Incoming ${req.method} request to ${req.originalUrl}`, {
     method: req.method,
-    url: req.url,
+    url: req.originalUrl,
     ip: req.ip,
     userAgent: req.get('user-agent'),
-    body: req.method === 'POST' ? req.body : undefined,
+    query: req.query,
+    body: req.method !== 'GET' ? req.body : undefined,
   });
 
-  // Capture response using response.on('finish')
-  res.on('finish', () => {
+  // Override end to calculate duration
+  const originalEnd = res.end;
+  res.end = function(...args) {
     const duration = Date.now() - start;
-    const logLevel = res.statusCode >= 400 ? 'error' : 'info';
 
-    logger[logLevel]('Request completed', {
-      method: req.method,
-      url: req.url,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      slow: duration > 1000,
-    });
-  });
+    // Log response using helper method
+    logger.httpRequest(req, res, duration);
+
+    // Call original end
+    originalEnd.apply(res, args);
+  };
 
   next();
 };
