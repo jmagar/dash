@@ -24,6 +24,7 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
+import type { Stack } from '../../types';
 import {
   createStack,
   deleteStack,
@@ -33,7 +34,6 @@ import {
   updateStackComposeFile,
 } from '../api';
 import CodeEditor from './CodeEditor';
-import type { Stack } from '../../types';
 import { useDockerUpdates } from '../hooks';
 
 export default function DockerCompose(): JSX.Element {

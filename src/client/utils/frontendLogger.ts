@@ -1,5 +1,6 @@
-import { Logger } from '../../types/logger';
+import type { Logger } from '../../types/logger';
 
+/* eslint-disable no-console */
 const frontendLogger: Logger = {
   info: (message: string, meta?: Record<string, unknown>): void => {
     console.info(message, meta);
@@ -16,5 +17,6 @@ const frontendLogger: Logger = {
     }
   },
 };
+/* eslint-enable no-console */
 
 export default frontendLogger;

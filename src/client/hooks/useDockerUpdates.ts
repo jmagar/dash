@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 import { Container, Stack } from '../../types';
 import { getContainers, getStacks } from '../api';
@@ -26,7 +26,7 @@ export function useDockerUpdates({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async (): Promise<void> => {
+  const fetchData = useCallback(async (): Promise<void> => {
     try {
       setError(null);
       const result = await (type === 'containers' ? getContainers() : getStacks());
@@ -41,7 +41,7 @@ export function useDockerUpdates({
     } finally {
       setLoading(false);
     }
-  };
+  }, [type]);
 
   useEffect(() => {
     if (!enabled) {
@@ -58,7 +58,7 @@ export function useDockerUpdates({
     return () => {
       clearInterval(timer);
     };
-  }, [enabled, type, interval]);
+  }, [enabled, interval, fetchData]);
 
   return {
     data,
