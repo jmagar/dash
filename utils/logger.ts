@@ -1,10 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import type { Request, Response, NextFunction } from 'express';
-
 // Ensure logs directory exists in project root
-const logsDir = path.join(__dirname, '..', '..', 'logs');
+const logsDir = path.join(__dirname, '..', 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -51,7 +49,7 @@ const formatLog = (level: LogLevel, message: string, meta: LogMeta = {}): string
     timestamp: new Date().toISOString(),
     level,
     message,
-    meta,
+    meta
   };
   return JSON.stringify(logData, null, 2);
 };
@@ -86,13 +84,11 @@ const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void 
   }
 
   // Send to backend for file logging
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: formattedLog,
-    }).catch(() => console.error('Failed to send log to server'));
-  }
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: formattedLog,
+  }).catch(() => console.error('Failed to send log to server'));
 };
 
 // Node.js specific logging
@@ -146,7 +142,10 @@ export const logger: Logger = {
   debug: (message: string, meta: LogMeta = {}) => log(LogLevel.DEBUG, message, meta),
 };
 
-// Request logger middleware for Express
+// Express middleware type
+import { Request, Response, NextFunction } from 'express';
+
+// Create request logger middleware
 export const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
   const start = Date.now();
 

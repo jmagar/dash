@@ -1,7 +1,7 @@
 'use strict';
 
 const http = require('http');
-const net = require('net');
+const path = require('path');
 
 const cors = require('cors');
 const express = require('express');
@@ -9,161 +9,183 @@ const { Server } = require('socket.io');
 
 const cache = require('./cache');
 const { pool } = require('./db');
-const { errorHandler } = require('./middleware/auth');
-const requestLogger = require('./middleware/requestLogger');
+const { logger, requestLogger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
 const routes = require('./routes');
 const { initTerminalSocket } = require('./routes/terminal');
-const logger = require('./utils/logger');
 
-// Use environment variable for port
-const PORT = process.env.PORT || 4000;
+// Create express app
+const app = express();
+const server = http.createServer(app);
 
-const startServer = async () => {
-  // Initialize Redis
-  await cache.initialize();
+// Configure CORS
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
-  const app = express();
-  const server = http.createServer(app);
-  const io = new Server(server, {
-    cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-      methods: ['GET', 'POST'],
-    },
-  });
+// Parse JSON bodies
+app.use(express.json());
 
-  // Middleware
-  app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
-  }));
-  app.use(express.json());
-  app.use(requestLogger);
+// Request logging
+app.use(requestLogger);
 
-  // Initialize WebSocket handlers
-  initTerminalSocket(io);
+// Error handler for JSON parsing
+app.use((err, req, res, _next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    logger.error('JSON parsing error', { error: err.message });
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid JSON',
+    });
+  }
+  _next(err);
+});
 
-  // Routes
-  app.use('/api', routes);
+// Initialize WebSocket
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+    methods: ['GET', 'POST'],
+  },
+});
 
-  // Error handling
-  app.use(errorHandler);
+// Initialize WebSocket handlers
+initTerminalSocket(io);
 
-  // Health check
-  app.get('/health', async (req, res) => {
-    try {
-      // Check database connection
-      await pool.query('SELECT 1');
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const dbResult = await pool.query('SELECT 1');
+    const redisConnected = cache.isConnected();
 
-      // Check Redis connection
-      const redisHealthy = await cache.healthCheck();
-
-      if (!redisHealthy) {
-        throw new Error('Redis health check failed');
-      }
-
-      res.json({
-        status: 'healthy',
-        services: {
-          database: 'connected',
-          cache: 'connected',
-          websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
-        },
-      });
-    } catch (err) {
-      logger.error('Health check failed', { error: err.message });
-      res.status(500).json({
-        status: 'unhealthy',
-        error: err.message,
-        services: {
-          database: err.message.includes('pool') ? 'error' : 'connected',
-          cache: err.message.includes('Redis') ? 'error' : 'connected',
-          websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
-        },
-      });
-    }
-  });
-
-  // Graceful shutdown
-  const shutdown = async () => {
-    logger.info('Initiating graceful shutdown...');
-
-    // Close WebSocket connections
-    io.close(() => {
-      logger.info('WebSocket server closed');
+    res.json({
+      success: true,
+      status: 'healthy',
+      services: {
+        database: dbResult.rows[0] ? 'connected' : 'error',
+        redis: redisConnected ? 'connected' : 'disconnected',
+        websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
+      },
+    });
+  } catch (error) {
+    logger.error('Health check failed', {
+      error: error.message,
+      stack: error.stack,
     });
 
-    // Close database pool
+    res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      error: error.message,
+      services: {
+        database: 'error',
+        redis: cache.isConnected() ? 'connected' : 'disconnected',
+        websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
+      },
+    });
+  }
+});
+
+// API routes
+app.use('/api', routes);
+
+// 404 handler
+app.use((req, res) => {
+  logger.warn('Route not found', {
+    method: req.method,
+    url: req.url,
+  });
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+  });
+});
+
+// Global error handler
+app.use((err, req, res, _next) => {
+  logger.error('Unhandled error', {
+    error: err.message,
+    stack: err.stack,
+    method: req.method,
+    url: req.url,
+  });
+
+  if (!res.headersSent) {
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+});
+
+// Start server
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server running on port ${PORT}`, {
+    environment: process.env.NODE_ENV,
+    frontendUrl: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+    dbHost: process.env.DB_HOST,
+    redisHost: process.env.REDIS_HOST,
+  });
+});
+
+// Graceful shutdown
+const shutdown = async () => {
+  logger.info('Initiating graceful shutdown...');
+
+  server.close(() => {
+    logger.info('HTTP server closed');
+  });
+
+  io.close(() => {
+    logger.info('WebSocket server closed');
+  });
+
+  try {
     await pool.end();
     logger.info('Database pool closed');
-
-    // Close Redis connection
-    await cache.redis.quit();
-    logger.info('Redis connection closed');
-
-    // Close HTTP server
-    server.close(() => {
-      logger.info('HTTP server closed');
-      process.exit(0);
-    });
-
-    // Force exit after 10 seconds
-    setTimeout(() => {
-      logger.error('Could not close connections in time, forcefully shutting down');
-      process.exit(1);
-    }, 10000);
-  };
-
-  // Handle shutdown signals
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
-
-  // Handle uncaught errors
-  process.on('uncaughtException', (err) => {
-    logger.error('Uncaught exception', {
+  } catch (err) {
+    logger.error('Error closing database pool', {
       error: err.message,
       stack: err.stack,
-      type: 'uncaughtException',
     });
-    shutdown();
-  });
+  }
 
-  process.on('unhandledRejection', (err) => {
-    logger.error('Unhandled rejection', {
-      error: err.message,
-      stack: err.stack,
-      type: 'unhandledRejection',
-    });
-    shutdown();
-  });
+  if (cache.isConnected()) {
+    try {
+      await cache.redis.quit();
+      logger.info('Redis connection closed');
+    } catch (err) {
+      logger.error('Error closing Redis connection', {
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  }
 
-  // Start server
-  server.listen(PORT, () => {
-    logger.info(`Server running on port ${PORT}`, {
-      environment: process.env.NODE_ENV,
-      frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
-      dbHost: process.env.DB_HOST,
-      redisHost: process.env.REDIS_HOST,
-    });
-  });
+  process.exit(0);
 };
 
-// Check if port is available before starting
-const testServer = net.createServer()
-  .once('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      logger.error(`Port ${PORT} is already in use`);
-      process.exit(1);
-    } else {
-      logger.error('Error checking port availability', { error: err.message });
-      process.exit(1);
-    }
-  })
-  .once('listening', () => {
-    testServer.close(() => {
-      startServer().catch((err) => {
-        logger.error('Failed to start server', { error: err.message });
-        process.exit(1);
-      });
-    });
-  })
-  .listen(PORT);
+// Handle shutdown signals
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// Handle uncaught errors
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', {
+    error: err.message,
+    stack: err.stack,
+  });
+  shutdown();
+});
+
+process.on('unhandledRejection', (err) => {
+  logger.error('Unhandled rejection', {
+    error: err.message,
+    stack: err.stack,
+  });
+  shutdown();
+});
+
+module.exports = app;

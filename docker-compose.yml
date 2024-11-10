@@ -1,18 +1,18 @@
+version: '3.8'
+
 services:
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./src:/app/src
       - ./public:/app/public
-      - /app/node_modules
     environment:
       - NODE_ENV=development
-      - REACT_APP_API_URL=http://localhost:4000
-      - REACT_APP_WS_URL=ws://localhost:4000
+      - REACT_APP_API_URL=http://127.0.0.1:4000
     depends_on:
       - backend
 
@@ -21,27 +21,25 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     volumes:
-      - ./backend:/app/backend
+      - ./backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
-      - /app/node_modules
-      - ./logs:/app/logs
+    env_file:
+      - ./backend/.env
     environment:
       - NODE_ENV=development
       - PORT=4000
-      - FRONTEND_URL=http://localhost:3000
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=shh
-      - JWT_SECRET=your-secret-key
-      - DOCKER_HOST=unix:///var/run/docker.sock
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - CORS_ORIGINS=http://localhost:3000
-      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - JWT_SECRET=your-super-secret-key-change-this-in-production
+      - JWT_EXPIRATION=30m
+      - FRONTEND_URL=http://127.0.0.1:3000
     depends_on:
       - db
       - redis
@@ -49,22 +47,21 @@ services:
   db:
     image: postgres:14-alpine
     ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=shh
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
 
 volumes:
   postgres_data:

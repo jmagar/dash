@@ -1,143 +1,238 @@
 'use strict';
 
+const path = require('path');
+
 const bcrypt = require('bcrypt');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 
-const { pool } = require('../db');
-const logger = require('../utils/logger');
 const router = express.Router();
+const cache = require('../cache');
+const { pool } = require('../db');
+const { logger } = require(path.join(__dirname, '..', '..', 'src', 'utils', 'logger'));
 
 // Login route
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  let client;
 
   try {
-    // Get user from database
-    const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1',
+    logger.info('Starting login process');
+    const { username, password } = req.body;
+
+    // Input validation
+    if (!username || !password) {
+      logger.warn('Login attempt with missing credentials');
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required',
+      });
+    }
+
+    // Get database client
+    client = await pool.connect();
+    logger.info('Database connection acquired');
+
+    // Query user from database
+    logger.info('Querying database for user', { username });
+    const result = await client.query(
+      'SELECT id, username, password_hash, role FROM users WHERE username = $1 AND is_active = true',
       [username],
     );
 
     const user = result.rows[0];
+    logger.info('Database query completed', { userFound: !!user });
 
+    // Check if user exists
     if (!user) {
-      logger.warn('Login failed: User not found', { username });
-      return res.status(401).json({ error: 'Invalid credentials' });
+      logger.warn('Login attempt with invalid username', { username });
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+      });
     }
 
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      logger.warn('Login failed: Invalid password', { username });
-      return res.status(401).json({ error: 'Invalid credentials' });
+    // Verify password
+    try {
+      logger.info('Verifying password');
+      logger.debug('Password verification details', {
+        hasPasswordHash: !!user.password_hash,
+        passwordLength: password.length,
+      });
+
+      const validPassword = await bcrypt.compare(password, user.password_hash);
+
+      if (!validPassword) {
+        logger.warn('Login attempt with invalid password', { username });
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid credentials',
+        });
+      }
+    } catch (bcryptError) {
+      logger.error('Password verification failed', {
+        error: bcryptError.message,
+        stack: bcryptError.stack,
+      });
+      throw bcryptError;
     }
 
     // Generate JWT token
+    logger.info('Generating JWT token');
     const token = jwt.sign(
-      { id: user.id, username: user.username },
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRATION || '30m' },
     );
 
-    // Update last login
-    await pool.query(
-      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
-      [user.id],
-    );
+    // Cache session data if Redis is connected
+    const sessionData = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+    };
 
-    logger.info('User logged in successfully', { username, userId: user.id });
+    if (cache.isConnected()) {
+      try {
+        logger.info('Caching session data');
+        await cache.cacheSession(token, JSON.stringify(sessionData));
+      } catch (cacheError) {
+        logger.error('Failed to cache session', {
+          error: cacheError.message,
+          stack: cacheError.stack,
+        });
+        // Continue even if caching fails
+      }
+    } else {
+      logger.warn('Redis not connected, skipping session caching');
+    }
 
-    res.json({
+    // Update last login timestamp
+    try {
+      logger.info('Updating last login timestamp');
+      await client.query(
+        'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+        [user.id],
+      );
+    } catch (updateError) {
+      logger.error('Failed to update last login', {
+        error: updateError.message,
+        stack: updateError.stack,
+      });
+      // Continue even if update fails
+    }
+
+    // Return success response
+    logger.info('Login successful', { username });
+    return res.status(200).json({
+      success: true,
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        preferences: user.preferences,
-      },
+      user: sessionData,
     });
+
   } catch (error) {
-    logger.error('Login error', { error: error.message, username });
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error('Login process error', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body,
+    });
+
+    // Ensure we send a response
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  } finally {
+    if (client) {
+      try {
+        client.release();
+        logger.info('Database connection released');
+      } catch (releaseError) {
+        logger.error('Error releasing database connection', {
+          error: releaseError.message,
+          stack: releaseError.stack,
+        });
+      }
+    }
   }
 });
 
-// Register route
-router.post('/register', async (req, res) => {
-  const { username, email, password } = req.body;
-
+// Logout route
+router.post('/logout', async (req, res) => {
   try {
-    // Check if user exists
-    const existingUser = await pool.query(
-      'SELECT * FROM users WHERE username = $1 OR email = $2',
-      [username, email],
-    );
-
-    if (existingUser.rows.length > 0) {
-      logger.warn('Registration failed: User exists', { username, email });
-      return res.status(400).json({ error: 'Username or email already exists' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token && cache.isConnected()) {
+      await cache.redis.del(`${cache.CACHE_KEYS.SESSION}${token}`);
+      logger.info('User logged out successfully');
     }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // Create user
-    const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash, role, preferences)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, username, email, role, preferences`,
-      [username, email, passwordHash, 'user', {}],
-    );
-
-    const user = result.rows[0];
-
-    logger.info('User registered successfully', { username, userId: user.id });
-
-    res.status(201).json({
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        preferences: user.preferences,
-      },
-    });
+    res.json({ success: true });
   } catch (error) {
-    logger.error('Registration error', { error: error.message, username, email });
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error('Logout error', {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
   }
 });
 
 // Validate token route
-router.post('/validate', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (!token) {
-    logger.warn('Token validation failed: No token provided');
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
+router.get('/validate', async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const result = await pool.query(
-      'SELECT id, username, email, role, preferences FROM users WHERE id = $1',
-      [decoded.id],
-    );
-
-    const user = result.rows[0];
-    if (!user) {
-      logger.warn('Token validation failed: User not found', { userId: decoded.id });
-      return res.status(401).json({ error: 'Invalid token' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      logger.warn('Token validation attempt without token');
+      return res.status(401).json({
+        success: false,
+        error: 'No token provided',
+      });
     }
 
-    logger.info('Token validated successfully', { userId: user.id });
-    res.json({ user });
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check if session exists in cache if Redis is connected
+    if (cache.isConnected()) {
+      const session = await cache.getSession(token);
+      if (!session) {
+        logger.warn('Token validation with expired session');
+        return res.status(401).json({
+          success: false,
+          error: 'Session expired',
+        });
+      }
+    }
+
+    logger.info('Token validated successfully');
+    res.json({
+      success: true,
+      user: decoded,
+    });
   } catch (error) {
-    logger.error('Token validation error', { error: error.message });
-    res.status(401).json({ error: 'Invalid token' });
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      logger.warn('Invalid token validation attempt', { error: error.message });
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid token',
+      });
+    }
+
+    logger.error('Token validation error', {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
   }
 });
 

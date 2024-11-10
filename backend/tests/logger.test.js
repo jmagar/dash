@@ -3,10 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const logger = require('../utils/logger');
+const { logger } = require(path.join(__dirname, '..', '..', 'src', 'utils', 'logger'));
 
 describe('Logger', () => {
-  const logDir = path.join(__dirname, '../logs');
+  const logDir = path.join(__dirname, '..', '..', 'logs');
   const testMessage = 'Test log message';
   const testContext = { test: true, value: 123 };
 
@@ -21,118 +21,153 @@ describe('Logger', () => {
     // Clean up test log files
     const files = fs.readdirSync(logDir);
     files.forEach((file) => {
-      if (file.includes('test-')) {
+      if (file.startsWith('test-')) {
         fs.unlinkSync(path.join(logDir, file));
       }
     });
   });
 
-  it('logs messages at different levels', () => {
-    expect(() => {
-      logger.error(testMessage, testContext);
-      logger.warn(testMessage, testContext);
-      logger.info(testMessage, testContext);
-      logger.http(testMessage, testContext);
-      logger.debug(testMessage, testContext);
-    }).not.toThrow();
+  describe('Node.js Environment', () => {
+    it('logs messages at different levels', () => {
+      expect(() => {
+        logger.error(testMessage, testContext);
+        logger.warn(testMessage, testContext);
+        logger.info(testMessage, testContext);
+        logger.debug(testMessage, testContext);
+      }).not.toThrow();
+    });
+
+    it('logs errors with stack traces', () => {
+      const testError = new Error('Test error');
+      expect(() => {
+        logger.error('Error occurred', {
+          error: testError.message,
+          stack: testError.stack,
+        });
+      }).not.toThrow();
+    });
+
+    it('handles undefined context', () => {
+      expect(() => {
+        logger.error(testMessage);
+        logger.warn(testMessage);
+        logger.info(testMessage);
+        logger.debug(testMessage);
+      }).not.toThrow();
+    });
+
+    it('handles circular references', () => {
+      const circular = { a: 1 };
+      circular.self = circular;
+
+      expect(() => {
+        logger.info('Circular reference test', circular);
+      }).not.toThrow();
+    });
+
+    it('creates log files', () => {
+      // Log some test messages
+      logger.error('test-error');
+      logger.warn('test-warn');
+      logger.info('test-info');
+      logger.debug('test-debug');
+
+      // Check log files exist
+      const files = fs.readdirSync(logDir);
+      const logFiles = files.filter((file) => file.endsWith('.log'));
+      expect(logFiles.length).toBeGreaterThan(0);
+
+      // Verify log file contents
+      const todayDate = new Date().toISOString().split('T')[0];
+      const errorLogFile = path.join(logDir, `error-${todayDate}.log`);
+      const warnLogFile = path.join(logDir, `warn-${todayDate}.log`);
+      const infoLogFile = path.join(logDir, `info-${todayDate}.log`);
+      const debugLogFile = path.join(logDir, `debug-${todayDate}.log`);
+
+      expect(fs.existsSync(errorLogFile)).toBe(true);
+      expect(fs.existsSync(warnLogFile)).toBe(true);
+      expect(fs.existsSync(infoLogFile)).toBe(true);
+      expect(fs.existsSync(debugLogFile)).toBe(true);
+    });
+
+    it('formats log messages correctly', () => {
+      const spy = jest.spyOn(console, 'log').mockImplementation();
+      const testData = { key: 'value' };
+
+      logger.info('Test message', testData);
+
+      expect(spy).toHaveBeenCalled();
+      const loggedMessage = spy.mock.calls[0][0];
+      expect(typeof loggedMessage).toBe('string');
+      const parsedMessage = JSON.parse(loggedMessage);
+      expect(parsedMessage).toHaveProperty('timestamp');
+      expect(parsedMessage).toHaveProperty('level', 'info');
+      expect(parsedMessage).toHaveProperty('message', 'Test message');
+      expect(parsedMessage).toHaveProperty('meta');
+      expect(parsedMessage.meta).toHaveProperty('key', 'value');
+
+      spy.mockRestore();
+    });
+
+    it('includes timestamps in log messages', () => {
+      const spy = jest.spyOn(console, 'log').mockImplementation();
+
+      logger.info('Test message');
+
+      expect(spy).toHaveBeenCalled();
+      const loggedMessage = spy.mock.calls[0][0];
+      const parsedMessage = JSON.parse(loggedMessage);
+      // Match ISO date format
+      expect(parsedMessage.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+
+      spy.mockRestore();
+    });
   });
 
-  it('logs errors with stack traces', () => {
-    const testError = new Error('Test error');
-    expect(() => {
-      logger.logError(testError, testContext);
-    }).not.toThrow();
-  });
+  describe('Browser Environment Mock', () => {
+    let originalWindow;
+    let mockFetch;
 
-  it('logs database queries', () => {
-    const query = 'SELECT * FROM test';
-    const duration = 50;
-    const rowCount = 10;
+    beforeAll(() => {
+      originalWindow = global.window;
+      mockFetch = jest.fn(() => Promise.resolve());
+      global.window = { fetch: mockFetch };
+      global.fetch = mockFetch;
+    });
 
-    expect(() => {
-      logger.logDatabase(query, duration, rowCount);
-    }).not.toThrow();
+    afterAll(() => {
+      global.window = originalWindow;
+      global.fetch = undefined;
+    });
 
-    // Test slow query
-    const slowDuration = 150;
-    expect(() => {
-      logger.logDatabase(query, slowDuration, rowCount);
-    }).not.toThrow();
-  });
+    it('logs to console in browser environment', () => {
+      const consoleSpy = {
+        error: jest.spyOn(console, 'error').mockImplementation(),
+        warn: jest.spyOn(console, 'warn').mockImplementation(),
+        info: jest.spyOn(console, 'info').mockImplementation(),
+        debug: jest.spyOn(console, 'debug').mockImplementation(),
+      };
 
-  it('logs HTTP requests', () => {
-    const mockReq = {
-      method: 'GET',
-      url: '/api/test',
-      ip: '127.0.0.1',
-      get: (header) => {
-        const headers = {
-          'user-agent': 'test-agent',
-        };
-        return headers[header];
-      },
-      user: {
-        id: 123,
-      },
-    };
+      logger.error('Browser error', { test: true });
+      logger.warn('Browser warning', { test: true });
+      logger.info('Browser info', { test: true });
+      logger.debug('Browser debug', { test: true });
 
-    expect(() => {
-      logger.logRequest(mockReq, 'Test HTTP request');
-    }).not.toThrow();
-  });
+      expect(consoleSpy.error).toHaveBeenCalled();
+      expect(consoleSpy.warn).toHaveBeenCalled();
+      expect(consoleSpy.info).toHaveBeenCalled();
+      expect(consoleSpy.debug).toHaveBeenCalled();
 
-  it('handles undefined context', () => {
-    expect(() => {
-      logger.error(testMessage);
-      logger.warn(testMessage);
-      logger.info(testMessage);
-      logger.http(testMessage);
-      logger.debug(testMessage);
-    }).not.toThrow();
-  });
+      Object.values(consoleSpy).forEach((spy) => spy.mockRestore());
+    });
 
-  it('handles circular references', () => {
-    const circular = { a: 1 };
-    circular.self = circular;
+    it('sends logs to backend in browser environment', () => {
+      logger.info('Test browser log');
 
-    expect(() => {
-      logger.info('Circular reference test', circular);
-    }).not.toThrow();
-  });
-
-  it('creates log files', () => {
-    const files = fs.readdirSync(logDir);
-    const logFiles = files.filter((file) => file.endsWith('.log'));
-    expect(logFiles.length).toBeGreaterThan(0);
-  });
-
-  it('formats log messages correctly', () => {
-    const spy = jest.spyOn(console, 'log').mockImplementation();
-    const testData = { key: 'value' };
-
-    logger.info('Test message', testData);
-
-    expect(spy).toHaveBeenCalled();
-    const loggedMessage = spy.mock.calls[0][0];
-    expect(loggedMessage).toContain('Test message');
-    expect(loggedMessage).toContain('key');
-    expect(loggedMessage).toContain('value');
-
-    spy.mockRestore();
-  });
-
-  it('includes timestamps in log messages', () => {
-    const spy = jest.spyOn(console, 'log').mockImplementation();
-
-    logger.info('Test message');
-
-    expect(spy).toHaveBeenCalled();
-    const loggedMessage = spy.mock.calls[0][0];
-    // Match ISO date format
-    expect(loggedMessage).toMatch(/\d{4}-\d{2}-\d{2}/);
-    // Match time format
-    expect(loggedMessage).toMatch(/\d{2}:\d{2}:\d{2}/);
-
-    spy.mockRestore();
+      expect(mockFetch).toHaveBeenCalledWith('/api/log', expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    });
   });
 });

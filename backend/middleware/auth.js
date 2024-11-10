@@ -1,6 +1,9 @@
+'use strict';
+
 const jwt = require('jsonwebtoken');
-const { query } = require('../db');
+
 const cache = require('../cache');
+const { query } = require('../db');
 
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -27,8 +30,8 @@ const authenticateToken = async (req, res, next) => {
     // Get user from database with caching
     const result = await query(
       'SELECT * FROM users WHERE id = $1',
-      [decoded.userId],
-      { cache: true, ttl: 3600, key: `user:${decoded.userId}` }
+      [decoded.id],
+      { cache: true, ttl: 3600, key: `user:${decoded.id}` },
     );
 
     if (result.rows.length === 0) {
@@ -43,7 +46,7 @@ const authenticateToken = async (req, res, next) => {
 
     // Cache session
     await cache.cacheSession(token, JSON.stringify(user));
-    next();
+    return next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({
@@ -65,24 +68,22 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-const checkRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required',
-      });
-    }
+const checkRole = (roles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+    });
+  }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Insufficient permissions',
-      });
-    }
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Insufficient permissions',
+    });
+  }
 
-    next();
-  };
+  return next();
 };
 
 const rateLimiter = async (req, res, next) => {
@@ -103,15 +104,15 @@ const rateLimiter = async (req, res, next) => {
       });
     }
 
-    next();
+    return next();
   } catch (err) {
     console.error('Rate limiter error:', err);
     // Continue on rate limiter error
-    next();
+    return next();
   }
 };
 
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   console.error('Error:', err);
 
   if (err.type === 'entity.parse.failed') {
@@ -128,7 +129,7 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
     error: 'Internal server error',
   });

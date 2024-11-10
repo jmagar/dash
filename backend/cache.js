@@ -1,82 +1,12 @@
 'use strict';
 
+const path = require('path');
+
 const Redis = require('ioredis');
 
-const logger = require('./utils/logger');
+const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
 
-// Redis configuration from environment variables
-const redisConfig = {
-  host: process.env.REDIS_HOST,
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  username: process.env.REDIS_USERNAME,
-  password: process.env.REDIS_PASSWORD,
-  retryStrategy: (times) => {
-    const maxRetryTime = 3000;
-    const delay = Math.min(times * 50, maxRetryTime);
-    logger.info(`Retrying Redis connection in ${delay}ms...`);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-  showFriendlyErrorStack: process.env.NODE_ENV !== 'production',
-  enableOfflineQueue: true,
-  connectTimeout: 10000,
-  lazyConnect: true,
-};
-
-// Create Redis client
-let redis = null;
-
-// Initialize Redis connection
-const initialize = async () => {
-  try {
-    if (!process.env.REDIS_HOST) {
-      throw new Error('REDIS_HOST environment variable is required');
-    }
-
-    redis = new Redis(redisConfig);
-
-    redis.on('connect', () => {
-      logger.info('Redis client connected', {
-        host: redisConfig.host,
-        port: redisConfig.port,
-      });
-    });
-
-    redis.on('error', (err) => {
-      logger.error('Redis client error', {
-        error: err.message,
-        host: redisConfig.host,
-        port: redisConfig.port,
-      });
-    });
-
-    redis.on('ready', () => {
-      logger.info('Redis client ready');
-    });
-
-    redis.on('close', () => {
-      logger.info('Redis client connection closed');
-    });
-
-    await redis.connect();
-
-    // Test connection
-    const pong = await redis.ping();
-    if (pong !== 'PONG') {
-      throw new Error('Redis ping failed');
-    }
-
-    logger.info('Redis initialized successfully');
-    return true;
-  } catch (err) {
-    logger.error('Redis initialization failed', {
-      error: err.message,
-      host: redisConfig.host,
-      port: redisConfig.port,
-    });
-    return false;
-  }
-};
+let redisClient = null;
 
 // Cache keys and expiration times
 const CACHE_KEYS = {
@@ -97,133 +27,137 @@ const CACHE_TTL = {
   MFA: 300,         // 5 minutes
 };
 
+// Initialize Redis client
+const initializeRedis = () => {
+  try {
+    logger.info('Initializing Redis client...', {
+      host: process.env.REDIS_HOST,
+      port: process.env.REDIS_PORT,
+    });
+
+    redisClient = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        logger.info(`Retrying Redis connection (attempt ${times})...`);
+        return delay;
+      },
+      maxRetriesPerRequest: 3,
+    });
+
+    redisClient.on('connect', () => {
+      logger.info('Redis client connected');
+    });
+
+    redisClient.on('ready', () => {
+      logger.info('Redis client ready');
+    });
+
+    redisClient.on('error', (err) => {
+      logger.error('Redis client error', {
+        error: err.message,
+        stack: err.stack,
+      });
+    });
+
+    redisClient.on('close', () => {
+      logger.warn('Redis connection closed');
+    });
+
+    redisClient.on('reconnecting', () => {
+      logger.info('Redis client reconnecting');
+    });
+
+    redisClient.on('end', () => {
+      logger.info('Redis connection ended');
+    });
+
+    logger.info('Redis initialized successfully');
+    return redisClient;
+  } catch (error) {
+    logger.error('Failed to initialize Redis', {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw error;
+  }
+};
+
+// Get Redis client (initialize if needed)
+const getClient = () => {
+  if (!redisClient) {
+    redisClient = initializeRedis();
+  }
+  return redisClient;
+};
+
+// Check if Redis is connected
+const isConnected = () => redisClient && redisClient.status === 'ready';
+
 // Session caching
-const cacheSession = async (userId, sessionData) => {
-  const key = `${CACHE_KEYS.SESSION}${userId}`;
-  await redis.setex(key, CACHE_TTL.SESSION, JSON.stringify(sessionData));
+const cacheSession = async (token, sessionData) => {
+  try {
+    const client = getClient();
+    await client.setex(`${CACHE_KEYS.SESSION}${token}`, CACHE_TTL.SESSION, sessionData);
+    logger.debug('Session cached', { token });
+  } catch (error) {
+    logger.error('Failed to cache session', {
+      error: error.message,
+      stack: error.stack,
+      token,
+    });
+    throw error;
+  }
 };
 
-const getSession = async (userId) => {
-  const key = `${CACHE_KEYS.SESSION}${userId}`;
-  const data = await redis.get(key);
-  return data ? JSON.parse(data) : null;
-};
-
-// User data caching
-const cacheUser = async (userId, userData) => {
-  const key = `${CACHE_KEYS.USER}${userId}`;
-  await redis.setex(key, CACHE_TTL.USER, JSON.stringify(userData));
-};
-
-const getUser = async (userId) => {
-  const key = `${CACHE_KEYS.USER}${userId}`;
-  const data = await redis.get(key);
-  return data ? JSON.parse(data) : null;
-};
-
-// Command history caching
-const cacheCommand = async (userId, hostId, command) => {
-  const key = `${CACHE_KEYS.COMMAND}${userId}:${hostId}`;
-  await redis.lpush(key, JSON.stringify(command));
-  await redis.ltrim(key, 0, 99); // Keep last 100 commands
-  await redis.expire(key, CACHE_TTL.COMMAND);
-};
-
-const getCommands = async (userId, hostId) => {
-  const key = `${CACHE_KEYS.COMMAND}${userId}:${hostId}`;
-  const commands = await redis.lrange(key, 0, -1);
-  return commands.map((cmd) => JSON.parse(cmd));
-};
-
-// Docker state caching
-const cacheDockerState = async (hostId, state) => {
-  const key = `${CACHE_KEYS.DOCKER}${hostId}`;
-  await redis.setex(key, CACHE_TTL.DOCKER, JSON.stringify(state));
-};
-
-const getDockerState = async (hostId) => {
-  const key = `${CACHE_KEYS.DOCKER}${hostId}`;
-  const data = await redis.get(key);
-  return data ? JSON.parse(data) : null;
-};
-
-// Host status caching
-const cacheHostStatus = async (hostId, status) => {
-  const key = `${CACHE_KEYS.HOST}${hostId}`;
-  await redis.setex(key, CACHE_TTL.HOST, JSON.stringify(status));
-};
-
-const getHostStatus = async (hostId) => {
-  const key = `${CACHE_KEYS.HOST}${hostId}`;
-  const data = await redis.get(key);
-  return data ? JSON.parse(data) : null;
-};
-
-// MFA verification caching
-const cacheMfaCode = async (userId, code) => {
-  const key = `${CACHE_KEYS.MFA}${userId}`;
-  await redis.setex(key, CACHE_TTL.MFA, code);
-};
-
-const getMfaCode = async (userId) => {
-  const key = `${CACHE_KEYS.MFA}${userId}`;
-  return await redis.get(key);
-};
-
-// Cache invalidation
-const invalidateUserCache = async (userId) => {
-  const keys = [
-    `${CACHE_KEYS.SESSION}${userId}`,
-    `${CACHE_KEYS.USER}${userId}`,
-    `${CACHE_KEYS.MFA}${userId}`,
-  ];
-  await redis.del(...keys);
-};
-
-const invalidateHostCache = async (hostId) => {
-  const keys = [
-    `${CACHE_KEYS.DOCKER}${hostId}`,
-    `${CACHE_KEYS.HOST}${hostId}`,
-  ];
-  await redis.del(...keys);
+const getSession = async (token) => {
+  try {
+    const client = getClient();
+    const data = await client.get(`${CACHE_KEYS.SESSION}${token}`);
+    logger.debug('Session retrieved', { token, found: !!data });
+    return data;
+  } catch (error) {
+    logger.error('Failed to get session', {
+      error: error.message,
+      stack: error.stack,
+      token,
+    });
+    throw error;
+  }
 };
 
 // Health check
 const healthCheck = async () => {
-  if (!redis) {
-    logger.error('Redis client not initialized');
-    return false;
-  }
-
   try {
-    const pong = await redis.ping();
-    return pong === 'PONG';
-  } catch (err) {
+    const client = getClient();
+    await client.ping();
+    return {
+      status: 'healthy',
+      connected: isConnected(),
+    };
+  } catch (error) {
     logger.error('Redis health check failed', {
-      error: err.message,
-      host: redisConfig.host,
-      port: redisConfig.port,
+      error: error.message,
+      stack: error.stack,
     });
-    return false;
+    return {
+      status: 'unhealthy',
+      connected: false,
+      error: error.message,
+    };
   }
 };
 
+// Initialize Redis on module load
+initializeRedis();
+
 module.exports = {
-  initialize,
-  get redis() { return redis; },
+  redis: getClient(),
   cacheSession,
   getSession,
-  cacheUser,
-  getUser,
-  cacheCommand,
-  getCommands,
-  cacheDockerState,
-  getDockerState,
-  cacheHostStatus,
-  getHostStatus,
-  cacheMfaCode,
-  getMfaCode,
-  invalidateUserCache,
-  invalidateHostCache,
   healthCheck,
+  isConnected,
+  CACHE_KEYS,
+  CACHE_TTL,
 };

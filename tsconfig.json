@@ -59,7 +59,8 @@
     "scripts/**/*.ts",
     "scripts/**/*.cjs",
     ".eslintrc.cjs",
-    "backend/**/*.js"
+    "backend/**/*.js",
+    "utils/**/*.ts"
   ],
   "exclude": [
     "node_modules",

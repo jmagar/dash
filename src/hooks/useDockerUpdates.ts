@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { io as socketIo, Socket } from 'socket.io-client';
 
+import { logger } from '../../utils/logger';
 import { getContainers, getStacks } from '../api/docker';
 import type { Container, Stack } from '../types';
-import * as frontendLogger from '../utils/frontendLogger';
 
 export interface UseDockerUpdatesOptions {
   enabled?: boolean;
@@ -31,11 +31,11 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
       const result = await (type === 'containers' ? getContainers() : getStacks());
       if (result.success && result.data) {
         setData(result.data);
-        frontendLogger.logger.info(`Successfully fetched ${type}`, { count: result.data.length });
+        logger.info(`Successfully fetched ${type}`, { count: result.data.length });
       } else {
         const errorMsg = `Failed to fetch ${type}`;
         setError(result.error || errorMsg);
-        frontendLogger.logger.error(errorMsg, {
+        logger.error(errorMsg, {
           type,
           errorDetails: result.error,
         });
@@ -43,7 +43,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
     } catch (err) {
       const errorMsg = `Failed to fetch ${type}`;
       setError(err instanceof Error ? err.message : errorMsg);
-      frontendLogger.logger.error(errorMsg, {
+      logger.error(errorMsg, {
         type,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -63,7 +63,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
     });
 
     newSocket.on('connect', () => {
-      frontendLogger.logger.info('Docker socket connected', { type });
+      logger.info('Docker socket connected', { type });
       setLoading(false);
       setError(null);
       void refetch();
@@ -72,7 +72,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
     newSocket.on('connect_error', (err) => {
       const errorMsg = `Failed to connect to docker socket: ${err.message}`;
       setError(errorMsg);
-      frontendLogger.logger.error(errorMsg, {
+      logger.error(errorMsg, {
         type,
         errorDetails: err,
       });
@@ -82,7 +82,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
     newSocket.on('docker:update', (updatedData: Container[] | Stack[]) => {
       if (updatedData) {
         setData(updatedData);
-        frontendLogger.logger.info(`Received docker ${type} update`, {
+        logger.info(`Received docker ${type} update`, {
           count: updatedData.length,
         });
       }
@@ -90,7 +90,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
 
     newSocket.on('error', (err) => {
       const errorMsg = `Socket error for ${type}`;
-      frontendLogger.logger.error(errorMsg, {
+      logger.error(errorMsg, {
         type,
         errorDetails: err,
       });
@@ -100,7 +100,7 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
 
     return () => {
       newSocket.close();
-      frontendLogger.logger.info('Docker socket disconnected', { type });
+      logger.info('Docker socket disconnected', { type });
     };
   }, [enabled, type, refetch]);
 
@@ -110,11 +110,11 @@ const useDockerUpdates = (options: UseDockerUpdatesOptions = {}): DockerUpdatesR
     }
 
     socket.emit('docker:subscribe', { type });
-    frontendLogger.logger.info('Subscribed to docker updates', { type });
+    logger.info('Subscribed to docker updates', { type });
 
     return () => {
       socket.emit('docker:unsubscribe', { type });
-      frontendLogger.logger.info('Unsubscribed from docker updates', { type });
+      logger.info('Unsubscribed from docker updates', { type });
     };
   }, [socket, enabled, type]);
 

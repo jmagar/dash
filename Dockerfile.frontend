@@ -2,18 +2,20 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Clean npm cache and install dependencies with legacy peer deps
+# Copy package files
 COPY package*.json ./
-RUN npm cache clean --force && \
-    npm install --legacy-peer-deps && \
-    npm install --legacy-peer-deps --save-dev \
-    @testing-library/react-hooks@8.0.1 \
-    @babel/plugin-proposal-private-property-in-object \
-    @babel/plugin-transform-private-property-in-object \
-    eslint-plugin-unused-imports
+
+# Install only production dependencies with legacy peer deps
+RUN npm install --production --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
-# Start app in development mode
-CMD ["npm", "start"]
+# Build the app
+RUN npm run build
+
+# Expose port
+EXPOSE 3000
+
+# Start the app
+CMD ["npm", "start", "--", "--host", "0.0.0.0"]
