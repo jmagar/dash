@@ -54,3 +54,18 @@ export interface Package {
   installed: boolean;
   updateAvailable?: boolean;
 }
+
+export interface AuthResult {
+  success: boolean;
+  data?: User;
+  token?: string;
+  mfaRequired?: boolean;
+  error?: string;
+}
+
+export interface UserRegistration {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword?: string;
+}
