@@ -9,9 +9,9 @@ const { Server } = require('socket.io');
 
 const cache = require('./cache');
 const { pool } = require('./db');
-const { logger, requestLogger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
-const routes = require('./routes');
-const { initTerminalSocket } = require('./routes/terminal');
+const { logger, requestLogger } = require('./utils/logger');
+const routes = require('../routes');
+const { initTerminalSocket } = require('../routes/terminal');
 
 // Create express app
 const app = express();
