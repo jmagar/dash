@@ -1,6 +1,8 @@
-const express = require('express');
 const Docker = require('dockerode');
-const cache = require('../src/cache');
+const express = require('express');
+
+const cache = require('../cache');
+const { serverLogger: logger } = require('../utils/serverLogger');
 const router = express.Router();
 
 const docker = new Docker({
@@ -26,7 +28,7 @@ router.get('/containers', async (req, res) => {
       state: container.State,
       created: container.Created * 1000, // Convert to milliseconds
       ports: container.Ports.map(port =>
-        `${port.IP || ''}:${port.PublicPort || ''}->${port.PrivatePort}/${port.Type}`
+        `${port.IP || ''}:${port.PublicPort || ''}->${port.PrivatePort}/${port.Type}`,
       ).filter(Boolean),
     }));
 
@@ -34,7 +36,7 @@ router.get('/containers', async (req, res) => {
     await cache.cacheDockerState('local', formattedContainers);
     res.json(formattedContainers);
   } catch (err) {
-    console.error('Error listing containers:', err);
+    logger.error('Error listing containers:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to list containers' });
   }
 });
@@ -47,7 +49,7 @@ router.post('/containers/:id/start', async (req, res) => {
     await cache.invalidateHostCache('local');
     res.json({ success: true });
   } catch (err) {
-    console.error('Error starting container:', err);
+    logger.error('Error starting container:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to start container' });
   }
 });
@@ -60,7 +62,7 @@ router.post('/containers/:id/stop', async (req, res) => {
     await cache.invalidateHostCache('local');
     res.json({ success: true });
   } catch (err) {
-    console.error('Error stopping container:', err);
+    logger.error('Error stopping container:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to stop container' });
   }
 });
@@ -73,7 +75,7 @@ router.delete('/containers/:id', async (req, res) => {
     await cache.invalidateHostCache('local');
     res.json({ success: true });
   } catch (err) {
-    console.error('Error removing container:', err);
+    logger.error('Error removing container:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to remove container' });
   }
 });
@@ -90,7 +92,7 @@ router.get('/containers/:id/logs', async (req, res) => {
     });
     res.send(logs);
   } catch (err) {
-    console.error('Error getting container logs:', err);
+    logger.error('Error getting container logs:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to get container logs' });
   }
 });
@@ -102,7 +104,7 @@ router.get('/containers/:id/stats', async (req, res) => {
     const stats = await container.stats({ stream: false });
     res.json(stats);
   } catch (err) {
-    console.error('Error getting container stats:', err);
+    logger.error('Error getting container stats:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to get container stats' });
   }
 });
@@ -143,7 +145,7 @@ router.get('/stacks', async (req, res) => {
     await cache.cacheDockerState('stacks', stackList);
     res.json(stackList);
   } catch (err) {
-    console.error('Error listing stacks:', err);
+    logger.error('Error listing stacks:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to list stacks' });
   }
 });

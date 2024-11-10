@@ -1,20 +1,23 @@
+const path = require('path');
+
 const express = require('express');
 const { Client } = require('ssh2');
-const path = require('path');
-const { query } = require('../src/db');
-const cache = require('../src/cache');
+
+const cache = require('../cache');
+const { query } = require('../db');
+const { serverLogger: logger } = require('../utils/serverLogger');
 const router = express.Router();
 
 // List directory contents
 router.get('/:hostId/list', async (req, res) => {
   const { path: dirPath = '/' } = req.query;
-  const normalizedPath = path.normalize(dirPath).replace(/^(\.\.[\/\\])+/, '');
+  const normalizedPath = path.normalize(dirPath).replace(/^(\.\.[\\/])+/, '');
 
   try {
     // Get host connection details
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -67,7 +70,7 @@ router.get('/:hostId/list', async (req, res) => {
     const files = await listDirectory;
     res.json({ success: true, data: files });
   } catch (err) {
-    console.error('Error listing directory:', err);
+    logger.error('Error listing directory:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -79,12 +82,12 @@ router.get('/:hostId/download', async (req, res) => {
     return res.status(400).json({ success: false, error: 'File path required' });
   }
 
-  const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+  const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\\/])+/, '');
 
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -129,7 +132,7 @@ router.get('/:hostId/download', async (req, res) => {
       passphrase: host.passphrase,
     });
   } catch (err) {
-    console.error('Error downloading file:', err);
+    logger.error('Error downloading file:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -141,12 +144,12 @@ router.post('/:hostId/upload', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Path and content required' });
   }
 
-  const normalizedPath = path.normalize(uploadPath).replace(/^(\.\.[\/\\])+/, '');
+  const normalizedPath = path.normalize(uploadPath).replace(/^(\.\.[\\/])+/, '');
 
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -188,7 +191,7 @@ router.post('/:hostId/upload', async (req, res) => {
     await uploadFile;
     res.json({ success: true });
   } catch (err) {
-    console.error('Error uploading file:', err);
+    logger.error('Error uploading file:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -200,12 +203,12 @@ router.delete('/:hostId', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Path required' });
   }
 
-  const normalizedPath = path.normalize(deletePath).replace(/^(\.\.[\/\\])+/, '');
+  const normalizedPath = path.normalize(deletePath).replace(/^(\.\.[\\/])+/, '');
 
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -225,7 +228,7 @@ router.delete('/:hostId', async (req, res) => {
 
           sftp.unlink(normalizedPath, (err) => {
             if (err) {
-              // If file not found, try removing as directory
+              // If file not found try removing as directory
               if (err.code === 2) {
                 sftp.rmdir(normalizedPath, (err) => {
                   if (err) {
@@ -258,7 +261,7 @@ router.delete('/:hostId', async (req, res) => {
     await deleteFile;
     res.json({ success: true });
   } catch (err) {
-    console.error('Error deleting file:', err);
+    logger.error('Error deleting file:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });

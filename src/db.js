@@ -1,11 +1,8 @@
 'use strict';
 
-const path = require('path');
-
 const { Pool } = require('pg');
 
-// Import the common logger from src/utils
-const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
+const { serverLogger: logger } = require('./utils/serverLogger');
 
 const pool = new Pool({
   host: process.env.DB_HOST,

@@ -1,6 +1,5 @@
 'use strict';
 
-const path = require('path');
-const { requestLogger } = require(path.join(__dirname, '..', '..', 'src', 'utils', 'logger'));
+const { requestLogger } = require('../utils/serverLogger');
 
 module.exports = requestLogger;

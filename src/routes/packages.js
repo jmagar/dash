@@ -1,7 +1,9 @@
 const express = require('express');
 const { Client } = require('ssh2');
-const { query } = require('../src/db');
-const cache = require('../src/cache');
+
+const cache = require('../cache');
+const { query } = require('../db');
+const { serverLogger: logger } = require('../utils/serverLogger');
 const router = express.Router();
 
 // Execute package manager command
@@ -55,7 +57,7 @@ router.get('/:hostId/list', async (req, res) => {
 
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -64,8 +66,8 @@ router.get('/:hostId/list', async (req, res) => {
 
     const host = result.rows[0];
 
-    // Try apt first, then fallback to yum
-    let { code, output } = await executeCommand(host, 'which apt-get && dpkg -l || which yum && rpm -qa');
+    // Try apt first then fallback to yum
+    const { code, output } = await executeCommand(host, 'which apt-get && dpkg -l || which yum && rpm -qa');
 
     const packages = output
       .split('\n')
@@ -85,7 +87,7 @@ router.get('/:hostId/list', async (req, res) => {
 
     res.json({ success: true, data: packages });
   } catch (err) {
-    console.error('Error listing packages:', err);
+    logger.error('Error listing packages:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -100,7 +102,7 @@ router.post('/:hostId/install', async (req, res) => {
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -109,10 +111,10 @@ router.post('/:hostId/install', async (req, res) => {
 
     const host = result.rows[0];
 
-    // Try apt first, then fallback to yum
+    // Try apt first then fallback to yum
     const { code, output } = await executeCommand(
       host,
-      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ${name} || which yum && sudo yum install -y ${name}`
+      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ${name} || which yum && sudo yum install -y ${name}`,
     );
 
     if (code !== 0) {
@@ -124,7 +126,7 @@ router.post('/:hostId/install', async (req, res) => {
 
     res.json({ success: true, data: { output } });
   } catch (err) {
-    console.error('Error installing package:', err);
+    logger.error('Error installing package:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -139,7 +141,7 @@ router.post('/:hostId/uninstall', async (req, res) => {
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -148,10 +150,10 @@ router.post('/:hostId/uninstall', async (req, res) => {
 
     const host = result.rows[0];
 
-    // Try apt first, then fallback to yum
+    // Try apt first then fallback to yum
     const { code, output } = await executeCommand(
       host,
-      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y ${name} || which yum && sudo yum remove -y ${name}`
+      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y ${name} || which yum && sudo yum remove -y ${name}`,
     );
 
     if (code !== 0) {
@@ -163,7 +165,7 @@ router.post('/:hostId/uninstall', async (req, res) => {
 
     res.json({ success: true, data: { output } });
   } catch (err) {
-    console.error('Error uninstalling package:', err);
+    logger.error('Error uninstalling package:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -178,7 +180,7 @@ router.post('/:hostId/update', async (req, res) => {
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -187,10 +189,10 @@ router.post('/:hostId/update', async (req, res) => {
 
     const host = result.rows[0];
 
-    // Try apt first, then fallback to yum
+    // Try apt first then fallback to yum
     const { code, output } = await executeCommand(
       host,
-      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y ${name} || which yum && sudo yum update -y ${name}`
+      `which apt-get && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y ${name} || which yum && sudo yum update -y ${name}`,
     );
 
     if (code !== 0) {
@@ -202,7 +204,7 @@ router.post('/:hostId/update', async (req, res) => {
 
     res.json({ success: true, data: { output } });
   } catch (err) {
-    console.error('Error updating package:', err);
+    logger.error('Error updating package:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -212,7 +214,7 @@ router.get('/:hostId/updates', async (req, res) => {
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId]
+      [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
@@ -221,10 +223,10 @@ router.get('/:hostId/updates', async (req, res) => {
 
     const host = result.rows[0];
 
-    // Try apt first, then fallback to yum
+    // Try apt first then fallback to yum
     const { code, output } = await executeCommand(
       host,
-      `which apt-get && sudo apt-get update && apt list --upgradable || which yum && sudo yum check-update`
+      `which apt-get && sudo apt-get update && apt list --upgradable || which yum && sudo yum check-update`,
     );
 
     // yum check-update returns 100 when updates are available
@@ -242,7 +244,7 @@ router.get('/:hostId/updates', async (req, res) => {
 
     res.json({ success: true, data: updates });
   } catch (err) {
-    console.error('Error checking updates:', err);
+    logger.error('Error checking updates:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });

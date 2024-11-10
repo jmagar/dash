@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { io as socketIo, Socket } from 'socket.io-client';
 
-import { logger } from '../../utils/logger';
 import { getContainers, getStacks } from '../api/docker';
 import type { Container, Stack } from '../types';
+import { logger } from '../utils/logger';
 
 export interface UseDockerUpdatesOptions {
   enabled?: boolean;

@@ -1,15 +1,13 @@
 'use strict';
 
-const path = require('path');
-
 const bcrypt = require('bcrypt');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
-const cache = require('../src/cache');
-const { pool } = require('../src/db');
-const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
+const cache = require('../cache');
+const { pool } = require('../db');
+const { serverLogger: logger } = require('../utils/serverLogger');
 
 // Login route
 router.post('/login', async (req, res) => {

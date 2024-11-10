@@ -1,7 +1,9 @@
 const express = require('express');
 const { Client } = require('ssh2');
-const { query } = require('../src/db');
-const cache = require('../src/cache');
+
+const cache = require('../cache');
+const { query } = require('../db');
+const { serverLogger: logger } = require('../utils/serverLogger');
 const router = express.Router();
 
 // Initialize WebSocket handlers
@@ -19,7 +21,7 @@ const initTerminalSocket = (io) => {
         // Get host details with SSH key
         const result = await query(
           'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-          [hostId]
+          [hostId],
         );
 
         if (result.rows.length === 0) {
@@ -38,6 +40,7 @@ const initTerminalSocket = (io) => {
             cols: 80,
           }, (err, sshStream) => {
             if (err) {
+              logger.error('SSH stream error:', { error: err.message, stack: err.stack });
               socket.emit('error', err.message);
               return;
             }
@@ -61,6 +64,7 @@ const initTerminalSocket = (io) => {
 
         // Handle SSH errors
         sshClient.on('error', (err) => {
+          logger.error('SSH connection error:', { error: err.message, stack: err.stack });
           socket.emit('error', err.message);
           if (stream) stream.end();
           sshClient.end();
@@ -76,7 +80,7 @@ const initTerminalSocket = (io) => {
         });
 
       } catch (err) {
-        console.error('Terminal initialization error:', err);
+        logger.error('Terminal initialization error:', { error: err.message, stack: err.stack });
         socket.emit('error', err.message);
       }
     });
@@ -109,14 +113,14 @@ const initTerminalSocket = (io) => {
         // Log command to database
         await query(
           'INSERT INTO command_history (user_id, host_id, command, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
-          [socket.user.id, hostId, command]
+          [socket.user.id, hostId, command],
         );
 
         if (stream) {
           stream.write(`${command}\n`);
         }
       } catch (err) {
-        console.error('Command execution error:', err);
+        logger.error('Command execution error:', { error: err.message, stack: err.stack });
         socket.emit('error', err.message);
       }
     });
@@ -147,14 +151,14 @@ router.get('/:hostId/history', async (req, res) => {
       `SELECT * FROM command_history
        WHERE user_id = $1 AND host_id = $2
        ORDER BY created_at DESC LIMIT 100`,
-      [req.user.id, req.params.hostId]
+      [req.user.id, req.params.hostId],
     );
 
     const commands = result.rows;
     await cache.cacheCommand(req.user.id, req.params.hostId, commands);
     res.json({ success: true, data: commands });
   } catch (err) {
-    console.error('Error getting command history:', err);
+    logger.error('Error getting command history:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });

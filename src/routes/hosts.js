@@ -1,8 +1,10 @@
 const express = require('express');
 const { Client } = require('ssh2');
-const { query, transaction } = require('../src/db');
-const cache = require('../src/cache');
-const { checkRole } = require('../src/middleware/auth');
+
+const cache = require('../cache');
+const { query, transaction } = require('../db');
+const { checkRole } = require('../middleware/auth');
+const { serverLogger: logger } = require('../utils/serverLogger');
 const router = express.Router();
 
 // List hosts
@@ -16,14 +18,14 @@ router.get('/', async (req, res) => {
     const result = await query(
       'SELECT * FROM hosts ORDER BY name',
       [],
-      { cache: true, ttl: 60 }
+      { cache: true, ttl: 60 },
     );
 
     const hosts = result.rows;
     await cache.cacheHostStatus('all', hosts);
     res.json({ success: true, data: hosts });
   } catch (err) {
-    console.error('Error listing hosts:', err);
+    logger.error('Error listing hosts:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: 'Failed to list hosts' });
   }
 });
@@ -38,7 +40,7 @@ router.get('/:id', async (req, res) => {
 
     const result = await query(
       'SELECT h.*, sk.name as key_name FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.id]
+      [req.params.id],
     );
 
     if (result.rows.length === 0) {
@@ -49,7 +51,7 @@ router.get('/:id', async (req, res) => {
     await cache.cacheHostStatus(req.params.id, host);
     res.json({ success: true, data: host });
   } catch (err) {
-    console.error('Error getting host:', err);
+    logger.error('Error getting host:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: 'Failed to get host' });
   }
 });
@@ -63,7 +65,7 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       // Check if host already exists
       const existing = await client.query(
         'SELECT id FROM hosts WHERE hostname = $1 AND port = $2',
-        [hostname, port]
+        [hostname, port],
       );
 
       if (existing.rows.length > 0) {
@@ -73,7 +75,7 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       // Create new host
       const result = await client.query(
         'INSERT INTO hosts (name, hostname, port, ip, ssh_key_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [name, hostname, port, ip, sshKeyId]
+        [name, hostname, port, ip, sshKeyId],
       );
 
       return result.rows[0];
@@ -82,7 +84,7 @@ router.post('/', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
-    console.error('Error creating host:', err);
+    logger.error('Error creating host:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -95,7 +97,7 @@ router.patch('/:id', checkRole(['admin']), async (req, res) => {
     const result = await transaction(async (client) => {
       const existing = await client.query(
         'SELECT id FROM hosts WHERE id = $1',
-        [req.params.id]
+        [req.params.id],
       );
 
       if (existing.rows.length === 0) {
@@ -107,7 +109,7 @@ router.patch('/:id', checkRole(['admin']), async (req, res) => {
          SET name = $1, hostname = $2, port = $3, ip = $4, ssh_key_id = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP
          WHERE id = $7
          RETURNING *`,
-        [name, hostname, port, ip, sshKeyId, isActive, req.params.id]
+        [name, hostname, port, ip, sshKeyId, isActive, req.params.id],
       );
 
       return result.rows[0];
@@ -117,7 +119,7 @@ router.patch('/:id', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
-    console.error('Error updating host:', err);
+    logger.error('Error updating host:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -129,7 +131,7 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
       // Check for active connections or dependencies
       const activeCommands = await client.query(
         'SELECT COUNT(*) FROM command_history WHERE host_id = $1 AND created_at > NOW() - INTERVAL \'5 minutes\'',
-        [req.params.id]
+        [req.params.id],
       );
 
       if (activeCommands.rows[0].count > 0) {
@@ -143,7 +145,7 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true });
   } catch (err) {
-    console.error('Error deleting host:', err);
+    logger.error('Error deleting host:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -153,7 +155,7 @@ router.post('/:id/test', async (req, res) => {
   try {
     const result = await query(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.id]
+      [req.params.id],
     );
 
     if (result.rows.length === 0) {
@@ -185,7 +187,7 @@ router.post('/:id/test', async (req, res) => {
     await testConnection;
     res.json({ success: true });
   } catch (err) {
-    console.error('Error testing connection:', err);
+    logger.error('Error testing connection:', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });

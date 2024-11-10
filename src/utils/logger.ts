@@ -1,13 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-
 import type { Request, Response, NextFunction } from 'express';
-
-// Ensure logs directory exists in project root
-const logsDir = path.join(__dirname, '..', '..', 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
 
 export enum LogLevel {
   ERROR = 'error',
@@ -56,33 +47,23 @@ const formatLog = (level: LogLevel, message: string, meta: LogMeta = {}): string
   return JSON.stringify(logData, null, 2);
 };
 
-// Write log to file (Node.js environment only)
-const writeToFile = (formattedLog: string, level: LogLevel): void => {
-  if (typeof window === 'undefined') {
-    const date = new Date().toISOString().split('T')[0];
-    const logFile = path.join(logsDir, `${level}-${date}.log`);
-    fs.appendFileSync(logFile, `${formattedLog}\n`);
-  }
-};
-
 // Browser-specific logging
 const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
   const formattedLog = formatLog(level, message, meta);
 
-  // Log to browser console using the appropriate level
+  // Log to browser console
   switch (level) {
     case LogLevel.ERROR:
-      // Using logger.error for consistency
-      logger.error(message, meta);
+      console.error(message, meta);
       break;
     case LogLevel.WARN:
-      logger.warn(message, meta);
+      console.warn(message, meta);
       break;
     case LogLevel.INFO:
-      logger.info(message, meta);
+      console.info(message, meta);
       break;
     case LogLevel.DEBUG:
-      logger.debug(message, meta);
+      console.debug(message, meta);
       break;
   }
 
@@ -92,42 +73,14 @@ const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: formattedLog,
-    }).catch(() => logger.error('Failed to send log to server'));
+    }).catch(() => console.error('Failed to send log to server'));
   }
-};
-
-// Node.js specific logging
-const nodeLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
-  const formattedLog = formatLog(level, message, meta);
-
-  // Console output using the appropriate level
-  switch (level) {
-    case LogLevel.ERROR:
-      logger.error(formattedLog);
-      break;
-    case LogLevel.WARN:
-      logger.warn(formattedLog);
-      break;
-    case LogLevel.INFO:
-      logger.info(formattedLog);
-      break;
-    case LogLevel.DEBUG:
-      logger.debug(formattedLog);
-      break;
-  }
-
-  // File output
-  writeToFile(formattedLog, level);
 };
 
 // Universal logging method
 const log = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
   if (shouldLog(level)) {
-    if (typeof window !== 'undefined') {
-      browserLog(level, message, meta);
-    } else {
-      nodeLog(level, message, meta);
-    }
+    browserLog(level, message, meta);
   }
 };
 

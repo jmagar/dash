@@ -1,10 +1,8 @@
 'use strict';
 
-const path = require('path');
-
 const Redis = require('ioredis');
 
-const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
+const { serverLogger: logger } = require('../dist/utils/serverLogger');
 
 let redisClient = null;
 

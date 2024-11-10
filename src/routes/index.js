@@ -1,18 +1,15 @@
 'use strict';
 
-const path = require('path');
-
 const express = require('express');
 
-const router = express.Router();
-
-// Import route modules
 const authRoutes = require('./auth');
 const dockerRoutes = require('./docker');
 const filesRoutes = require('./files');
 const hostsRoutes = require('./hosts');
 const packagesRoutes = require('./packages');
-const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
+const { serverLogger: logger } = require('../utils/serverLogger');
+
+const router = express.Router();
 
 // Health check route
 router.get('/health', (req, res) => {
