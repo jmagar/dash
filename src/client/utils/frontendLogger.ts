@@ -1,79 +1,20 @@
-/* eslint-disable no-console */
-import { LogLevel } from '../types/logger';
-import type { LogMeta, LogData, Logger } from '../types/logging';
+import { Logger } from '../../types/logger';
 
-// Get configured log level from environment or default to 'info'
-const LOG_LEVEL = (process.env.REACT_APP_LOG_LEVEL as LogLevel) || LogLevel.DEBUG;
-
-// Log level weights for filtering
-const LOG_LEVEL_WEIGHTS: Record<LogLevel, number> = {
-  [LogLevel.ERROR]: 0,
-  [LogLevel.WARN]: 1,
-  [LogLevel.INFO]: 2,
-  [LogLevel.DEBUG]: 3,
-};
-
-// Check if a log level should be logged based on configured level
-const shouldLog = (level: LogLevel): boolean => {
-  const configuredWeight = LOG_LEVEL_WEIGHTS[LOG_LEVEL];
-  const messageWeight = LOG_LEVEL_WEIGHTS[level];
-  return messageWeight <= configuredWeight;
-};
-
-// Format log message
-const formatLog = (level: LogLevel, message: string, meta: LogMeta = {}): string => {
-  const logData: LogData = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    meta,
-  };
-  return JSON.stringify(logData, null, 2);
-};
-
-// Browser-specific logging
-const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
-  const formattedLog = formatLog(level, message, meta);
-
-  // Log to browser console
-  switch (level) {
-    case LogLevel.ERROR:
-      console.error(message, meta);
-      break;
-    case LogLevel.WARN:
-      console.warn(message, meta);
-      break;
-    case LogLevel.INFO:
-      console.info(message, meta);
-      break;
-    case LogLevel.DEBUG:
+const frontendLogger: Logger = {
+  info: (message: string, meta?: Record<string, unknown>): void => {
+    console.info(message, meta);
+  },
+  warn: (message: string, meta?: Record<string, unknown>): void => {
+    console.warn(message, meta);
+  },
+  error: (message: string, meta?: Record<string, unknown>): void => {
+    console.error(message, meta);
+  },
+  debug: (message: string, meta?: Record<string, unknown>): void => {
+    if (process.env.NODE_ENV !== 'production') {
       console.debug(message, meta);
-      break;
-  }
-
-  // Send to server for file logging
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: formattedLog,
-    }).catch(() => console.error('Failed to send log to server'));
-  }
+    }
+  },
 };
 
-// Universal logging method
-const log = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
-  if (shouldLog(level)) {
-    browserLog(level, message, meta);
-  }
-};
-
-// Create logger instance
-export const logger: Logger = {
-  error: (message: string, meta: LogMeta = {}) => log(LogLevel.ERROR, message, meta),
-  warn: (message: string, meta: LogMeta = {}) => log(LogLevel.WARN, message, meta),
-  info: (message: string, meta: LogMeta = {}) => log(LogLevel.INFO, message, meta),
-  debug: (message: string, meta: LogMeta = {}) => log(LogLevel.DEBUG, message, meta),
-};
-
-export default logger;
+export default frontendLogger;

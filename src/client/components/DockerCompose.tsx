@@ -33,8 +33,8 @@ import {
   updateStackComposeFile,
 } from '../api';
 import CodeEditor from './CodeEditor';
+import type { Stack } from '../../types';
 import { useDockerUpdates } from '../hooks';
-import type { Stack } from '../types';
 
 export default function DockerCompose(): JSX.Element {
   const { data: rawStacks, loading, error, refetch } = useDockerUpdates({

@@ -21,12 +21,15 @@
     }
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx"
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "src/server/**/*",
-    "**/*.server.ts"
+    "**/*.server.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }
