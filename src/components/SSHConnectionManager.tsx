@@ -1,42 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Typography,
+  CircularProgress,
+} from '@mui/material';
+import React, { useState } from 'react';
 
-import { getHostStatus } from '../api/hosts';
-import { Host } from '../types/models';
+import { getHostStatus, connectHost, disconnectHost } from '../client/api';
+import { useAsync } from '../hooks';
+import type { Host } from '../types';
 
-interface SSHConnectionManagerProps {
-  hostId: number;
+interface Props {
+  host: Host;
+  onStatusChange?: (connected: boolean) => void;
 }
 
-const SSHConnectionManager: React.FC<SSHConnectionManagerProps> = ({ hostId }) => {
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+export default function SSHConnectionManager({ host, onStatusChange }: Props): JSX.Element {
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const checkConnection = async (): Promise<void> => {
-      try {
-        const result = await getHostStatus();
-        if (result.success && result.data) {
-          const host = result.data.find((h: Host) => h.id === hostId);
-          if (host?.isActive !== undefined) {
-            setIsConnected(host.isActive);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to check connection:', err);
-        setIsConnected(false);
+  const checkStatus = async (): Promise<boolean> => {
+    const result = await getHostStatus(host.id);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to check connection status');
+    }
+    return result.data || false;
+  };
+
+  const {
+    data: connected,
+    loading: statusLoading,
+    error: statusError,
+    execute: refreshStatus,
+  } = useAsync<boolean>(checkStatus, { immediate: true });
+
+  const handleConnect = async (): Promise<void> => {
+    setError(null);
+    try {
+      const result = await connectHost(host.id);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to connect');
       }
-    };
+      void refreshStatus();
+      onStatusChange?.(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+    }
+  };
 
-    checkConnection();
-    const interval = setInterval(checkConnection, 5000);
-
-    return () => clearInterval(interval);
-  }, [hostId]);
+  const handleDisconnect = async (): Promise<void> => {
+    setError(null);
+    try {
+      const result = await disconnectHost(host.id);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to disconnect');
+      }
+      void refreshStatus();
+      onStatusChange?.(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect');
+    }
+  };
 
   return (
-    <div>
-      <span>Connection Status: {isConnected ? 'Connected' : 'Disconnected'}</span>
-    </div>
-  );
-};
+    <Card>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          {host.name}
+        </Typography>
+        <Typography color="textSecondary" gutterBottom>
+          {host.hostname}:{host.port}
+        </Typography>
 
-export default SSHConnectionManager;
+        {statusLoading ? (
+          <CircularProgress size={24} />
+        ) : (
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Typography
+              color={connected ? 'success.main' : 'error.main'}
+              sx={{ fontWeight: 'bold' }}
+            >
+              {connected ? 'Connected' : 'Disconnected'}
+            </Typography>
+            <Button
+              variant="contained"
+              color={connected ? 'error' : 'primary'}
+              onClick={connected ? handleDisconnect : handleConnect}
+            >
+              {connected ? 'Disconnect' : 'Connect'}
+            </Button>
+          </Box>
+        )}
+
+        {(error || statusError) && (
+          <Typography color="error" sx={{ mt: 2 }}>
+            {error || statusError}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

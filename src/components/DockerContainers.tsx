@@ -8,14 +8,15 @@ import {
   Paper,
   IconButton,
   Typography,
+  Box,
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import Terminal from '../components/Terminal';
+import Terminal from './Terminal';
 import { useDockerUpdates } from '../hooks';
-import { Container, Host } from '../types/models';
+import type { Container, Host } from '../types';
 
-const Containers: React.FC = () => {
+export default function DockerContainers(): JSX.Element {
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const { data, loading } = useDockerUpdates({ type: 'containers' });
 
@@ -53,12 +54,18 @@ const Containers: React.FC = () => {
   };
 
   if (loading) {
-    return <div>Loading containers...</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>Loading containers...</Typography>
+      </Box>
+    );
   }
 
   return (
-    <div>
-      <Typography variant="h4">Containers</Typography>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Containers
+      </Typography>
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -81,8 +88,6 @@ const Containers: React.FC = () => {
           host={mockHost}
         />
       )}
-    </div>
+    </Box>
   );
-};
-
-export default Containers;
+}

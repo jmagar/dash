@@ -140,8 +140,10 @@ const Terminal: React.FC<TerminalProps> = ({ host: initialHost }): JSX.Element =
   }, [selectedHost, connectToTerminal]);
 
   const handleHostSelect = (hosts: Host[]): void => {
-    setSelectedHost(hosts[0]);
-    setHostSelectorOpen(false);
+    if (hosts && hosts.length > 0) {
+      setSelectedHost(hosts[0]);
+      setHostSelectorOpen(false);
+    }
   };
 
   const handleFontSizeChange = (delta: number): void => {

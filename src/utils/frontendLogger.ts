@@ -1,183 +1,79 @@
-// Fallback UUID generation if uuid package fails
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
+/* eslint-disable no-console */
+import { LogLevel } from '../types/logger';
+import type { LogMeta, LogData, Logger } from '../types/logging';
 
-export enum LogLevel {
-  ERROR = 'error',
-  WARN = 'warn',
-  INFO = 'info',
-  DEBUG = 'debug',
-}
+// Get configured log level from environment or default to 'info'
+const LOG_LEVEL = (process.env.REACT_APP_LOG_LEVEL as LogLevel) || LogLevel.DEBUG;
 
-export interface LogEntry {
-  id: string;
-  timestamp: number;
-  level: LogLevel;
-  message: string;
-  context?: Record<string, unknown>;
-  error?: Error;
-}
+// Log level weights for filtering
+const LOG_LEVEL_WEIGHTS: Record<LogLevel, number> = {
+  [LogLevel.ERROR]: 0,
+  [LogLevel.WARN]: 1,
+  [LogLevel.INFO]: 2,
+  [LogLevel.DEBUG]: 3,
+};
 
-class FrontendLogger {
-  private static instance: FrontendLogger;
-  private logs: LogEntry[] = [];
-  private maxLogEntries = 500;
-  private remoteLoggingEnabled = false;
-  private remoteLoggingUrl?: string;
+// Check if a log level should be logged based on configured level
+const shouldLog = (level: LogLevel): boolean => {
+  const configuredWeight = LOG_LEVEL_WEIGHTS[LOG_LEVEL];
+  const messageWeight = LOG_LEVEL_WEIGHTS[level];
+  return messageWeight <= configuredWeight;
+};
 
-  private constructor() {
-    this.setupUnhandledErrorListeners();
+// Format log message
+const formatLog = (level: LogLevel, message: string, meta: LogMeta = {}): string => {
+  const logData: LogData = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    meta,
+  };
+  return JSON.stringify(logData, null, 2);
+};
+
+// Browser-specific logging
+const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
+  const formattedLog = formatLog(level, message, meta);
+
+  // Log to browser console
+  switch (level) {
+    case LogLevel.ERROR:
+      console.error(message, meta);
+      break;
+    case LogLevel.WARN:
+      console.warn(message, meta);
+      break;
+    case LogLevel.INFO:
+      console.info(message, meta);
+      break;
+    case LogLevel.DEBUG:
+      console.debug(message, meta);
+      break;
   }
 
-  public static getInstance(): FrontendLogger {
-    if (!FrontendLogger.instance) {
-      FrontendLogger.instance = new FrontendLogger();
-    }
-    return FrontendLogger.instance;
+  // Send to server for file logging
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: formattedLog,
+    }).catch(() => console.error('Failed to send log to server'));
   }
+};
 
-  private setupUnhandledErrorListeners(): void {
-    window.addEventListener('error', (event) => {
-      this.error('Unhandled Error', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        error: event.error,
-      });
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-      this.error('Unhandled Promise Rejection', {
-        reason: event.reason,
-      });
-    });
+// Universal logging method
+const log = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
+  if (shouldLog(level)) {
+    browserLog(level, message, meta);
   }
+};
 
-  private createLogEntry(
-    level: LogLevel,
-    message: string,
-    context?: Record<string, unknown>,
-    error?: Error,
-  ): LogEntry {
-    const entry: LogEntry = {
-      id: generateUUID(),
-      timestamp: Date.now(),
-      level,
-      message,
-      context,
-      error,
-    };
+// Create logger instance
+export const logger: Logger = {
+  error: (message: string, meta: LogMeta = {}) => log(LogLevel.ERROR, message, meta),
+  warn: (message: string, meta: LogMeta = {}) => log(LogLevel.WARN, message, meta),
+  info: (message: string, meta: LogMeta = {}) => log(LogLevel.INFO, message, meta),
+  debug: (message: string, meta: LogMeta = {}) => log(LogLevel.DEBUG, message, meta),
+};
 
-    // Manage log size
-    if (this.logs.length >= this.maxLogEntries) {
-      this.logs.shift();
-    }
-    this.logs.push(entry);
-
-    // Console output
-    this.consoleOutput(entry);
-
-    // Remote logging
-    if (this.remoteLoggingEnabled) {
-      this.sendRemoteLog(entry);
-    }
-
-    return entry;
-  }
-
-  private consoleOutput(entry: LogEntry): void {
-    const { level, message, context, error } = entry;
-
-    switch (level) {
-      case LogLevel.ERROR:
-        // eslint-disable-next-line no-console
-        console.error(message, context, error);
-        break;
-      case LogLevel.WARN:
-        // eslint-disable-next-line no-console
-        console.warn(message, context);
-        break;
-      case LogLevel.INFO:
-        // eslint-disable-next-line no-console
-        console.info(message, context);
-        break;
-      case LogLevel.DEBUG:
-        // eslint-disable-next-line no-console
-        console.debug(message, context);
-        break;
-    }
-  }
-
-  private async sendRemoteLog(entry: LogEntry): Promise<void> {
-    if (!this.remoteLoggingUrl) return;
-
-    try {
-      await fetch(this.remoteLoggingUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(entry),
-      });
-    } catch {
-      // Silently fail to prevent logging errors from breaking app
-      this.warn('Remote logging failed');
-    }
-  }
-
-  public error(
-    message: string,
-    context?: Record<string, unknown>,
-    error?: Error,
-  ): LogEntry {
-    return this.createLogEntry(LogLevel.ERROR, message, context, error);
-  }
-
-  public warn(
-    message: string,
-    context?: Record<string, unknown>,
-  ): LogEntry {
-    return this.createLogEntry(LogLevel.WARN, message, context);
-  }
-
-  public info(
-    message: string,
-    context?: Record<string, unknown>,
-  ): LogEntry {
-    return this.createLogEntry(LogLevel.INFO, message, context);
-  }
-
-  public debug(
-    message: string,
-    context?: Record<string, unknown>,
-  ): LogEntry {
-    return this.createLogEntry(LogLevel.DEBUG, message, context);
-  }
-
-  public enableRemoteLogging(url: string): void {
-    this.remoteLoggingEnabled = true;
-    this.remoteLoggingUrl = url;
-  }
-
-  public disableRemoteLogging(): void {
-    this.remoteLoggingEnabled = false;
-    this.remoteLoggingUrl = undefined;
-  }
-
-  public getLogs(): LogEntry[] {
-    return [...this.logs];
-  }
-
-  public clearLogs(): void {
-    this.logs = [];
-  }
-}
-
-export const logger = FrontendLogger.getInstance();
 export default logger;

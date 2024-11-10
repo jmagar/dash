@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["es2020"],
     "allowJs": true,
-    "outDir": "dist",
+    "outDir": "dist/server",
     "rootDir": "src",
     "strict": true,
     "noImplicitAny": true,
@@ -12,16 +12,24 @@
     "resolveJsonModule": true,
     "moduleResolution": "node",
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"]
+    }
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.js"
+    "src/server/**/*",
+    "src/**/*.server.ts",
+    "src/types/**/*"
   ],
   "exclude": [
     "node_modules",
-    "src/**/*.test.ts",
-    "src/**/*.spec.ts",
-    "src/**/*.tsx"
+    "src/**/*.client.ts",
+    "src/**/*.tsx",
+    "src/components/**/*",
+    "src/context/**/*",
+    "src/hooks/**/*",
+    "src/styles/**/*"
   ]
 }

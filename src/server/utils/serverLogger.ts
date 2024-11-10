@@ -1,25 +1,16 @@
+/* eslint-disable no-console */
 import fs from 'fs';
 import path from 'path';
 
 import type { Request, Response, NextFunction } from 'express';
 
-import { LogLevel } from './logger';
+import { LogLevel } from '../types/logger';
+import type { LogMeta, LogData, Logger } from '../types/logging';
 
 // Ensure logs directory exists in project root
 const logsDir = path.join(__dirname, '..', '..', 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
-}
-
-interface LogMeta {
-  [key: string]: unknown;
-}
-
-interface LogData {
-  timestamp: string;
-  level: LogLevel;
-  message: string;
-  meta?: LogMeta;
 }
 
 // Format log message
@@ -65,7 +56,7 @@ const nodeLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => 
 };
 
 // Create server logger instance
-export const serverLogger = {
+export const serverLogger: Logger = {
   error: (message: string, meta: LogMeta = {}): void => nodeLog(LogLevel.ERROR, message, meta),
   warn: (message: string, meta: LogMeta = {}): void => nodeLog(LogLevel.WARN, message, meta),
   info: (message: string, meta: LogMeta = {}): void => nodeLog(LogLevel.INFO, message, meta),

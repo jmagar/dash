@@ -12,8 +12,9 @@ import {
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { login } from '../api/auth';
+import { login } from '../client/api';
 import { useUserContext } from '../context/UserContext';
+import { AuthResult } from '../types';
 
 export default function Login(): JSX.Element {
   const navigate = useNavigate();
@@ -32,25 +33,27 @@ export default function Login(): JSX.Element {
     setError(null);
 
     try {
-      const result = await login(username, password, mfaToken);
+      const result = await login(username, password, rememberMe);
 
       if (!result.success) {
         throw new Error(result.error || 'Login failed');
       }
 
-      if (result.mfaRequired) {
+      const authResult = result.data as AuthResult;
+
+      if (authResult.mfaRequired) {
         setShowMfa(true);
         setLoading(false);
         return;
       }
 
-      if (result.data && result.token) {
+      if (authResult.data && authResult.token) {
         if (rememberMe) {
-          localStorage.setItem('token', result.token);
+          localStorage.setItem('token', authResult.token);
         } else {
-          sessionStorage.setItem('token', result.token);
+          sessionStorage.setItem('token', authResult.token);
         }
-        setUser(result.data);
+        setUser(authResult.data);
         navigate('/');
       }
     } catch (err) {

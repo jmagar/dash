@@ -39,10 +39,9 @@ export function useAsync<T>(
 
   useEffect(() => {
     if (options.immediate) {
-      execute();
+      void execute();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [execute, options.immediate, ...(options.deps || [])]);
+  }, [execute, options.immediate]);
 
   return {
     data,

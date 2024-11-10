@@ -7,8 +7,8 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import ComposePage from './Compose';
-import ContainersPage from './Containers';
+import DockerCompose from './DockerCompose';
+import DockerContainers from './DockerContainers';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -42,7 +42,7 @@ function a11yProps(index: number): {
   };
 }
 
-export default function DockerPage(): JSX.Element {
+export default function DockerManager(): JSX.Element {
   const [value, setValue] = useState(0);
 
   const handleChange = (_event: React.SyntheticEvent, newValue: number): void => {
@@ -72,10 +72,10 @@ export default function DockerPage(): JSX.Element {
         </Tabs>
       </Box>
       <TabPanel value={value} index={0}>
-        <ContainersPage />
+        <DockerContainers />
       </TabPanel>
       <TabPanel value={value} index={1}>
-        <ComposePage />
+        <DockerCompose />
       </TabPanel>
     </Box>
   );

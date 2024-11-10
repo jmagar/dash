@@ -3,27 +3,52 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Alert, IconButton } from '@mui/material';
-import * as React from 'react';
+import {
+  Box,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Alert,
+  IconButton,
+} from '@mui/material';
+import React, { useState } from 'react';
 
-import { createStack, deleteStack, startStack, stopStack, getStackComposeFile, updateStackComposeFile } from '../api/docker';
-import CodeEditor from '../components/CodeEditor';
+import {
+  createStack,
+  deleteStack,
+  startStack,
+  stopStack,
+  getStackComposeFile,
+  updateStackComposeFile,
+} from '../api';
+import CodeEditor from './CodeEditor';
 import { useDockerUpdates } from '../hooks';
 import type { Stack } from '../types';
 
-export default function ComposePage(): JSX.Element {
+export default function DockerCompose(): JSX.Element {
   const { data: rawStacks, loading, error, refetch } = useDockerUpdates({
     enabled: true,
     type: 'stacks',
   });
 
-  const [openCreateDialog, setOpenCreateDialog] = React.useState(false);
-  const [openEditDialog, setOpenEditDialog] = React.useState(false);
-  const [selectedStack, setSelectedStack] = React.useState<Stack | null>(null);
-  const [newStackName, setNewStackName] = React.useState('');
-  const [composeFile, setComposeFile] = React.useState('');
-  const [actionError, setActionError] = React.useState<string | null>(null);
-  const [actionLoading, setActionLoading] = React.useState(false);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [selectedStack, setSelectedStack] = useState<Stack | null>(null);
+  const [newStackName, setNewStackName] = useState('');
+  const [composeFile, setComposeFile] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const handleCreateStack = async (): Promise<void> => {
     try {

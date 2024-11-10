@@ -1,78 +1,24 @@
 {
-  "env": {
-    "node": true,
-    "commonjs": true,
-    "es2021": true
-  },
   "extends": [
-    "eslint:recommended"
+    "react-app",
+    "react-app/jest"
   ],
-  "parserOptions": {
-    "ecmaVersion": "latest",
-    "sourceType": "script"
-  },
   "rules": {
-    "strict": ["error", "global"],
-    "no-console": "off",
-    "no-unused-vars": ["error", {
-      "argsIgnorePattern": "^_",
-      "varsIgnorePattern": "^_"
-    }],
-    "semi": ["error", "always"],
-    "quotes": ["error", "single"],
-    "no-undef": "error",
-    "no-var": "error",
-    "prefer-const": "error",
-    "handle-callback-err": "error",
-    "no-promise-executor-return": "error",
-    "prefer-promise-reject-errors": "error",
-    "callback-return": "error",
-    "global-require": "error",
-    "no-buffer-constructor": "error",
-    "no-mixed-requires": "error",
-    "no-new-require": "error",
-    "no-path-concat": "error",
-    "no-eval": "error",
-    "no-implied-eval": "error",
-    // JavaScript-specific rules
-    "arrow-body-style": ["error", "as-needed"],
-    "arrow-parens": ["error", "always"],
-    "no-duplicate-imports": "error",
-    "no-useless-constructor": "error",
-    "prefer-arrow-callback": "error",
-    "prefer-template": "error",
-    // Disable problematic rules
-    "func-style": "off",
-    "require-await": "off",
-    // Remove TypeScript-specific rules
-    "@typescript-eslint/explicit-function-return-type": "off",
-    "@typescript-eslint/explicit-module-boundary-types": "off"
+    "no-console": ["error", {
+      "allow": ["warn", "error", "info", "debug"]
+    }]
   },
-  "ignorePatterns": ["dist/", "node_modules/"],
   "overrides": [
     {
-      "files": ["**/*.test.js", "**/*.spec.js", "tests/**/*.js"],
-      "env": {
-        "jest": true,
-        "mocha": true
-      },
-      "globals": {
-        "describe": "readonly",
-        "it": "readonly",
-        "expect": "readonly",
-        "beforeAll": "readonly",
-        "beforeEach": "readonly",
-        "afterAll": "readonly",
-        "afterEach": "readonly",
-        "jest": "readonly"
-      },
+      "files": ["src/utils/*Logger.ts"],
       "rules": {
-        "global-require": "off",
-        "no-undef": "off",
-        "func-style": "off",
-        "require-await": "off",
-        "max-nested-callbacks": ["error", 5]
+        "no-console": "off"
       }
     }
-  ]
+  ],
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  }
 }

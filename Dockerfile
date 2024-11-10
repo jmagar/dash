@@ -2,40 +2,52 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install system dependencies
+# Install build essentials
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
     openssh-client
 
-# Copy package files
+# Set production mode
+ENV NODE_ENV=production
+ENV SKIP_PREFLIGHT_CHECK=true
+
+# Copy package files first to leverage layer caching
 COPY package*.json ./
+
+# Install dependencies and necessary build tools
+RUN npm install --force && \
+    npm install -g react-scripts typescript
+
+# Copy source files
 COPY tsconfig*.json ./
+COPY .env.production ./
+COPY src ./src
+COPY public ./public
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
-
-# Copy source code
-COPY . .
-
-# Build frontend and backend
-RUN npm run build:all
+# Clean and build
+RUN rm -rf dist build && \
+    npm run build:all
 
 # Production stage
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Install production dependencies
+# Set production mode
+ENV NODE_ENV=production
+
+# Copy package files and install only production dependencies
 COPY package*.json ./
-RUN npm install --production --legacy-peer-deps
+RUN npm install --omit=dev --force --no-optional
 
 # Copy built files
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/.env.production ./
 
-# Create SSH directory
+# Create SSH directory with proper permissions
 RUN mkdir -p /root/.ssh && \
     chmod 700 /root/.ssh
 

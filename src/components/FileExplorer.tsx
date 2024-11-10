@@ -1,110 +1,62 @@
 import {
-  ArrowUpward as UpIcon,
   Add as AddIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
 import {
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Paper,
-  TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
-  InputAdornment,
-  Theme,
   Alert,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import { listFiles, deleteFile, createDirectory } from '../api/fileExplorer';
-import { useAsync, useDebounce, useKeyPress, useClickOutside } from '../hooks';
+import { listFiles, deleteFile, createDirectory } from '../client/api';
+import { useAsync, useDebounce, useKeyPress } from '../hooks';
 import type { FileItem, Host } from '../types';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
 
-interface CreateFolderDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (name: string) => void;
+interface Props {
+  hostId: number;
 }
 
-const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({ open, onClose, onConfirm }) => {
-  const [folderName, setFolderName] = useState('');
-  const dialogRef = useClickOutside<HTMLDivElement>(onClose);
-
-  useKeyPress('Escape', onClose);
-  useKeyPress('Enter', () => {
-    if (folderName.trim()) {
-      onConfirm(folderName.trim());
-      setFolderName('');
-    }
-  });
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Create New Folder</DialogTitle>
-      <DialogContent ref={dialogRef}>
-        <TextField
-          autoFocus
-          margin="dense"
-          label="Folder Name"
-          fullWidth
-          value={folderName}
-          onChange={(e): void => setFolderName(e.target.value)}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={(): void => {
-            if (folderName.trim()) {
-              onConfirm(folderName.trim());
-              setFolderName('');
-            }
-          }}
-          color="primary"
-          disabled={!folderName.trim()}
-        >
-          Create
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
-const FileExplorer: React.FC = () => {
+export default function FileExplorer({ hostId }: Props): JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>('/');
   const [selectedHost, setSelectedHost] = useState<Host | null>(null);
   const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const debouncedSearch = useDebounce(searchTerm, { delay: 300 });
+  const debouncedSearch = useDebounce(searchTerm, 300);
+
+  const loadFilesList = async (): Promise<FileItem[]> => {
+    if (!selectedHost) return [];
+    const response = await listFiles(selectedHost.id, currentPath);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to load files');
+    }
+    return response.data || [];
+  };
 
   const {
     data: files,
     loading,
     error: loadError,
     execute: loadFiles,
-  } = useAsync<FileItem[]>(
-    async () => {
-      if (!selectedHost) return [];
-      const response = await listFiles(selectedHost.id, currentPath);
-      return response.success ? response.data || [] : [];
-    },
-    {
-      deps: [selectedHost?.id, currentPath],
-      immediate: !!selectedHost,
-    },
-  );
+  } = useAsync(loadFilesList, {
+    deps: [selectedHost?.id, currentPath],
+    immediate: !!selectedHost,
+  });
 
   const filteredFiles = files?.filter(file =>
     file.name.toLowerCase().includes(debouncedSearch.toLowerCase()),
@@ -156,12 +108,14 @@ const FileExplorer: React.FC = () => {
     }
   };
 
-  useKeyPress('n', (e) => {
-    if (e.ctrlKey) {
+  const handleNewFolderKeyPress = (e: KeyboardEvent): void => {
+    if (e.ctrlKey && e.key === 'n') {
       e.preventDefault();
       setCreateFolderDialogOpen(true);
     }
-  });
+  };
+
+  useKeyPress('n', handleNewFolderKeyPress);
 
   if (!selectedHost) {
     return (
@@ -232,44 +186,28 @@ const FileExplorer: React.FC = () => {
         </Alert>
       )}
 
-      <Paper>
-        <List>
-          {currentPath !== '/' && (
-            <ListItem
-              onClick={handleNavigateUp}
-              sx={{
-                cursor: 'pointer',
-                '&:hover': {
-                  backgroundColor: (theme: Theme) => theme.palette.action.hover,
-                },
-              }}
-            >
-              <ListItemIcon>
-                <UpIcon />
-              </ListItemIcon>
-              <ListItemText primary=".." secondary="Parent Directory" />
-            </ListItem>
-          )}
-          {filteredFiles?.map((file) => (
-            <FileListItem
-              key={file.path}
-              file={file}
-              hostId={selectedHost.id}
-              onNavigate={handleNavigate}
-              onDelete={handleDeleteFile}
-              onError={setError}
-            />
-          ))}
-        </List>
-      </Paper>
-
-      <CreateFolderDialog
-        open={createFolderDialogOpen}
-        onClose={(): void => setCreateFolderDialogOpen(false)}
-        onConfirm={handleCreateFolder}
-      />
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Size</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredFiles?.map((item) => (
+              <FileListItem
+                key={item.path}
+                item={item}
+                hostId={selectedHost.id}
+                onNavigate={handleNavigate}
+                onDelete={handleDeleteFile}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Box>
   );
-};
-
-export default FileExplorer;
+}

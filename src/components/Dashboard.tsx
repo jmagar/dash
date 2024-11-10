@@ -1,214 +1,149 @@
 import {
-  Refresh as RefreshIcon,
-  Computer as ComputerIcon,
-  Storage as StorageIcon,
-  Memory as MemoryIcon,
-  NetworkCheck as NetworkIcon,
-} from '@mui/icons-material';
-import {
   Box,
-  Button,
   Card,
   CardContent,
   Grid,
-  Typography,
-  IconButton,
   LinearProgress,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
+  Typography,
 } from '@mui/material';
 import React from 'react';
 
-import { getSystemStats, getHostStatus } from '../api/hosts';
-import { useAsync, useThrottle, useIntersectionObserver } from '../hooks';
+import { getSystemStats, getHostStatus } from '../client/api';
+import { useAsync, useThrottle } from '../hooks';
+import type { SystemStats } from '../types';
 import LoadingScreen from './LoadingScreen';
-import type { Host, SystemStats } from '../types/models';
 
-const formatBytes = (bytes: number): string => {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-
-  return `${value.toFixed(2)} ${units[unitIndex]}`;
-};
-
-interface StatItemProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  progress?: number;
+interface Props {
+  hostId: number;
 }
 
-const StatItem: React.FC<StatItemProps> = ({
-  icon,
-  label,
-  value,
-  progress,
-}) => (
-  <ListItem>
-    <ListItemIcon>{icon}</ListItemIcon>
-    <ListItemText primary={label} secondary={value} />
-    {progress !== undefined && (
-      <LinearProgress
-        variant="determinate"
-        value={progress}
-        sx={{ width: 100, ml: 2 }}
-      />
-    )}
-  </ListItem>
-);
-
-interface HostCardProps {
-  host: Host;
+interface StatCardProps {
+  title: string;
+  value: number;
+  total?: number;
+  unit: string;
 }
 
-const HostCard: React.FC<HostCardProps> = ({ host }: HostCardProps) => {
-  const [ref, isVisible] = useIntersectionObserver<HTMLDivElement>({
-    threshold: 0.1,
-    rootMargin: '50px',
-  });
-
-  const {
-    data: stats,
-    loading,
-    error,
-    execute: loadStats,
-  } = useAsync<SystemStats>(
-    async () => {
-      if (!isVisible) {
-        throw new Error('Host card not visible');
-      }
-      const response = await getSystemStats(host.id);
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to load system stats');
-      }
-      return response.data;
-    },
-    {
-      deps: [isVisible],
-      immediate: isVisible,
-    },
-  );
-
-  const throttledStats = useThrottle(stats, 1000);
+const StatCard: React.FC<StatCardProps> = ({ title, value, total, unit }) => {
+  const percentage = total ? (value / total) * 100 : value;
 
   return (
-    <Card ref={ref}>
+    <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <ComputerIcon sx={{ mr: 1 }} />
-          <Typography variant="h6">{host.name}</Typography>
-          <Box sx={{ flexGrow: 1 }} />
-          <IconButton
-            onClick={(): void => void loadStats()}
-            disabled={loading}
-            title="Refresh stats"
-          >
-            <RefreshIcon />
-          </IconButton>
-        </Box>
-
-        {loading ? (
-          <LinearProgress />
-        ) : error ? (
-          <Typography color="error">{error}</Typography>
-        ) : throttledStats ? (
-          <List dense>
-            <StatItem
-              icon={<MemoryIcon />}
-              label="CPU Usage"
-              value={`${throttledStats.cpu.toFixed(1)}%`}
-              progress={throttledStats.cpu}
-            />
-            <StatItem
-              icon={<StorageIcon />}
-              label="Memory"
-              value={`${formatBytes(throttledStats.memory.used)} / ${formatBytes(
-                throttledStats.memory.total,
-              )}`}
-              progress={(throttledStats.memory.used / throttledStats.memory.total) * 100}
-            />
-            <StatItem
-              icon={<StorageIcon />}
-              label="Disk"
-              value={`${formatBytes(throttledStats.disk.used)} / ${formatBytes(
-                throttledStats.disk.total,
-              )}`}
-              progress={(throttledStats.disk.used / throttledStats.disk.total) * 100}
-            />
-            <StatItem
-              icon={<NetworkIcon />}
-              label="Network"
-              value={`↓ ${formatBytes(throttledStats.network.rx)}/s  ↑ ${formatBytes(
-                throttledStats.network.tx,
-              )}/s`}
-            />
-          </List>
-        ) : null}
+        <Typography variant="h6" gutterBottom>
+          {title}
+        </Typography>
+        <Typography variant="body1">
+          {value.toFixed(1)} {unit}
+          {total && ` / ${total.toFixed(1)} ${unit}`}
+        </Typography>
+        <LinearProgress
+          variant="determinate"
+          value={Math.min(percentage, 100)}
+          sx={{ mt: 1 }}
+        />
       </CardContent>
     </Card>
   );
 };
 
-const Dashboard: React.FC = () => {
-  const {
-    data: hosts,
-    loading,
-    error,
-    execute: loadHosts,
-  } = useAsync<Host[]>(
-    async () => {
-      const response = await getHostStatus();
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to load hosts');
-      }
-      return response.data;
-    },
-    {
-      immediate: true,
-    },
-  );
+export default function Dashboard({ hostId }: Props): JSX.Element {
+  const loadStats = async (): Promise<SystemStats> => {
+    const result = await getSystemStats(hostId);
+    if (!result.success || !result.data) {
+      throw new Error(result.error || 'Failed to load system stats');
+    }
+    return result.data;
+  };
 
-  if (loading) {
-    return <LoadingScreen fullscreen={false} message="Loading hosts..." />;
+  const checkStatus = async (): Promise<boolean> => {
+    const result = await getHostStatus(hostId);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to check host status');
+    }
+    return result.data || false;
+  };
+
+  const throttledLoadStats = useThrottle(loadStats, 5000);
+
+  const {
+    data: stats,
+    loading: statsLoading,
+    error: statsError,
+  } = useAsync<SystemStats>(throttledLoadStats, { immediate: true });
+
+  const {
+    data: connected,
+    loading: statusLoading,
+    error: statusError,
+  } = useAsync<boolean>(checkStatus, { immediate: true });
+
+  if (statsLoading || statusLoading) {
+    return <LoadingScreen fullscreen={false} message="Loading system stats..." />;
   }
 
-  if (error) {
+  if (statsError || statusError) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
-        <Button
-          variant="contained"
-          onClick={(): void => void loadHosts()}
-        >
-          Retry
-        </Button>
-      </Box>
+      <Typography color="error" sx={{ p: 3 }}>
+        {statsError || statusError}
+      </Typography>
+    );
+  }
+
+  if (!connected) {
+    return (
+      <Typography color="error" sx={{ p: 3 }}>
+        Host is not connected
+      </Typography>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <Typography color="error" sx={{ p: 3 }}>
+        No system stats available
+      </Typography>
     );
   }
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
-        System Dashboard
+        System Statistics
       </Typography>
 
       <Grid container spacing={3}>
-        {hosts?.map((host: Host) => (
-          <Grid item xs={12} md={6} lg={4} key={host.id}>
-            <HostCard host={host} />
-          </Grid>
-        ))}
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="CPU Usage"
+            value={stats.cpu}
+            unit="%"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Memory Usage"
+            value={stats.memory.used}
+            total={stats.memory.total}
+            unit="GB"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Disk Usage"
+            value={stats.disk.used}
+            total={stats.disk.total}
+            unit="GB"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Network Traffic"
+            value={(stats.network.rx + stats.network.tx) / 1024 / 1024}
+            unit="MB/s"
+          />
+        </Grid>
       </Grid>
     </Box>
   );
-};
-
-export default Dashboard;
+}

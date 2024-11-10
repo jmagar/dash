@@ -1,177 +1,141 @@
-import DeleteIcon from '@mui/icons-material/Delete';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import SaveIcon from '@mui/icons-material/Save';
 import {
   Box,
   Button,
-  IconButton,
-  List,
-  ListItem,
-  ListItemSecondaryAction,
-  ListItemText,
   Paper,
   TextField,
   Typography,
+  Alert,
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import { executeCommand } from '../api/remoteExecution';
+import { executeCommand } from '../client/api';
 import { useAsync } from '../hooks';
-import type { CommandResult } from '../types/models';
+import type { Command, CommandResult } from '../types';
+import LoadingScreen from './LoadingScreen';
 
-interface RemoteExecutionProps {
+interface Props {
   hostId: number;
 }
 
-interface SavedCommand {
-  id: string;
-  command: string;
-  description?: string;
-}
+export default function RemoteExecution({ hostId }: Props): JSX.Element {
+  const [command, setCommand] = useState('');
+  const [workingDirectory, setWorkingDirectory] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-export default function RemoteExecution({ hostId }: RemoteExecutionProps): JSX.Element {
-  const [command, setCommand] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [savedCommands, setSavedCommands] = useState<SavedCommand[]>([]);
+  const executeCommandAsync = async (): Promise<CommandResult> => {
+    const cmd: Command = {
+      command,
+      workingDirectory: workingDirectory || undefined,
+    };
+    const result = await executeCommand(hostId, cmd);
+    if (!result.success || !result.data) {
+      throw new Error(result.error || 'Failed to execute command');
+    }
+    return result.data;
+  };
 
   const {
-    data: commandResult,
+    execute,
+    data: result,
     loading,
-    error,
-    execute: runCommand,
-  } = useAsync<CommandResult>(
-    async (): Promise<CommandResult> => {
-      const result = await executeCommand(hostId, command);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to execute command');
-      }
-      if (!result.data) {
-        throw new Error('No command result returned');
-      }
-      return result.data;
-    },
-    { immediate: false },
-  );
+    error: asyncError,
+  } = useAsync<CommandResult>(executeCommandAsync);
 
-  const handleCommandChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setCommand(e.target.value);
-  };
-
-  const handleDescriptionChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setDescription(e.target.value);
-  };
-
-  const handleExecute = async (): Promise<void> => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setError(null);
+    if (!command.trim()) {
+      setError('Please enter a command');
+      return;
+    }
     try {
-      await runCommand();
+      await execute();
     } catch (err) {
-      console.error('Failed to execute command:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 
-  const handleSaveCommand = (): void => {
-    if (!command) return;
-
-    const newCommand: SavedCommand = {
-      id: Date.now().toString(),
-      command,
-      description,
-    };
-
-    setSavedCommands((prev) => [...prev, newCommand]);
-    setCommand('');
-    setDescription('');
-  };
-
-  const handleDeleteSavedCommand = (id: string): void => {
-    setSavedCommands((prev) => prev.filter((cmd) => cmd.id !== id));
-  };
-
-  const handleLoadSavedCommand = (savedCommand: SavedCommand): void => {
-    setCommand(savedCommand.command);
-    setDescription(savedCommand.description || '');
-  };
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom>
+        Remote Command Execution
+      </Typography>
+
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <form onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label="Working Directory"
+            value={workingDirectory}
+            onChange={(e): void => setWorkingDirectory(e.target.value)}
+            margin="normal"
+            placeholder="/path/to/directory"
+          />
           <TextField
             fullWidth
             label="Command"
             value={command}
-            onChange={handleCommandChange}
-            disabled={loading}
+            onChange={(e): void => setCommand(e.target.value)}
+            margin="normal"
+            required
+            placeholder="Enter command to execute"
           />
           <Button
+            type="submit"
             variant="contained"
-            startIcon={<PlayArrowIcon />}
-            onClick={handleExecute}
-            disabled={loading || !command}
+            disabled={loading || !command.trim()}
+            sx={{ mt: 2 }}
           >
             Execute
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SaveIcon />}
-            onClick={handleSaveCommand}
-            disabled={!command}
-          >
-            Save
-          </Button>
-        </Box>
-        <TextField
-          fullWidth
-          label="Description (Optional)"
-          value={description}
-          onChange={handleDescriptionChange}
-          disabled={loading}
-          sx={{ mb: 2 }}
-        />
-        {error && (
-          <Typography color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-        {commandResult && (
-          <Box>
-            <Typography variant="h6">Output:</Typography>
-            <pre>{commandResult.stdout || commandResult.stderr}</pre>
-          </Box>
-        )}
+        </form>
       </Paper>
 
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>Saved Commands</Typography>
-        <List>
-          {savedCommands.length === 0 ? (
-            <ListItem>
-              <ListItemText primary="No saved commands" />
-            </ListItem>
-          ) : (
-            savedCommands.map((savedCmd) => (
-              <ListItem
-                key={savedCmd.id}
-                button
-                onClick={(): void => handleLoadSavedCommand(savedCmd)}
-              >
-                <ListItemText
-                  primary={savedCmd.command}
-                  secondary={savedCmd.description}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    onClick={(): void => handleDeleteSavedCommand(savedCmd.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))
-          )}
-        </List>
-      </Paper>
+      {loading && <LoadingScreen fullscreen={false} message="Executing command..." />}
+
+      {(error || asyncError) && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error || asyncError}
+        </Alert>
+      )}
+
+      {result && (
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Result
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              p: 2,
+              bgcolor: 'background.default',
+              borderRadius: 1,
+              overflow: 'auto',
+              maxHeight: 400,
+            }}
+          >
+            {result.stdout && (
+              <>
+                <Typography variant="subtitle2" color="success.main">
+                  Standard Output:
+                </Typography>
+                {result.stdout}
+              </>
+            )}
+            {result.stderr && (
+              <>
+                <Typography variant="subtitle2" color="error" sx={{ mt: 2 }}>
+                  Standard Error:
+                </Typography>
+                {result.stderr}
+              </>
+            )}
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>
+              Exit Code: {result.exitCode}
+            </Typography>
+          </Box>
+        </Paper>
+      )}
     </Box>
   );
 }

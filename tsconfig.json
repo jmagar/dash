@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    // Basic Compiler Options
     "target": "es2020",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
@@ -9,62 +8,25 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-
-    // Module Resolution
+    "noFallthroughCasesInSwitch": true,
     "module": "esnext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "baseUrl": ".",
-
-    // React-specific Options
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
-
-    // Emit Options
     "noEmit": true,
-
-    // Strict Type Checking
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-
-    // Additional Checks
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-
-    // Path Aliases
+    "jsx": "react-jsx",
+    "baseUrl": "src",
     "paths": {
-      "src/*": ["src/*"],
-      "@mui/*": ["node_modules/@mui/*"],
-      "react": ["node_modules/react"],
-      "react-dom/*": ["node_modules/react-dom/*"],
-      "react-router-dom": ["node_modules/react-router-dom"],
-      "axios": ["node_modules/axios"],
-      "socket.io-client": ["node_modules/socket.io-client"],
-      "xterm": ["node_modules/xterm"],
-      "xterm-addon-fit": ["node_modules/xterm-addon-fit"],
-      "xterm-addon-web-links": ["node_modules/xterm-addon-web-links"]
+      "@/*": ["*"]
     }
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.js",
-    "scripts/**/*.ts",
-    "scripts/**/*.cjs",
-    "routes/**/*.js",
-    ".eslintrc.cjs"
+    "src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
-    "build",
-    "dist"
+    "src/server/**/*",
+    "**/*.server.ts"
   ]
 }

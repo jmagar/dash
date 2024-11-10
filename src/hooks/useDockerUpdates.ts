@@ -3,7 +3,7 @@ import { io as socketIo, Socket } from 'socket.io-client';
 
 import { getContainers, getStacks } from '../api/docker';
 import type { Container, Stack } from '../types';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 
 export interface UseDockerUpdatesOptions {
   enabled?: boolean;

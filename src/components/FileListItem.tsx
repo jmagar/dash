@@ -1,178 +1,171 @@
 import {
-  Folder as FolderIcon,
-  InsertDriveFile as FileIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
+  Folder as FolderIcon,
+  InsertDriveFile as FileIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
 import {
+  Box,
+  IconButton,
   ListItem,
   ListItemIcon,
   ListItemText,
-  IconButton,
-  Theme,
+  TextField,
+  Typography,
 } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 
-import CodeEditor from './CodeEditor';
-import { readFile, writeFile } from '../api/fileExplorer';
+import { readFile, writeFile } from '../client/api';
+import { useAsync, useKeyPress } from '../hooks';
 import type { FileItem } from '../types';
 
-interface FileListItemProps {
-  file: FileItem;
-  hostId: number;
+interface Props {
+  item: FileItem;
+  onDelete: (path: string) => void;
   onNavigate?: (path: string) => void;
-  onDelete?: (path: string) => void;
-  onError?: (error: string) => void;
+  hostId: number;
 }
 
-const isTextFile = (fileName: string): boolean => {
-  const textExtensions = [
-    'txt', 'md', 'json', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'jsx', 'ts', 'tsx',
-    'conf', 'config', 'ini', 'sh', 'bash', 'env', 'log', 'sql', 'properties',
-  ];
-  const extension = fileName.split('.').pop()?.toLowerCase() || '';
-  return textExtensions.includes(extension) ||
-         fileName.startsWith('.env') ||
-         fileName.includes('.env.');
-};
+export default function FileListItem({
+  item,
+  onDelete,
+  onNavigate,
+  hostId,
+}: Props): JSX.Element {
+  const [isEditing, setIsEditing] = useState(false);
+  const [content, setContent] = useState('');
+  const editRef = useRef<HTMLDivElement>(null);
 
-const getLanguageFromFileName = (fileName: string): string => {
-  const extension = fileName.split('.').pop()?.toLowerCase() || '';
-  const languageMap: Record<string, string> = {
-    js: 'javascript',
-    jsx: 'javascript',
-    ts: 'typescript',
-    tsx: 'typescript',
-    json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    xml: 'xml',
-    html: 'html',
-    css: 'css',
-    md: 'markdown',
-    sql: 'sql',
-    sh: 'shell',
-    bash: 'shell',
-    env: 'ini',
+  const handleReadFile = useCallback(() => readFile(hostId, item.path), [hostId, item.path]);
+  const handleWriteFile = useCallback(() => writeFile(hostId, item.path, content), [hostId, item.path, content]);
+
+  const { execute: executeRead, loading: loadingRead } = useAsync(handleReadFile);
+  const { execute: executeWrite, loading: loadingWrite } = useAsync(handleWriteFile);
+
+  const handleKeyPress = (e: KeyboardEvent): void => {
+    if (e.key === 'Enter' && isEditing) {
+      void handleSave();
+    } else if (e.key === 'Escape' && isEditing) {
+      handleCancel();
+    }
   };
 
-  // Special handling for .env files
-  if (fileName.startsWith('.env') || fileName.includes('.env.')) {
-    return 'ini';
-  }
+  useKeyPress('Enter', handleKeyPress);
+  useKeyPress('Escape', handleKeyPress);
 
-  return languageMap[extension] || 'plaintext';
-};
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent): void => {
+      if (editRef.current && !editRef.current.contains(event.target as Node)) {
+        if (isEditing) {
+          handleCancel();
+        }
+      }
+    };
 
-const FileListItem: React.FC<FileListItemProps> = ({
-  file,
-  hostId,
-  onNavigate,
-  onDelete,
-  onError,
-}) => {
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isEditing]);
+
+  const handleEdit = async (): Promise<void> => {
+    if (item.type === 'file') {
+      const result = await executeRead();
+      if (result.success && result.data) {
+        setContent(result.data);
+        setIsEditing(true);
+      }
+    }
+  };
+
+  const handleSave = async (): Promise<void> => {
+    if (item.type === 'file') {
+      const result = await executeWrite();
+      if (result.success) {
+        setIsEditing(false);
+      }
+    }
+  };
+
+  const handleCancel = (): void => {
+    setIsEditing(false);
+    setContent('');
+  };
+
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    setContent(e.target.value);
+  };
 
   const handleClick = (): void => {
-    if (file.type === 'directory' && onNavigate) {
-      onNavigate(file.path);
+    if (item.type === 'directory' && onNavigate) {
+      onNavigate(item.path);
     }
   };
 
-  const handleDelete = (e: React.MouseEvent): void => {
-    e.stopPropagation();
-    if (onDelete) {
-      onDelete(file.path);
-    }
+  const handleDelete = (): void => {
+    onDelete(item.path);
   };
 
-  const handleEdit = async (e: React.MouseEvent): Promise<void> => {
-    e.stopPropagation();
-    try {
-      setLoading(true);
-      const result = await readFile(hostId, file.path);
-      if (result.success && result.data) {
-        setFileContent(result.data);
-        setEditorOpen(true);
-      } else {
-        onError?.(result.error || 'Failed to read file');
-      }
-    } catch (err) {
-      onError?.(err instanceof Error ? err.message : 'Failed to read file');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async (content: string): Promise<void> => {
-    try {
-      const result = await writeFile(hostId, file.path, content);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save file');
-      }
-    } catch (err) {
-      throw err instanceof Error ? err : new Error('Failed to save file');
-    }
-  };
+  if (isEditing) {
+    return (
+      <Box ref={editRef} sx={{ p: 2, width: '100%' }}>
+        <TextField
+          fullWidth
+          multiline
+          rows={10}
+          value={content}
+          onChange={handleContentChange}
+          disabled={loadingWrite}
+        />
+        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          <IconButton onClick={handleCancel} disabled={loadingWrite}>
+            <CancelIcon />
+          </IconButton>
+          <IconButton onClick={(): void => void handleSave()} disabled={loadingWrite}>
+            <SaveIcon />
+          </IconButton>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
-    <>
-      <ListItem
-        onClick={handleClick}
-        sx={{
-          cursor: file.type === 'directory' ? 'pointer' : 'default',
-          '&:hover': {
-            backgroundColor: (theme: Theme) =>
-              file.type === 'directory' ? theme.palette.action.hover : 'inherit',
-          },
-        }}
-      >
-        <ListItemIcon>
-          {file.type === 'directory' ? <FolderIcon /> : <FileIcon />}
-        </ListItemIcon>
-        <ListItemText
-          primary={file.name}
-          secondary={`${file.size} bytes - Modified: ${new Date(file.modified).toLocaleString()}`}
-        />
-        {file.type === 'file' && isTextFile(file.name) && (
-          <IconButton
-            edge="end"
-            aria-label="edit"
-            onClick={handleEdit}
-            disabled={loading}
-            title="Edit file"
-          >
-            <EditIcon />
-          </IconButton>
-        )}
+    <ListItem
+      onClick={handleClick}
+      sx={{
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        cursor: item.type === 'directory' ? 'pointer' : 'default',
+      }}
+    >
+      <ListItemIcon>
+        {item.type === 'directory' ? <FolderIcon /> : <FileIcon />}
+      </ListItemIcon>
+      <ListItemText
+        primary={item.name}
+        secondary={
+          <Typography variant="body2" color="textSecondary">
+            {item.size} bytes
+          </Typography>
+        }
+      />
+      {item.type === 'file' && (
         <IconButton
-          edge="end"
-          aria-label="delete"
-          onClick={handleDelete}
-          disabled={loading}
-          title="Delete file"
+          onClick={(): void => void handleEdit()}
+          disabled={loadingRead}
+          sx={{ mr: 1 }}
         >
-          <DeleteIcon />
+          <EditIcon />
         </IconButton>
-      </ListItem>
-
-      {editorOpen && fileContent !== null && (
-        <CodeEditor
-          open={editorOpen}
-          onClose={(): void => {
-            setEditorOpen(false);
-            setFileContent(null);
-          }}
-          onSave={handleSave}
-          initialContent={fileContent}
-          title={file.name}
-          language={getLanguageFromFileName(file.name)}
-        />
       )}
-    </>
+      <IconButton onClick={handleDelete}>
+        <DeleteIcon />
+      </IconButton>
+    </ListItem>
   );
-};
-
-export default FileListItem;
+}
