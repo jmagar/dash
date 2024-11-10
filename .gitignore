@@ -1,5 +1,5 @@
 # Dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.js
 
@@ -38,13 +38,9 @@ Thumbs.db
 .cache/
 .npm/
 
-# Backend specific
-/backend/node_modules/
-/backend/dist/
-/backend/coverage/
-/backend/.env
-/backend/logs/
-/backend/*.log
+# Logs
+/logs/
+*.log
 
 # Docker
 .docker/
@@ -58,5 +54,4 @@ id_rsa.pub
 known_hosts
 
 # Misc
-*.log
 .DS_Store

@@ -1,6 +1,6 @@
 # SSH Remote Management
 
-A modern web interface for managing remote servers through SSH, with support for file management, package management, and Docker containers.
+A modern web interface for managing remote servers through SSH with support for file management, package management, and Docker containers.
 
 ## Features
 
@@ -15,21 +15,15 @@ A modern web interface for managing remote servers through SSH, with support for
 
 ## Tech Stack
 
-### Frontend
-
 - React with TypeScript
 - Material-UI Components
-- WebSocket for Real-time Updates
-- Custom React Hooks
-- Context API for State Management
-
-### Backend
-
 - Node.js/Express
 - PostgreSQL Database
 - Redis Caching
-- WebSocket Server
+- WebSocket for Real-time Updates
 - SSH2 for Remote Access
+- Custom React Hooks
+- Context API for State Management
 
 ## Quick Start
 
@@ -40,97 +34,88 @@ git clone https://github.com/yourusername/shh.git
 cd shh
 ```
 
-1. Install dependencies:
+2. Install dependencies:
 
 ```bash
-# Frontend dependencies
 npm install
-
-# Backend dependencies
-cd backend
-npm install
-cd ..
 ```
 
-1. Set up environment variables:
+3. Set up environment variables:
 
 ```bash
-# Frontend
 cp .env.example .env
-
-# Backend
-cd backend
-cp .env.example .env
-cd ..
 ```
 
-1. Start the services:
+4. Start the services:
 
 ```bash
 docker compose up
 ```
 
 The application will be available at:
-
 - Frontend: `http://localhost:3000`
-- Backend: `http://localhost:4000`
+- API Server: `http://localhost:4000`
 
 ## Development
 
-Start the development server:
+Start the development servers:
 
 ```bash
-# Frontend
+# Start frontend development server
 npm start
 
-# Backend
-cd backend
-npm run dev
+# Start API server in development mode
+npm run dev:server
 ```
 
 ## Project Structure
 
 ```plaintext
 .
-├── src/                    # Frontend source code
+├── src/                    # Source code
 │   ├── api/               # API client functions
 │   ├── components/        # React components
 │   ├── context/          # React context providers
 │   ├── hooks/            # Custom React hooks
+│   ├── middleware/       # Express middleware
 │   ├── pages/            # Page components
 │   ├── styles/           # Global styles
-│   └── types/            # TypeScript definitions
-├── backend/              # Backend source code
-│   ├── routes/           # API routes
-│   ├── middleware/       # Express middleware
-│   ├── db/              # Database setup
-│   └── cache/           # Redis cache setup
-├── db/                  # Database migrations
-└── docker-compose.yml   # Docker services config
+│   ├── types/            # TypeScript definitions
+│   └── utils/            # Shared utilities
+├── routes/               # API routes
+├── db/                   # Database migrations
+└── docker-compose.yml    # Docker services config
 ```
 
 ## Available Scripts
 
-Frontend:
-
 ```bash
-npm start          # Start development server
-npm run build      # Build for production
+# Development
+npm start          # Start frontend development server
+npm run dev:server # Start API server in development mode
+
+# Building
+npm run build      # Build frontend for production
+
+# Testing
+npm test           # Run tests
 npm run lint       # Run ESLint
 npm run format     # Run Prettier
-```
 
-Backend:
-
-```bash
-npm run dev        # Start development server
-npm start          # Start production server
+# Database
 npm run migrate    # Run database migrations
 ```
 
 ## Environment Variables
 
-See `.env.example` and `backend/.env.example` for required environment variables.
+See `.env.example` for required environment variables.
+
+Key variables include:
+- `PORT`: API server port (default: 4000)
+- `DATABASE_URL`: PostgreSQL connection string
+- `REDIS_URL`: Redis connection string
+- `JWT_SECRET`: Secret for JWT signing
+- `FRONTEND_URL`: Frontend URL for CORS
 
 ## Security
 
@@ -145,10 +130,10 @@ See `.env.example` and `backend/.env.example` for required environment variables
 ## Contributing
 
 1. Fork the repository
-1. Create your feature branch
-1. Commit your changes
-1. Push to the branch
-1. Create a Pull Request
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 

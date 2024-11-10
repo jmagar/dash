@@ -128,7 +128,7 @@ module.exports = {
       },
     },
     {
-      files: ['scripts/**/*.ts', 'backend/**/*.js'],
+      files: ['scripts/**/*.ts', 'src/**/*.js', 'routes/**/*.js'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
         'no-console': 'off',
