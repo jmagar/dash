@@ -1,35 +1,28 @@
 {
   "compilerOptions": {
-    "target": "es2020",
+    "target": "ES2020",
     "module": "commonjs",
     "lib": ["es2020"],
     "allowJs": true,
-    "outDir": "dist/server",
-    "rootDir": "src",
-    "strict": true,
-    "noImplicitAny": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "node",
     "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": "src",
+    "noFallthroughCasesInSwitch": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["src/*"]
     }
   },
   "include": [
-    "src/server/**/*",
-    "src/**/*.server.ts",
-    "src/types/**/*"
+    "src/server/**/*.ts",
+    "src/server/**/*.js",
+    "src/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "src/**/*.client.ts",
-    "src/**/*.tsx",
-    "src/components/**/*",
-    "src/context/**/*",
-    "src/hooks/**/*",
-    "src/styles/**/*"
-  ]
+  "exclude": ["node_modules"]
 }

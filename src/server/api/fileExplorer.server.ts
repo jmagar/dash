@@ -1,91 +1,110 @@
-import axios from 'axios';
+import fs from 'fs/promises';
+import path from 'path';
 
-import { FileItem, ApiResult } from '../types';
-import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+import { Request, Response } from 'express';
 
-export const listFiles = async (
-  hostId: number,
-  path: string,
-): Promise<ApiResult<FileItem[]>> => {
+import type { ApiResult } from '../../types/api-shared';
+import type { FileItem } from '../../types/models-shared';
+import { handleApiError } from '../../utils/error';
+
+export async function listFiles(req: Request, res: Response): Promise<void> {
+  const { path: dirPath } = req.query;
+
   try {
-    const { data } = await axios.get<FileItem[]>(
-      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`,
-      { params: { path } },
+    const files = await fs.readdir(dirPath as string, { withFileTypes: true });
+    const fileList: FileItem[] = await Promise.all(
+      files.map(async (file) => {
+        const filePath = path.join(dirPath as string, file.name);
+        const stats = await fs.stat(filePath);
+        return {
+          name: file.name,
+          path: filePath,
+          type: file.isDirectory() ? 'directory' : 'file',
+          size: stats.size,
+          modified: stats.mtime,
+        };
+      }),
     );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<FileItem[]>(error);
-  }
-};
 
-export const deleteFile = async (
-  hostId: number,
-  path: string,
-): Promise<ApiResult<void>> => {
-  try {
-    await axios.delete(`${BASE_URL}${API_ENDPOINTS.FILES.DELETE(hostId)}`, {
-      params: { path },
-    });
-    return {
+    const result: ApiResult<FileItem[]> = {
       success: true,
+      data: fileList,
     };
-  } catch (error) {
-    return handleApiError<void>(error);
-  }
-};
 
-export const createDirectory = async (
-  hostId: number,
-  path: string,
-): Promise<ApiResult<void>> => {
-  try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`, {
-      path,
-      type: 'directory',
-    });
-    return {
-      success: true,
-    };
+    res.json(result);
   } catch (error) {
-    return handleApiError<void>(error);
+    const errorResult = handleApiError<FileItem[]>(error);
+    res.status(500).json(errorResult);
   }
-};
+}
 
-export const readFile = async (
-  hostId: number,
-  path: string,
-): Promise<ApiResult<string>> => {
-  try {
-    const { data } = await axios.get<{ content: string }>(
-      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}/content`,
-      { params: { path } },
-    );
-    return {
-      success: true,
-      data: data.content,
-    };
-  } catch (error) {
-    return handleApiError<string>(error);
-  }
-};
+export async function readFile(req: Request, res: Response): Promise<void> {
+  const { path: filePath } = req.query;
 
-export const writeFile = async (
-  hostId: number,
-  path: string,
-  content: string,
-): Promise<ApiResult<void>> => {
   try {
-    await axios.put(
-      `${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}/content`,
-      { path, content },
-    );
-    return {
+    const content = await fs.readFile(filePath as string, 'utf-8');
+    const result: ApiResult<string> = {
+      success: true,
+      data: content,
+    };
+
+    res.json(result);
+  } catch (error) {
+    const errorResult = handleApiError<string>(error);
+    res.status(500).json(errorResult);
+  }
+}
+
+export async function writeFile(req: Request, res: Response): Promise<void> {
+  const { path: filePath, content } = req.body;
+
+  try {
+    await fs.writeFile(filePath, content, 'utf-8');
+    const result: ApiResult<void> = {
       success: true,
     };
+
+    res.json(result);
   } catch (error) {
-    return handleApiError<void>(error);
+    const errorResult = handleApiError(error);
+    res.status(500).json(errorResult);
   }
-};
+}
+
+export async function deleteFile(req: Request, res: Response): Promise<void> {
+  const { path: filePath } = req.query;
+
+  try {
+    const stats = await fs.stat(filePath as string);
+    if (stats.isDirectory()) {
+      await fs.rmdir(filePath as string);
+    } else {
+      await fs.unlink(filePath as string);
+    }
+
+    const result: ApiResult<void> = {
+      success: true,
+    };
+
+    res.json(result);
+  } catch (error) {
+    const errorResult = handleApiError(error);
+    res.status(500).json(errorResult);
+  }
+}
+
+export async function createDirectory(req: Request, res: Response): Promise<void> {
+  const { path: dirPath } = req.body;
+
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+    const result: ApiResult<void> = {
+      success: true,
+    };
+
+    res.json(result);
+  } catch (error) {
+    const errorResult = handleApiError(error);
+    res.status(500).json(errorResult);
+  }
+}

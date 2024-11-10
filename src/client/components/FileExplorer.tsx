@@ -1,6 +1,7 @@
 import {
   Add as AddIcon,
   Search as SearchIcon,
+  ArrowUpward as ArrowUpIcon,
 } from '@mui/icons-material';
 import {
   Box,
@@ -29,10 +30,6 @@ import { useAsync, useDebounce, useKeyPress } from '../hooks';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
-
-interface Props {
-  hostId: number;
-}
 
 export default function FileExplorer(): JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>('/');
@@ -161,6 +158,16 @@ export default function FileExplorer(): JSX.Element {
         <Typography variant="subtitle1" color="textSecondary">
           {selectedHost.name} - {currentPath}
         </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowUpIcon />}
+            onClick={handleNavigateUp}
+            disabled={currentPath === '/'}
+          >
+            Up
+          </Button>
+        </Box>
         <Box sx={{ flexGrow: 1 }}>
           <TextField
             size="small"

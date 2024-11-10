@@ -1,4 +1,4 @@
-import { isAxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 
 export interface ApiResult<T> {
   success: boolean;
@@ -54,11 +54,16 @@ export interface ExecutionResult {
   error?: string;
 }
 
+interface ApiErrorResponse {
+  message?: string;
+}
+
 export const handleApiError = <T>(error: unknown): ApiResult<T> => {
-  if (isAxiosError(error)) {
+  if (error && typeof error === 'object' && 'isAxiosError' in error) {
+    const axiosError = error as AxiosError<ApiErrorResponse>;
     return {
       success: false,
-      error: error.response?.data?.message || error.message || 'An unknown error occurred',
+      error: axiosError.response?.data?.message || axiosError.message || 'An unknown error occurred',
     };
   }
   return {

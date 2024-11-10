@@ -1,77 +1,58 @@
-import axios from 'axios';
+import bcrypt from 'bcrypt';
+import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 
-import { User, ApiResult, AuthResult, UserRegistration } from '../types';
-import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+import type { User, AuthResult } from '../../types';
+import type { ApiResult } from '../../types/api-shared';
+import { db } from '../db';
 
-export const login = async (
-  username: string,
-  password: string,
-  remember = false,
-): Promise<ApiResult<AuthResult>> => {
+export async function login(req: Request, res: Response): Promise<void> {
+  const { username, password, _remember } = req.body;
+
   try {
-    const { data } = await axios.post<AuthResult>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`,
-      { username, password },
+    const user = await db.query<User>('SELECT * FROM users WHERE username = $1', [username]);
+
+    if (!user.rows.length) {
+      res.status(401).json({
+        success: false,
+        error: 'Invalid username or password',
+      });
+      return;
+    }
+
+    const validPassword = await bcrypt.compare(password, user.rows[0].password);
+
+    if (!validPassword) {
+      res.status(401).json({
+        success: false,
+        error: 'Invalid username or password',
+      });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: user.rows[0].id, username: user.rows[0].username },
+      process.env.JWT_SECRET || 'secret',
+      { expiresIn: '24h' },
     );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<AuthResult>(error);
-  }
-};
 
-export const register = async (userData: UserRegistration): Promise<ApiResult<User>> => {
-  try {
-    const { data } = await axios.post<User>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`,
-      userData,
-    );
-    return {
+    const authResult: AuthResult = {
       success: true,
-      data,
+      token,
+      data: user.rows[0],
     };
-  } catch (error) {
-    return handleApiError<User>(error);
-  }
-};
 
-export const logout = async (): Promise<ApiResult<void>> => {
-  try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGOUT}`);
-    return {
+    const result: ApiResult<AuthResult> = {
       success: true,
+      data: authResult,
     };
-  } catch (error) {
-    return handleApiError<void>(error);
-  }
-};
 
-export const validateToken = async (): Promise<ApiResult<User>> => {
-  try {
-    const { data } = await axios.get<User>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.VALIDATE}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    res.json(result);
   } catch (error) {
-    return handleApiError<User>(error);
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
   }
-};
-
-export const refreshToken = async (): Promise<ApiResult<AuthResult>> => {
-  try {
-    const { data } = await axios.post<AuthResult>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
-    );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<AuthResult>(error);
-  }
-};
+}

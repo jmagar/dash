@@ -8,9 +8,9 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
+import type { Host } from '../../types';
 import { getHostStatus, connectHost, disconnectHost } from '../api';
 import { useAsync } from '../hooks';
-import type { Host } from '../../types';
 
 interface Props {
   host: Host;

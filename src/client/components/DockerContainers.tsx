@@ -13,8 +13,8 @@ import {
 import React, { useState } from 'react';
 
 import Terminal from './Terminal';
-import { useDockerUpdates } from '../hooks';
 import type { Container, Host } from '../../types';
+import { useDockerUpdates } from '../hooks';
 
 export default function DockerContainers(): JSX.Element {
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);

@@ -1,6 +1,4 @@
 import { Box } from '@mui/material';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import React, { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from 'xterm';
 
@@ -16,49 +14,63 @@ interface Props {
 export default function Terminal({ host, onData, onResize }: Props): JSX.Element {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm>();
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'monospace',
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#d4d4d4',
-      },
-    });
+    const loadAddons = async (): Promise<void> => {
+      const [{ FitAddon }, { WebLinksAddon }] = await Promise.all([
+        import('@xterm/addon-fit'),
+        import('@xterm/addon-web-links'),
+      ]);
 
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
+      const term = new XTerm({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: 'monospace',
+        theme: {
+          background: '#1e1e1e',
+          foreground: '#d4d4d4',
+          cursor: '#d4d4d4',
+        },
+      });
 
-    term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
+      const fitAddon = new FitAddon();
+      const webLinksAddon = new WebLinksAddon();
 
-    term.open(terminalRef.current);
-    fitAddon.fit();
+      term.loadAddon(fitAddon);
+      term.loadAddon(webLinksAddon);
 
-    term.onData((data) => {
-      onData?.(data);
-    });
-
-    term.onResize(({ cols, rows }) => {
-      onResize?.(cols, rows);
-    });
-
-    xtermRef.current = term;
-
-    const handleResize = (): void => {
+      term.open(terminalRef.current as HTMLElement);
       fitAddon.fit();
+
+      term.onData((data) => {
+        onData?.(data);
+      });
+
+      term.onResize(({ cols, rows }) => {
+        onResize?.(cols, rows);
+      });
+
+      xtermRef.current = term;
+
+      const handleResize = (): void => {
+        fitAddon.fit();
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      cleanupRef.current = (): void => {
+        window.removeEventListener('resize', handleResize);
+        term.dispose();
+      };
     };
 
-    window.addEventListener('resize', handleResize);
+    void loadAddons();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      term.dispose();
+      cleanupRef.current?.();
     };
   }, [onData, onResize]);
 
