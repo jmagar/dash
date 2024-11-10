@@ -28,29 +28,34 @@ A modern web interface for managing remote servers through SSH with support for 
 ## Quick Start
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/shh.git
 cd shh
 ```
 
-2. Install dependencies:
+1. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Set up environment variables:
+1. Set up environment variables:
+
 ```bash
 cp .env.example .env
 ```
 
-4. Start the development environment:
+1. Start the development environment:
 
 ### Using Docker
+
 ```bash
 docker compose up
 ```
 
 ### Local Development
+
 ```bash
 # Start both frontend and backend in development mode
 npm run dev
@@ -106,6 +111,7 @@ npm run migrate     # Run database migrations
 ## Environment Variables
 
 Key variables in `.env`:
+
 ```bash
 # Application
 PORT=4000
@@ -147,10 +153,10 @@ See `.env.example` for all available options.
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1. Create your feature branch
+1. Commit your changes
+1. Push to the branch
+1. Create a Pull Request
 
 ## License
 

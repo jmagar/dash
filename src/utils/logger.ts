@@ -69,19 +69,20 @@ const writeToFile = (formattedLog: string, level: LogLevel): void => {
 const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
   const formattedLog = formatLog(level, message, meta);
 
-  // Log to browser console
+  // Log to browser console using the appropriate level
   switch (level) {
     case LogLevel.ERROR:
-      console.error(message, meta);
+      // Using logger.error for consistency
+      logger.error(message, meta);
       break;
     case LogLevel.WARN:
-      console.warn(message, meta);
+      logger.warn(message, meta);
       break;
     case LogLevel.INFO:
-      console.info(message, meta);
+      logger.info(message, meta);
       break;
     case LogLevel.DEBUG:
-      console.debug(message, meta);
+      logger.debug(message, meta);
       break;
   }
 
@@ -91,7 +92,7 @@ const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: formattedLog,
-    }).catch(() => console.error('Failed to send log to server'));
+    }).catch(() => logger.error('Failed to send log to server'));
   }
 };
 
@@ -99,19 +100,19 @@ const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void 
 const nodeLog = (level: LogLevel, message: string, meta: LogMeta = {}): void => {
   const formattedLog = formatLog(level, message, meta);
 
-  // Console output
+  // Console output using the appropriate level
   switch (level) {
     case LogLevel.ERROR:
-      console.error(formattedLog);
+      logger.error(formattedLog);
       break;
     case LogLevel.WARN:
-      console.warn(formattedLog);
+      logger.warn(formattedLog);
       break;
     case LogLevel.INFO:
-      console.info(formattedLog);
+      logger.info(formattedLog);
       break;
     case LogLevel.DEBUG:
-      console.debug(formattedLog);
+      logger.debug(formattedLog);
       break;
   }
 
