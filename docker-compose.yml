@@ -1,35 +1,24 @@
 version: '3.8'
 
 services:
-  frontend:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile
     ports:
       - "127.0.0.1:3000:3000"
-    volumes:
-      - ./src:/app/src
-      - ./public:/app/public
-    environment:
-      - NODE_ENV=development
-      - REACT_APP_API_URL=http://127.0.0.1:4000
-    depends_on:
-      - backend
-
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    ports:
       - "127.0.0.1:4000:4000"
     volumes:
-      - ./backend:/app
+      - ./src:/app/src
+      - ./routes:/app/routes
+      - ./public:/app/public
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
-      - ./backend/.env
+      - .env
     environment:
       - NODE_ENV=development
       - PORT=4000
+      - REACT_APP_API_URL=http://127.0.0.1:4000
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=postgres
