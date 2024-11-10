@@ -1,162 +1,127 @@
 import axios from 'axios';
 
-import { ApiResult, Container, Stack } from '../types';
-import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+import { ApiResult, Container, Stack } from '../../types';
+import { handleApiError, API_ENDPOINTS } from '../../types/api-shared';
+import { BASE_URL } from '../config';
 
-export const getContainers = async (): Promise<ApiResult<Container[]>> => {
+export async function getContainers(): Promise<ApiResult<Container[]>> {
   try {
-    const { data } = await axios.get<Container[]>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINERS}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINERS}`);
+    return response.data;
   } catch (error) {
     return handleApiError<Container[]>(error);
   }
-};
+}
 
-export const getContainer = async (id: string): Promise<ApiResult<Container>> => {
+export async function getContainerLogs(id: string): Promise<ApiResult<string>> {
   try {
-    const { data } = await axios.get<Container>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER(id)}`,
-    );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<Container>(error);
-  }
-};
-
-export const getContainerLogs = async (id: string): Promise<ApiResult<string>> => {
-  try {
-    const { data } = await axios.get<string>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER_LOGS(id)}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER_LOGS(id)}`);
+    return response.data;
   } catch (error) {
     return handleApiError<string>(error);
   }
-};
+}
 
-export const getContainerStats = async (id: string): Promise<ApiResult<Container>> => {
+export async function startContainer(id: string): Promise<ApiResult<void>> {
   try {
-    const { data } = await axios.get<Container>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER_STATS(id)}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER(id)}/start`);
+    return response.data;
   } catch (error) {
-    return handleApiError<Container>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const getStacks = async (): Promise<ApiResult<Stack[]>> => {
+export async function stopContainer(id: string): Promise<ApiResult<void>> {
   try {
-    const { data } = await axios.get<Stack[]>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.STACKS}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER(id)}/stop`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function restartContainer(id: string): Promise<ApiResult<void>> {
+  try {
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER(id)}/restart`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function removeContainer(id: string): Promise<ApiResult<void>> {
+  try {
+    const response = await axios.delete(`${BASE_URL}${API_ENDPOINTS.DOCKER.CONTAINER(id)}`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function getStacks(): Promise<ApiResult<Stack[]>> {
+  try {
+    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACKS}`);
+    return response.data;
   } catch (error) {
     return handleApiError<Stack[]>(error);
   }
-};
+}
 
-export const getStack = async (name: string): Promise<ApiResult<Stack>> => {
+export async function createStack(name: string, composeFile: string): Promise<ApiResult<void>> {
   try {
-    const { data } = await axios.get<Stack>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}`,
-    );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<Stack>(error);
-  }
-};
-
-export const createStack = async (name: string, composeFile: string): Promise<ApiResult<void>> => {
-  try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACKS}`, {
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACKS}`, {
       name,
       composeFile,
     });
-    return {
-      success: true,
-    };
+    return response.data;
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const deleteStack = async (name: string): Promise<ApiResult<void>> => {
+export async function deleteStack(name: string): Promise<ApiResult<void>> {
   try {
-    await axios.delete(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}`);
-    return {
-      success: true,
-    };
+    const response = await axios.delete(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}`);
+    return response.data;
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const startStack = async (name: string): Promise<ApiResult<void>> => {
+export async function startStack(name: string): Promise<ApiResult<void>> {
   try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK_START(name)}`);
-    return {
-      success: true,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK_START(name)}`);
+    return response.data;
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const stopStack = async (name: string): Promise<ApiResult<void>> => {
+export async function stopStack(name: string): Promise<ApiResult<void>> {
   try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK_STOP(name)}`);
-    return {
-      success: true,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK_STOP(name)}`);
+    return response.data;
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const getStackComposeFile = async (name: string): Promise<ApiResult<string>> => {
+export async function getStackComposeFile(name: string): Promise<ApiResult<string>> {
   try {
-    const { data } = await axios.get<{ content: string }>(
-      `${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}/compose`,
-    );
-    return {
-      success: true,
-      data: data.content,
-    };
+    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}/compose`);
+    return response.data;
   } catch (error) {
     return handleApiError<string>(error);
   }
-};
+}
 
-export const updateStackComposeFile = async (name: string, content: string): Promise<ApiResult<void>> => {
+export async function updateStackComposeFile(name: string, composeFile: string): Promise<ApiResult<void>> {
   try {
-    await axios.put(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}/compose`, {
-      content,
+    const response = await axios.put(`${BASE_URL}${API_ENDPOINTS.DOCKER.STACK(name)}/compose`, {
+      composeFile,
     });
-    return {
-      success: true,
-    };
+    return response.data;
   } catch (error) {
-    return handleApiError<void>(error);
+    return handleApiError(error);
   }
-};
+}

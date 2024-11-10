@@ -1,58 +1,68 @@
+import { Box, Typography } from '@mui/material';
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Dashboard from './components/Dashboard';
+import DockerManager from './components/DockerManager';
 import FileExplorer from './components/FileExplorer';
 import Layout from './components/Layout';
 import Login from './components/Login';
 import PackageManager from './components/PackageManager';
 import PrivateRoute from './components/PrivateRoute';
-import RemoteExecution from './components/RemoteExecution';
 import UserProfile from './components/UserProfile';
-import ComposePage from './pages/Compose';
-import ContainersPage from './pages/Containers';
-import DockerPage from './pages/Docker';
+import { HostProvider, useHost } from './context/HostContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 
-const App: React.FC = () => {
+function AppRoutes(): JSX.Element {
+  const { isDarkMode, toggleTheme } = useTheme();
+  const { selectedHost } = useHost();
+  const hostId = selectedHost?.id;
+
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-
-        {/* Protected routes */}
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <Outlet />
-              </Layout>
-            </PrivateRoute>
-          }
-        >
-          {/* Dashboard */}
-          <Route index element={<Dashboard />} />
-
-          {/* Docker management */}
-          <Route path="docker" element={<DockerPage />} />
-          <Route path="containers" element={<ContainersPage />} />
-          <Route path="compose" element={<ComposePage />} />
-
-          {/* System management */}
-          <Route path="files" element={<FileExplorer />} />
-          <Route path="packages" element={<PackageManager />} />
-          <Route path="remote-execution" element={<RemoteExecution hostId={1} />} />
-
-          {/* User */}
-          <Route path="profile" element={<UserProfile />} />
-        </Route>
-
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          <PrivateRoute>
+            <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
+              <Routes>
+                {hostId ? (
+                  <>
+                    <Route index element={<Dashboard hostId={hostId} />} />
+                    <Route path="docker/*" element={<DockerManager />} />
+                    <Route path="files" element={<FileExplorer hostId={hostId} />} />
+                    <Route path="packages" element={<PackageManager hostId={hostId} />} />
+                    <Route path="profile" element={<UserProfile />} />
+                  </>
+                ) : (
+                  <Route
+                    path="*"
+                    element={
+                      <Box sx={{ p: 3 }}>
+                        <Typography color="error">
+                          Please select a host to continue
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                )}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+    </Routes>
   );
-};
+}
 
-export default App;
+export default function App(): JSX.Element {
+  return (
+    <ThemeProvider>
+      <HostProvider>
+        <AppRoutes />
+      </HostProvider>
+    </ThemeProvider>
+  );
+}

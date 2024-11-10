@@ -8,9 +8,9 @@ import {
 } from '@mui/material';
 import React from 'react';
 
-import { getSystemStats, getHostStatus } from '../client/api';
+import type { SystemStats } from '../../types';
+import { getSystemStats, getHostStatus } from '../api';
 import { useAsync, useThrottle } from '../hooks';
-import type { SystemStats } from '../types';
 import LoadingScreen from './LoadingScreen';
 
 interface Props {

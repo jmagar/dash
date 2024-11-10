@@ -26,7 +26,7 @@ import {
   updatePackage,
   searchPackages,
   Package,
-} from '../client/api';
+} from '../api';
 import { useAsync } from '../hooks';
 import LoadingScreen from './LoadingScreen';
 

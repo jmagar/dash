@@ -5,56 +5,41 @@ import {
   CardContent,
   TextField,
   Typography,
-  FormControlLabel,
-  Checkbox,
+  Alert,
   CircularProgress,
 } from '@mui/material';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { login } from '../client/api';
+import { login } from '../api';
 import { useUserContext } from '../context/UserContext';
-import { AuthResult } from '../types';
 
 export default function Login(): JSX.Element {
   const navigate = useNavigate();
   const { setUser } = useUserContext();
-  const [username, setUsername] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [mfaToken, setMfaToken] = useState<string>('');
-  const [showMfa, setShowMfa] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    setLoading(true);
 
     try {
-      const result = await login(username, password, rememberMe);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Login failed');
-      }
-
-      const authResult = result.data as AuthResult;
-
-      if (authResult.mfaRequired) {
-        setShowMfa(true);
-        setLoading(false);
-        return;
-      }
-
-      if (authResult.data && authResult.token) {
-        if (rememberMe) {
-          localStorage.setItem('token', authResult.token);
+      const result = await login(username, password);
+      if (result.success && result.data) {
+        const { token, data: user } = result.data;
+        if (token && user) {
+          localStorage.setItem('token', token);
+          setUser(user);
+          navigate('/');
         } else {
-          sessionStorage.setItem('token', authResult.token);
+          setError('Invalid response from server');
         }
-        setUser(authResult.data);
-        navigate('/');
+      } else {
+        setError(result.error || 'Login failed');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -63,88 +48,54 @@ export default function Login(): JSX.Element {
     }
   };
 
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setUsername(e.target.value);
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setPassword(e.target.value);
-  };
-
-  const handleMfaTokenChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setMfaToken(e.target.value);
-  };
-
-  const handleRememberMeChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setRememberMe(e.target.checked);
-  };
-
   return (
     <Box
       sx={{
-        height: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        minHeight: '100vh',
         bgcolor: 'background.default',
       }}
     >
       <Card sx={{ width: '100%', maxWidth: 400 }}>
         <CardContent>
-          <Typography variant="h5" align="center" gutterBottom>
-            SSH Remote Management
+          <Typography variant="h5" component="h1" gutterBottom align="center">
+            Login
           </Typography>
+
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
               label="Username"
               value={username}
-              onChange={handleUsernameChange}
+              onChange={(e): void => setUsername(e.target.value)}
               margin="normal"
-              disabled={loading || showMfa}
-              autoFocus
+              required
+              disabled={loading}
             />
             <TextField
               fullWidth
-              type="password"
               label="Password"
+              type="password"
               value={password}
-              onChange={handlePasswordChange}
+              onChange={(e): void => setPassword(e.target.value)}
               margin="normal"
-              disabled={loading || showMfa}
+              required
+              disabled={loading}
             />
-            {showMfa && (
-              <TextField
-                fullWidth
-                label="MFA Code"
-                value={mfaToken}
-                onChange={handleMfaTokenChange}
-                margin="normal"
-                disabled={loading}
-                autoFocus
-              />
-            )}
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={rememberMe}
-                  onChange={handleRememberMeChange}
-                  disabled={loading}
-                />
-              }
-              label="Remember me"
-              sx={{ mt: 1 }}
-            />
+
             {error && (
-              <Typography color="error" align="center" sx={{ mt: 2 }}>
+              <Alert severity="error" sx={{ mt: 2 }}>
                 {error}
-              </Typography>
+              </Alert>
             )}
+
             <Button
               fullWidth
               variant="contained"
               type="submit"
-              disabled={loading || !username || !password || (showMfa && !mfaToken)}
+              disabled={loading}
               sx={{ mt: 3 }}
             >
               {loading ? <CircularProgress size={24} /> : 'Login'}

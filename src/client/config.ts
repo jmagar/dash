@@ -1,10 +1,12 @@
+export type ThemeMode = 'light' | 'dark';
+
 // Client-side configuration
 export const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
 export const APP_CONFIG = {
   // Default theme settings
   theme: {
-    defaultMode: 'light' as const,
+    defaultMode: 'light' as ThemeMode,
     storageKey: 'theme-mode',
   },
   // Authentication settings
@@ -25,4 +27,4 @@ export const APP_CONFIG = {
     enableFileExplorer: true,
     enableDockerManager: true,
   },
-};
+} as const;

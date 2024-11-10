@@ -9,9 +9,9 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import { updateUser } from '../client/api';
+import type { User } from '../../types';
+import { updateUser } from '../api';
 import { useUserContext } from '../context/UserContext';
-import type { User } from '../types';
 
 interface UpdateUserData {
   email?: string;

@@ -8,9 +8,9 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import { executeCommand } from '../client/api';
+import { executeCommand } from '../api';
 import { useAsync } from '../hooks';
-import type { Command, CommandResult } from '../types';
+import type { Command, CommandResult } from '../../types';
 import LoadingScreen from './LoadingScreen';
 
 interface Props {

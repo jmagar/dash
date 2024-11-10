@@ -19,9 +19,9 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import { listFiles, deleteFile, createDirectory } from '../client/api';
+import type { FileItem, Host } from '../../types';
+import { listFiles, deleteFile, createDirectory } from '../api';
 import { useAsync, useDebounce, useKeyPress } from '../hooks';
-import type { FileItem, Host } from '../types';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';

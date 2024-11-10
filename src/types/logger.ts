@@ -5,8 +5,10 @@ export interface Logger {
   debug(message: string, meta?: Record<string, unknown>): void;
 }
 
+export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+
 export interface LogEntry {
-  level: 'info' | 'warn' | 'error' | 'debug';
+  level: LogLevel;
   message: string;
   timestamp: string;
   meta?: Record<string, unknown>;

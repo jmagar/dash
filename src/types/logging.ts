@@ -1,19 +1,25 @@
-import { LogLevel } from './logger';
+import type { LogLevel, LogEntry } from './logger';
 
-export interface LogMeta {
-  [key: string]: unknown;
-}
-
-export interface LogData {
-  timestamp: string;
+export interface LogConfig {
   level: LogLevel;
-  message: string;
-  meta?: LogMeta;
+  format?: 'json' | 'text';
+  timestamp?: boolean;
+  colors?: boolean;
 }
 
-export interface Logger {
-  error: (message: string, meta?: LogMeta) => void;
-  warn: (message: string, meta?: LogMeta) => void;
-  info: (message: string, meta?: LogMeta) => void;
-  debug: (message: string, meta?: LogMeta) => void;
+export interface LogFormatter {
+  format(entry: LogEntry): string;
+}
+
+export interface LogTransport {
+  log(entry: LogEntry): void;
+  setFormatter(formatter: LogFormatter): void;
+}
+
+export interface LoggerOptions {
+  level?: LogLevel;
+  transports?: LogTransport[];
+  format?: 'json' | 'text';
+  timestamp?: boolean;
+  colors?: boolean;
 }

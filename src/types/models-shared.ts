@@ -46,6 +46,8 @@ export interface User {
   role?: string;
   lastLogin?: Date;
   createdAt?: Date;
+  currentPassword?: string;
+  newPassword?: string;
 }
 
 export interface Package {

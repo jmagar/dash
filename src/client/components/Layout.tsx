@@ -15,8 +15,8 @@ import {
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { logout } from '../api';
 import Navigation from './Navigation';
-import { logout } from '../client/api';
 import { useUserContext } from '../context/UserContext';
 
 interface Props {

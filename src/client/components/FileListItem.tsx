@@ -17,9 +17,9 @@ import {
 } from '@mui/material';
 import React, { useState, useRef, useCallback } from 'react';
 
-import { readFile, writeFile } from '../client/api';
+import type { FileItem, ApiResult } from '../../types';
+import { readFile, writeFile } from '../api';
 import { useAsync, useKeyPress } from '../hooks';
-import type { FileItem } from '../types';
 
 interface Props {
   item: FileItem;
@@ -41,8 +41,8 @@ export default function FileListItem({
   const handleReadFile = useCallback(() => readFile(hostId, item.path), [hostId, item.path]);
   const handleWriteFile = useCallback(() => writeFile(hostId, item.path, content), [hostId, item.path, content]);
 
-  const { execute: executeRead, loading: loadingRead } = useAsync(handleReadFile);
-  const { execute: executeWrite, loading: loadingWrite } = useAsync(handleWriteFile);
+  const { execute: executeRead, loading: loadingRead } = useAsync<ApiResult<string>>(handleReadFile);
+  const { execute: executeWrite, loading: loadingWrite } = useAsync<ApiResult<void>>(handleWriteFile);
 
   const handleKeyPress = (e: KeyboardEvent): void => {
     if (e.key === 'Enter' && isEditing) {

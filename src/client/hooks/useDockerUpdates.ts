@@ -4,7 +4,7 @@ import { Container, Stack } from '../../types';
 import { getContainers, getStacks } from '../api';
 import logger from '../utils/frontendLogger';
 
-interface UseDockerUpdatesOptions {
+export interface UseDockerUpdatesOptions {
   enabled?: boolean;
   type: 'containers' | 'stacks';
   interval?: number;

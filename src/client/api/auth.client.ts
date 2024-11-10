@@ -1,111 +1,68 @@
 import axios from 'axios';
 
-import { User, ApiResult, AuthResult, UserRegistration } from '../types';
-import { handleApiError, API_ENDPOINTS, BASE_URL } from '../types/api';
+import { User, ApiResult, AuthResult, UserRegistration } from '../../types';
+import { handleApiError, API_ENDPOINTS } from '../../types/api-shared';
+import { BASE_URL } from '../config';
 
-const storage = typeof localStorage !== 'undefined' ? localStorage : sessionStorage;
-
-export const login = async (
+export async function login(
   username: string,
   password: string,
-  remember = false,
-): Promise<ApiResult<AuthResult>> => {
+): Promise<ApiResult<AuthResult>> {
   try {
-    const { data } = await axios.post<AuthResult>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`,
-      { username, password },
-    );
-
-    if (data.token) {
-      if (remember) {
-        localStorage.setItem('token', data.token);
-      } else {
-        sessionStorage.setItem('token', data.token);
-      }
-    }
-
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`, {
+      username,
+      password,
+    });
+    return response.data;
   } catch (error) {
     return handleApiError<AuthResult>(error);
   }
-};
-
-export const register = async (userData: UserRegistration): Promise<ApiResult<User>> => {
-  try {
-    const { data } = await axios.post<User>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`,
-      userData,
-    );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<User>(error);
-  }
-};
-
-export const logout = async (): Promise<ApiResult<void>> => {
-  try {
-    await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGOUT}`);
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
-    return {
-      success: true,
-    };
-  } catch (error) {
-    return handleApiError<void>(error);
-  }
-};
-
-interface UpdateUserData {
-  email?: string;
-  currentPassword?: string;
-  newPassword?: string;
 }
 
-export const updateUser = async (userData: UpdateUserData): Promise<ApiResult<User>> => {
+export async function logout(): Promise<ApiResult<void>> {
   try {
-    const { data } = await axios.put<User>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.UPDATE}`,
-      userData,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.LOGOUT}`);
+    return response.data;
   } catch (error) {
-    return handleApiError<User>(error);
+    return handleApiError(error);
   }
-};
+}
 
-export const validateToken = async (): Promise<ApiResult<User>> => {
+export async function register(data: UserRegistration): Promise<ApiResult<AuthResult>> {
   try {
-    const { data } = await axios.get<User>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.VALIDATE}`,
-    );
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return handleApiError<User>(error);
-  }
-};
-
-export const refreshToken = async (): Promise<ApiResult<AuthResult>> => {
-  try {
-    const { data } = await axios.post<AuthResult>(
-      `${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
-    );
-    return {
-      success: true,
-      data,
-    };
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`, data);
+    return response.data;
   } catch (error) {
     return handleApiError<AuthResult>(error);
   }
-};
+}
+
+export async function updateUser(data: Partial<User>): Promise<ApiResult<User>> {
+  try {
+    const response = await axios.put(
+      `${BASE_URL}${API_ENDPOINTS.AUTH.UPDATE(data.id as number)}`,
+      data,
+    );
+    return response.data;
+  } catch (error) {
+    return handleApiError<User>(error);
+  }
+}
+
+export async function validateToken(): Promise<ApiResult<User>> {
+  try {
+    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.AUTH.VALIDATE}`);
+    return response.data;
+  } catch (error) {
+    return handleApiError<User>(error);
+  }
+}
+
+export async function refreshToken(): Promise<ApiResult<{ token: string }>> {
+  try {
+    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`);
+    return response.data;
+  } catch (error) {
+    return handleApiError<{ token: string }>(error);
+  }
+}
