@@ -1,7 +1,7 @@
 const express = require('express');
 const { Client } = require('ssh2');
-const { query } = require('../db');
-const cache = require('../cache');
+const { query } = require('../src/db');
+const cache = require('../src/cache');
 const router = express.Router();
 
 // Initialize WebSocket handlers

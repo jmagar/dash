@@ -7,9 +7,9 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
-const cache = require('../cache');
-const { pool } = require('../db');
-const { logger } = require(path.join(__dirname, '..', '..', 'src', 'utils', 'logger'));
+const cache = require('../src/cache');
+const { pool } = require('../src/db');
+const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
 
 // Login route
 router.post('/login', async (req, res) => {

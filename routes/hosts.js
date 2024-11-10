@@ -1,8 +1,8 @@
 const express = require('express');
 const { Client } = require('ssh2');
-const { query, transaction } = require('../db');
-const cache = require('../cache');
-const { checkRole } = require('../middleware/auth');
+const { query, transaction } = require('../src/db');
+const cache = require('../src/cache');
+const { checkRole } = require('../src/middleware/auth');
 const router = express.Router();
 
 // List hosts

@@ -1,6 +1,6 @@
 const express = require('express');
 const Docker = require('dockerode');
-const cache = require('../cache');
+const cache = require('../src/cache');
 const router = express.Router();
 
 const docker = new Docker({

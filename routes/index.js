@@ -12,7 +12,7 @@ const dockerRoutes = require('./docker');
 const filesRoutes = require('./files');
 const hostsRoutes = require('./hosts');
 const packagesRoutes = require('./packages');
-const { logger } = require(path.join(__dirname, '..', '..', 'src', 'utils', 'logger'));
+const { logger } = require(path.join(__dirname, '..', 'src', 'utils', 'logger'));
 
 // Health check route
 router.get('/health', (req, res) => {
