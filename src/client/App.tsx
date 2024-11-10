@@ -31,7 +31,7 @@ function AppRoutes(): JSX.Element {
                   <>
                     <Route index element={<Dashboard hostId={hostId} />} />
                     <Route path="docker/*" element={<DockerManager />} />
-                    <Route path="files" element={<FileExplorer hostId={hostId} />} />
+                    <Route path="files" element={<FileExplorer />} />
                     <Route path="packages" element={<PackageManager hostId={hostId} />} />
                     <Route path="profile" element={<UserProfile />} />
                   </>

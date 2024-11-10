@@ -15,6 +15,10 @@ import {
   Typography,
   Alert,
   TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   InputAdornment,
 } from '@mui/material';
 import React, { useState } from 'react';
@@ -30,11 +34,12 @@ interface Props {
   hostId: number;
 }
 
-export default function FileExplorer({ hostId }: Props): JSX.Element {
+export default function FileExplorer(): JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>('/');
   const [selectedHost, setSelectedHost] = useState<Host | null>(null);
   const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const debouncedSearch = useDebounce(searchTerm, 300);
@@ -76,14 +81,15 @@ export default function FileExplorer({ hostId }: Props): JSX.Element {
     setCurrentPath(parentPath);
   };
 
-  const handleCreateFolder = async (name: string): Promise<void> => {
-    if (!selectedHost) return;
+  const handleCreateFolder = async (): Promise<void> => {
+    if (!selectedHost || !newFolderName.trim()) return;
 
     try {
-      const newPath = `${currentPath}/${name}`.replace(/\/+/g, '/');
+      const newPath = `${currentPath}/${newFolderName}`.replace(/\/+/g, '/');
       const result = await createDirectory(selectedHost.id, newPath);
       if (result.success) {
         setCreateFolderDialogOpen(false);
+        setNewFolderName('');
         void loadFiles();
       } else {
         setError(result.error || 'Failed to create folder');
@@ -208,6 +214,31 @@ export default function FileExplorer({ hostId }: Props): JSX.Element {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Dialog
+        open={createFolderDialogOpen}
+        onClose={(): void => setCreateFolderDialogOpen(false)}
+      >
+        <DialogTitle>Create New Folder</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Folder Name"
+            fullWidth
+            value={newFolderName}
+            onChange={(e): void => setNewFolderName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={(): void => setCreateFolderDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={(): void => void handleCreateFolder()} disabled={!newFolderName.trim()}>
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

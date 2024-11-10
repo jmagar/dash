@@ -70,11 +70,6 @@ export default function HostSelector({
     }
   };
 
-  const handleConfirm = (): void => {
-    onSelect(selected);
-    onClose();
-  };
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Select Host{multiSelect ? 's' : ''}</DialogTitle>

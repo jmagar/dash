@@ -13,12 +13,6 @@ import type { User } from '../../types';
 import { updateUser } from '../api';
 import { useUserContext } from '../context/UserContext';
 
-interface UpdateUserData {
-  email?: string;
-  currentPassword?: string;
-  newPassword?: string;
-}
-
 export default function UserProfile(): JSX.Element {
   const { user, setUser } = useUserContext();
   const [email, setEmail] = useState(user?.email || '');

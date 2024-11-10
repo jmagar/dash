@@ -10,7 +10,6 @@ import {
   IconButton,
   Toolbar,
   Typography,
-  useTheme,
 } from '@mui/material';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,7 +25,6 @@ interface Props {
 }
 
 export default function Layout({ children, toggleTheme, isDarkMode }: Props): JSX.Element {
-  const theme = useTheme();
   const navigate = useNavigate();
   const { user, setUser } = useUserContext();
 

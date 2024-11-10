@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { FileItem, ApiResult } from '../../types';
 import { readFile, writeFile } from '../api';
@@ -55,7 +55,7 @@ export default function FileListItem({
   useKeyPress('Enter', handleKeyPress);
   useKeyPress('Escape', handleKeyPress);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent): void => {
       if (editRef.current && !editRef.current.contains(event.target as Node)) {
         if (isEditing) {
