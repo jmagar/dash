@@ -129,9 +129,13 @@ module.exports = {
     },
     {
       files: ['scripts/**/*.ts', 'src/**/*.js', 'routes/**/*.js'],
+      env: {
+        node: true,
+      },
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
         'no-console': 'off',
+        '@typescript-eslint/explicit-function-return-type': 'off',
       },
     },
   ],

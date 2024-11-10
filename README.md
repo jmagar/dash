@@ -28,45 +28,39 @@ A modern web interface for managing remote servers through SSH with support for 
 ## Quick Start
 
 1. Clone the repository:
-
 ```bash
 git clone https://github.com/yourusername/shh.git
 cd shh
 ```
 
 2. Install dependencies:
-
 ```bash
 npm install
 ```
 
 3. Set up environment variables:
-
 ```bash
 cp .env.example .env
 ```
 
-4. Start the services:
+4. Start the development environment:
 
+### Using Docker
 ```bash
 docker compose up
 ```
 
-The application will be available at:
-- Frontend: `http://localhost:3000`
-- API Server: `http://localhost:4000`
-
-## Development
-
-Start the development servers:
-
+### Local Development
 ```bash
-# Start frontend development server
-npm start
+# Start both frontend and backend in development mode
+npm run dev
 
-# Start API server in development mode
-npm run dev:server
+# Or start them separately:
+npm run dev:client  # Frontend
+npm run dev:server  # Backend
 ```
+
+The application will be available at `http://localhost:4000`
 
 ## Project Structure
 
@@ -91,31 +85,54 @@ npm run dev:server
 
 ```bash
 # Development
-npm start          # Start frontend development server
-npm run dev:server # Start API server in development mode
+npm run dev          # Start both frontend and backend in development mode
+npm run dev:client   # Start frontend development server
+npm run dev:server   # Start backend development server
 
-# Building
-npm run build      # Build frontend for production
+# Production
+npm run build        # Build frontend for production
+npm start            # Start production server
 
-# Testing
-npm test           # Run tests
-npm run lint       # Run ESLint
-npm run format     # Run Prettier
+# Testing and Linting
+npm test            # Run frontend tests
+npm run test:server # Run backend tests
+npm run lint        # Run ESLint
+npm run format      # Run Prettier
 
 # Database
-npm run migrate    # Run database migrations
+npm run migrate     # Run database migrations
 ```
 
 ## Environment Variables
 
-See `.env.example` for required environment variables.
+Key variables in `.env`:
+```bash
+# Application
+PORT=4000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:4000
 
-Key variables include:
-- `PORT`: API server port (default: 4000)
-- `DATABASE_URL`: PostgreSQL connection string
-- `REDIS_URL`: Redis connection string
-- `JWT_SECRET`: Secret for JWT signing
-- `FRONTEND_URL`: Frontend URL for CORS
+# API Configuration
+REACT_APP_API_URL=http://localhost:4000/api
+REACT_APP_WS_URL=ws://localhost:4000
+
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=shh
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# JWT
+JWT_SECRET=your-secret-key
+JWT_EXPIRATION=30m
+```
+
+See `.env.example` for all available options.
 
 ## Security
 

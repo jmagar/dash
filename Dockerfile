@@ -25,8 +25,8 @@ RUN mkdir -p /root/.ssh && \
 # Build frontend
 RUN npm run build
 
-# Expose ports
-EXPOSE 3000 4000
+# Expose port
+EXPOSE 4000
 
-# Start both frontend and backend
-CMD ["sh", "-c", "npm run dev:server & npm start -- --host 0.0.0.0"]
+# Start unified application
+CMD ["npm", "run", "dev:server"]

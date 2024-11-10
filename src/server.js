@@ -9,8 +9,8 @@ const { Server } = require('socket.io');
 
 const cache = require('./cache');
 const { pool } = require('./db');
-const { logger, requestLogger } = require('./utils/logger');
 const routes = require('../routes');
+const { logger, requestLogger } = require('./utils/logger');
 const { initTerminalSocket } = require('../routes/terminal');
 
 // Create express app
@@ -19,7 +19,7 @@ const server = http.createServer(app);
 
 // Configure CORS
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:4000',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -29,6 +29,9 @@ app.use(express.json());
 
 // Request logging
 app.use(requestLogger);
+
+// Serve static files from the React build directory
+app.use(express.static(path.join(__dirname, '..', 'build')));
 
 // Error handler for JSON parsing
 app.use((err, req, res, _next) => {
@@ -45,7 +48,7 @@ app.use((err, req, res, _next) => {
 // Initialize WebSocket
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+    origin: process.env.FRONTEND_URL || 'http://localhost:4000',
     methods: ['GET', 'POST'],
   },
 });
@@ -90,16 +93,9 @@ app.get('/health', async (req, res) => {
 // API routes
 app.use('/api', routes);
 
-// 404 handler
-app.use((req, res) => {
-  logger.warn('Route not found', {
-    method: req.method,
-    url: req.url,
-  });
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-  });
+// Serve React app for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });
 
 // Global error handler
@@ -124,7 +120,7 @@ const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server running on port ${PORT}`, {
     environment: process.env.NODE_ENV,
-    frontendUrl: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
     dbHost: process.env.DB_HOST,
     redisHost: process.env.REDIS_HOST,
   });
