@@ -85,7 +85,7 @@ const browserLog = (level: LogLevel, message: string, meta: LogMeta = {}): void 
       break;
   }
 
-  // Send to backend for file logging
+  // Send to server for file logging
   if (typeof fetch !== 'undefined') {
     fetch('/api/log', {
       method: 'POST',

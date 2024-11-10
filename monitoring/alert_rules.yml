@@ -33,15 +33,15 @@ groups:
 
 - name: application_alerts
   rules:
-  # Backend Service Down
-  - alert: BackendServiceDown
-    expr: up{job='backend'} == 0
+  # Application Service Down
+  - alert: ApplicationServiceDown
+    expr: up{job='app'} == 0
     for: 2m
     labels:
       severity: critical
     annotations:
-      summary: "Backend Service Down"
-      description: "Backend service has been down for more than 2 minutes"
+      summary: "Application Service Down"
+      description: "Application service has been down for more than 2 minutes"
 
   # High Error Rate
   - alert: HighErrorRate
