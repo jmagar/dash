@@ -59,29 +59,25 @@ interface DockerOptions {
         start(): Promise<void>;
         stop(): Promise<void>;
         remove(): Promise<void>;
-        inspect(): Promise<any>;
-        logs(options?: { stdout?: boolean; stderr?: boolean; follow?: boolean }): Promise<any>;
+        inspect(): Promise<Record<string, unknown>>;
+        logs(options?: { stdout?: boolean; stderr?: boolean; follow?: boolean }): Promise<string>;
         exec(options: { Cmd: string[]; AttachStdout?: boolean; AttachStderr?: boolean }): Promise<Exec>;
     }
 
     interface Exec extends EventEmitter {
         start(options?: { hijack?: boolean; stdin?: boolean }): Promise<void>;
-        inspect(): Promise<any>;
+        inspect(): Promise<Record<string, unknown>>;
     }
 
-    interface PullOptions {
-        fromImage?: string;
-        tag?: string;
-        platform?: string;
-        [key: string]: unknown;
-    }
-
-    interface BuildOptions {
-        t?: string;
-        dockerfile?: string;
-        nocache?: boolean;
-        buildargs?: Record<string, string>;
-        [key: string]: unknown;
+    interface ImageInfo {
+        Id: string;
+        ParentId: string;
+        RepoTags: string[];
+        RepoDigests: string[];
+        Created: number;
+        Size: number;
+        VirtualSize: number;
+        Labels: Record<string, string>;
     }
 
     class Docker {
@@ -89,10 +85,10 @@ interface DockerOptions {
       createContainer(options: ContainerCreateOptions): Promise<Container>;
       listContainers(options?: { all?: boolean }): Promise<ContainerInfo[]>;
       getContainer(id: string): Container;
-      listImages(): Promise<any[]>;
-      pull(repoTag: string, options?: PullOptions): Promise<any>;
-      getImage(name: string): any;
-      buildImage(file: string | NodeJS.ReadableStream, options?: BuildOptions): Promise<any>;
+      listImages(): Promise<ImageInfo[]>;
+      pull(repoTag: string, options?: Record<string, unknown>): Promise<void>;
+      getImage(name: string): { remove(): Promise<void>; tag(options: Record<string, string>): Promise<void> };
+      buildImage(file: string | NodeJS.ReadableStream, options?: Record<string, unknown>): Promise<void>;
     }
 
     export = Docker;

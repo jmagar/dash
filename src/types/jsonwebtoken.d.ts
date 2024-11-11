@@ -7,7 +7,7 @@ declare module 'jsonwebtoken' {
         issuer?: string;
         jwtid?: string;
         noTimestamp?: boolean;
-        header?: object;
+        header?: Record<string, unknown>;
         keyid?: string;
     }
 
@@ -32,11 +32,11 @@ declare module 'jsonwebtoken' {
     }
 
     export interface VerifyCallback {
-        (err: Error, decoded: object | string): void;
+        (err: Error | null, decoded: Record<string, unknown> | string | undefined): void;
     }
 
     export function sign(
-        payload: string | Buffer | object,
+        payload: string | Buffer | Record<string, unknown>,
         secretOrPrivateKey: string | Buffer,
         options?: SignOptions
     ): string;
@@ -45,10 +45,10 @@ declare module 'jsonwebtoken' {
         token: string,
         secretOrPublicKey: string | Buffer,
         options?: VerifyOptions
-    ): object | string;
+    ): Record<string, unknown> | string;
 
     export function decode(
         token: string,
         options?: DecodeOptions
-    ): null | { [key: string]: any } | string;
+    ): null | Record<string, unknown> | string;
 }

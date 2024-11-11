@@ -14,7 +14,7 @@ declare module 'pg' {
         application_name?: string;
     }
 
-    export interface QueryResult<T = any> {
+    export interface QueryResult<T = unknown> {
         rows: T[];
         fields: FieldDef[];
         rowCount: number;
@@ -36,24 +36,24 @@ declare module 'pg' {
       constructor(config?: PoolConfig);
       connect(): Promise<PoolClient>;
       end(): Promise<void>;
-      query<T = any>(queryText: string, values?: any[]): Promise<QueryResult<T>>;
-      on(event: string, listener: (...args: any[]) => void): this;
+      query<T = unknown>(queryText: string, values?: unknown[]): Promise<QueryResult<T>>;
+      on(event: string, listener: (...args: unknown[]) => void): this;
       totalCount: number;
       idleCount: number;
       waitingCount: number;
     }
 
     export interface PoolClient {
-        query<T = any>(queryText: string, values?: any[]): Promise<QueryResult<T>>;
+        query<T = unknown>(queryText: string, values?: unknown[]): Promise<QueryResult<T>>;
         release(err?: Error): void;
-        on(event: string, listener: (...args: any[]) => void): this;
+        on(event: string, listener: (...args: unknown[]) => void): this;
     }
 
     export class Client {
       constructor(config?: PoolConfig);
       connect(): Promise<void>;
       end(): Promise<void>;
-      query<T = any>(queryText: string, values?: any[]): Promise<QueryResult<T>>;
-      on(event: string, listener: (...args: any[]) => void): this;
+      query<T = unknown>(queryText: string, values?: unknown[]): Promise<QueryResult<T>>;
+      on(event: string, listener: (...args: unknown[]) => void): this;
     }
 }

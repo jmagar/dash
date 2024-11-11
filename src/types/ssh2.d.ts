@@ -36,17 +36,49 @@ declare module 'ssh2' {
         env?: Record<string, string>;
     }
 
+    interface SFTPStats {
+        mode: number;
+        uid: number;
+        gid: number;
+        size: number;
+        atime: number;
+        mtime: number;
+    }
+
     interface SFTPWrapper extends EventEmitter {
-        fastGet(remotePath: string, localPath: string, options: unknown, callback: (err: Error | undefined) => void): void;
-        fastPut(localPath: string, remotePath: string, options: unknown, callback: (err: Error | undefined) => void): void;
-        createReadStream(path: string, options?: unknown): Readable;
-        createWriteStream(path: string, options?: unknown): Writable;
-        readdir(location: string, callback: (err: Error | undefined, list: Array<{ filename: string; longname: string; attrs: unknown }>) => void): void;
+        fastGet(
+            remotePath: string,
+            localPath: string,
+            options: Record<string, unknown>,
+            callback: (err: Error | undefined) => void
+        ): void;
+        fastPut(
+            localPath: string,
+            remotePath: string,
+            options: Record<string, unknown>,
+            callback: (err: Error | undefined) => void
+        ): void;
+        createReadStream(path: string, options?: Record<string, unknown>): Readable;
+        createWriteStream(path: string, options?: Record<string, unknown>): Writable;
+        readdir(
+            location: string,
+            callback: (
+                err: Error | undefined,
+                list: Array<{ filename: string; longname: string; attrs: SFTPStats }>
+            ) => void
+        ): void;
         unlink(path: string, callback: (err: Error | undefined) => void): void;
-        rename(srcPath: string, destPath: string, callback: (err: Error | undefined) => void): void;
+        rename(
+            srcPath: string,
+            destPath: string,
+            callback: (err: Error | undefined) => void
+        ): void;
         mkdir(path: string, callback: (err: Error | undefined) => void): void;
         rmdir(path: string, callback: (err: Error | undefined) => void): void;
-        stat(path: string, callback: (err: Error | undefined, stats: unknown) => void): void;
+        stat(
+            path: string,
+            callback: (err: Error | undefined, stats: SFTPStats) => void
+        ): void;
         end(): void;
     }
 
@@ -54,10 +86,20 @@ declare module 'ssh2' {
       constructor();
       connect(config: ClientConfig): void;
       end(): void;
-      exec(command: string, callback: (err: Error | undefined, channel: unknown) => void): void;
-      exec(command: string, options: ExecOptions, callback: (err: Error | undefined, channel: unknown) => void): void;
+      exec(
+            command: string,
+            callback: (err: Error | undefined, channel: unknown) => void
+        ): void;
+      exec(
+            command: string,
+            options: ExecOptions,
+            callback: (err: Error | undefined, channel: unknown) => void
+        ): void;
       shell(callback: (err: Error | undefined, channel: unknown) => void): void;
-      shell(options: ShellOptions, callback: (err: Error | undefined, channel: unknown) => void): void;
+      shell(
+            options: ShellOptions,
+            callback: (err: Error | undefined, channel: unknown) => void
+        ): void;
       sftp(callback: (err: Error | undefined, sftp: SFTPWrapper) => void): void;
 
       on(event: 'ready', listener: () => void): this;

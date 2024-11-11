@@ -1,7 +1,6 @@
-import winston from 'winston';
+import { createLogger, format, transports } from 'winston';
 import 'winston-daily-rotate-file';
 
-const { createLogger, format, transports } = winston;
 const { combine, timestamp, printf, colorize } = format;
 
 // Custom log format

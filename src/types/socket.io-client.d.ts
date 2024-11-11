@@ -3,7 +3,10 @@ declare module 'socket.io-client' {
 
     interface ManagerOptions {
         path?: string;
-        parser?: any;
+        parser?: {
+            encode: (packet: unknown) => unknown;
+            decode: (packet: unknown) => unknown;
+        };
         autoConnect?: boolean;
         query?: Record<string, string>;
         auth?: Record<string, string> | (() => Record<string, string> | Promise<Record<string, string>>);
@@ -38,7 +41,7 @@ declare module 'socket.io-client' {
         off(ev: string, listener?: (...args: unknown[]) => void): this;
         removeListener(ev: string, listener?: (...args: unknown[]) => void): this;
         removeAllListeners(ev?: string): this;
-        listeners(ev: string): Function[];
+        listeners(ev: string): Array<(...args: unknown[]) => void>;
     }
 
     interface Manager extends EventEmitter {

@@ -5,7 +5,11 @@ declare module 'socket.io' {
     interface ServerOptions {
         path?: string;
         serveClient?: boolean;
-        adapter?: any;
+        adapter?: {
+            broadcast: (packet: unknown, opts: unknown) => void;
+            add: (id: string, room: string) => void;
+            del: (id: string, room: string) => void;
+        };
         cors?: {
             origin?: string | string[] | boolean;
             methods?: string[];
@@ -36,8 +40,25 @@ declare module 'socket.io' {
             auth: Record<string, unknown>;
         };
         rooms: Set<string>;
-        client: any;
-        conn: any;
+        client: {
+            id: string;
+            conn: {
+                id: string;
+                transport: {
+                    name: string;
+                    writable: boolean;
+                    readable: boolean;
+                };
+            };
+        };
+        conn: {
+            id: string;
+            transport: {
+                name: string;
+                writable: boolean;
+                readable: boolean;
+            };
+        };
         data: Record<string, unknown>;
 
         join(room: string | string[]): Promise<void>;
@@ -56,7 +77,11 @@ declare module 'socket.io' {
     interface Namespace extends EventEmitter {
         name: string;
         sockets: Map<string, Socket>;
-        adapter: any;
+        adapter: {
+            rooms: Map<string, Set<string>>;
+            sids: Map<string, Set<string>>;
+            broadcast: (packet: unknown, opts: unknown) => void;
+        };
 
         to(room: string | string[]): Namespace;
         in(room: string | string[]): Namespace;
@@ -67,17 +92,26 @@ declare module 'socket.io' {
         use(fn: (socket: Socket, next: (err?: Error) => void) => void): Namespace;
     }
 
+    interface EngineSocket {
+        on(event: string, listener: (...args: unknown[]) => void): void;
+        emit(event: string, ...args: unknown[]): void;
+    }
+
     class Server extends EventEmitter {
       constructor(srv?: HttpServer | number, opts?: ServerOptions);
 
       path(): string;
       serveClient(v: boolean): Server;
-      adapter(v: any): Server;
+      adapter(v: {
+            broadcast: (packet: unknown, opts: unknown) => void;
+            add: (id: string, room: string) => void;
+            del: (id: string, room: string) => void;
+        }): Server;
       origins(v: string | string[]): Server;
       attach(srv: HttpServer, opts?: ServerOptions): Server;
       listen(srv: HttpServer, opts?: ServerOptions): Server;
-      bind(engine: any): Server;
-      onconnection(socket: any): Server;
+      bind(engine: EngineSocket): Server;
+      onconnection(socket: Socket): Server;
       of(nsp: string | RegExp | ((socket: Socket) => boolean)): Namespace;
       close(fn?: (err?: Error) => void): void;
 
