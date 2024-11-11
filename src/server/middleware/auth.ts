@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { verify } from 'jsonwebtoken';
+import { ParsedQs } from 'qs';
 
 import { AuthenticatedUser } from '../../types/jwt';
 import { serverLogger as logger } from '../../utils/serverLogger';
 
 export interface AuthenticatedRequest<
-  P = any,
-  ResBody = any,
-  ReqBody = any,
-  ReqQuery = any,
+  P = Record<string, string>,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = ParsedQs,
 > extends Request<P, ResBody, ReqBody, ReqQuery> {
   user: AuthenticatedUser;
 }
@@ -39,6 +40,17 @@ export const authenticateToken = (
   res: Response,
   next: NextFunction,
 ): void => {
+  // Skip authentication if DISABLE_AUTH is set
+  if (process.env.DISABLE_AUTH === 'true') {
+    (req as AuthenticatedRequest).user = {
+      id: 'dev',
+      username: 'dev',
+      role: 'admin',
+    };
+    next();
+    return;
+  }
+
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.split(' ')[1];
@@ -71,6 +83,12 @@ export const authenticateToken = (
 
 export const checkRole = (roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Skip role check if DISABLE_AUTH is set
+    if (process.env.DISABLE_AUTH === 'true') {
+      next();
+      return;
+    }
+
     try {
       const authReq = req as AuthenticatedRequest;
       if (!authReq.user) {

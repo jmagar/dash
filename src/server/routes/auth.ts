@@ -1,5 +1,5 @@
 import { compare } from 'bcrypt';
-import express, { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import { sign, verify } from 'jsonwebtoken';
 
 import {
@@ -14,18 +14,32 @@ import {
 import { createAuthHandler } from '../../types/express';
 import { JWTPayload, TokenError } from '../../types/jwt';
 import { serverLogger as logger } from '../../utils/serverLogger';
-import cache from '../cache';
+import { isConnected, cacheSession, redis, CACHE_KEYS, getSession } from '../cache';
 import { pool } from '../db';
 
-const router: Router = express.Router();
+const router: Router = Router();
 
 // Login route
 router.post(
   '/login',
-  async (req: express.Request<RequestParams, LoginResponse, LoginRequest>, res: Response<LoginResponse>) => {
+  async (req: Request<RequestParams, LoginResponse, LoginRequest>, res: Response<LoginResponse>) => {
     let client;
 
     try {
+      // If auth is disabled, return dev user
+      if (process.env.DISABLE_AUTH === 'true') {
+        const devUser = {
+          id: 'dev',
+          username: 'dev',
+          role: 'admin',
+        };
+        return res.status(200).json({
+          success: true,
+          token: 'dev-token',
+          user: devUser,
+        });
+      }
+
       logger.info('Starting login process');
       const { username, password } = req.body;
 
@@ -52,9 +66,9 @@ router.post(
       const user = result.rows[0];
       logger.info('Database query completed', { userFound: !!user });
 
-      // Check if user exists
-      if (!user) {
-        logger.warn('Login attempt with invalid username', { username });
+      // Check if user exists and has password hash
+      if (!user || !user.password_hash) {
+        logger.warn('Login attempt with invalid username or missing password hash', { username });
         return res.status(401).json({
           success: false,
           error: 'Invalid credentials',
@@ -65,7 +79,7 @@ router.post(
       try {
         logger.info('Verifying password');
         logger.debug('Password verification details', {
-          hasPasswordHash: !!user.password_hash,
+          hasPasswordHash: true,
           passwordLength: password.length,
         });
 
@@ -105,10 +119,10 @@ router.post(
         role: user.role,
       };
 
-      if (cache.isConnected()) {
+      if (isConnected()) {
         try {
           logger.info('Caching session data');
-          await cache.cacheSession(token, JSON.stringify(sessionData));
+          await cacheSession(token, JSON.stringify(sessionData));
         } catch (cacheError) {
           logger.error('Failed to cache session', {
             error: (cacheError as Error).message,
@@ -179,8 +193,8 @@ router.post(
   createAuthHandler<RequestParams, LogoutResponse>(async (req, res) => {
     try {
       const token = req.headers.authorization?.split(' ')[1];
-      if (token && cache.isConnected()) {
-        await cache.redis.del(`${cache.CACHE_KEYS.SESSION}${token}`);
+      if (token && isConnected()) {
+        await redis.del(`${CACHE_KEYS.SESSION}${token}`);
         logger.info('User logged out successfully');
       }
       res.json({ success: true });
@@ -200,8 +214,20 @@ router.post(
 // Validate token route
 router.get(
   '/validate',
-  createAuthHandler<RequestParams, ValidateResponse>(async (req, res) => {
+  async (req: Request, res: Response<ValidateResponse>) => {
     try {
+      // If auth is disabled, return dev user
+      if (process.env.DISABLE_AUTH === 'true') {
+        return res.json({
+          success: true,
+          user: {
+            id: 'dev',
+            username: 'dev',
+            role: 'admin',
+          },
+        });
+      }
+
       const token = req.headers.authorization?.split(' ')[1];
       if (!token) {
         logger.warn('Token validation attempt without token');
@@ -225,8 +251,8 @@ router.get(
       const decoded = decodedToken as JWTPayload;
 
       // Check if session exists in cache if Redis is connected
-      if (cache.isConnected()) {
-        const session = await cache.getSession(token);
+      if (isConnected()) {
+        const session = await getSession(token);
         if (!session) {
           logger.warn('Token validation with expired session');
           return res.status(401).json({
@@ -265,7 +291,7 @@ router.get(
         error: 'Internal server error',
       });
     }
-  }),
+  },
 );
 
 export default router;

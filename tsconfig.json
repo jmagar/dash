@@ -20,9 +20,13 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.js",
-    "src/**/*.jsx",
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx"
+    "src/**/*.jsx"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src/setupTests.ts",
+    "src/setupServerTests.ts"
+  ]
 }

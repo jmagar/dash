@@ -1,6 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const Redis = require('ioredis');
-export type RedisClient = typeof Redis;
+import Redis from 'ioredis';
 
 export interface CacheCommand {
   command: string;
@@ -17,6 +15,7 @@ export interface CacheKeys {
   };
   HOST: string;
   MFA: string;
+  PACKAGES: string;
 }
 
 export interface CacheTTL {
@@ -26,10 +25,11 @@ export interface CacheTTL {
   DOCKER: number;
   HOST: number;
   MFA: number;
+  PACKAGES: number;
 }
 
 export interface Cache {
-  redis: RedisClient;
+  redis: Redis;
   CACHE_KEYS: CacheKeys;
   CACHE_TTL: CacheTTL;
   cacheSession(token: string, sessionData: string): Promise<void>;

@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 
+import { CacheCommand } from '../types/cache';
 import { Container, Stack } from '../types/models-shared';
 import { serverLogger as logger } from '../utils/serverLogger';
 
@@ -16,6 +17,7 @@ export const CACHE_KEYS = {
   },
   HOST: 'host:',          // Host status (1 minute)
   MFA: 'mfa:',            // MFA verification codes (5 minutes)
+  PACKAGES: 'packages:',   // Package lists (1 hour)
 } as const;
 
 export const CACHE_TTL = {
@@ -25,6 +27,7 @@ export const CACHE_TTL = {
   DOCKER: 30,       // 30 seconds
   HOST: 60,         // 1 minute
   MFA: 300,         // 5 minutes
+  PACKAGES: 3600,   // 1 hour
 } as const;
 
 // Initialize Redis client
@@ -124,6 +127,55 @@ export const getSession = async (token: string): Promise<string | null> => {
       error: (error as Error).message,
       stack: (error as Error).stack,
       token,
+    });
+    throw error;
+  }
+};
+
+// Command history caching
+export const cacheCommand = async (
+  userId: string,
+  hostId: string,
+  command: CacheCommand | CacheCommand[],
+): Promise<void> => {
+  try {
+    const client = getClient();
+    const key = `${CACHE_KEYS.COMMAND}${userId}:${hostId}`;
+    const commands = Array.isArray(command) ? command : [command];
+
+    // Get existing commands
+    const existingData = await client.get(key);
+    const existingCommands = existingData ? JSON.parse(existingData) : [];
+
+    // Combine and limit to last 100 commands
+    const updatedCommands = [...commands, ...existingCommands].slice(0, 100);
+
+    await client.setex(key, CACHE_TTL.COMMAND, JSON.stringify(updatedCommands));
+  } catch (error) {
+    logger.error('Failed to cache command', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      userId,
+      hostId,
+    });
+    throw error;
+  }
+};
+
+export const getCommands = async (
+  userId: string,
+  hostId: string,
+): Promise<CacheCommand[] | null> => {
+  try {
+    const client = getClient();
+    const data = await client.get(`${CACHE_KEYS.COMMAND}${userId}:${hostId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error('Failed to get commands', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      userId,
+      hostId,
     });
     throw error;
   }
@@ -286,4 +338,6 @@ export default {
   cacheDockerContainers,
   getDockerStacks,
   cacheDockerStacks,
+  cacheCommand,
+  getCommands,
 };

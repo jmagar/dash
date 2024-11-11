@@ -12,6 +12,11 @@ interface PrivateRouteProps {
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, requiredRole }) => {
   const { user } = useUserContext();
 
+  // If auth is disabled, render children directly
+  if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
+    return children;
+  }
+
   // Show loading screen while checking authentication
   if (user === undefined) {
     return <LoadingScreen fullscreen message="Checking authentication..." />;

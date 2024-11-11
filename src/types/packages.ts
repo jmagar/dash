@@ -3,8 +3,9 @@ import { ParamsDictionary } from 'express-serve-static-core';
 export interface Package {
   name: string;
   version: string;
-  description: string;
+  description?: string;
   installed: boolean;
+  updateAvailable?: boolean;
 }
 
 export interface PackageUpdate {
@@ -19,12 +20,14 @@ export interface CommandResult {
 
 export interface PackageResponse {
   success: boolean;
+  packages?: Package[];
+  message?: string;
   data?: Package[] | { output: string } | PackageUpdate[];
   error?: string;
 }
 
 export interface PackageRequest {
-  name: string;
+  packageName: string;
 }
 
 export interface RequestParams extends ParamsDictionary {

@@ -1,13 +1,14 @@
-import express, { Request, Response, NextFunction, Router } from 'express';
+import { Request, Response, NextFunction, Router } from 'express';
 
 import authRoutes from './auth';
 import dockerRoutes from './docker';
 import filesRoutes from './files';
 import hostsRoutes from './hosts';
 import packagesRoutes from './packages';
+import { authenticateToken } from '../middleware/auth';
 import { serverLogger as logger } from '../utils/serverLogger';
 
-const router: Router = express.Router();
+const router: Router = Router();
 
 interface HealthResponse {
   status: string;
@@ -22,6 +23,11 @@ interface ErrorResponse {
 router.get('/health', (_req: Request, res: Response<HealthResponse>) => {
   res.json({ status: 'ok' });
 });
+
+// Apply authentication middleware to all API routes unless auth is disabled
+if (process.env.DISABLE_AUTH !== 'true') {
+  router.use(authenticateToken);
+}
 
 // Mount routes
 router.use('/auth', authRoutes);

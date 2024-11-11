@@ -18,7 +18,7 @@ import {
 import { pool } from './db';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
-import { initTerminalSocket } from './routes/terminal';
+import { initializeSocketIO } from './routes/terminal';
 import { serverLogger as logger } from './utils/serverLogger';
 
 // Import socket.io using require since it has issues with ES modules
@@ -67,7 +67,7 @@ const io = new SocketServer(server, {
 });
 
 // Initialize WebSocket handlers
-initTerminalSocket(io);
+initializeSocketIO(io);
 
 interface HealthCheckResponse {
   success: boolean;

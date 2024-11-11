@@ -1,37 +1,50 @@
-import { Request, Response, NextFunction, RequestHandler } from 'express';
-import { ParamsDictionary, Query } from 'express-serve-static-core';
+import { Request, Response, NextFunction } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 
 import { AuthenticatedUser } from './jwt';
 
+// Extend Request to include authenticated user
 export interface AuthenticatedRequest<
-  P extends ParamsDictionary = ParamsDictionary,
-  ResBody = any,
-  ReqBody = any,
-  ReqQuery extends Query = Query,
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = unknown,
 > extends Request<P, ResBody, ReqBody, ReqQuery> {
   user: AuthenticatedUser;
 }
 
-export type AuthHandler<
-  P extends ParamsDictionary = ParamsDictionary,
-  ResBody = any,
-  ReqBody = any,
-  ReqQuery extends Query = Query,
+// Generic handler type for express routes
+export type RequestHandler<
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = unknown,
+> = (
+  req: Request<P, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>,
+  next: NextFunction,
+) => Promise<Response<ResBody> | undefined | void> | Response<ResBody> | undefined | void;
+
+// Generic authenticated handler type
+export type AuthenticatedHandler<
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = unknown,
 > = (
   req: AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>,
   res: Response<ResBody>,
   next: NextFunction,
-) => Promise<void | Response<ResBody>> | void | Response<ResBody>;
+) => Promise<Response<ResBody> | undefined | void> | Response<ResBody> | undefined | void;
 
+// Helper function to create authenticated handlers
 export const createAuthHandler = <
-  P extends ParamsDictionary = ParamsDictionary,
-  ResBody = any,
-  ReqBody = any,
-  ReqQuery extends Query = Query,
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = unknown,
 >(
-    handler: AuthHandler<P, ResBody, ReqBody, ReqQuery>,
+    handler: AuthenticatedHandler<P, ResBody, ReqBody, ReqQuery>,
   ): RequestHandler<P, ResBody, ReqBody, ReqQuery> => {
-  return (req: Request<P, ResBody, ReqBody, ReqQuery>, res: Response<ResBody>, next: NextFunction) => {
-    return handler(req as AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>, res, next);
-  };
+  return handler as RequestHandler<P, ResBody, ReqBody, ReqQuery>;
 };

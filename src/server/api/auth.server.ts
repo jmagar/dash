@@ -2,8 +2,9 @@ import { compare } from 'bcrypt';
 import { Request, Response } from 'express';
 import { sign } from 'jsonwebtoken';
 
-import type { User, AuthResult } from '../../types';
+import type { AuthResult } from '../../types';
 import type { ApiResult } from '../../types/api-shared';
+import type { User } from '../../types/auth';
 import { query } from '../db';
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -12,7 +13,8 @@ export async function login(req: Request, res: Response): Promise<void> {
   try {
     const result = await query<User>('SELECT * FROM users WHERE username = $1', [username]);
 
-    if (!result.rows.length) {
+    const user = result.rows[0];
+    if (!user || !user.password_hash) {
       res.status(401).json({
         success: false,
         error: 'Invalid username or password',
@@ -20,7 +22,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const validPassword = await compare(password, result.rows[0].password);
+    const validPassword = await compare(password, user.password_hash);
 
     if (!validPassword) {
       res.status(401).json({
@@ -31,7 +33,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const token = sign(
-      { id: result.rows[0].id, username: result.rows[0].username },
+      { id: user.id, username: user.username },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '24h' },
     );
@@ -39,7 +41,13 @@ export async function login(req: Request, res: Response): Promise<void> {
     const authResult: AuthResult = {
       success: true,
       token,
-      data: result.rows[0],
+      data: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        email: undefined,
+        lastLogin: user.last_login,
+      },
     };
 
     const apiResult: ApiResult<AuthResult> = {

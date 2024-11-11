@@ -8,9 +8,13 @@ interface UserContextType {
   setUser: React.Dispatch<React.SetStateAction<User | null | undefined>>;
 }
 
+const defaultSetUser: React.Dispatch<React.SetStateAction<User | null | undefined>> = () => {
+  console.warn('UserContext not initialized');
+};
+
 const UserContext = createContext<UserContextType>({
   user: undefined,
-  setUser: () => {}, // Default implementation
+  setUser: defaultSetUser,
 });
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -18,21 +22,25 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const checkAuth = async (): Promise<void> => {
-      if (process.env.ENABLE_AUTH === 'false') {
-        // Authentication disabled, set a dummy user
+      // If auth is disabled, set dev user immediately without any API calls
+      if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
         setUser({
-          id: -1,
-          username: 'guest',
-          email: 'guest@example.com',
-          password: '',
+          id: 'dev',
+          username: 'dev',
+          role: 'admin',
         });
         return;
       }
 
-      const result = await validateToken();
-      if (result.success) {
-        setUser(result.data);
-      } else {
+      try {
+        const result = await validateToken();
+        if (result.success) {
+          setUser(result.data);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
         setUser(null);
       }
     };

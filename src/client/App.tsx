@@ -13,43 +13,47 @@ import UserProfile from './components/UserProfile';
 import { HostProvider, useHost } from './context/HostContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
-function AppRoutes(): JSX.Element {
+function AppContent(): JSX.Element {
   const { isDarkMode, toggleTheme } = useTheme();
   const { selectedHost } = useHost();
-  const hostId = selectedHost?.id;
+
+  if (!selectedHost) {
+    return (
+      <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
+        <Box sx={{ p: 3 }}>
+          <Typography color="error">
+            Please select a host to continue
+          </Typography>
+        </Box>
+      </Layout>
+    );
+  }
 
   return (
+    <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
+      <Routes>
+        <Route index element={<Dashboard hostId={selectedHost.id} />} />
+        <Route path="docker/*" element={<DockerManager />} />
+        <Route path="files" element={<FileExplorer />} />
+        <Route path="packages" element={<PackageManager hostId={selectedHost.id} />} />
+        <Route path="profile" element={<UserProfile />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
+  );
+}
+
+function AuthenticatedApp(): JSX.Element {
+  return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      {process.env.REACT_APP_DISABLE_AUTH !== 'true' && (
+        <Route path="/login" element={<Login />} />
+      )}
       <Route
-        path="/"
+        path="/*"
         element={
           <PrivateRoute>
-            <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
-              <Routes>
-                {hostId ? (
-                  <>
-                    <Route index element={<Dashboard hostId={hostId} />} />
-                    <Route path="docker/*" element={<DockerManager />} />
-                    <Route path="files" element={<FileExplorer />} />
-                    <Route path="packages" element={<PackageManager hostId={hostId} />} />
-                    <Route path="profile" element={<UserProfile />} />
-                  </>
-                ) : (
-                  <Route
-                    path="*"
-                    element={
-                      <Box sx={{ p: 3 }}>
-                        <Typography color="error">
-                          Please select a host to continue
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                )}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Layout>
+            <AppContent />
           </PrivateRoute>
         }
       />
@@ -61,7 +65,11 @@ export default function App(): JSX.Element {
   return (
     <ThemeProvider>
       <HostProvider>
-        <AppRoutes />
+        {process.env.REACT_APP_DISABLE_AUTH === 'true' ? (
+          <AppContent />
+        ) : (
+          <AuthenticatedApp />
+        )}
       </HostProvider>
     </ThemeProvider>
   );

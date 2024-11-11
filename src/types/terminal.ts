@@ -1,14 +1,13 @@
+import { Socket } from 'socket.io/dist/socket';
+
 import { CacheCommand } from './cache';
 import { SSHClient, SSHStream } from './ssh';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const socketio = require('socket.io');
-export type IOServer = typeof socketio.Server;
 
 export interface TerminalData {
   hostId: string;
   rows?: number;
   cols?: number;
+  data?: string;
 }
 
 export interface CommandData {
@@ -36,37 +35,29 @@ export interface CommandHistoryResponse {
 }
 
 export interface TerminalEvents {
-  init: (data: TerminalData) => void;
-  data: (data: string) => void;
-  resize: (data: ResizeData) => void;
-  execute: (data: CommandData) => void;
-  error: (message: string) => void;
-  ready: () => void;
-  close: () => void;
+  'terminal:data': (data: TerminalData) => void;
+  'terminal:resize': (data: ResizeData) => void;
+  'terminal:execute': (data: CommandData) => void;
+  'terminal:error': (message: string) => void;
+  'terminal:ready': () => void;
+  'terminal:close': () => void;
   disconnect: () => void;
 }
 
-export interface AuthenticatedSocket {
+export interface AuthenticatedSocket extends Socket {
   user: {
     id: string;
     username: string;
     role: string;
   };
-  emit<T extends keyof TerminalEvents>(event: T, ...args: Parameters<TerminalEvents[T]>): boolean;
-  on<T extends keyof TerminalEvents>(event: T, listener: TerminalEvents[T]): this;
+  on(event: 'disconnect', listener: () => void): this;
+  on(event: 'terminal:data', listener: (data: TerminalData) => void): this;
+  on(event: 'terminal:resize', listener: (data: TerminalData) => void): this;
 }
 
 export interface TerminalState {
   sshClient: SSHClient | null;
   stream: SSHStream | null;
-}
-
-export interface TerminalNamespace {
-  on(event: 'connection', listener: (socket: AuthenticatedSocket) => void): this;
-}
-
-export interface TerminalServer extends IOServer {
-  of(nsp: string): TerminalNamespace;
 }
 
 export const convertToCache = (history: CommandHistory): CacheCommand => ({

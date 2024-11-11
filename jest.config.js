@@ -5,7 +5,7 @@ module.exports = {
     {
       displayName: 'server',
       testEnvironment: 'node',
-      testMatch: ['<rootDir>/src/server/**/*.test.ts'],
+      testMatch: ['<rootDir>/test/server/**/*.test.ts'],
       transform: {
         '^.+\\.tsx?$': ['ts-jest', {
           tsconfig: 'tsconfig.server.json',
@@ -14,16 +14,16 @@ module.exports = {
       },
       moduleFileExtensions: ['ts', 'js', 'json', 'node'],
       moduleNameMapper: {
-        '^@/(.*)$': '<rootDir>/src/$1',
+        '^(.*)$': '<rootDir>/src/$1',
       },
-      setupFilesAfterEnv: ['<rootDir>/src/setupServerTests.ts'],
+      setupFilesAfterEnv: ['<rootDir>/test/setupServerTests.ts'],
       moduleDirectories: ['node_modules', 'src'],
     },
     // Client tests configuration
     {
       displayName: 'client',
       testEnvironment: 'jsdom',
-      testMatch: ['<rootDir>/src/client/**/*.test.{ts,tsx}'],
+      testMatch: ['<rootDir>/test/client/**/*.test.{ts,tsx}'],
       transform: {
         '^.+\\.tsx?$': ['ts-jest', {
           tsconfig: 'tsconfig.json',
@@ -32,9 +32,9 @@ module.exports = {
       },
       moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
       moduleNameMapper: {
-        '^@/(.*)$': '<rootDir>/src/$1',
+        '^(.*)$': '<rootDir>/src/$1',
       },
-      setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
+      setupFilesAfterEnv: ['<rootDir>/test/setupTests.ts'],
       moduleDirectories: ['node_modules', 'src'],
       testEnvironmentOptions: {
         url: 'http://localhost'
@@ -45,9 +45,7 @@ module.exports = {
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/types/**/*',
-    '!src/**/index.{ts,tsx}',
-    '!src/setupTests.ts',
-    '!src/setupServerTests.ts',
+    '!src/**/index.{ts,tsx}'
   ],
   coverageThreshold: {
     global: {

@@ -1,6 +1,6 @@
 import path from 'path';
 
-import express, { Router, RequestHandler } from 'express';
+import { Router, RequestHandler } from 'express';
 import { Client } from 'ssh2';
 
 import {
@@ -16,10 +16,12 @@ import { serverLogger as logger } from '../../utils/serverLogger';
 import { query } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
-const router: Router = express.Router();
+const router: Router = Router();
 
-// Apply authentication middleware to all routes
-router.use(authenticateToken);
+// Apply authentication middleware to all routes unless auth is disabled
+if (process.env.DISABLE_AUTH !== 'true') {
+  router.use(authenticateToken);
+}
 
 interface RequestParams {
   hostId: string;
@@ -60,7 +62,7 @@ type FileDeleteHandler = RequestHandler<
 const listDirectory: FileListHandler = async (req, res) => {
   const { path: dirPath = '/' } = req.query;
   const normalizedPath = path.normalize(dirPath || '').replace(/^(\.\.[\\/])+/, '');
-  const authenticatedReq = req as AuthenticatedRequest<RequestParams>;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
 
   try {
     // Get host connection details
@@ -111,7 +113,7 @@ const listDirectory: FileListHandler = async (req, res) => {
       conn.connect({
         host: host.hostname,
         port: host.port,
-        username: authenticatedReq.user.username,
+        username,
         privateKey: host.private_key,
         passphrase: host.passphrase,
       });
@@ -133,7 +135,7 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
   }
 
   const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\\/])+/, '');
-  const authenticatedReq = req as AuthenticatedRequest<RequestParams>;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
 
   try {
     const result = await query<HostConnection>(
@@ -179,7 +181,7 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
     conn.connect({
       host: host.hostname,
       port: host.port,
-      username: authenticatedReq.user.username,
+      username,
       privateKey: host.private_key,
       passphrase: host.passphrase,
     });
@@ -197,7 +199,7 @@ const uploadFile: FileUploadHandler = async (req, res) => {
   }
 
   const normalizedPath = path.normalize(uploadPath).replace(/^(\.\.[\\/])+/, '');
-  const authenticatedReq = req as AuthenticatedRequest<RequestParams>;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
 
   try {
     const result = await query<HostConnection>(
@@ -236,7 +238,7 @@ const uploadFile: FileUploadHandler = async (req, res) => {
       conn.connect({
         host: host.hostname,
         port: host.port,
-        username: authenticatedReq.user.username,
+        username,
         privateKey: host.private_key,
         passphrase: host.passphrase,
       });
@@ -258,7 +260,7 @@ const deleteFile: FileDeleteHandler = async (req, res) => {
   }
 
   const normalizedPath = path.normalize(deletePath).replace(/^(\.\.[\\/])+/, '');
-  const authenticatedReq = req as AuthenticatedRequest<RequestParams>;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
 
   try {
     const result = await query<HostConnection>(
@@ -309,7 +311,7 @@ const deleteFile: FileDeleteHandler = async (req, res) => {
       conn.connect({
         host: host.hostname,
         port: host.port,
-        username: authenticatedReq.user.username,
+        username,
         privateKey: host.private_key,
         passphrase: host.passphrase,
       });

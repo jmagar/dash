@@ -40,11 +40,11 @@ export interface FileItem {
 }
 
 export interface User {
-  id: number;
+  id: string | number;
   username: string;
-  email: string;
-  password: string;
-  role?: string;
+  email?: string;
+  password?: string;
+  role: string;
   lastLogin?: Date;
   createdAt?: Date;
   currentPassword?: string;

@@ -38,11 +38,11 @@
   "scripts": {
     "start": "node dist/server/server.js",
     "clean": "rm -rf dist build",
-    "build": "SKIP_PREFLIGHT_CHECK=true react-scripts build",
+    "build": "REACT_APP_DISABLE_AUTH=true SKIP_PREFLIGHT_CHECK=true react-scripts build",
     "build:server": "tsc --project tsconfig.server.json",
     "build:all": "npm run clean && npm run build && npm run build:server",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:client": "PORT=4000 REACT_APP_WDS_SOCKET_PORT=0 react-scripts start",
+    "dev:client": "PORT=4000 REACT_APP_DISABLE_AUTH=true REACT_APP_WDS_SOCKET_PORT=0 react-scripts start",
     "dev:server": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server/server.ts",
     "test": "react-scripts test",
     "test:server": "jest",
