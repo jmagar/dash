@@ -1,4 +1,4 @@
-export interface DecodedToken {
+export interface JWTPayload {
   id: string;
   username: string;
   role: string;
@@ -6,14 +6,12 @@ export interface DecodedToken {
   exp: number;
 }
 
-export interface JwtPayload {
+export interface AuthenticatedUser {
   id: string;
   username: string;
   role: string;
 }
 
-export interface AuthenticatedUser {
-  id: string;
-  username: string;
-  role: string;
+export interface TokenError extends Error {
+  name: 'JsonWebTokenError' | 'TokenExpiredError';
 }
