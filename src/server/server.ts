@@ -16,6 +16,7 @@ import {
   redis as cacheRedis,
 } from './cache';
 import { pool } from './db';
+import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { initTerminalSocket } from './routes/terminal';
 import { serverLogger as logger } from './utils/serverLogger';
@@ -39,22 +40,6 @@ app.use(cors({
 app.use(expressJson());
 
 // Request logging middleware
-const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
-  const start = Date.now();
-
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    logger.info('Request processed', {
-      method: req.method,
-      url: req.url,
-      status: res.statusCode,
-      duration: `${duration}ms`,
-    });
-  });
-
-  next();
-};
-
 app.use(requestLogger);
 
 // Serve static files from the React build directory
