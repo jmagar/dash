@@ -4,15 +4,15 @@ import { sign } from 'jsonwebtoken';
 
 import type { User, AuthResult } from '../../types';
 import type { ApiResult } from '../../types/api-shared';
-import { db } from '../db';
+import { query } from '../db';
 
 export async function login(req: Request, res: Response): Promise<void> {
   const { username, password, _remember } = req.body;
 
   try {
-    const user = await db.query<User>('SELECT * FROM users WHERE username = $1', [username]);
+    const result = await query<User>('SELECT * FROM users WHERE username = $1', [username]);
 
-    if (!user.rows.length) {
+    if (!result.rows.length) {
       res.status(401).json({
         success: false,
         error: 'Invalid username or password',
@@ -20,7 +20,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const validPassword = await compare(password, user.rows[0].password);
+    const validPassword = await compare(password, result.rows[0].password);
 
     if (!validPassword) {
       res.status(401).json({
@@ -31,7 +31,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const token = sign(
-      { id: user.rows[0].id, username: user.rows[0].username },
+      { id: result.rows[0].id, username: result.rows[0].username },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '24h' },
     );
@@ -39,15 +39,15 @@ export async function login(req: Request, res: Response): Promise<void> {
     const authResult: AuthResult = {
       success: true,
       token,
-      data: user.rows[0],
+      data: result.rows[0],
     };
 
-    const result: ApiResult<AuthResult> = {
+    const apiResult: ApiResult<AuthResult> = {
       success: true,
       data: authResult,
     };
 
-    res.json(result);
+    res.json(apiResult);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({
