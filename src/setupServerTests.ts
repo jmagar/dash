@@ -1,5 +1,5 @@
-// Add any global test setup here
-import '@testing-library/jest-dom';
+import { jest } from '@jest/globals';
+import type RedisMock from 'ioredis-mock';
 
 // Mock environment variables
 process.env.JWT_SECRET = 'test-secret';
@@ -8,8 +8,8 @@ process.env.NODE_ENV = 'test';
 
 // Mock Redis
 jest.mock('ioredis', () => {
-  const RedisMock = jest.requireActual('ioredis-mock').default;
-  return RedisMock;
+  const mock = jest.requireActual<typeof RedisMock>('ioredis-mock');
+  return mock;
 });
 
 // Mock Winston logger
@@ -30,3 +30,5 @@ beforeEach(() => {
 afterEach(() => {
   jest.resetAllMocks();
 });
+
+export {};

@@ -1,23 +1,53 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  transform: {
-    '^.+\\.tsx?$': 'ts-jest',
-  },
-  testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$',
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-  },
-  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
+  projects: [
+    // Server tests configuration
+    {
+      displayName: 'server',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/src/server/**/*.test.ts'],
+      transform: {
+        '^.+\\.tsx?$': ['ts-jest', {
+          tsconfig: 'tsconfig.server.json',
+          isolatedModules: true,
+        }],
+      },
+      moduleFileExtensions: ['ts', 'js', 'json', 'node'],
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+      },
+      setupFilesAfterEnv: ['<rootDir>/src/setupServerTests.ts'],
+      moduleDirectories: ['node_modules', 'src'],
+    },
+    // Client tests configuration
+    {
+      displayName: 'client',
+      testEnvironment: 'jsdom',
+      testMatch: ['<rootDir>/src/client/**/*.test.{ts,tsx}'],
+      transform: {
+        '^.+\\.tsx?$': ['ts-jest', {
+          tsconfig: 'tsconfig.json',
+          isolatedModules: true,
+        }],
+      },
+      moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+      },
+      setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
+      moduleDirectories: ['node_modules', 'src'],
+      testEnvironmentOptions: {
+        url: 'http://localhost'
+      }
+    },
+  ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/types/**/*',
     '!src/**/index.{ts,tsx}',
     '!src/setupTests.ts',
+    '!src/setupServerTests.ts',
   ],
   coverageThreshold: {
     global: {
@@ -25,11 +55,6 @@ module.exports = {
       functions: 70,
       lines: 70,
       statements: 70,
-    },
-  },
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.server.json',
     },
   },
 };
