@@ -1,16 +1,44 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-import { User } from '../../types';
+import type { User } from '../../types';
+import { validateToken } from '../api';
 
 interface UserContextType {
-  user: User | null;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  user: User | null | undefined;
+  setUser: React.Dispatch<React.SetStateAction<User | null | undefined>>;
 }
 
-const UserContext = createContext<UserContextType | undefined>(undefined);
+const UserContext = createContext<UserContextType>({
+  user: undefined,
+  setUser: () => {}, // Default implementation
+});
 
-export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  useEffect(() => {
+    const checkAuth = async (): Promise<void> => {
+      if (process.env.ENABLE_AUTH === 'false') {
+        // Authentication disabled, set a dummy user
+        setUser({
+          id: -1,
+          username: 'guest',
+          email: 'guest@example.com',
+          password: '',
+        });
+        return;
+      }
+
+      const result = await validateToken();
+      if (result.success) {
+        setUser(result.data);
+      } else {
+        setUser(null);
+      }
+    };
+
+    void checkAuth();
+  }, []);
 
   return (
     <UserContext.Provider value={{ user, setUser }}>
@@ -19,10 +47,4 @@ export const UserContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
   );
 };
 
-export const useUserContext = (): UserContextType => {
-  const context = useContext(UserContext);
-  if (context === undefined) {
-    throw new Error('useUserContext must be used within a UserContextProvider');
-  }
-  return context;
-};
+export const useUserContext = (): UserContextType => useContext(UserContext);
