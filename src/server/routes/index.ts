@@ -5,12 +5,21 @@ import dockerRoutes from './docker';
 import filesRoutes from './files';
 import hostsRoutes from './hosts';
 import packagesRoutes from './packages';
-import { serverLogger as logger } from '../../utils/serverLogger';
+import { serverLogger as logger } from '../utils/serverLogger';
 
 const router: Router = express.Router();
 
+interface HealthResponse {
+  status: string;
+}
+
+interface ErrorResponse {
+  success: boolean;
+  error: string;
+}
+
 // Health check route
-router.get('/health', (_req: Request, res: Response) => {
+router.get('/health', (_req: Request, res: Response<HealthResponse>) => {
   res.json({ status: 'ok' });
 });
 
@@ -22,7 +31,7 @@ router.use('/hosts', hostsRoutes);
 router.use('/packages', packagesRoutes);
 
 // Error handling for routes
-router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+router.use((err: Error, req: Request, res: Response<ErrorResponse>, _next: NextFunction) => {
   logger.error('Route error', {
     error: err.message,
     stack: err.stack,
