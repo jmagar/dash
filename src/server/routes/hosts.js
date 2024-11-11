@@ -1,10 +1,11 @@
-const express = require('express');
-const { Client } = require('ssh2');
+import express from 'express';
+import { Client } from 'ssh2';
 
-const cache = require('../cache');
-const { query, transaction } = require('../db');
-const { checkRole } = require('../middleware/auth');
-const { serverLogger: logger } = require('../utils/serverLogger');
+import cache from '../cache';
+import { query, transaction } from '../db.js';
+import { checkRole } from '../middleware/auth.js';
+import { serverLogger as logger } from '../utils/serverLogger';
+
 const router = express.Router();
 
 // List hosts
@@ -192,4 +193,4 @@ router.post('/:id/test', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

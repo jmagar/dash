@@ -21,3 +21,25 @@ export default function auth(req, res, next) {
     res.status(401).json({ msg: 'Token is not valid' });
   }
 }
+
+export function checkRole(roles) {
+  return (req, res, next) => {
+    // Check if authentication is enabled
+    if (process.env.ENABLE_AUTH === 'false') {
+      // Authentication disabled, proceed to next middleware
+      return next();
+    }
+
+    // Check if user exists (should be set by auth middleware)
+    if (!req.user) {
+      return res.status(401).json({ msg: 'No user found, authorization denied' });
+    }
+
+    // Check if user has required role
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ msg: 'Access denied, insufficient permissions' });
+    }
+
+    next();
+  };
+}
