@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 
+import { Container, Stack } from '../types/models-shared';
 import { serverLogger as logger } from '../utils/serverLogger';
 
 let redisClient: Redis | null = null;
@@ -9,7 +10,10 @@ export const CACHE_KEYS = {
   SESSION: 'session:',      // User sessions (30 minutes)
   USER: 'user:',           // User data (1 hour)
   COMMAND: 'command:',     // Command history (1 day)
-  DOCKER: 'docker:',       // Docker state (30 seconds)
+  DOCKER: {
+    CONTAINERS: 'docker:containers:',  // Docker containers state (30 seconds)
+    STACKS: 'docker:stacks:',         // Docker stacks state (30 seconds)
+  },
   HOST: 'host:',          // Host status (1 minute)
   MFA: 'mfa:',            // MFA verification codes (5 minutes)
 } as const;
@@ -125,6 +129,73 @@ export const getSession = async (token: string): Promise<string | null> => {
   }
 };
 
+// Docker state caching
+export const getDockerContainers = async (hostId: string): Promise<Container[] | null> => {
+  try {
+    const client = getClient();
+    const data = await client.get(`${CACHE_KEYS.DOCKER.CONTAINERS}${hostId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error('Failed to get Docker containers', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      hostId,
+    });
+    throw error;
+  }
+};
+
+export const cacheDockerContainers = async (hostId: string, data: Container[]): Promise<void> => {
+  try {
+    const client = getClient();
+    await client.setex(
+      `${CACHE_KEYS.DOCKER.CONTAINERS}${hostId}`,
+      CACHE_TTL.DOCKER,
+      JSON.stringify(data),
+    );
+  } catch (error) {
+    logger.error('Failed to cache Docker containers', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      hostId,
+    });
+    throw error;
+  }
+};
+
+export const getDockerStacks = async (hostId: string): Promise<Stack[] | null> => {
+  try {
+    const client = getClient();
+    const data = await client.get(`${CACHE_KEYS.DOCKER.STACKS}${hostId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error('Failed to get Docker stacks', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      hostId,
+    });
+    throw error;
+  }
+};
+
+export const cacheDockerStacks = async (hostId: string, data: Stack[]): Promise<void> => {
+  try {
+    const client = getClient();
+    await client.setex(
+      `${CACHE_KEYS.DOCKER.STACKS}${hostId}`,
+      CACHE_TTL.DOCKER,
+      JSON.stringify(data),
+    );
+  } catch (error) {
+    logger.error('Failed to cache Docker stacks', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      hostId,
+    });
+    throw error;
+  }
+};
+
 // Host caching
 export const getHostStatus = async (id: string): Promise<unknown> => {
   try {
@@ -211,4 +282,8 @@ export default {
   getHostStatus,
   cacheHostStatus,
   invalidateHostCache,
+  getDockerContainers,
+  cacheDockerContainers,
+  getDockerStacks,
+  cacheDockerStacks,
 };

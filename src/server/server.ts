@@ -184,8 +184,10 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 
 // Start server
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server running on port ${PORT}`, {
+const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+
+server.listen(portNumber, '0.0.0.0', () => {
+  logger.info(`Server running on port ${portNumber}`, {
     environment: process.env.NODE_ENV,
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
     dbHost: process.env.DB_HOST,
