@@ -68,3 +68,28 @@ export const authenticateToken = (
     res.status(401).json({ success: false, error: 'Invalid token' });
   }
 };
+
+export const checkRole = (roles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      if (!roles.includes(authReq.user.role)) {
+        res.status(403).json({ success: false, error: 'Insufficient permissions' });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      logger.error('Role check error:', {
+        error: (err as Error).message,
+        stack: (err as Error).stack,
+      });
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+};
