@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { Client } from 'ssh2';
 
-import cache from '../cache';
+import {
+  getHostStatus,
+  cacheHostStatus,
+  invalidateHostCache,
+} from '../cache';
 import { query, transaction } from '../db.js';
 import { checkRole } from '../middleware/auth.js';
 import { serverLogger as logger } from '../utils/serverLogger';
@@ -23,7 +27,7 @@ interface Host {
 // List hosts
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const cachedHosts = await cache.getHostStatus('all');
+    const cachedHosts = await getHostStatus('all');
     if (cachedHosts) {
       return res.json({ success: true, data: cachedHosts });
     }
@@ -31,11 +35,10 @@ router.get('/', async (_req: Request, res: Response) => {
     const result = await query<Host>(
       'SELECT * FROM hosts ORDER BY name',
       [],
-      { cache: true, ttl: 60 },
     );
 
     const hosts = result.rows;
-    await cache.cacheHostStatus('all', hosts);
+    await cacheHostStatus('all', hosts);
     res.json({ success: true, data: hosts });
   } catch (err) {
     logger.error('Error listing hosts:', { error: (err as Error).message, stack: (err as Error).stack });
@@ -46,7 +49,7 @@ router.get('/', async (_req: Request, res: Response) => {
 // Get host details
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const cachedHost = await cache.getHostStatus(req.params.id);
+    const cachedHost = await getHostStatus(req.params.id);
     if (cachedHost) {
       return res.json({ success: true, data: cachedHost });
     }
@@ -61,7 +64,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     const host = result.rows[0];
-    await cache.cacheHostStatus(req.params.id, host);
+    await cacheHostStatus(req.params.id, host);
     res.json({ success: true, data: host });
   } catch (err) {
     logger.error('Error getting host:', { error: (err as Error).message, stack: (err as Error).stack });
@@ -102,7 +105,7 @@ router.post('/', checkRole(['admin']), async (req: Request<unknown, unknown, Cre
       return result.rows[0];
     });
 
-    await cache.invalidateHostCache('all');
+    await invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
     logger.error('Error creating host:', { error: (err as Error).message, stack: (err as Error).stack });
@@ -140,8 +143,8 @@ router.patch('/:id', checkRole(['admin']), async (req: Request<{ id: string }, u
       return result.rows[0];
     });
 
-    await cache.invalidateHostCache(req.params.id);
-    await cache.invalidateHostCache('all');
+    await invalidateHostCache(req.params.id);
+    await invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
     logger.error('Error updating host:', { error: (err as Error).message, stack: (err as Error).stack });
@@ -154,20 +157,20 @@ router.delete('/:id', checkRole(['admin']), async (req: Request<{ id: string }>,
   try {
     await transaction(async (client) => {
       // Check for active connections or dependencies
-      const activeCommands = await client.query(
+      const activeCommands = await client.query<{ count: string }>(
         'SELECT COUNT(*) FROM command_history WHERE host_id = $1 AND created_at > NOW() - INTERVAL \'5 minutes\'',
         [req.params.id],
       );
 
-      if (activeCommands.rows[0].count > 0) {
+      if (parseInt(activeCommands.rows[0].count) > 0) {
         throw new Error('Host has active connections');
       }
 
       await client.query('DELETE FROM hosts WHERE id = $1', [req.params.id]);
     });
 
-    await cache.invalidateHostCache(req.params.id);
-    await cache.invalidateHostCache('all');
+    await invalidateHostCache(req.params.id);
+    await invalidateHostCache('all');
     res.json({ success: true });
   } catch (err) {
     logger.error('Error deleting host:', { error: (err as Error).message, stack: (err as Error).stack });

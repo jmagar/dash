@@ -1,6 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { verify } from 'jsonwebtoken';
 
+interface DecodedToken {
+  user: {
+    id: string;
+    username: string;
+    role: string;
+  };
+  iat: number;
+  exp: number;
+}
+
 export default function auth(req: Request, res: Response, next: NextFunction): void {
   // Check if authentication is enabled
   if (process.env.ENABLE_AUTH === 'false') {
@@ -16,7 +26,7 @@ export default function auth(req: Request, res: Response, next: NextFunction): v
   }
 
   try {
-    const decoded = verify(token, process.env.JWT_SECRET || '');
+    const decoded = verify(token, process.env.JWT_SECRET || '') as DecodedToken;
     req.user = decoded.user;
     next();
   } catch (err) {

@@ -19,7 +19,7 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (...args: unknown[]) => {
-  const err = args[0] as Error;
+  const err = args[0] instanceof Error ? args[0] : new Error(String(args[0]));
   logger.error('Unexpected database error', {
     error: err.message,
     stack: err.stack,
@@ -31,7 +31,7 @@ pool.on('remove', () => {
 });
 
 // Query wrapper with logging
-export const query = async <T = any>(
+export const query = async <T = unknown>(
   text: string,
   params?: unknown[],
 ): Promise<QueryResult<T>> => {
@@ -60,7 +60,7 @@ export const query = async <T = any>(
 };
 
 // Transaction wrapper
-export const transaction = async <T = any>(
+export const transaction = async <T = unknown>(
   callback: (client: PoolClient) => Promise<T>,
 ): Promise<T> => {
   const client = await pool.connect();

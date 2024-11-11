@@ -1,4 +1,14 @@
 declare module 'jsonwebtoken' {
+    interface DecodedToken {
+        user: {
+            id: string;
+            username: string;
+            role: string;
+        };
+        iat: number;
+        exp: number;
+    }
+
     export interface SignOptions {
         expiresIn?: string | number;
         notBefore?: string | number;
@@ -32,7 +42,7 @@ declare module 'jsonwebtoken' {
     }
 
     export interface VerifyCallback {
-        (err: Error | null, decoded: Record<string, unknown> | string | undefined): void;
+        (err: Error | null, decoded: DecodedToken | undefined): void;
     }
 
     export function sign(
@@ -45,10 +55,10 @@ declare module 'jsonwebtoken' {
         token: string,
         secretOrPublicKey: string | Buffer,
         options?: VerifyOptions
-    ): Record<string, unknown> | string;
+    ): DecodedToken;
 
     export function decode(
         token: string,
         options?: DecodeOptions
-    ): null | Record<string, unknown> | string;
+    ): null | DecodedToken;
 }
