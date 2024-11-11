@@ -1,9 +1,12 @@
 import { Readable } from 'stream';
 
 export interface SSHStream {
-  stderr: Readable;
   readable: boolean;
   writable: boolean;
+  stderr: Readable;
+  write(data: string | Buffer): boolean;
+  end(): void;
+  setWindow(rows: number, cols: number): void;
   on(event: 'data', listener: (data: Buffer) => void): this;
   on(event: 'close', listener: (code: number) => void): this;
   on(event: 'error', listener: (err: Error) => void): this;
@@ -20,6 +23,13 @@ export interface SSHExecOptions {
   term?: string;
 }
 
+export interface SSHShellOptions {
+  term?: string;
+  rows?: number;
+  cols?: number;
+  pty?: boolean;
+}
+
 export interface SSHClient {
   exec(
     command: string,
@@ -28,6 +38,13 @@ export interface SSHClient {
   ): void;
   exec(
     command: string,
+    callback: (err: Error | undefined, stream: SSHStream) => void
+  ): void;
+  shell(
+    options: SSHShellOptions | undefined,
+    callback: (err: Error | undefined, stream: SSHStream) => void
+  ): void;
+  shell(
     callback: (err: Error | undefined, stream: SSHStream) => void
   ): void;
   on(event: 'ready', listener: () => void): this;
@@ -40,4 +57,13 @@ export interface SSHClient {
     passphrase?: string;
   }): void;
   end(): void;
+}
+
+export interface SSHHostConnection {
+  id: string;
+  hostname: string;
+  port: number;
+  username?: string;
+  private_key?: string;
+  passphrase?: string;
 }
