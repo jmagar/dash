@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-import { ApiResult } from '../../types';
-import { handleApiError, API_ENDPOINTS } from '../../types/api-shared';
+import type { ApiResult } from '../../types';
+import { API_ENDPOINTS } from '../../types/api-shared';
+import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
 
 export interface Package {

@@ -1,4 +1,4 @@
-import type { ApiResult } from '../types/api-shared';
+import type { ApiResult } from '../../types/api-shared';
 
 export function handleApiError<T>(error: unknown): ApiResult<T> {
   if (error instanceof Error) {

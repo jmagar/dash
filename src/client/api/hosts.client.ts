@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-import { ApiResult, Host, SystemStats } from '../../types';
-import { handleApiError, API_ENDPOINTS } from '../../types/api-shared';
+import type { Host, SystemStats, ApiResult } from '../../types';
+import { API_ENDPOINTS } from '../../types/api-shared';
+import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
 
 export async function listHosts(): Promise<ApiResult<Host[]>> {

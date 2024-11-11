@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-import { User, ApiResult, AuthResult, UserRegistration } from '../../types';
-import { handleApiError, API_ENDPOINTS } from '../../types/api-shared';
+import type { User, ApiResult, AuthResult, UserRegistration } from '../../types';
+import { API_ENDPOINTS } from '../../types/api-shared';
+import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
 
 export async function login(

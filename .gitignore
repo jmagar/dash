@@ -55,3 +55,4 @@ known_hosts
 
 # Misc
 .DS_Store
+.aider*
