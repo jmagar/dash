@@ -22,7 +22,6 @@
   },
   "include": [
     "src/server/**/*.ts",
-    "src/server/**/*.js",
     "src/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
