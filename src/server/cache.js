@@ -2,7 +2,7 @@
 
 const Redis = require('ioredis');
 
-const { serverLogger: logger } = require('../dist/utils/serverLogger');
+const { serverLogger: logger } = require('../utils/serverLogger');
 
 let redisClient = null;
 
