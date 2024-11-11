@@ -1,3 +1,4 @@
+import path from 'path';
 import { createLogger, format, transports, Logger as WinstonLogger } from 'winston';
 
 import type { Logger, LogConfig } from '../../types/logging';
@@ -24,6 +25,9 @@ class ServerLogger implements Logger {
       return `${timestamp} [${level}]: ${message}${metaString}`;
     });
 
+    // Create logs directory path
+    const logsDir = path.join(__dirname, '../../../logs');
+
     this.logger = createLogger({
       level: finalConfig.level,
       format: combine(
@@ -31,7 +35,26 @@ class ServerLogger implements Logger {
         finalConfig.colors ? colorize() : format.simple(),
         logFormat,
       ),
-      transports: [new transports.Console()],
+      transports: [
+        // Console transport
+        new transports.Console(),
+        // File transports
+        new transports.File({
+          filename: path.join(logsDir, 'error.log'),
+          level: 'error',
+        }),
+        new transports.File({
+          filename: path.join(logsDir, 'combined.log'),
+        }),
+        // Daily rotate file transport for detailed logs
+        new transports.File({
+          filename: path.join(logsDir, `detailed-${new Date().toISOString().split('T')[0]}.log`),
+          format: combine(
+            timestamp(),
+            format.json()
+          ),
+        }),
+      ],
     });
   }
 

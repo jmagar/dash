@@ -4,14 +4,8 @@ import { ApiResult, CommandResult } from '../../types/api-shared';
 import { Container, Stack } from '../../types/models-shared';
 import { serverLogger as logger } from '../../utils/serverLogger';
 import cache from '../cache';
-import { authenticateToken } from '../middleware/auth';
 
 const router: Router = Router();
-
-// Apply authentication middleware to all routes unless auth is disabled
-if (process.env.DISABLE_AUTH !== 'true') {
-  router.use(authenticateToken);
-}
 
 interface DockerContainerJson {
   ID: string;

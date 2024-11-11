@@ -14,14 +14,9 @@ import {
 } from '../../types/files';
 import { serverLogger as logger } from '../../utils/serverLogger';
 import { query } from '../db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 const router: Router = Router();
-
-// Apply authentication middleware to all routes unless auth is disabled
-if (process.env.DISABLE_AUTH !== 'true') {
-  router.use(authenticateToken);
-}
 
 interface RequestParams {
   hostId: string;

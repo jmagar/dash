@@ -2,8 +2,6 @@ import axios from 'axios';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 import type { Host } from '../../types';
-import LoadingScreen from '../components/LoadingScreen';
-import SetupWizard from '../components/SetupWizard';
 import { logger } from '../utils/frontendLogger';
 
 interface HostContextType {
@@ -41,11 +39,13 @@ export function HostProvider({ children }: Props): JSX.Element {
             setSelectedHost(response.data.data[0]);
             setHasHosts(true);
           } else {
+            setSelectedHost(null);
             setHasHosts(false);
           }
         }
       } catch (error) {
         logger.error('Error fetching hosts:', { error });
+        setSelectedHost(null);
         setHasHosts(false);
       } finally {
         setLoading(false);
@@ -54,14 +54,6 @@ export function HostProvider({ children }: Props): JSX.Element {
 
     void fetchHosts();
   }, []);
-
-  if (loading) {
-    return <LoadingScreen fullscreen message="Loading hosts..." />;
-  }
-
-  if (!hasHosts) {
-    return <SetupWizard />;
-  }
 
   return (
     <HostContext.Provider value={{ selectedHost, setSelectedHost, loading, hasHosts }}>

@@ -9,20 +9,27 @@ import Layout from './components/Layout';
 import Login from './components/Login';
 import PackageManager from './components/PackageManager';
 import PrivateRoute from './components/PrivateRoute';
+import SetupWizard from './components/SetupWizard';
 import UserProfile from './components/UserProfile';
 import { HostProvider, useHost } from './context/HostContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 function AppContent(): JSX.Element {
   const { isDarkMode, toggleTheme } = useTheme();
-  const { selectedHost } = useHost();
+  const { selectedHost, hasHosts, loading } = useHost();
 
+  // Show setup wizard if there are no hosts
+  if (!hasHosts && !loading) {
+    return <SetupWizard />;
+  }
+
+  // Show loading or no host message if needed
   if (!selectedHost) {
     return (
       <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
         <Box sx={{ p: 3 }}>
           <Typography color="error">
-            Please select a host to continue
+            {loading ? "Loading hosts..." : "No host selected"}
           </Typography>
         </Box>
       </Layout>

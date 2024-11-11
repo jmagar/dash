@@ -10,14 +10,9 @@ import {
   invalidateHostCache,
 } from '../cache';
 import { query, transaction } from '../db';
-import { authenticateToken, checkRole, type AuthenticatedRequest } from '../middleware/auth';
+import { checkRole, type AuthenticatedRequest } from '../middleware/auth';
 
 const router: Router = Router();
-
-// Apply authentication middleware to all routes unless auth is disabled
-if (process.env.DISABLE_AUTH !== 'true') {
-  router.use(authenticateToken);
-}
 
 interface Host {
     id: string;
@@ -41,36 +36,9 @@ interface RequestParams extends ParamsDictionary {
   id: string;
 }
 
-// Create default localhost host if none exists
-const ensureDefaultHost = async (): Promise<void> => {
-  if (process.env.DISABLE_AUTH !== 'true') {
-    return;
-  }
-
-  try {
-    const result = await query<Host>('SELECT id FROM hosts WHERE hostname = $1', ['localhost']);
-
-    if (result.rows.length === 0) {
-      logger.info('Creating default localhost host');
-      await query(
-        'INSERT INTO hosts (name, hostname, port, ip, is_active) VALUES ($1, $2, $3, $4, $5)',
-        ['localhost', 'localhost', 22, '127.0.0.1', true],
-      );
-    }
-  } catch (err) {
-    logger.error('Error ensuring default host:', { error: (err as Error).message, stack: (err as Error).stack });
-  }
-};
-
-// Ensure default host exists when the route is loaded
-void ensureDefaultHost();
-
 // List hosts
 router.get('/', async (_req: Request, res: Response<HostResponse>) => {
   try {
-    // Ensure default host exists before listing
-    await ensureDefaultHost();
-
     const cachedHosts = await getHostStatus('all');
     if (cachedHosts) {
       return res.json({ success: true, data: cachedHosts as Host[] });

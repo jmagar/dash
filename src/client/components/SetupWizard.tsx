@@ -28,6 +28,8 @@ export default function SetupWizard(): JSX.Element {
     hostname: '',
     port: 22,
     ip: '',
+    username: '',
+    password: '',
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -53,6 +55,12 @@ export default function SetupWizard(): JSX.Element {
           throw new Error(response.data.error || 'Failed to create host');
         }
       } else if (activeStep === 1) {
+        // When auth is disabled, skip connection test and just reload
+        if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
+          window.location.reload();
+          return;
+        }
+
         // Test connection
         const response = await axios.post(`/api/hosts/${hostData.name}/test`);
         if (response.data.success) {
@@ -77,7 +85,7 @@ export default function SetupWizard(): JSX.Element {
 
   const isNextDisabled = (): boolean => {
     if (activeStep === 0) {
-      return !hostData.name || !hostData.hostname || !hostData.ip;
+      return !hostData.name || !hostData.hostname || !hostData.ip || !hostData.username;
     }
     return false;
   };
@@ -111,6 +119,7 @@ export default function SetupWizard(): JSX.Element {
                 onChange={handleInputChange}
                 margin="normal"
                 required
+                helperText="A friendly name for this host"
               />
               <TextField
                 fullWidth
@@ -142,14 +151,38 @@ export default function SetupWizard(): JSX.Element {
                 required
                 helperText="e.g., 127.0.0.1 or server IP"
               />
+              <TextField
+                fullWidth
+                label="Username"
+                name="username"
+                value={hostData.username}
+                onChange={handleInputChange}
+                margin="normal"
+                required
+                helperText="SSH username"
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                name="password"
+                type="password"
+                value={hostData.password}
+                onChange={handleInputChange}
+                margin="normal"
+                helperText="SSH password (optional if using key-based auth)"
+              />
             </Box>
           ) : (
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="body1" gutterBottom>
-                Let&apos;s test the connection to your host.
+                {process.env.REACT_APP_DISABLE_AUTH === 'true'
+                  ? "Setup is complete! Click Next to continue."
+                  : "Let's test the connection to your host."}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Click Next to verify the connection.
+                {process.env.REACT_APP_DISABLE_AUTH === 'true'
+                  ? "The application will reload to apply changes."
+                  : "Click Next to verify the connection."}
               </Typography>
             </Box>
           )}

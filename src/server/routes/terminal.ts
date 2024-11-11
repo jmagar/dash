@@ -10,7 +10,7 @@ import type {
 } from '../../types/terminal';
 import { serverLogger as logger } from '../../utils/serverLogger';
 import { redis, CACHE_KEYS } from '../cache';
-import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
+import { type AuthenticatedRequest } from '../middleware/auth';
 
 const router: Router = Router();
 let ioServer: any;
@@ -56,11 +56,6 @@ interface SSHConnectionRequest {
   hostname: string;
   port: number;
   privateKey: string;
-}
-
-// Apply authentication middleware to all routes unless auth is disabled
-if (process.env.DISABLE_AUTH !== 'true') {
-  router.use(authenticateToken);
 }
 
 // Connect to SSH server

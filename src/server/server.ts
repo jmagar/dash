@@ -1,5 +1,6 @@
 import fs from 'fs';
 import http from 'http';
+import os from 'os';
 import path from 'path';
 
 import cors from 'cors';
@@ -20,6 +21,12 @@ import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { initializeSocketIO } from './routes/terminal';
 import { serverLogger as logger } from './utils/serverLogger';
+
+// Create logs directory if it doesn't exist
+const logsDir = path.join(__dirname, '../../logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir);
+}
 
 // Import socket.io using require since it has issues with ES modules
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -167,17 +174,45 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
+// Get server IP addresses
+const getServerIPs = (): string[] => {
+  const interfaces = os.networkInterfaces();
+  const addresses: string[] = [];
+
+  Object.values(interfaces).forEach((iface) => {
+    if (iface) {
+      iface.forEach((addr) => {
+        if (addr.family === 'IPv4' && !addr.internal) {
+          addresses.push(addr.address);
+        }
+      });
+    }
+  });
+
+  return addresses;
+};
+
 // Start server
 const PORT = process.env.PORT || 4000;
 const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
 
 server.listen(portNumber, '0.0.0.0', () => {
-  logger.info(`Server running on port ${portNumber}`, {
+  const ips = getServerIPs();
+  logger.info('Server started', {
     environment: process.env.NODE_ENV,
+    port: portNumber,
+    addresses: ips.map(ip => `http://${ip}:${portNumber}`),
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
     dbHost: process.env.DB_HOST,
     redisHost: process.env.REDIS_HOST,
   });
+
+  // Log to console for visibility
+  console.log('\nServer is running on:');
+  ips.forEach(ip => {
+    console.log(`  http://${ip}:${portNumber}`);
+  });
+  console.log('\n');
 });
 
 // Graceful shutdown

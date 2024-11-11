@@ -25,6 +25,11 @@ services:
       - JWT_SECRET=production-secret-key
       - JWT_EXPIRATION=30m
       - LOG_LEVEL=info
+      - DISABLE_AUTH=true
+      - REACT_APP_DISABLE_AUTH=true
+      - DISABLE_ESLINT_PLUGIN=true
+      - SKIP_PREFLIGHT_CHECK=true
+      - CI=true
     depends_on:
       db:
         condition: service_healthy
