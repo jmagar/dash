@@ -1,6 +1,7 @@
-import jwt from 'jsonwebtoken';
+import { Request, Response, NextFunction } from 'express';
+import { verify } from 'jsonwebtoken';
 
-export default function auth(req, res, next) {
+export default function auth(req: Request, res: Response, next: NextFunction): void {
   // Check if authentication is enabled
   if (process.env.ENABLE_AUTH === 'false') {
     // Authentication disabled, proceed to next middleware
@@ -10,11 +11,12 @@ export default function auth(req, res, next) {
   const token = req.header('Authorization');
 
   if (!token) {
-    return res.status(401).json({ msg: 'No token, authorization denied' });
+    res.status(401).json({ msg: 'No token, authorization denied' });
+    return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = verify(token, process.env.JWT_SECRET || '');
     req.user = decoded.user;
     next();
   } catch (err) {
@@ -22,8 +24,8 @@ export default function auth(req, res, next) {
   }
 }
 
-export function checkRole(roles) {
-  return (req, res, next) => {
+export function checkRole(roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
     // Check if authentication is enabled
     if (process.env.ENABLE_AUTH === 'false') {
       // Authentication disabled, proceed to next middleware
@@ -32,12 +34,14 @@ export function checkRole(roles) {
 
     // Check if user exists (should be set by auth middleware)
     if (!req.user) {
-      return res.status(401).json({ msg: 'No user found, authorization denied' });
+      res.status(401).json({ msg: 'No user found, authorization denied' });
+      return;
     }
 
     // Check if user has required role
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ msg: 'Access denied, insufficient permissions' });
+      res.status(403).json({ msg: 'Access denied, insufficient permissions' });
+      return;
     }
 
     next();

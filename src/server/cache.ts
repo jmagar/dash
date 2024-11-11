@@ -1,32 +1,30 @@
-'use strict';
+import Redis from 'ioredis';
 
-const Redis = require('ioredis');
+import { serverLogger as logger } from '../utils/serverLogger';
 
-const { serverLogger: logger } = require('../utils/serverLogger');
-
-let redisClient = null;
+let redisClient: Redis | null = null;
 
 // Cache keys and expiration times
-const CACHE_KEYS = {
+export const CACHE_KEYS = {
   SESSION: 'session:',      // User sessions (30 minutes)
   USER: 'user:',           // User data (1 hour)
   COMMAND: 'command:',     // Command history (1 day)
   DOCKER: 'docker:',       // Docker state (30 seconds)
   HOST: 'host:',          // Host status (1 minute)
   MFA: 'mfa:',            // MFA verification codes (5 minutes)
-};
+} as const;
 
-const CACHE_TTL = {
+export const CACHE_TTL = {
   SESSION: 1800,    // 30 minutes
   USER: 3600,       // 1 hour
   COMMAND: 86400,   // 1 day
   DOCKER: 30,       // 30 seconds
   HOST: 60,         // 1 minute
   MFA: 300,         // 5 minutes
-};
+} as const;
 
 // Initialize Redis client
-const initializeRedis = () => {
+const initializeRedis = (): Redis => {
   try {
     logger.info('Initializing Redis client...', {
       host: process.env.REDIS_HOST,
@@ -36,7 +34,7 @@ const initializeRedis = () => {
     redisClient = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
-      retryStrategy: (times) => {
+      retryStrategy: (times: number): number => {
         const delay = Math.min(times * 50, 2000);
         logger.info(`Retrying Redis connection (attempt ${times})...`);
         return delay;
@@ -52,7 +50,8 @@ const initializeRedis = () => {
       logger.info('Redis client ready');
     });
 
-    redisClient.on('error', (err) => {
+    redisClient.on('error', (...args: unknown[]) => {
+      const err = args[0] instanceof Error ? args[0] : new Error(String(args[0]));
       logger.error('Redis client error', {
         error: err.message,
         stack: err.stack,
@@ -75,15 +74,15 @@ const initializeRedis = () => {
     return redisClient;
   } catch (error) {
     logger.error('Failed to initialize Redis', {
-      error: error.message,
-      stack: error.stack,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
     });
     throw error;
   }
 };
 
 // Get Redis client (initialize if needed)
-const getClient = () => {
+const getClient = (): Redis => {
   if (!redisClient) {
     redisClient = initializeRedis();
   }
@@ -91,25 +90,26 @@ const getClient = () => {
 };
 
 // Check if Redis is connected
-const isConnected = () => redisClient && redisClient.status === 'ready';
+export const isConnected = (): boolean =>
+  redisClient?.status === 'ready' ?? false;
 
 // Session caching
-const cacheSession = async (token, sessionData) => {
+export const cacheSession = async (token: string, sessionData: string): Promise<void> => {
   try {
     const client = getClient();
     await client.setex(`${CACHE_KEYS.SESSION}${token}`, CACHE_TTL.SESSION, sessionData);
     logger.debug('Session cached', { token });
   } catch (error) {
     logger.error('Failed to cache session', {
-      error: error.message,
-      stack: error.stack,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
       token,
     });
     throw error;
   }
 };
 
-const getSession = async (token) => {
+export const getSession = async (token: string): Promise<string | null> => {
   try {
     const client = getClient();
     const data = await client.get(`${CACHE_KEYS.SESSION}${token}`);
@@ -117,16 +117,64 @@ const getSession = async (token) => {
     return data;
   } catch (error) {
     logger.error('Failed to get session', {
-      error: error.message,
-      stack: error.stack,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
       token,
     });
     throw error;
   }
 };
 
+// Host caching
+export const getHostStatus = async (id: string): Promise<unknown> => {
+  try {
+    const client = getClient();
+    const data = await client.get(`${CACHE_KEYS.HOST}${id}`);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error('Failed to get host status', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      id,
+    });
+    throw error;
+  }
+};
+
+export const cacheHostStatus = async (id: string, data: unknown): Promise<void> => {
+  try {
+    const client = getClient();
+    await client.setex(
+      `${CACHE_KEYS.HOST}${id}`,
+      CACHE_TTL.HOST,
+      JSON.stringify(data),
+    );
+  } catch (error) {
+    logger.error('Failed to cache host status', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      id,
+    });
+    throw error;
+  }
+};
+
+export const invalidateHostCache = async (id: string): Promise<void> => {
+  try {
+    const client = getClient();
+    await client.del(`${CACHE_KEYS.HOST}${id}`);
+  } catch (error) {
+    logger.error('Failed to invalidate host cache', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      id,
+    });
+    throw error;
+  }
+};
+
 // Health check
-const healthCheck = async () => {
+export const healthCheck = async (): Promise<{ status: string; connected: boolean; error?: string }> => {
   try {
     const client = getClient();
     await client.ping();
@@ -136,13 +184,13 @@ const healthCheck = async () => {
     };
   } catch (error) {
     logger.error('Redis health check failed', {
-      error: error.message,
-      stack: error.stack,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
     });
     return {
       status: 'unhealthy',
       connected: false,
-      error: error.message,
+      error: (error as Error).message,
     };
   }
 };
@@ -150,12 +198,17 @@ const healthCheck = async () => {
 // Initialize Redis on module load
 initializeRedis();
 
-module.exports = {
-  redis: getClient(),
+export const redis = getClient();
+
+export default {
+  redis,
   cacheSession,
   getSession,
   healthCheck,
   isConnected,
   CACHE_KEYS,
   CACHE_TTL,
+  getHostStatus,
+  cacheHostStatus,
+  invalidateHostCache,
 };

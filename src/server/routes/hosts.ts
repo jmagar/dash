@@ -1,4 +1,4 @@
-import express from 'express';
+import { Router, Request, Response } from 'express';
 import { Client } from 'ssh2';
 
 import cache from '../cache';
@@ -6,17 +6,29 @@ import { query, transaction } from '../db.js';
 import { checkRole } from '../middleware/auth.js';
 import { serverLogger as logger } from '../utils/serverLogger';
 
-const router = express.Router();
+const router = Router();
+
+interface Host {
+    id: string;
+    name: string;
+    hostname: string;
+    port: number;
+    ip: string;
+    ssh_key_id?: string;
+    is_active?: boolean;
+    private_key?: string;
+    passphrase?: string;
+}
 
 // List hosts
-router.get('/', async (req, res) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const cachedHosts = await cache.getHostStatus('all');
     if (cachedHosts) {
       return res.json({ success: true, data: cachedHosts });
     }
 
-    const result = await query(
+    const result = await query<Host>(
       'SELECT * FROM hosts ORDER BY name',
       [],
       { cache: true, ttl: 60 },
@@ -26,20 +38,20 @@ router.get('/', async (req, res) => {
     await cache.cacheHostStatus('all', hosts);
     res.json({ success: true, data: hosts });
   } catch (err) {
-    logger.error('Error listing hosts:', { error: err.message, stack: err.stack });
+    logger.error('Error listing hosts:', { error: (err as Error).message, stack: (err as Error).stack });
     res.status(500).json({ success: false, error: 'Failed to list hosts' });
   }
 });
 
 // Get host details
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const cachedHost = await cache.getHostStatus(req.params.id);
     if (cachedHost) {
       return res.json({ success: true, data: cachedHost });
     }
 
-    const result = await query(
+    const result = await query<Host>(
       'SELECT h.*, sk.name as key_name FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
       [req.params.id],
     );
@@ -52,13 +64,21 @@ router.get('/:id', async (req, res) => {
     await cache.cacheHostStatus(req.params.id, host);
     res.json({ success: true, data: host });
   } catch (err) {
-    logger.error('Error getting host:', { error: err.message, stack: err.stack });
+    logger.error('Error getting host:', { error: (err as Error).message, stack: (err as Error).stack });
     res.status(500).json({ success: false, error: 'Failed to get host' });
   }
 });
 
+interface CreateHostRequest {
+  name: string;
+  hostname: string;
+  port: number;
+  ip: string;
+  sshKeyId?: string;
+}
+
 // Create host
-router.post('/', checkRole(['admin']), async (req, res) => {
+router.post('/', checkRole(['admin']), async (req: Request<unknown, unknown, CreateHostRequest>, res: Response) => {
   const { name, hostname, port, ip, sshKeyId } = req.body;
 
   try {
@@ -74,7 +94,7 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       }
 
       // Create new host
-      const result = await client.query(
+      const result = await client.query<Host>(
         'INSERT INTO hosts (name, hostname, port, ip, ssh_key_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [name, hostname, port, ip, sshKeyId],
       );
@@ -85,13 +105,17 @@ router.post('/', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
-    logger.error('Error creating host:', { error: err.message, stack: err.stack });
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('Error creating host:', { error: (err as Error).message, stack: (err as Error).stack });
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
 
+interface UpdateHostRequest extends CreateHostRequest {
+  isActive?: boolean;
+}
+
 // Update host
-router.patch('/:id', checkRole(['admin']), async (req, res) => {
+router.patch('/:id', checkRole(['admin']), async (req: Request<{ id: string }, unknown, UpdateHostRequest>, res: Response) => {
   const { name, hostname, port, ip, sshKeyId, isActive } = req.body;
 
   try {
@@ -105,7 +129,7 @@ router.patch('/:id', checkRole(['admin']), async (req, res) => {
         throw new Error('Host not found');
       }
 
-      const result = await client.query(
+      const result = await client.query<Host>(
         `UPDATE hosts
          SET name = $1, hostname = $2, port = $3, ip = $4, ssh_key_id = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP
          WHERE id = $7
@@ -120,13 +144,13 @@ router.patch('/:id', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true, data: result });
   } catch (err) {
-    logger.error('Error updating host:', { error: err.message, stack: err.stack });
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('Error updating host:', { error: (err as Error).message, stack: (err as Error).stack });
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
 
 // Delete host
-router.delete('/:id', checkRole(['admin']), async (req, res) => {
+router.delete('/:id', checkRole(['admin']), async (req: Request<{ id: string }>, res: Response) => {
   try {
     await transaction(async (client) => {
       // Check for active connections or dependencies
@@ -146,15 +170,15 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
     await cache.invalidateHostCache('all');
     res.json({ success: true });
   } catch (err) {
-    logger.error('Error deleting host:', { error: err.message, stack: err.stack });
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('Error deleting host:', { error: (err as Error).message, stack: (err as Error).stack });
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
 
 // Test connection
-router.post('/:id/test', async (req, res) => {
+router.post('/:id/test', async (req: Request<{ id: string }>, res: Response) => {
   try {
-    const result = await query(
+    const result = await query<Host>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
       [req.params.id],
     );
@@ -166,7 +190,7 @@ router.post('/:id/test', async (req, res) => {
     const host = result.rows[0];
     const conn = new Client();
 
-    const testConnection = new Promise((resolve, reject) => {
+    const testConnection = new Promise<void>((resolve, reject) => {
       conn.on('ready', () => {
         conn.end();
         resolve();
@@ -179,7 +203,7 @@ router.post('/:id/test', async (req, res) => {
       conn.connect({
         host: host.hostname,
         port: host.port,
-        username: req.user.username,
+        username: req.user?.username,
         privateKey: host.private_key,
         passphrase: host.passphrase,
       });
@@ -188,8 +212,8 @@ router.post('/:id/test', async (req, res) => {
     await testConnection;
     res.json({ success: true });
   } catch (err) {
-    logger.error('Error testing connection:', { error: err.message, stack: err.stack });
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('Error testing connection:', { error: (err as Error).message, stack: (err as Error).stack });
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
 
