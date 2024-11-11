@@ -1,4 +1,4 @@
-export interface DecodedToken extends Record<string, unknown> {
+export interface DecodedToken {
   id: string;
   username: string;
   role: string;
@@ -6,7 +6,13 @@ export interface DecodedToken extends Record<string, unknown> {
   exp: number;
 }
 
-export interface JwtPayload extends Record<string, unknown> {
+export interface JwtPayload {
+  id: string;
+  username: string;
+  role: string;
+}
+
+export interface AuthenticatedUser {
   id: string;
   username: string;
   role: string;

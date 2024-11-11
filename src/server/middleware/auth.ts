@@ -1,59 +1,70 @@
 import { Request, Response, NextFunction } from 'express';
 import { verify } from 'jsonwebtoken';
 
-interface DecodedToken {
-  user: {
-    id: string;
-    username: string;
-    role: string;
-  };
+import { AuthenticatedUser } from '../../types/jwt';
+import { serverLogger as logger } from '../../utils/serverLogger';
+
+export interface AuthenticatedRequest<
+  P = any,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = any,
+> extends Request<P, ResBody, ReqBody, ReqQuery> {
+  user: AuthenticatedUser;
+}
+
+interface JWTVerificationResult {
+  id: string;
+  username: string;
+  role: string;
   iat: number;
   exp: number;
 }
 
-export default function auth(req: Request, res: Response, next: NextFunction): void {
-  // Check if authentication is enabled
-  if (process.env.ENABLE_AUTH === 'false') {
-    // Authentication disabled, proceed to next middleware
-    return next();
-  }
+const isValidToken = (decoded: unknown): decoded is JWTVerificationResult => {
+  if (!decoded || typeof decoded !== 'object') return false;
 
-  const token = req.header('Authorization');
+  const token = decoded as Record<string, unknown>;
+  return (
+    typeof token.id === 'string' &&
+    typeof token.username === 'string' &&
+    typeof token.role === 'string' &&
+    typeof token.iat === 'number' &&
+    typeof token.exp === 'number'
+  );
+};
 
-  if (!token) {
-    res.status(401).json({ msg: 'No token, authorization denied' });
-    return;
-  }
-
+export const authenticateToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
   try {
-    const decoded = verify(token, process.env.JWT_SECRET || '') as DecodedToken;
-    req.user = decoded.user;
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+
+    if (!token) {
+      res.status(401).json({ success: false, error: 'No token provided' });
+      return;
+    }
+
+    const decoded = verify(token, process.env.JWT_SECRET || '');
+
+    if (!isValidToken(decoded)) {
+      throw new Error('Invalid token format');
+    }
+
+    (req as AuthenticatedRequest).user = {
+      id: decoded.id,
+      username: decoded.username,
+      role: decoded.role,
+    };
     next();
   } catch (err) {
-    res.status(401).json({ msg: 'Token is not valid' });
+    logger.error('Authentication error:', {
+      error: (err as Error).message,
+      stack: (err as Error).stack,
+    });
+    res.status(401).json({ success: false, error: 'Invalid token' });
   }
-}
-
-export function checkRole(roles: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    // Check if authentication is enabled
-    if (process.env.ENABLE_AUTH === 'false') {
-      // Authentication disabled, proceed to next middleware
-      return next();
-    }
-
-    // Check if user exists (should be set by auth middleware)
-    if (!req.user) {
-      res.status(401).json({ msg: 'No user found, authorization denied' });
-      return;
-    }
-
-    // Check if user has required role
-    if (!roles.includes(req.user.role)) {
-      res.status(403).json({ msg: 'Access denied, insufficient permissions' });
-      return;
-    }
-
-    next();
-  };
-}
+};
