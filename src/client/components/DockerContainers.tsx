@@ -1,71 +1,77 @@
 import {
+  PlayArrow as StartIcon,
+  Stop as StopIcon,
+  Refresh as RestartIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
+import {
+  Box,
+  IconButton,
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  IconButton,
   Typography,
-  Box,
 } from '@mui/material';
 import React, { useState } from 'react';
 
-import Terminal from './Terminal';
-import type { Container, Host } from '../../types';
+import { startContainer, stopContainer, restartContainer, removeContainer } from '../api';
 import { useDockerUpdates } from '../hooks';
+import LoadingScreen from './LoadingScreen';
 
 export default function DockerContainers(): JSX.Element {
-  const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
-  const { data, loading } = useDockerUpdates({ type: 'containers' });
+  const { containers, loading, error } = useDockerUpdates({ interval: 5000 });
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Type guard to ensure we're working with Container[]
-  const containers = data as Container[] | null;
+  const handleAction = async (
+    containerId: string,
+    action: 'start' | 'stop' | 'restart' | 'remove',
+  ): Promise<void> => {
+    try {
+      setActionError(null);
+      const actionMap = {
+        start: startContainer,
+        stop: stopContainer,
+        restart: restartContainer,
+        remove: removeContainer,
+      };
 
-  const handleContainerSelect = (containerId: string): void => {
-    setSelectedContainerId(containerId);
-  };
-
-  const renderContainerRow = (container: Container): JSX.Element => (
-    <TableRow key={container.id}>
-      <TableCell>{container.name}</TableCell>
-      <TableCell>{container.image}</TableCell>
-      <TableCell>{container.status}</TableCell>
-      <TableCell>
-        {container.ports?.join(', ') || 'No ports exposed'}
-      </TableCell>
-      <TableCell>
-        <IconButton onClick={(): void => handleContainerSelect(container.id)}>
-          Open Terminal
-        </IconButton>
-      </TableCell>
-    </TableRow>
-  );
-
-  const mockHost: Host = {
-    id: 1,
-    name: selectedContainerId || '',
-    hostname: 'localhost',
-    port: 22,
-    username: 'docker',
-    status: 'connected',
-    isActive: true,
+      const result = await actionMap[action](containerId);
+      if (!result.success) {
+        setActionError(result.error || `Failed to ${action} container`);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : `Failed to ${action} container`);
+    }
   };
 
   if (loading) {
+    return <LoadingScreen fullscreen={false} message="Loading containers..." />;
+  }
+
+  if (error) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography>Loading containers...</Typography>
+        <Typography color="error">{error}</Typography>
       </Box>
     );
   }
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Containers
+      <Typography variant="h5" gutterBottom>
+        Docker Containers
       </Typography>
+
+      {actionError && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {actionError}
+        </Typography>
+      )}
+
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -73,21 +79,45 @@ export default function DockerContainers(): JSX.Element {
               <TableCell>Name</TableCell>
               <TableCell>Image</TableCell>
               <TableCell>Status</TableCell>
-              <TableCell>Ports</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {containers?.map((container) => renderContainerRow(container))}
+            {containers.map((container) => (
+              <TableRow key={container.id}>
+                <TableCell>{container.name}</TableCell>
+                <TableCell>{container.image}</TableCell>
+                <TableCell>{container.status}</TableCell>
+                <TableCell>
+                  <IconButton
+                    onClick={(): void => void handleAction(container.id, 'start')}
+                    disabled={container.state === 'running'}
+                  >
+                    <StartIcon />
+                  </IconButton>
+                  <IconButton
+                    onClick={(): void => void handleAction(container.id, 'stop')}
+                    disabled={container.state === 'stopped'}
+                  >
+                    <StopIcon />
+                  </IconButton>
+                  <IconButton
+                    onClick={(): void => void handleAction(container.id, 'restart')}
+                    disabled={container.state === 'stopped'}
+                  >
+                    <RestartIcon />
+                  </IconButton>
+                  <IconButton
+                    onClick={(): void => void handleAction(container.id, 'remove')}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>
-
-      {selectedContainerId && (
-        <Terminal
-          host={mockHost}
-        />
-      )}
     </Box>
   );
 }

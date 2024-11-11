@@ -1,8 +1,7 @@
-import winston from 'winston';
+import { createLogger, format, transports, Logger as WinstonLogger } from 'winston';
 
 import type { Logger, LogConfig } from '../../types/logging';
 
-const { createLogger, format, transports } = winston;
 const { combine, timestamp, printf, colorize } = format;
 
 const defaultConfig: LogConfig = {
@@ -13,7 +12,7 @@ const defaultConfig: LogConfig = {
 };
 
 class ServerLogger implements Logger {
-  private logger: winston.Logger;
+  private logger: WinstonLogger;
 
   constructor(config: Partial<LogConfig> = {}) {
     const finalConfig = { ...defaultConfig, ...config };

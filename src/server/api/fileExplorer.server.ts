@@ -4,8 +4,8 @@ import path from 'path';
 import { Request, Response } from 'express';
 
 import type { ApiResult } from '../../types/api-shared';
+import { handleApiError } from '../../types/error';
 import type { FileItem } from '../../types/models-shared';
-import { handleApiError } from '../../utils/error';
 
 export async function listFiles(req: Request, res: Response): Promise<void> {
   const { path: dirPath } = req.query;

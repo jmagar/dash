@@ -1,6 +1,6 @@
-import bcrypt from 'bcrypt';
+import { compare } from 'bcrypt';
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { sign } from 'jsonwebtoken';
 
 import type { User, AuthResult } from '../../types';
 import type { ApiResult } from '../../types/api-shared';
@@ -20,7 +20,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const validPassword = await bcrypt.compare(password, user.rows[0].password);
+    const validPassword = await compare(password, user.rows[0].password);
 
     if (!validPassword) {
       res.status(401).json({
@@ -30,7 +30,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const token = jwt.sign(
+    const token = sign(
       { id: user.rows[0].id, username: user.rows[0].username },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '24h' },

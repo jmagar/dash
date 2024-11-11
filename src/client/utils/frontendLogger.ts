@@ -1,22 +1,25 @@
-import type { Logger } from '../../types/logger';
+import type { Logger } from '../../types/logging';
 
-/* eslint-disable no-console */
-const frontendLogger: Logger = {
-  info: (message: string, meta?: Record<string, unknown>): void => {
+class FrontendLogger implements Logger {
+  info(message: string, meta?: Record<string, unknown>): void {
+    // eslint-disable-next-line no-console
     console.info(message, meta);
-  },
-  warn: (message: string, meta?: Record<string, unknown>): void => {
-    console.warn(message, meta);
-  },
-  error: (message: string, meta?: Record<string, unknown>): void => {
-    console.error(message, meta);
-  },
-  debug: (message: string, meta?: Record<string, unknown>): void => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug(message, meta);
-    }
-  },
-};
-/* eslint-enable no-console */
+  }
 
-export default frontendLogger;
+  warn(message: string, meta?: Record<string, unknown>): void {
+    // eslint-disable-next-line no-console
+    console.warn(message, meta);
+  }
+
+  error(message: string, meta?: Record<string, unknown>): void {
+    // eslint-disable-next-line no-console
+    console.error(message, meta);
+  }
+
+  debug(message: string, meta?: Record<string, unknown>): void {
+    // eslint-disable-next-line no-console
+    console.debug(message, meta);
+  }
+}
+
+export const logger = new FrontendLogger();

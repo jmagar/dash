@@ -1,69 +1,52 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Container, Stack } from '../../types';
-import { getContainers, getStacks } from '../api';
-import logger from '../utils/frontendLogger';
+import type { Container } from '../../types';
+import { getContainers } from '../api';
+import { logger } from '../utils/frontendLogger';
 
 export interface UseDockerUpdatesOptions {
-  enabled?: boolean;
-  type: 'containers' | 'stacks';
   interval?: number;
+  enabled?: boolean;
 }
 
-interface UseDockerUpdatesResult {
-  data: Container[] | Stack[] | null;
+export function useDockerUpdates(options: UseDockerUpdatesOptions = {}): {
+  containers: Container[];
   loading: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
-}
-
-export function useDockerUpdates({
-  enabled = true,
-  type,
-  interval = 5000,
-}: UseDockerUpdatesOptions): UseDockerUpdatesResult {
-  const [data, setData] = useState<Container[] | Stack[] | null>(null);
+} {
+  const { interval = 5000, enabled = true } = options;
+  const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (): Promise<void> => {
-    try {
-      setError(null);
-      const result = await (type === 'containers' ? getContainers() : getStacks());
-      if (!result.success) {
-        throw new Error(result.error || `Failed to fetch ${type}`);
-      }
-      setData(result.data || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : `Failed to fetch ${type}`;
-      logger.error(message);
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [type]);
-
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
+    if (!enabled) return;
 
-    void fetchData();
+    const fetchContainers = async (): Promise<void> => {
+      try {
+        setError(null);
+        const result = await getContainers();
+        if (result.success) {
+          setContainers(result.data || []);
+        } else {
+          setError(result.error || 'Failed to fetch containers');
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+        logger.error('Error fetching containers:', { error: errorMessage });
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const timer = setInterval(() => {
-      void fetchData();
-    }, interval);
+    void fetchContainers();
+    const timer = setInterval(() => void fetchContainers(), interval);
 
     return () => {
       clearInterval(timer);
     };
-  }, [enabled, interval, fetchData]);
+  }, [interval, enabled]);
 
-  return {
-    data,
-    loading,
-    error,
-    refetch: fetchData,
-  };
+  return { containers, loading, error };
 }
