@@ -125,6 +125,10 @@ class AppErrorBoundary extends React.Component<
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    logger.error('Error boundary caught error:', {
+      error: error.message,
+      stack: error.stack,
+    });
     return { hasError: true, error };
   }
 
@@ -155,6 +159,15 @@ class AppErrorBoundary extends React.Component<
               <p>{this.state.errorInfo?.componentStack}</p>
             </details>
           )}
+          <button
+            onClick={(): void => {
+              logger.info('Attempting to recover from error');
+              this.setState({ hasError: false, error: null, errorInfo: null });
+            }}
+            style={{ marginTop: '10px' }}
+          >
+            Try Again
+          </button>
         </div>
       );
     }
