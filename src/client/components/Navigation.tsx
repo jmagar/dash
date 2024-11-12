@@ -20,6 +20,7 @@ import React, { useState, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import HostSelector from './HostSelector';
+import SetupWizard from './SetupWizard';
 import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
@@ -36,8 +37,9 @@ const menuItems = [
 
 export default function Navigation(): JSX.Element {
   const location = useLocation();
-  const { selectedHost, setSelectedHost } = useHost();
+  const { selectedHost, setSelectedHost, hasHosts } = useHost();
   const [isHostSelectorOpen, setIsHostSelectorOpen] = useState(false);
+  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
 
   const handleHostSelect = useCallback((hosts: Host[]): void => {
     logger.info('Host selected', { hostId: hosts[0]?.id });
@@ -47,14 +49,24 @@ export default function Navigation(): JSX.Element {
     setIsHostSelectorOpen(false);
   }, [setSelectedHost]);
 
-  const handleClose = useCallback((): void => {
+  const handleHostSelectorClose = useCallback((): void => {
     logger.info('Host selector closed');
     setIsHostSelectorOpen(false);
   }, []);
 
-  const handleOpenSelector = useCallback((): void => {
-    logger.info('Opening host selector');
-    setIsHostSelectorOpen(true);
+  const handleOpenHostSelector = useCallback((): void => {
+    if (!hasHosts) {
+      logger.info('No hosts available, opening setup wizard');
+      setIsSetupWizardOpen(true);
+    } else {
+      logger.info('Opening host selector');
+      setIsHostSelectorOpen(true);
+    }
+  }, [hasHosts]);
+
+  const handleSetupWizardClose = useCallback((): void => {
+    logger.info('Setup wizard closed');
+    setIsSetupWizardOpen(false);
   }, []);
 
   return (
@@ -62,18 +74,12 @@ export default function Navigation(): JSX.Element {
       <Box sx={{ p: 2 }}>
         <Button
           variant="contained"
-          onClick={handleOpenSelector}
+          onClick={handleOpenHostSelector}
           fullWidth
           color="primary"
         >
           {selectedHost ? `Connected: ${selectedHost.name}` : 'Select Host'}
         </Button>
-        <HostSelector
-          open={isHostSelectorOpen}
-          onClose={handleClose}
-          onSelect={handleHostSelect}
-          selectedHosts={selectedHost ? [selectedHost] : []}
-        />
       </Box>
 
       <Divider />
@@ -130,6 +136,20 @@ export default function Navigation(): JSX.Element {
           </ListItem>
         ))}
       </List>
+
+      {hasHosts && (
+        <HostSelector
+          open={isHostSelectorOpen}
+          onClose={handleHostSelectorClose}
+          onSelect={handleHostSelect}
+          selectedHosts={selectedHost ? [selectedHost] : []}
+        />
+      )}
+
+      <SetupWizard
+        open={isSetupWizardOpen}
+        onClose={handleSetupWizardClose}
+      />
     </Box>
   );
 }
