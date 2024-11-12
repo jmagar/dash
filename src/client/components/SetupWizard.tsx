@@ -121,20 +121,6 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     return Object.keys(errors).length === 0;
   }, [hostData]);
 
-  const handleFormSubmit = useCallback(async (e: React.FormEvent): Promise<void> => {
-    logger.info('Form submit event received', { type: e.type });
-    e.preventDefault();
-
-    try {
-      await handleSave();
-    } catch (err) {
-      logger.error('Form submission error:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined,
-      });
-    }
-  }, []);
-
   const handleSave = async (): Promise<void> => {
     logger.info('Starting save process', {
       hasValidationErrors: !validateAndProceed(),
@@ -258,7 +244,11 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         <Box
           component="form"
           noValidate
-          onSubmit={handleFormSubmit}
+          onSubmit={(e): void => {
+            e.preventDefault();
+            logger.info('Form submitted');
+            void handleSave();
+          }}
         >
           <TextField
             fullWidth
@@ -337,7 +327,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
             <Button
               variant="outlined"
               type="button"
-              onClick={handleTestConnection}
+              onClick={(): Promise<void> => handleTestConnection()}
               disabled={loading || testingConnection}
               startIcon={testingConnection ? <CircularProgress size={20} /> : null}
               fullWidth
