@@ -29,7 +29,7 @@ function AppContent(): JSX.Element {
       <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
         <Box sx={{ p: 3 }}>
           <Typography color="error">
-            {loading ? "Loading hosts..." : "No host selected"}
+            {loading ? 'Loading hosts...' : 'No host selected'}
           </Typography>
         </Box>
       </Layout>

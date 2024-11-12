@@ -1,215 +1,326 @@
+import CloseIcon from '@mui/icons-material/Close';
 import {
+  Alert,
   Box,
   Button,
-  Container,
-  Paper,
-  Step,
-  StepLabel,
-  Stepper,
+  CircularProgress,
+  Drawer,
+  IconButton,
   TextField,
   Typography,
 } from '@mui/material';
-import axios from 'axios';
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, type ChangeEvent } from 'react';
 
+import { addHost, testConnection } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
-const steps = ['Add Host', 'Test Connection'];
+interface SetupWizardProps {
+  open: boolean;
+  onClose: () => void;
+}
 
-export default function SetupWizard(): JSX.Element {
-  const [activeStep, setActiveStep] = useState(0);
+interface ValidationErrors {
+  name?: string;
+  hostname?: string;
+  port?: string;
+  ip?: string;
+  username?: string;
+}
+
+type HostStatus = 'connected' | 'disconnected' | 'error';
+
+interface HostData {
+  name: string;
+  hostname: string;
+  port: number;
+  ip: string;
+  username: string;
+  password: string;
+  status: HostStatus;
+}
+
+const validateForm = (data: HostData): ValidationErrors => {
+  const errors: ValidationErrors = {};
+
+  if (!data.name?.trim()) {
+    errors.name = 'Display name is required';
+  }
+
+  if (!data.hostname?.trim()) {
+    errors.hostname = 'Hostname is required';
+  }
+
+  if (!data.ip?.trim()) {
+    errors.ip = 'IP address is required';
+  } else {
+    // Basic IP validation
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipPattern.test(data.ip)) {
+      errors.ip = 'Invalid IP address format';
+    }
+  }
+
+  if (!data.username?.trim()) {
+    errors.username = 'Username is required';
+  }
+
+  if (data.port < 1 || data.port > 65535) {
+    errors.port = 'Port must be between 1 and 65535';
+  }
+
+  return errors;
+};
+
+const initialHostData: HostData = {
+  name: '',
+  hostname: '',
+  port: 22,
+  ip: '',
+  username: '',
+  password: '',
+  status: 'disconnected',
+};
+
+const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
   const [loading, setLoading] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const { setSelectedHost } = useHost();
 
-  const [hostData, setHostData] = useState({
-    name: '',
-    hostname: '',
-    port: 22,
-    ip: '',
-    username: '',
-    password: '',
-  });
+  const [hostData, setHostData] = useState<HostData>(initialHostData);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
     setHostData(prev => ({
       ...prev,
       [name]: name === 'port' ? parseInt(value) || 22 : value,
     }));
+    // Clear messages and validation errors for the changed field
+    setError(null);
+    setSuccess(null);
+    setValidationErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
-  const handleNext = async (): Promise<void> => {
+  const resetForm = useCallback((): void => {
+    setHostData(initialHostData);
     setError(null);
+    setSuccess(null);
+    setLoading(false);
+    setTestingConnection(false);
+    setValidationErrors({});
+  }, []);
+
+  const handleClose = useCallback((): void => {
+    resetForm();
+    onClose();
+  }, [onClose, resetForm]);
+
+  // Cleanup when drawer closes
+  useEffect(() => {
+    if (!open) {
+      resetForm();
+    }
+  }, [open, resetForm]);
+
+  const validateAndProceed = (): boolean => {
+    const errors = validateForm(hostData);
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = async (): Promise<void> => {
+    if (!validateAndProceed()) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
-      if (activeStep === 0) {
-        // Create host
-        const response = await axios.post('/api/hosts', hostData);
-        if (response.data.success) {
-          setSelectedHost(response.data.data);
-          setActiveStep(1);
-        } else {
-          throw new Error(response.data.error || 'Failed to create host');
-        }
-      } else if (activeStep === 1) {
-        // When auth is disabled, skip connection test and just reload
-        if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
-          window.location.reload();
-          return;
-        }
+      const result = await addHost(hostData);
+      if (result.success && result.data) {
+        logger.info('Host created successfully:', { hostname: hostData.hostname });
+        setSuccess('Host created successfully');
+        setSelectedHost(result.data);
 
-        // Test connection
-        const response = await axios.post(`/api/hosts/${hostData.name}/test`);
-        if (response.data.success) {
-          // Connection successful, refresh the page to show the main app
-          window.location.reload();
-        } else {
-          throw new Error(response.data.error || 'Connection test failed');
-        }
+        // Close drawer after showing success message briefly
+        setTimeout(() => {
+          handleClose();
+        }, 1000);
+      } else {
+        throw new Error(result.error || 'Failed to create host');
       }
     } catch (err) {
-      logger.error('Setup error:', { error: err });
-      setError((err as Error).message || 'An error occurred');
+      const errorMessage = (err as Error).message || 'An error occurred while creating the host';
+      logger.error('Setup error:', { error: err, hostData });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBack = (): void => {
-    setActiveStep((prevStep) => prevStep - 1);
-    setError(null);
-  };
-
-  const isNextDisabled = (): boolean => {
-    if (activeStep === 0) {
-      return !hostData.name || !hostData.hostname || !hostData.ip || !hostData.username;
+  const handleTestConnection = async (): Promise<void> => {
+    if (!validateAndProceed()) {
+      return;
     }
-    return false;
+
+    setError(null);
+    setSuccess(null);
+    setTestingConnection(true);
+
+    try {
+      const result = await testConnection(hostData);
+      if (result.success) {
+        logger.info('Connection test successful:', { hostname: hostData.hostname });
+        setSuccess('Connection test successful!');
+        setHostData(prev => ({ ...prev, status: 'connected' }));
+      } else {
+        throw new Error(result.error || 'Connection test failed');
+      }
+    } catch (err) {
+      const errorMessage = (err as Error).message || 'Connection test failed';
+      logger.error('Connection test error:', { error: err, hostData });
+      setError(errorMessage);
+      setHostData(prev => ({ ...prev, status: 'error' }));
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   return (
-    <Container maxWidth="sm">
-      <Paper sx={{ p: 4, mt: 8 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Welcome to SSH Host Manager
-        </Typography>
-        <Typography variant="subtitle1" gutterBottom align="center">
-          Let&apos;s set up your first host
-        </Typography>
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={handleClose}
+      sx={{
+        '& .MuiDrawer-paper': {
+          width: '400px',
+          boxSizing: 'border-box',
+        },
+      }}
+    >
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">Add New Host</Typography>
+          <IconButton onClick={handleClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
 
-        <Stepper activeStep={activeStep} sx={{ mt: 4, mb: 4 }}>
-          {steps.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        <Box sx={{ mt: 4 }}>
-          {activeStep === 0 ? (
-            <Box component="form" noValidate>
-              <TextField
-                fullWidth
-                label="Host Name"
-                name="name"
-                value={hostData.name}
-                onChange={handleInputChange}
-                margin="normal"
-                required
-                helperText="A friendly name for this host"
-              />
-              <TextField
-                fullWidth
-                label="Hostname"
-                name="hostname"
-                value={hostData.hostname}
-                onChange={handleInputChange}
-                margin="normal"
-                required
-                helperText="e.g., localhost or remote-server.com"
-              />
-              <TextField
-                fullWidth
-                label="Port"
-                name="port"
-                type="number"
-                value={hostData.port}
-                onChange={handleInputChange}
-                margin="normal"
-                required
-              />
-              <TextField
-                fullWidth
-                label="IP Address"
-                name="ip"
-                value={hostData.ip}
-                onChange={handleInputChange}
-                margin="normal"
-                required
-                helperText="e.g., 127.0.0.1 or server IP"
-              />
-              <TextField
-                fullWidth
-                label="Username"
-                name="username"
-                value={hostData.username}
-                onChange={handleInputChange}
-                margin="normal"
-                required
-                helperText="SSH username"
-              />
-              <TextField
-                fullWidth
-                label="Password"
-                name="password"
-                type="password"
-                value={hostData.password}
-                onChange={handleInputChange}
-                margin="normal"
-                helperText="SSH password (optional if using key-based auth)"
-              />
-            </Box>
-          ) : (
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="body1" gutterBottom>
-                {process.env.REACT_APP_DISABLE_AUTH === 'true'
-                  ? "Setup is complete! Click Next to continue."
-                  : "Let's test the connection to your host."}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {process.env.REACT_APP_DISABLE_AUTH === 'true'
-                  ? "The application will reload to apply changes."
-                  : "Click Next to verify the connection."}
-              </Typography>
-            </Box>
-          )}
+        <Box component="form" noValidate>
+          <TextField
+            fullWidth
+            label="Display Name"
+            name="name"
+            value={hostData.name}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            error={!!validationErrors.name}
+            helperText={validationErrors.name || 'A friendly name to identify this host'}
+            disabled={loading || testingConnection}
+          />
+          <TextField
+            fullWidth
+            label="DNS Hostname"
+            name="hostname"
+            value={hostData.hostname}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            error={!!validationErrors.hostname}
+            helperText={validationErrors.hostname || 'e.g., server.example.com or localhost'}
+            disabled={loading || testingConnection}
+          />
+          <TextField
+            fullWidth
+            label="Port"
+            name="port"
+            type="number"
+            value={hostData.port}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            error={!!validationErrors.port}
+            helperText={validationErrors.port || 'SSH port (default: 22)'}
+            disabled={loading || testingConnection}
+          />
+          <TextField
+            fullWidth
+            label="IP Address"
+            name="ip"
+            value={hostData.ip}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            error={!!validationErrors.ip}
+            helperText={validationErrors.ip || 'Direct IP address e.g., 192.168.1.100'}
+            disabled={loading || testingConnection}
+          />
+          <TextField
+            fullWidth
+            label="Username"
+            name="username"
+            value={hostData.username}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            error={!!validationErrors.username}
+            helperText={validationErrors.username || 'SSH username'}
+            disabled={loading || testingConnection}
+          />
+          <TextField
+            fullWidth
+            label="Password"
+            name="password"
+            type="password"
+            value={hostData.password}
+            onChange={handleInputChange}
+            margin="normal"
+            helperText="SSH password (optional if using key-based auth)"
+            disabled={loading || testingConnection}
+          />
 
           {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
+            <Alert severity="error" sx={{ mt: 2 }}>
               {error}
-            </Typography>
+            </Alert>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+          {success && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              {success}
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
             <Button
-              onClick={handleBack}
-              disabled={activeStep === 0 || loading}
+              variant="outlined"
+              onClick={handleTestConnection}
+              disabled={loading || testingConnection}
+              startIcon={testingConnection ? <CircularProgress size={20} /> : null}
+              fullWidth
             >
-              Back
+              {testingConnection ? 'Testing...' : 'Test Connection'}
             </Button>
             <Button
               variant="contained"
-              onClick={handleNext}
-              disabled={isNextDisabled() || loading}
+              onClick={handleSave}
+              disabled={loading || testingConnection}
+              startIcon={loading ? <CircularProgress size={20} /> : null}
+              fullWidth
             >
-              {loading ? 'Processing...' : activeStep === steps.length - 1 ? 'Finish' : 'Next'}
+              {loading ? 'Saving...' : 'Save Host'}
             </Button>
           </Box>
         </Box>
-      </Paper>
-    </Container>
+      </Box>
+    </Drawer>
   );
-}
+};
+
+export default SetupWizard;

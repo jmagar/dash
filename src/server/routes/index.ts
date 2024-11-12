@@ -24,13 +24,21 @@ router.get('/health', (_req: Request, res: Response<HealthResponse>) => {
   res.json({ status: 'ok' });
 });
 
-// Apply authentication middleware to all API routes unless auth is disabled
+// Mount auth routes before authentication middleware
+router.use('/auth', authRoutes);
+
+// Apply authentication middleware to protected routes unless auth is disabled
 if (process.env.DISABLE_AUTH !== 'true') {
-  router.use(authenticateToken);
+  router.use((req: Request, res: Response, next: NextFunction) => {
+    // Skip authentication for auth-related endpoints
+    if (req.path.startsWith('/auth/')) {
+      return next();
+    }
+    authenticateToken(req, res, next);
+  });
 }
 
-// Mount routes
-router.use('/auth', authRoutes);
+// Mount other protected routes
 router.use('/docker', dockerRoutes);
 router.use('/files', filesRoutes);
 router.use('/hosts', hostsRoutes);
