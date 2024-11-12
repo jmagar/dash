@@ -194,8 +194,11 @@ router.post(
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (token && isConnected()) {
-        await redis.del(`${CACHE_KEYS.SESSION}${token}`);
-        logger.info('User logged out successfully');
+        const client = await redis.getClient();
+        if (client) {
+          await client.del(`${CACHE_KEYS.SESSION}${token}`);
+          logger.info('User logged out successfully');
+        }
       }
       res.json({ success: true });
     } catch (error) {
