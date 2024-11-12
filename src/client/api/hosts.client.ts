@@ -1,10 +1,34 @@
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 import type { Host, SystemStats, ApiResult } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
-import { BASE_URL } from '../config';
+import { APP_CONFIG } from '../config';
 import { logger } from '../utils/frontendLogger';
+
+// Configure axios
+const api = axios.create({
+  baseURL: APP_CONFIG.api.baseUrl,
+  timeout: APP_CONFIG.api.timeout,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  response => response,
+  error => {
+    logger.error('API request failed:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      error: error.message,
+      response: error.response?.data,
+    });
+    return Promise.reject(error);
+  },
+);
 
 // Validation functions
 const validateHost = (host: Partial<Host>): string | null => {
@@ -24,7 +48,7 @@ const RETRY_DELAY = 2000;
 
 // Retry utility
 async function retryOperation<T>(
-  operation: () => Promise<AxiosResponse<T>>,
+  operation: () => Promise<T>,
   retries: number,
   delay: number,
   timeout: number,
@@ -41,7 +65,7 @@ async function retryOperation<T>(
           setTimeout(() => reject(new Error('Operation timed out')), timeout),
         ),
       ]);
-      return response.data;
+      return response;
     } catch (error) {
       lastError = error as Error;
       logger.warn(`${context}: Attempt ${attempt + 1} failed`, { error: lastError });
@@ -59,7 +83,9 @@ async function retryOperation<T>(
 
 export async function listHosts(): Promise<ApiResult<Host[]>> {
   try {
-    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.HOSTS.LIST}`);
+    logger.info('Fetching hosts list');
+    const response = await api.get(API_ENDPOINTS.HOSTS.LIST);
+    logger.info('Hosts list fetched successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
     return handleApiError<Host[]>(error, 'listHosts');
@@ -71,7 +97,7 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
     // Validate host data before making request
     const validationError = validateHost(host);
     if (validationError) {
-      logger.warn('Host validation failed:', { host, error: validationError });
+      logger.warn('Host validation failed:', { host: { ...host, password: '[REDACTED]' }, error: validationError });
       return {
         success: false,
         error: validationError,
@@ -90,7 +116,8 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
 
     // If connection test succeeds, add the host
     logger.info('Connection test successful, adding host:', { hostname: host.hostname });
-    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.ADD}`, host);
+    const response = await api.post(API_ENDPOINTS.HOSTS.ADD, host);
+    logger.info('Host added successfully', { hostId: response.data?.data?.id });
     return response.data;
   } catch (error) {
     return handleApiError<Host>(error, 'addHost');
@@ -100,7 +127,8 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
 export async function removeHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Removing host:', { id });
-    const response = await axios.delete(`${BASE_URL}${API_ENDPOINTS.HOSTS.REMOVE(id)}`);
+    const response = await api.delete(API_ENDPOINTS.HOSTS.REMOVE(id));
+    logger.info('Host removed successfully', { id });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'removeHost');
@@ -109,7 +137,7 @@ export async function removeHost(id: number): Promise<ApiResult<void>> {
 
 export async function getHostStatus(id: number): Promise<ApiResult<boolean>> {
   try {
-    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.HOSTS.STATUS}/${id}`);
+    const response = await api.get(API_ENDPOINTS.HOSTS.STATUS);
     return response.data;
   } catch (error) {
     return handleApiError<boolean>(error, 'getHostStatus');
@@ -121,7 +149,7 @@ export async function testConnection(host: Omit<Host, 'id'>): Promise<ApiResult<
     // Validate host data before testing
     const validationError = validateHost(host);
     if (validationError) {
-      logger.warn('Host validation failed:', { host, error: validationError });
+      logger.warn('Host validation failed:', { host: { ...host, password: '[REDACTED]' }, error: validationError });
       return {
         success: false,
         error: validationError,
@@ -131,8 +159,8 @@ export async function testConnection(host: Omit<Host, 'id'>): Promise<ApiResult<
     logger.info('Testing connection with retries:', { hostname: host.hostname });
 
     const response = await retryOperation(
-      () => axios.post(
-        `${BASE_URL}${API_ENDPOINTS.HOSTS.TEST_CONNECTION}`,
+      () => api.post(
+        API_ENDPOINTS.HOSTS.TEST_CONNECTION,
         host,
         { timeout: CONNECTION_TEST_TIMEOUT },
       ),
@@ -142,7 +170,12 @@ export async function testConnection(host: Omit<Host, 'id'>): Promise<ApiResult<
       'Connection test',
     );
 
-    return response;
+    logger.info('Connection test completed', {
+      hostname: host.hostname,
+      success: response.data.success,
+    });
+
+    return response.data;
   } catch (error) {
     return handleApiError(error, 'testConnection');
   }
@@ -153,9 +186,9 @@ export async function testExistingHost(id: number): Promise<ApiResult<void>> {
     logger.info('Testing existing host connection:', { id });
 
     const response = await retryOperation(
-      () => axios.post(
-        `${BASE_URL}/hosts/${id}/test`,
-        {},
+      () => api.post(
+        API_ENDPOINTS.HOSTS.TEST_CONNECTION,
+        { id },
         { timeout: CONNECTION_TEST_TIMEOUT },
       ),
       CONNECTION_TEST_RETRIES,
@@ -164,7 +197,12 @@ export async function testExistingHost(id: number): Promise<ApiResult<void>> {
       'Existing host test',
     );
 
-    return response;
+    logger.info('Existing host test completed', {
+      id,
+      success: response.data.success,
+    });
+
+    return response.data;
   } catch (error) {
     return handleApiError(error, 'testExistingHost');
   }
@@ -172,7 +210,7 @@ export async function testExistingHost(id: number): Promise<ApiResult<void>> {
 
 export async function getSystemStats(id: number): Promise<ApiResult<SystemStats>> {
   try {
-    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.HOSTS.STATS(id)}`);
+    const response = await api.get(API_ENDPOINTS.HOSTS.STATS(id));
     return response.data;
   } catch (error) {
     return handleApiError<SystemStats>(error, 'getSystemStats');
@@ -182,7 +220,8 @@ export async function getSystemStats(id: number): Promise<ApiResult<SystemStats>
 export async function connectHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Connecting to host:', { id });
-    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.CONNECT(id)}`);
+    const response = await api.post(API_ENDPOINTS.HOSTS.CONNECT(id));
+    logger.info('Host connected successfully', { id });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'connectHost');
@@ -192,7 +231,8 @@ export async function connectHost(id: number): Promise<ApiResult<void>> {
 export async function disconnectHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Disconnecting from host:', { id });
-    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.HOSTS.DISCONNECT(id)}`);
+    const response = await api.post(API_ENDPOINTS.HOSTS.DISCONNECT(id));
+    logger.info('Host disconnected successfully', { id });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'disconnectHost');
