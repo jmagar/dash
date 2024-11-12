@@ -8,21 +8,24 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 
 import SetupWizard from './SetupWizard';
+import { logger } from '../utils/frontendLogger';
 
 export default function WelcomeCard(): JSX.Element {
   const [setupOpen, setSetupOpen] = useState(false);
   const theme = useTheme();
 
-  const handleOpenSetup = (): void => {
+  const handleOpenSetup = useCallback((): void => {
+    logger.info('Opening setup wizard from welcome card');
     setSetupOpen(true);
-  };
+  }, []);
 
-  const handleCloseSetup = (): void => {
+  const handleCloseSetup = useCallback((): void => {
+    logger.info('Closing setup wizard from welcome card');
     setSetupOpen(false);
-  };
+  }, []);
 
   return (
     <>
@@ -81,7 +84,13 @@ export default function WelcomeCard(): JSX.Element {
         </CardActions>
       </Card>
 
-      <SetupWizard open={setupOpen} onClose={handleCloseSetup} />
+      {/* Only render SetupWizard when needed */}
+      {setupOpen && (
+        <SetupWizard
+          open={setupOpen}
+          onClose={handleCloseSetup}
+        />
+      )}
     </>
   );
 }
