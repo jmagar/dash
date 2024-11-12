@@ -84,13 +84,10 @@ export default function WelcomeCard(): JSX.Element {
         </CardActions>
       </Card>
 
-      {/* Only render SetupWizard when needed */}
-      {setupOpen && (
-        <SetupWizard
-          open={setupOpen}
-          onClose={handleCloseSetup}
-        />
-      )}
+      <SetupWizard
+        open={setupOpen}
+        onClose={handleCloseSetup}
+      />
     </>
   );
 }
