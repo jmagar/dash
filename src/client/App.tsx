@@ -1,4 +1,3 @@
-import { Box, Typography } from '@mui/material';
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
@@ -10,28 +9,28 @@ import Login from './components/Login';
 import PackageManager from './components/PackageManager';
 import PrivateRoute from './components/PrivateRoute';
 import UserProfile from './components/UserProfile';
+import WelcomeCard from './components/WelcomeCard';
 import { HostProvider, useHost } from './context/HostContext';
-import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 function AppContent(): JSX.Element {
-  const { isDarkMode, toggleTheme } = useTheme();
-  const { selectedHost, hasHosts, loading } = useHost();
+  const { selectedHost, loading } = useHost();
 
-  // Show loading or no host message if needed
+  // Show loading or welcome card if no host is selected
   if (!selectedHost) {
     return (
-      <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
-        <Box sx={{ p: 3 }}>
-          <Typography color="error">
-            {loading ? 'Loading hosts...' : 'No host selected'}
-          </Typography>
-        </Box>
+      <Layout>
+        {loading ? (
+          <div>Loading...</div>
+        ) : (
+          <WelcomeCard />
+        )}
       </Layout>
     );
   }
 
   return (
-    <Layout toggleTheme={toggleTheme} isDarkMode={isDarkMode}>
+    <Layout>
       <Routes>
         <Route index element={<Dashboard hostId={selectedHost.id} />} />
         <Route path="docker/*" element={<DockerManager />} />
