@@ -121,15 +121,12 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     return Object.keys(errors).length === 0;
   }, [hostData]);
 
-  const handleSave = async (): Promise<void> => {
-    logger.info('Starting save process', {
-      hasValidationErrors: !validateAndProceed(),
-      isConnectionTested: connectionTested,
-      isLoading: loading,
-    });
+  const handleFormSubmit = useCallback(async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    logger.info('Form submitted');
 
     if (!validateAndProceed() || !connectionTested) {
-      logger.warn('Save attempted without validation or connection test', {
+      logger.warn('Form submission blocked:', {
         hasValidationErrors: !validateAndProceed(),
         isConnectionTested: connectionTested,
       });
@@ -137,15 +134,15 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     }
 
     if (loading) {
-      logger.warn('Save attempted while loading');
+      logger.warn('Form submission blocked: already loading');
       return;
     }
 
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-
     try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+
       logger.info('Attempting to save host', { hostname: hostData.hostname });
       const result = await addHost(hostData);
 
@@ -177,25 +174,25 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     } finally {
       setLoading(false);
     }
-  };
+  }, [validateAndProceed, connectionTested, loading, hostData, refreshHosts, setSelectedHost, handleClose]);
 
-  const handleTestConnection = async (): Promise<void> => {
+  const handleTestConnection = useCallback(async (): Promise<void> => {
     if (!validateAndProceed()) {
-      logger.warn('Connection test attempted without validation');
+      logger.warn('Connection test blocked: validation failed');
       return;
     }
 
     if (testingConnection) {
-      logger.warn('Connection test attempted while already testing');
+      logger.warn('Connection test blocked: already testing');
       return;
     }
 
-    setError(null);
-    setSuccess(null);
-    setTestingConnection(true);
-    setConnectionTested(false);
-
     try {
+      setTestingConnection(true);
+      setError(null);
+      setSuccess(null);
+      setConnectionTested(false);
+
       logger.info('Testing connection', { hostname: hostData.hostname });
       const result = await testConnection(hostData);
 
@@ -220,7 +217,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     } finally {
       setTestingConnection(false);
     }
-  };
+  }, [validateAndProceed, testingConnection, hostData]);
 
   return (
     <Drawer
@@ -245,11 +242,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         <Box
           component="form"
           noValidate
-          onSubmit={(e): void => {
-            e.preventDefault();
-            logger.info('Form submitted');
-            void handleSave();
-          }}
+          onSubmit={handleFormSubmit}
         >
           <TextField
             fullWidth
@@ -328,7 +321,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
             <Button
               variant="outlined"
               type="button"
-              onClick={(): Promise<void> => handleTestConnection()}
+              onClick={handleTestConnection}
               disabled={loading || testingConnection}
               startIcon={testingConnection ? <CircularProgress size={20} /> : null}
               fullWidth
