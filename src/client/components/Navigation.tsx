@@ -16,12 +16,13 @@ import {
   Divider,
   Button,
 } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import HostSelector from './HostSelector';
 import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
+import { logger } from '../utils/frontendLogger';
 
 const menuItems = [
   { icon: DashboardIcon, text: 'Dashboard', path: '/', shortcut: 'Alt+D' },
@@ -38,23 +39,30 @@ export default function Navigation(): JSX.Element {
   const { selectedHost, setSelectedHost } = useHost();
   const [isHostSelectorOpen, setIsHostSelectorOpen] = useState(false);
 
-  const handleHostSelect = (hosts: Host[]): void => {
+  const handleHostSelect = useCallback((hosts: Host[]): void => {
+    logger.info('Host selected', { hostId: hosts[0]?.id });
     if (hosts.length > 0) {
       setSelectedHost(hosts[0]);
     }
     setIsHostSelectorOpen(false);
-  };
+  }, [setSelectedHost]);
 
-  const handleClose = (): void => {
+  const handleClose = useCallback((): void => {
+    logger.info('Host selector closed');
     setIsHostSelectorOpen(false);
-  };
+  }, []);
+
+  const handleOpenSelector = useCallback((): void => {
+    logger.info('Opening host selector');
+    setIsHostSelectorOpen(true);
+  }, []);
 
   return (
     <Box sx={{ overflow: 'auto' }}>
       <Box sx={{ p: 2 }}>
         <Button
           variant="contained"
-          onClick={(): void => setIsHostSelectorOpen(true)}
+          onClick={handleOpenSelector}
           fullWidth
           color="primary"
         >
@@ -64,6 +72,7 @@ export default function Navigation(): JSX.Element {
           open={isHostSelectorOpen}
           onClose={handleClose}
           onSelect={handleHostSelect}
+          selectedHosts={selectedHost ? [selectedHost] : []}
         />
       </Box>
 
