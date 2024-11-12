@@ -20,7 +20,14 @@ function AppContent(): JSX.Element {
 
   // Show setup wizard if there are no hosts
   if (!hasHosts && !loading) {
-    return <SetupWizard />;
+    return (
+      <SetupWizard
+        open={true}
+        onClose={(): void => {
+          // No-op since we can't close the wizard when there are no hosts
+        }}
+      />
+    );
   }
 
   // Show loading or no host message if needed

@@ -18,6 +18,10 @@ import { useAsync, useThrottle } from '../hooks';
 import LoadingScreen from './LoadingScreen';
 import SetupWizard from './SetupWizard';
 
+interface DashboardProps {
+  hostId?: number;
+}
+
 interface StatCardProps {
   title: string;
   value: number;
@@ -69,7 +73,7 @@ const NoHostMessage: React.FC<{ onAddHost: () => void }> = ({ onAddHost }) => (
   </Box>
 );
 
-export default function Dashboard(): JSX.Element {
+const Dashboard: React.FC<DashboardProps> = ({ hostId }) => {
   const { selectedHost, loading: hostContextLoading, hasHosts } = useHost();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -271,4 +275,6 @@ export default function Dashboard(): JSX.Element {
       <SetupWizard open={setupDialogOpen} onClose={handleCloseSetup} />
     </>
   );
-}
+};
+
+export default Dashboard;
