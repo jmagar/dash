@@ -32,6 +32,7 @@ export function HostProvider({ children }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [hasHosts, setHasHosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hosts, setHosts] = useState<Host[]>([]);
 
   const fetchHosts = useCallback(async (): Promise<void> => {
     try {
@@ -41,23 +42,45 @@ export function HostProvider({ children }: Props): JSX.Element {
 
       const response = await axios.get('/api/hosts');
       if (response.data.success) {
-        const hosts = response.data.data || [];
-        logger.info('Hosts fetched successfully', { hostCount: hosts.length });
+        const newHosts = response.data.data || [];
+        logger.info('Hosts fetched successfully', {
+          hostCount: newHosts.length,
+          hosts: newHosts.map((h: Host) => ({ id: h.id, name: h.name })),
+        });
 
-        setHasHosts(hosts.length > 0);
+        setHosts(newHosts);
+        setHasHosts(newHosts.length > 0);
 
-        // Only set initial host if we don't have one selected
-        if (hosts.length > 0 && !selectedHost) {
-          logger.info('Setting initial host', { host: hosts[0] });
-          setSelectedHost(hosts[0]);
-        } else if (hosts.length === 0) {
-          logger.info('No hosts available');
-          setSelectedHost(null);
+        // If we have a selected host, make sure it's still in the list
+        if (selectedHost) {
+          const hostStillExists = newHosts.some((h: Host) => h.id === selectedHost.id);
+          if (!hostStillExists) {
+            logger.info('Selected host no longer exists', { hostId: selectedHost.id });
+            setSelectedHost(null);
+          } else {
+            // Update the selected host data
+            const updatedHost = newHosts.find((h: Host) => h.id === selectedHost.id);
+            if (updatedHost && JSON.stringify(updatedHost) !== JSON.stringify(selectedHost)) {
+              logger.info('Updating selected host data', {
+                hostId: selectedHost.id,
+                changes: {
+                  old: selectedHost,
+                  new: updatedHost,
+                },
+              });
+              setSelectedHost(updatedHost);
+            }
+          }
+        } else if (newHosts.length > 0) {
+          // If we don't have a selected host but we have hosts, select the first one
+          logger.info('Setting initial host', { host: newHosts[0] });
+          setSelectedHost(newHosts[0]);
         }
       } else {
         const errorMessage = response.data.error || 'Failed to fetch hosts';
         logger.error('Failed to fetch hosts', { error: errorMessage });
         setError(errorMessage);
+        setHosts([]);
         setHasHosts(false);
         setSelectedHost(null);
       }
@@ -68,12 +91,13 @@ export function HostProvider({ children }: Props): JSX.Element {
         stack: error instanceof Error ? error.stack : undefined,
       });
       setError(errorMessage);
+      setHosts([]);
       setHasHosts(false);
       setSelectedHost(null);
     } finally {
       setLoading(false);
     }
-  }, [selectedHost]); // Remove selectedHost from deps to prevent loops
+  }, [selectedHost]);
 
   // Initial fetch
   useEffect(() => {
@@ -86,6 +110,11 @@ export function HostProvider({ children }: Props): JSX.Element {
         previousHost: selectedHost?.id,
         newHost: host?.id,
       });
+
+      if (host && !hosts.some((h: Host) => h.id === host.id)) {
+        logger.warn('Attempted to select non-existent host', { hostId: host.id });
+        return;
+      }
 
       setSelectedHost(host);
       setError(null);
@@ -104,17 +133,19 @@ export function HostProvider({ children }: Props): JSX.Element {
       });
       setError(errorMessage);
     }
-  }, [selectedHost]); // Remove selectedHost from deps
+  }, [selectedHost, hosts]);
 
   // Log state changes
   useEffect(() => {
     logger.debug('Host context state updated', {
       hasSelectedHost: !!selectedHost,
+      selectedHostId: selectedHost?.id,
       loading,
       hasHosts,
+      hostCount: hosts.length,
       hasError: !!error,
     });
-  }, [selectedHost, loading, hasHosts, error]);
+  }, [selectedHost, loading, hasHosts, hosts, error]);
 
   const value = {
     selectedHost,
