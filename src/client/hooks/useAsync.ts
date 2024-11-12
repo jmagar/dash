@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback, DependencyList } from 'react';
+import { useState, useEffect, useCallback, useRef, DependencyList } from 'react';
 
-export interface UseAsyncOptions<_T> {
+import { logger } from '../utils/frontendLogger';
+
+export interface UseAsyncOptions<T> {
   immediate?: boolean;
   deps?: DependencyList;
+  onSuccess?: (data: T) => void;
+  onError?: (error: Error) => void;
 }
 
 export interface UseAsyncResult<T> {
@@ -16,32 +20,70 @@ export function useAsync<T>(
   asyncFunction: () => Promise<T>,
   options: UseAsyncOptions<T> = {},
 ): UseAsyncResult<T> {
+  const {
+    immediate = false,
+    deps = [],
+    onSuccess,
+    onError,
+  } = options;
+
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const execute = useCallback((): Promise<T> => {
-    setLoading(true);
-    setError(null);
+  // Use refs to store the latest callbacks
+  const asyncFunctionRef = useRef(asyncFunction);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
 
-    return asyncFunction()
-      .then((response) => {
-        setData(response);
-        setLoading(false);
-        return response;
-      })
-      .catch((error) => {
-        setError(error.message || 'An error occurred');
-        setLoading(false);
-        throw error;
+  // Update refs when callbacks change
+  useEffect(() => {
+    asyncFunctionRef.current = asyncFunction;
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [asyncFunction, onSuccess, onError]);
+
+  const execute = useCallback(async (): Promise<T> => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      logger.debug('Starting async operation');
+      const response = await asyncFunctionRef.current();
+
+      logger.debug('Async operation completed successfully');
+      setData(response);
+      setLoading(false);
+
+      if (onSuccessRef.current) {
+        onSuccessRef.current(response);
+      }
+
+      return response;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+
+      logger.error('Async operation failed:', {
+        error: error.message,
+        stack: error.stack,
       });
-  }, [asyncFunction]);
+
+      setError(error.message);
+      setLoading(false);
+
+      if (onErrorRef.current) {
+        onErrorRef.current(error);
+      }
+
+      throw error;
+    }
+  }, []); // No dependencies needed since we use refs
 
   useEffect(() => {
-    if (options.immediate) {
+    if (immediate) {
       void execute();
     }
-  }, [execute, options.immediate]);
+  }, [execute, immediate, ...deps]);
 
   return {
     data,
