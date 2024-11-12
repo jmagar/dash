@@ -70,7 +70,7 @@ const NoHostMessage: React.FC<{ onAddHost: () => void }> = ({ onAddHost }) => (
 );
 
 export default function Dashboard(): JSX.Element {
-  const { selectedHost, loading: hostContextLoading } = useHost();
+  const { selectedHost, loading: hostContextLoading, hasHosts } = useHost();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -134,6 +134,18 @@ export default function Dashboard(): JSX.Element {
 
   if (hostContextLoading || statsLoading || statusLoading) {
     return <LoadingScreen fullscreen={false} message="Loading system stats..." />;
+  }
+
+  // Show setup wizard if there are no hosts
+  if (!hasHosts && !hostContextLoading) {
+    return (
+      <SetupWizard
+        open={true}
+        onClose={(): void => {
+          // No-op since we can't close the wizard when there are no hosts
+        }}
+      />
+    );
   }
 
   // Show welcome message if no host is selected
