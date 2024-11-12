@@ -9,7 +9,6 @@ import Layout from './components/Layout';
 import Login from './components/Login';
 import PackageManager from './components/PackageManager';
 import PrivateRoute from './components/PrivateRoute';
-import SetupWizard from './components/SetupWizard';
 import UserProfile from './components/UserProfile';
 import { HostProvider, useHost } from './context/HostContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -17,18 +16,6 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 function AppContent(): JSX.Element {
   const { isDarkMode, toggleTheme } = useTheme();
   const { selectedHost, hasHosts, loading } = useHost();
-
-  // Show setup wizard if there are no hosts
-  if (!hasHosts && !loading) {
-    return (
-      <SetupWizard
-        open={true}
-        onClose={(): void => {
-          // No-op since we can't close the wizard when there are no hosts
-        }}
-      />
-    );
-  }
 
   // Show loading or no host message if needed
   if (!selectedHost) {

@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import React, { useState, useCallback, useEffect, type ChangeEvent } from 'react';
+import React, { useState, useCallback } from 'react';
 
 import { addHost, testConnection } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
@@ -88,11 +88,12 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [connectionTested, setConnectionTested] = useState(false);
   const { setSelectedHost } = useHost();
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
     setHostData(prev => ({
       ...prev,
@@ -101,6 +102,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     // Clear messages and validation errors for the changed field
     setError(null);
     setSuccess(null);
+    setConnectionTested(false);
     setValidationErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
@@ -110,6 +112,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     setSuccess(null);
     setLoading(false);
     setTestingConnection(false);
+    setConnectionTested(false);
     setValidationErrors({});
   }, []);
 
@@ -119,7 +122,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
   }, [onClose, resetForm]);
 
   // Cleanup when drawer closes
-  useEffect(() => {
+  React.useEffect(() => {
     if (!open) {
       resetForm();
     }
@@ -132,7 +135,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
   };
 
   const handleSave = async (): Promise<void> => {
-    if (!validateAndProceed()) {
+    if (!validateAndProceed() || !connectionTested) {
       return;
     }
 
@@ -171,6 +174,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     setError(null);
     setSuccess(null);
     setTestingConnection(true);
+    setConnectionTested(false);
 
     try {
       const result = await testConnection(hostData);
@@ -178,6 +182,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
         logger.info('Connection test successful:', { hostname: hostData.hostname });
         setSuccess('Connection test successful!');
         setHostData(prev => ({ ...prev, status: 'connected' }));
+        setConnectionTested(true);
       } else {
         throw new Error(result.error || 'Connection test failed');
       }
@@ -186,6 +191,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
       logger.error('Connection test error:', { error: err, hostData });
       setError(errorMessage);
       setHostData(prev => ({ ...prev, status: 'error' }));
+      setConnectionTested(false);
     } finally {
       setTestingConnection(false);
     }
@@ -307,15 +313,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
             >
               {testingConnection ? 'Testing...' : 'Test Connection'}
             </Button>
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={loading || testingConnection}
-              startIcon={loading ? <CircularProgress size={20} /> : null}
-              fullWidth
-            >
-              {loading ? 'Saving...' : 'Save Host'}
-            </Button>
+            {connectionTested && (
+              <Button
+                variant="contained"
+                onClick={handleSave}
+                disabled={loading || testingConnection}
+                startIcon={loading ? <CircularProgress size={20} /> : null}
+                fullWidth
+              >
+                {loading ? 'Saving...' : 'Save Host'}
+              </Button>
+            )}
           </Box>
         </Box>
       </Box>

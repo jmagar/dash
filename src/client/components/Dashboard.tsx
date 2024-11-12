@@ -52,24 +52,28 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, total, unit }) => {
   );
 };
 
-const NoHostMessage: React.FC<{ onAddHost: () => void }> = ({ onAddHost }) => (
+const WelcomeMessage: React.FC<{ onAddHost: () => void }> = ({ onAddHost }) => (
   <Box sx={{ p: 3 }}>
     <Alert severity="info" sx={{ mb: 3 }}>
       <AlertTitle>Welcome to SSH Host Manager</AlertTitle>
-      No host is currently connected. To get started, you can:
-      <Box component="ul" sx={{ mt: 1, mb: 0 }}>
-        <li>Add a new host using the setup wizard</li>
-        <li>Select an existing host from the host selector</li>
+      <Typography variant="body1" paragraph>
+        Get started by connecting to your first SSH host. You can:
+      </Typography>
+      <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+        <li>Add a new host using SSH credentials</li>
+        <li>Monitor system resources</li>
+        <li>Execute remote commands</li>
+        <li>Manage files and packages</li>
       </Box>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={onAddHost}
+        sx={{ mt: 1 }}
+      >
+        Add New Host
+      </Button>
     </Alert>
-    <Button
-      onClick={onAddHost}
-      variant="contained"
-      color="primary"
-      sx={{ mr: 2 }}
-    >
-      Add New Host
-    </Button>
   </Box>
 );
 
@@ -140,23 +144,31 @@ const Dashboard: React.FC<DashboardProps> = ({ hostId }) => {
     return <LoadingScreen fullscreen={false} message="Loading system stats..." />;
   }
 
-  // Show setup wizard if there are no hosts
-  if (!hasHosts && !hostContextLoading) {
-    return (
-      <SetupWizard
-        open={true}
-        onClose={(): void => {
-          // No-op since we can't close the wizard when there are no hosts
-        }}
-      />
-    );
+  // Show welcome message if no hosts exist
+  if (!hasHosts) {
+    return <WelcomeMessage onAddHost={handleOpenSetup} />;
   }
 
-  // Show welcome message if no host is selected
+  // Show no host selected message
   if (!selectedHost) {
     return (
       <>
-        <NoHostMessage onAddHost={handleOpenSetup} />
+        <Box sx={{ p: 3 }}>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <AlertTitle>No Host Selected</AlertTitle>
+            <Typography variant="body1" paragraph>
+              Please select a host from the dropdown menu or add a new one.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleOpenSetup}
+              sx={{ mt: 1 }}
+            >
+              Add New Host
+            </Button>
+          </Alert>
+        </Box>
         <SetupWizard open={setupDialogOpen} onClose={handleCloseSetup} />
       </>
     );
