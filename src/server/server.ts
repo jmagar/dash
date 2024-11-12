@@ -57,7 +57,13 @@ app.use('/api', routes);
 // Serve static files from the React build directory
 const buildPath = path.resolve(__dirname, '../../build');
 if (fs.existsSync(buildPath)) {
-  app.use(expressStatic(buildPath));
+  app.use(expressStatic(buildPath, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res: Response) => {
+      res.set('Cache-Control', 'no-cache');
+    },
+  }));
 }
 
 // Error handler for JSON parsing
@@ -140,17 +146,12 @@ app.get('*', (_req: Request, res: Response) => {
     if (!fs.existsSync(indexPath)) {
       throw new Error('index.html not found');
     }
-    res.sendFile('index.html', { root: buildPath }, (err?: Error) => {
-      if (err) {
-        logger.error('Error serving index.html', {
-          error: err.message,
-          stack: err.stack,
-        });
-        if (!res.headersSent) {
-          res.status(500).send('Internal Server Error');
-        }
-      }
-    });
+
+    // Read and send the file directly instead of using sendFile
+    const indexHtml = fs.readFileSync(indexPath, 'utf8');
+    res.set('Cache-Control', 'no-cache');
+    res.set('Content-Type', 'text/html');
+    res.send(indexHtml);
   } catch (error) {
     logger.error('Error serving index.html', {
       error: (error as Error).message,
