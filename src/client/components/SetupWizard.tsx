@@ -76,7 +76,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
   const [success, setSuccess] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [connectionTested, setConnectionTested] = useState(false);
-  const { setSelectedHost, refreshHosts } = useHost();
+  const { setSelectedHost } = useHost();
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
@@ -121,10 +121,26 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     return Object.keys(errors).length === 0;
   }, [hostData]);
 
-  const handleSave = useCallback(async (e?: React.FormEvent): Promise<void> => {
-    if (e) {
-      e.preventDefault();
+  const handleFormSubmit = useCallback(async (e: React.FormEvent): Promise<void> => {
+    logger.info('Form submit event received', { type: e.type });
+    e.preventDefault();
+
+    try {
+      await handleSave();
+    } catch (err) {
+      logger.error('Form submission error:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+      });
     }
+  }, []);
+
+  const handleSave = async (): Promise<void> => {
+    logger.info('Starting save process', {
+      hasValidationErrors: !validateAndProceed(),
+      isConnectionTested: connectionTested,
+      isLoading: loading,
+    });
 
     if (!validateAndProceed() || !connectionTested) {
       logger.warn('Save attempted without validation or connection test', {
@@ -154,8 +170,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         });
         setSuccess('Host created successfully');
 
-        // Update the host context and refresh the list
-        await refreshHosts();
+        // Update the host context
         setSelectedHost(result.data);
 
         // Show success message briefly before closing
@@ -175,9 +190,9 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     } finally {
       setLoading(false);
     }
-  }, [validateAndProceed, connectionTested, loading, hostData, refreshHosts, setSelectedHost, handleClose]);
+  };
 
-  const handleTestConnection = useCallback(async (): Promise<void> => {
+  const handleTestConnection = async (): Promise<void> => {
     if (!validateAndProceed()) {
       logger.warn('Connection test attempted without validation');
       return;
@@ -218,7 +233,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     } finally {
       setTestingConnection(false);
     }
-  }, [validateAndProceed, testingConnection, hostData]);
+  };
 
   return (
     <Drawer
@@ -243,9 +258,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         <Box
           component="form"
           noValidate
-          onSubmit={(e: React.FormEvent): void => {
-            void handleSave(e);
-          }}
+          onSubmit={handleFormSubmit}
         >
           <TextField
             fullWidth
@@ -324,7 +337,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
             <Button
               variant="outlined"
               type="button"
-              onClick={(): Promise<void> => handleTestConnection()}
+              onClick={handleTestConnection}
               disabled={loading || testingConnection}
               startIcon={testingConnection ? <CircularProgress size={20} /> : null}
               fullWidth
