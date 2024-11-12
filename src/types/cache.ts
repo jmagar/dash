@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 
 export interface CacheCommand {
   command: string;
@@ -28,8 +28,12 @@ export interface CacheTTL {
   PACKAGES: number;
 }
 
+export interface RedisClient {
+  getClient(): Promise<Redis | null>;
+}
+
 export interface Cache {
-  redis: Redis;
+  redis: RedisClient;
   CACHE_KEYS: CacheKeys;
   CACHE_TTL: CacheTTL;
   cacheSession(token: string, sessionData: string): Promise<void>;

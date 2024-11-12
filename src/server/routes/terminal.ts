@@ -180,7 +180,15 @@ router.get(
     const userId = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest).user?.id;
 
     try {
-      const commands = await redis.get(`${CACHE_KEYS.COMMAND}${userId}:${hostId}`);
+      const client = await redis.getClient();
+      if (!client) {
+        return res.json({
+          success: true,
+          data: [],
+        });
+      }
+
+      const commands = await client.get(`${CACHE_KEYS.COMMAND}${userId}:${hostId}`);
       const history = commands ? (JSON.parse(commands) as CacheCommand[]) : [];
 
       res.json({
