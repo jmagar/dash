@@ -56,7 +56,7 @@ export default function Navigation(): JSX.Element {
           variant="contained"
           onClick={(): void => setIsHostSelectorOpen(true)}
           fullWidth
-          color={selectedHost ? 'primary' : 'secondary'}
+          color="primary"
         >
           {selectedHost ? `Connected: ${selectedHost.name}` : 'Select Host'}
         </Button>
