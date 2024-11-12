@@ -6,6 +6,22 @@ import { logger } from '../client/utils/frontendLogger';
 interface ApiErrorResponse {
   error?: string;
   message?: string;
+  details?: unknown;
+}
+
+export class ApiError extends Error {
+  public readonly status?: number;
+  public readonly details?: unknown;
+
+  constructor(message: string, status?: number, details?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.details = details;
+
+    // Ensure instanceof works correctly
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
 }
 
 export function handleApiError<T>(error: unknown, context: string): ApiResult<T> {
@@ -15,6 +31,7 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
     context,
   });
 
+  // Handle Axios errors
   if (error && typeof error === 'object' && 'isAxiosError' in error) {
     const axiosError = error as AxiosError<ApiErrorResponse>;
     const errorMessage = axiosError.response?.data?.error ||
@@ -39,8 +56,28 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
     };
   }
 
-  // Handle non-Axios errors
+  // Handle our custom API errors
+  if (error instanceof ApiError) {
+    logger.error('API error details:', {
+      status: error.status,
+      details: error.details,
+      stack: error.stack,
+    });
+
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+
+  // Handle standard errors
   if (error instanceof Error) {
+    logger.error('Standard error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    });
+
     return {
       success: false,
       error: error.message,
@@ -48,8 +85,55 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
   }
 
   // Handle unknown errors
+  logger.error('Unknown error:', { error });
   return {
     success: false,
     error: 'An unexpected error occurred',
   };
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
+export function createApiError(
+  message: string,
+  status?: number,
+  details?: unknown,
+): ApiError {
+  return new ApiError(message, status, details);
+}
+
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return 'An unexpected error occurred';
+}
+
+export function logError(error: unknown, context: string): void {
+  if (error instanceof ApiError) {
+    logger.error(`${context}:`, {
+      message: error.message,
+      status: error.status,
+      details: error.details,
+      stack: error.stack,
+    });
+  } else if (error instanceof Error) {
+    logger.error(`${context}:`, {
+      message: error.message,
+      stack: error.stack,
+    });
+  } else {
+    logger.error(`${context}:`, { error });
+  }
 }
