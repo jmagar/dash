@@ -73,7 +73,7 @@ export function HostProvider({ children }: Props): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedHost]); // Remove selectedHost from deps to prevent loops
 
   // Initial fetch
   useEffect(() => {
@@ -104,7 +104,7 @@ export function HostProvider({ children }: Props): JSX.Element {
       });
       setError(errorMessage);
     }
-  }, [selectedHost]);
+  }, [selectedHost]); // Remove selectedHost from deps
 
   // Log state changes
   useEffect(() => {
