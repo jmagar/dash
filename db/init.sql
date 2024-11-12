@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS hosts (
     hostname VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL DEFAULT 22,
     ip VARCHAR(45) NOT NULL,
+    username VARCHAR(255),
+    password TEXT,
     ssh_key_id INTEGER,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +79,7 @@ CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_hosts_name ON hosts(name);
 CREATE INDEX idx_hosts_hostname ON hosts(hostname);
+CREATE INDEX idx_hosts_username ON hosts(username);
 CREATE INDEX idx_ssh_keys_user_id ON ssh_keys(user_id);
 CREATE INDEX idx_command_history_user_id ON command_history(user_id);
 CREATE INDEX idx_command_history_host_id ON command_history(host_id);
