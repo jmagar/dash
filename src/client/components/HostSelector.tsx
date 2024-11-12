@@ -10,6 +10,7 @@ import {
   IconButton,
   Typography,
   CircularProgress,
+  Box,
 } from '@mui/material';
 import React, { useState, useEffect, useCallback } from 'react';
 
@@ -32,7 +33,7 @@ export default function HostSelector({
   onSelect,
   multiSelect = false,
   selectedHosts = [],
-}: Props): JSX.Element {
+}: Props): JSX.Element | null {
   const [selected, setSelected] = useState<Host[]>(selectedHosts);
 
   const loadHostsList = useCallback(async (): Promise<Host[]> => {
@@ -77,17 +78,42 @@ export default function HostSelector({
     }
   }, [multiSelect, selected, onSelect, onClose]);
 
+  // Don't render anything if not open
+  if (!open) {
+    return null;
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Select Host{multiSelect ? 's' : ''}</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      aria-labelledby="host-selector-title"
+    >
+      <DialogTitle id="host-selector-title">
+        Select Host{multiSelect ? 's' : ''}
+      </DialogTitle>
       <DialogContent>
-        {loading && <CircularProgress />}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        )}
+
         {error && (
           <Typography color="error" gutterBottom>
             {error}
           </Typography>
         )}
-        {hosts && (
+
+        {hosts && hosts.length === 0 && (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            No hosts available. Add a new host to get started.
+          </Typography>
+        )}
+
+        {hosts && hosts.length > 0 && (
           <List>
             {hosts.map((host: Host) => {
               const isSelected = selected.some((h) => h.id === host.id);
@@ -97,14 +123,36 @@ export default function HostSelector({
                   button
                   onClick={(): void => handleSelect(host)}
                   selected={isSelected}
+                  sx={{
+                    borderRadius: 1,
+                    mb: 0.5,
+                    '&.Mui-selected': {
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                      },
+                    },
+                  }}
                 >
                   <ListItemText
                     primary={host.name}
                     secondary={`${host.hostname}:${host.port}`}
+                    secondaryTypographyProps={{
+                      sx: {
+                        color: isSelected ? 'inherit' : 'text.secondary',
+                        opacity: isSelected ? 0.9 : 0.7,
+                      },
+                    }}
                   />
                   {isSelected && (
                     <ListItemSecondaryAction>
-                      <IconButton edge="end">
+                      <IconButton
+                        edge="end"
+                        sx={{
+                          color: isSelected ? 'primary.contrastText' : 'inherit',
+                        }}
+                      >
                         <CheckIcon />
                       </IconButton>
                     </ListItemSecondaryAction>
