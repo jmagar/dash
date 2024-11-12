@@ -11,11 +11,12 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 import type { Host } from '../../types';
-import { listHosts } from '../api';
+import { listHosts } from '../api/hosts.client';
 import { useAsync } from '../hooks';
+import { logger } from '../utils/frontendLogger';
 
 interface Props {
   open: boolean;
@@ -34,28 +35,34 @@ export default function HostSelector({
 }: Props): JSX.Element {
   const [selected, setSelected] = useState<Host[]>(selectedHosts);
 
-  const loadHostsList = async (): Promise<Host[]> => {
+  const loadHostsList = useCallback(async (): Promise<Host[]> => {
+    logger.info('Loading hosts list');
     const result = await listHosts();
     if (!result.success) {
-      throw new Error(result.error || 'Failed to load hosts');
+      const error = result.error || 'Failed to load hosts';
+      logger.error('Failed to load hosts', { error });
+      throw new Error(error);
     }
+    logger.info('Hosts loaded successfully', { count: result.data?.length });
     return result.data || [];
-  };
+  }, []);
 
   const {
     data: hosts,
     loading,
     error,
     execute: loadHosts,
-  } = useAsync(loadHostsList, { immediate: true });
+  } = useAsync(loadHostsList, { immediate: false });
 
   useEffect(() => {
     if (open) {
+      logger.info('Host selector opened, loading hosts');
       void loadHosts();
     }
   }, [open, loadHosts]);
 
-  const handleSelect = (host: Host): void => {
+  const handleSelect = useCallback((host: Host): void => {
+    logger.info('Host selected', { hostId: host.id });
     if (multiSelect) {
       const isSelected = selected.some((h) => h.id === host.id);
       if (isSelected) {
@@ -68,7 +75,7 @@ export default function HostSelector({
       onSelect([host]);
       onClose();
     }
-  };
+  }, [multiSelect, selected, onSelect, onClose]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
