@@ -2,6 +2,7 @@ import axios from 'axios';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 import type { Host } from '../../types';
+import { createApiError, logError } from '../../types/error';
 import { logger } from '../utils/frontendLogger';
 
 interface HostContextType {
@@ -71,26 +72,13 @@ export function HostProvider({ children }: Props): JSX.Element {
               setSelectedHost(updatedHost);
             }
           }
-        } else if (newHosts.length > 0) {
-          // If we don't have a selected host but we have hosts, select the first one
-          logger.info('Setting initial host', { host: newHosts[0] });
-          setSelectedHost(newHosts[0]);
         }
       } else {
-        const errorMessage = response.data.error || 'Failed to fetch hosts';
-        logger.error('Failed to fetch hosts', { error: errorMessage });
-        setError(errorMessage);
-        setHosts([]);
-        setHasHosts(false);
-        setSelectedHost(null);
+        throw createApiError(response.data.error || 'Failed to fetch hosts');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      logger.error('Error fetching hosts:', {
-        error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      setError(errorMessage);
+      logError(error, 'Error fetching hosts');
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
       setHosts([]);
       setHasHosts(false);
       setSelectedHost(null);
@@ -113,7 +101,7 @@ export function HostProvider({ children }: Props): JSX.Element {
 
       if (host && !hosts.some((h: Host) => h.id === host.id)) {
         logger.warn('Attempted to select non-existent host', { hostId: host.id });
-        return;
+        throw createApiError('Selected host does not exist');
       }
 
       setSelectedHost(host);
@@ -126,12 +114,8 @@ export function HostProvider({ children }: Props): JSX.Element {
         logger.info('Host selection cleared');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to set selected host';
-      logger.error('Error setting selected host:', {
-        error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      setError(errorMessage);
+      logError(error, 'Error setting selected host');
+      setError(error instanceof Error ? error.message : 'Failed to set selected host');
     }
   }, [selectedHost, hosts]);
 
