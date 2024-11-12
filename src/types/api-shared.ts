@@ -55,22 +55,9 @@ export interface ExecutionResult {
 }
 
 interface ApiErrorResponse {
+  error?: string;
   message?: string;
 }
-
-export const handleApiError = <T>(error: unknown): ApiResult<T> => {
-  if (error && typeof error === 'object' && 'isAxiosError' in error) {
-    const axiosError = error as AxiosError<ApiErrorResponse>;
-    return {
-      success: false,
-      error: axiosError.response?.data?.message || axiosError.message || 'An unknown error occurred',
-    };
-  }
-  return {
-    success: false,
-    error: 'An unexpected error occurred',
-  };
-};
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -89,7 +76,7 @@ export const API_ENDPOINTS = {
     STATUS: '/hosts/status',
     ADD: '/hosts',
     REMOVE: (id: number): string => `/hosts/${id}`,
-    TEST: '/hosts/test-connection',
+    TEST: '/hosts/test',
     STATS: (id: number): string => `/hosts/${id}/stats`,
     LOGS: (id: number): string => `/hosts/${id}/logs`,
     TEST_CONNECTION: '/hosts/test-connection',
@@ -131,4 +118,33 @@ export const API_ENDPOINTS = {
     INFO: (hostId: number, packageName: string): string =>
       `/hosts/${hostId}/packages/${packageName}/info`,
   },
-};
+} as const;
+
+export function handleApiError<T>(error: unknown, context: string): ApiResult<T> {
+  if (error && typeof error === 'object' && 'isAxiosError' in error) {
+    const axiosError = error as AxiosError<ApiErrorResponse>;
+    const errorMessage = axiosError.response?.data?.error ||
+                        axiosError.response?.data?.message ||
+                        axiosError.message ||
+                        'An unknown error occurred';
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+
+  // Handle non-Axios errors
+  if (error instanceof Error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+
+  // Handle unknown errors
+  return {
+    success: false,
+    error: 'An unexpected error occurred',
+  };
+}
