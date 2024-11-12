@@ -76,7 +76,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
   const [success, setSuccess] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [connectionTested, setConnectionTested] = useState(false);
-  const { setSelectedHost } = useHost();
+  const { setSelectedHost, refreshHosts } = useHost();
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
@@ -157,6 +157,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         setSuccess('Host created successfully');
 
         // Update the host context
+        await refreshHosts();
         setSelectedHost(result.data);
 
         // Show success message briefly before closing
