@@ -15,8 +15,9 @@ import express, {
 import {
   isConnected as cacheIsConnected,
   redis,
+  initializeCache,
 } from './cache';
-import { pool } from './db';
+import { pool, initializeDatabase } from './db';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { initializeSocketIO } from './routes/terminal';
@@ -25,7 +26,7 @@ import { serverLogger as logger } from './utils/serverLogger';
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, '../../logs');
 if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir);
+  fs.mkdirSync(logsDir, { recursive: true });
 }
 
 // Import socket.io using require since it has issues with ES modules
@@ -55,7 +56,9 @@ app.use('/api', routes);
 
 // Serve static files from the React build directory
 const buildPath = path.resolve(__dirname, '../../build');
-app.use(expressStatic(buildPath));
+if (fs.existsSync(buildPath)) {
+  app.use(expressStatic(buildPath));
+}
 
 // Error handler for JSON parsing
 app.use((err: Error & { status?: number; body?: unknown }, req: Request, res: Response, _next: NextFunction) => {
@@ -194,28 +197,48 @@ const getServerIPs = (): string[] => {
   return addresses;
 };
 
-// Start server
-const PORT = process.env.PORT || 4000;
-const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+// Initialize server
+const startServer = async (): Promise<void> => {
+  try {
+    // Initialize database first
+    await initializeDatabase();
+    logger.info('Database initialized successfully');
 
-server.listen(portNumber, '0.0.0.0', () => {
-  const ips = getServerIPs();
-  const addresses = ips.map(ip => `http://${ip}:${portNumber}`);
+    // Initialize Redis (non-blocking)
+    void initializeCache().then(() => {
+      logger.info('Redis initialization completed');
+    });
 
-  logger.info('Server started', {
-    environment: process.env.NODE_ENV,
-    port: portNumber,
-    addresses,
-    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
-    dbHost: process.env.DB_HOST,
-    redisHost: process.env.REDIS_HOST,
-  });
+    // Start HTTP server
+    const PORT = process.env.PORT || 4000;
+    const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
 
-  // Log server addresses for visibility
-  logger.info('Server is running on:', {
-    addresses,
-  });
-});
+    server.listen(portNumber, '0.0.0.0', () => {
+      const ips = getServerIPs();
+      const addresses = ips.map(ip => `http://${ip}:${portNumber}`);
+
+      logger.info('Server started', {
+        environment: process.env.NODE_ENV,
+        port: portNumber,
+        addresses,
+        frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
+        dbHost: process.env.DB_HOST,
+        redisHost: process.env.REDIS_HOST,
+      });
+
+      // Log server addresses for visibility
+      logger.info('Server is running on:', {
+        addresses,
+      });
+    });
+  } catch (error) {
+    logger.error('Failed to start server', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+    });
+    process.exit(1);
+  }
+};
 
 // Graceful shutdown handling
 let isShuttingDown = false;
@@ -296,5 +319,8 @@ process.on('unhandledRejection', (err: unknown) => {
   });
   shutdown();
 });
+
+// Start server
+void startServer();
 
 export default app;

@@ -166,6 +166,38 @@ const getClient = async (): Promise<Redis | null> => {
   }
 };
 
+// Initialize Redis with retries
+export const initializeCache = async (): Promise<void> => {
+  for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      logger.info(`Attempting Redis connection (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`);
+      const client = await initializeRedis();
+      if (client) {
+        return;
+      }
+
+      if (attempt === MAX_RETRY_ATTEMPTS) {
+        logger.warn('Max Redis connection attempts reached, continuing without Redis');
+        return;
+      }
+
+      logger.info(`Retrying in ${BASE_RETRY_DELAY / 1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, BASE_RETRY_DELAY));
+    } catch (error) {
+      logger.error('Redis initialization attempt failed', {
+        attempt,
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+      });
+
+      if (attempt === MAX_RETRY_ATTEMPTS) {
+        logger.warn('Max Redis connection attempts reached, continuing without Redis');
+        return;
+      }
+    }
+  }
+};
+
 // Check if Redis is connected
 export const isConnected = (): boolean =>
   redisClient?.status === 'ready' ?? false;
@@ -360,9 +392,6 @@ export const healthCheck = async (): Promise<{ status: string; connected: boolea
   }
 };
 
-// Initialize Redis on module load
-void initializeRedis();
-
 // Export an async function to get the Redis client
 export const redis = {
   getClient,
@@ -385,4 +414,5 @@ export default {
   cacheDockerStacks,
   cacheCommand,
   getCommands,
+  initializeCache,
 };
