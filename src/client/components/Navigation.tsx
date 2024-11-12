@@ -54,7 +54,7 @@ export default function Navigation(): JSX.Element {
     setIsHostSelectorOpen(false);
   }, []);
 
-  const handleOpenHostSelector = useCallback((): void => {
+  const handleOpenSelector = useCallback((): void => {
     if (!hasHosts) {
       logger.info('No hosts available, opening setup wizard');
       setIsSetupWizardOpen(true);
@@ -74,7 +74,7 @@ export default function Navigation(): JSX.Element {
       <Box sx={{ p: 2 }}>
         <Button
           variant="contained"
-          onClick={handleOpenHostSelector}
+          onClick={handleOpenSelector}
           fullWidth
           color="primary"
         >
@@ -137,14 +137,12 @@ export default function Navigation(): JSX.Element {
         ))}
       </List>
 
-      {hasHosts && (
-        <HostSelector
-          open={isHostSelectorOpen}
-          onClose={handleHostSelectorClose}
-          onSelect={handleHostSelect}
-          selectedHosts={selectedHost ? [selectedHost] : []}
-        />
-      )}
+      <HostSelector
+        open={isHostSelectorOpen}
+        onClose={handleHostSelectorClose}
+        onSelect={handleHostSelect}
+        selectedHosts={selectedHost ? [selectedHost] : []}
+      />
 
       <SetupWizard
         open={isSetupWizardOpen}
