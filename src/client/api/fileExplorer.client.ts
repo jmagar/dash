@@ -4,30 +4,63 @@ import type { FileItem, ApiResult } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
+import { logger } from '../utils/frontendLogger';
+
+// Configure axios
+const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  response => response,
+  error => {
+    logger.error('File Explorer API request failed:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      error: error.message,
+      response: error.response?.data,
+    });
+    return Promise.reject(error);
+  },
+);
 
 export async function listFiles(hostId: number, path?: string): Promise<ApiResult<FileItem[]>> {
   try {
-    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.FILES.LIST(hostId)}`, {
+    logger.info('Listing files', { hostId, path });
+    const response = await api.get(API_ENDPOINTS.FILES.LIST(hostId), {
       params: { path },
+    });
+    logger.info('Files listed successfully', {
+      hostId,
+      path,
+      count: response.data?.data?.length,
     });
     return response.data;
   } catch (error) {
-    return handleApiError<FileItem[]>(error);
+    return handleApiError<FileItem[]>(error, 'listFiles');
   }
 }
 
 export async function readFile(hostId: number, path: string): Promise<ApiResult<string>> {
   try {
-    const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.FILES.DOWNLOAD(hostId)}`, {
+    logger.info('Reading file', { hostId, path });
+    const response = await api.get(API_ENDPOINTS.FILES.DOWNLOAD(hostId), {
       params: { path },
       responseType: 'text',
     });
+    logger.info('File read successfully', { hostId, path });
     return {
       success: true,
       data: response.data,
     };
   } catch (error) {
-    return handleApiError<string>(error);
+    return handleApiError<string>(error, 'readFile');
   }
 }
 
@@ -37,24 +70,28 @@ export async function writeFile(
   content: string,
 ): Promise<ApiResult<void>> {
   try {
-    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.FILES.UPLOAD(hostId)}`, {
+    logger.info('Writing file', { hostId, path });
+    const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
       path,
       content,
     });
+    logger.info('File written successfully', { hostId, path });
     return response.data;
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, 'writeFile');
   }
 }
 
 export async function deleteFile(hostId: number, path: string): Promise<ApiResult<void>> {
   try {
-    const response = await axios.delete(`${BASE_URL}${API_ENDPOINTS.FILES.DELETE(hostId)}`, {
+    logger.info('Deleting file', { hostId, path });
+    const response = await api.delete(API_ENDPOINTS.FILES.DELETE(hostId), {
       params: { path },
     });
+    logger.info('File deleted successfully', { hostId, path });
     return response.data;
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, 'deleteFile');
   }
 }
 
@@ -63,12 +100,14 @@ export async function createDirectory(
   path: string,
 ): Promise<ApiResult<void>> {
   try {
-    const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.FILES.UPLOAD(hostId)}`, {
+    logger.info('Creating directory', { hostId, path });
+    const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
       path,
       isDirectory: true,
     });
+    logger.info('Directory created successfully', { hostId, path });
     return response.data;
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, 'createDirectory');
   }
 }
