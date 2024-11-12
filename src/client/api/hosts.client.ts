@@ -6,6 +6,12 @@ import { handleApiError } from '../../types/error';
 import { APP_CONFIG } from '../config';
 import { logger } from '../utils/frontendLogger';
 
+interface HostsResponse {
+  success: boolean;
+  data: Host[];
+  error?: string;
+}
+
 // Configure axios
 const api = axios.create({
   baseURL: APP_CONFIG.api.baseUrl,
@@ -84,9 +90,13 @@ async function retryOperation<T>(
 export async function listHosts(): Promise<ApiResult<Host[]>> {
   try {
     logger.info('Fetching hosts list');
-    const response = await api.get(API_ENDPOINTS.HOSTS.LIST);
+    const response = await api.get<HostsResponse>(API_ENDPOINTS.HOSTS.LIST);
     logger.info('Hosts list fetched successfully', { count: response.data?.data?.length });
-    return response.data;
+    return {
+      success: response.data.success,
+      data: response.data.data,
+      error: response.data.error,
+    };
   } catch (error) {
     return handleApiError<Host[]>(error, 'listHosts');
   }
@@ -116,7 +126,7 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
 
     // If connection test succeeds, add the host
     logger.info('Connection test successful, adding host:', { hostname: host.hostname });
-    const response = await api.post(API_ENDPOINTS.HOSTS.ADD, host);
+    const response = await api.post<ApiResult<Host>>(API_ENDPOINTS.HOSTS.ADD, host);
     logger.info('Host added successfully', { hostId: response.data?.data?.id });
     return response.data;
   } catch (error) {
@@ -127,7 +137,7 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
 export async function removeHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Removing host:', { id });
-    const response = await api.delete(API_ENDPOINTS.HOSTS.REMOVE(id));
+    const response = await api.delete<ApiResult<void>>(API_ENDPOINTS.HOSTS.REMOVE(id));
     logger.info('Host removed successfully', { id });
     return response.data;
   } catch (error) {
@@ -137,7 +147,7 @@ export async function removeHost(id: number): Promise<ApiResult<void>> {
 
 export async function getHostStatus(id: number): Promise<ApiResult<boolean>> {
   try {
-    const response = await api.get(API_ENDPOINTS.HOSTS.STATUS);
+    const response = await api.get<ApiResult<boolean>>(API_ENDPOINTS.HOSTS.STATUS);
     return response.data;
   } catch (error) {
     return handleApiError<boolean>(error, 'getHostStatus');
@@ -159,7 +169,7 @@ export async function testConnection(host: Omit<Host, 'id'>): Promise<ApiResult<
     logger.info('Testing connection with retries:', { hostname: host.hostname });
 
     const response = await retryOperation(
-      () => api.post(
+      () => api.post<ApiResult<void>>(
         API_ENDPOINTS.HOSTS.TEST_CONNECTION,
         host,
         { timeout: CONNECTION_TEST_TIMEOUT },
@@ -186,7 +196,7 @@ export async function testExistingHost(id: number): Promise<ApiResult<void>> {
     logger.info('Testing existing host connection:', { id });
 
     const response = await retryOperation(
-      () => api.post(
+      () => api.post<ApiResult<void>>(
         API_ENDPOINTS.HOSTS.TEST_CONNECTION,
         { id },
         { timeout: CONNECTION_TEST_TIMEOUT },
@@ -210,7 +220,7 @@ export async function testExistingHost(id: number): Promise<ApiResult<void>> {
 
 export async function getSystemStats(id: number): Promise<ApiResult<SystemStats>> {
   try {
-    const response = await api.get(API_ENDPOINTS.HOSTS.STATS(id));
+    const response = await api.get<ApiResult<SystemStats>>(API_ENDPOINTS.HOSTS.STATS(id));
     return response.data;
   } catch (error) {
     return handleApiError<SystemStats>(error, 'getSystemStats');
@@ -220,7 +230,7 @@ export async function getSystemStats(id: number): Promise<ApiResult<SystemStats>
 export async function connectHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Connecting to host:', { id });
-    const response = await api.post(API_ENDPOINTS.HOSTS.CONNECT(id));
+    const response = await api.post<ApiResult<void>>(API_ENDPOINTS.HOSTS.CONNECT(id));
     logger.info('Host connected successfully', { id });
     return response.data;
   } catch (error) {
@@ -231,7 +241,7 @@ export async function connectHost(id: number): Promise<ApiResult<void>> {
 export async function disconnectHost(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Disconnecting from host:', { id });
-    const response = await api.post(API_ENDPOINTS.HOSTS.DISCONNECT(id));
+    const response = await api.post<ApiResult<void>>(API_ENDPOINTS.HOSTS.DISCONNECT(id));
     logger.info('Host disconnected successfully', { id });
     return response.data;
   } catch (error) {
