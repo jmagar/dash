@@ -1,4 +1,4 @@
-import { AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 
 import type { ApiResult } from './api-shared';
 import { logger } from '../client/utils/frontendLogger';
@@ -6,76 +6,44 @@ import { logger } from '../client/utils/frontendLogger';
 interface ApiErrorResponse {
   error?: string;
   message?: string;
-  details?: unknown;
 }
 
-export function handleApiError<T>(error: unknown, context?: string): ApiResult<T> {
-  // Log the error with context
-  const errorContext = context ? ` in ${context}` : '';
-  logger.error(`API Error${errorContext}:`, { error });
+export function handleApiError<T>(error: unknown, context: string): ApiResult<T> {
+  logger.error(`API error in ${context}:`, {
+    error: error instanceof Error ? error.message : error,
+    stack: error instanceof Error ? error.stack : undefined,
+    context,
+  });
 
-  // Handle Axios errors
-  if (error instanceof AxiosError) {
-    const response = error.response?.data as ApiErrorResponse | undefined;
-    const status = error.response?.status;
+  if (error && typeof error === 'object' && 'isAxiosError' in error) {
+    const axiosError = error as AxiosError<ApiErrorResponse>;
+    const errorMessage = axiosError.response?.data?.error ||
+                        axiosError.response?.data?.message ||
+                        axiosError.message ||
+                        'An unknown error occurred';
 
-    // Log detailed error information
-    logger.error('API Request Failed:', {
-      status,
-      url: error.config?.url,
-      method: error.config?.method,
-      response: response,
-      error: error.message,
+    logger.error('Axios error details:', {
+      status: axiosError.response?.status,
+      statusText: axiosError.response?.statusText,
+      data: axiosError.response?.data,
+      config: {
+        url: axiosError.config?.url,
+        method: axiosError.config?.method,
+        baseURL: axiosError.config?.baseURL,
+      },
     });
 
-    // Handle specific status codes
-    switch (status) {
-      case 400:
-        return {
-          success: false,
-          error: response?.error || response?.message || 'Invalid request. Please check your input.',
-        };
-      case 401:
-        return {
-          success: false,
-          error: 'Authentication required. Please log in.',
-        };
-      case 403:
-        return {
-          success: false,
-          error: 'You do not have permission to perform this action.',
-        };
-      case 404:
-        return {
-          success: false,
-          error: response?.error || 'The requested resource was not found.',
-        };
-      case 500:
-        return {
-          success: false,
-          error: 'An internal server error occurred. Please try again later.',
-        };
-      default:
-        return {
-          success: false,
-          error: response?.error || response?.message || error.message || 'An unexpected error occurred',
-        };
-    }
+    return {
+      success: false,
+      error: errorMessage,
+    };
   }
 
-  // Handle standard Error objects
+  // Handle non-Axios errors
   if (error instanceof Error) {
     return {
       success: false,
       error: error.message,
-    };
-  }
-
-  // Handle string errors
-  if (typeof error === 'string') {
-    return {
-      success: false,
-      error,
     };
   }
 
