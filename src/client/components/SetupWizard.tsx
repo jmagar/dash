@@ -121,12 +121,9 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     return Object.keys(errors).length === 0;
   }, [hostData]);
 
-  const handleFormSubmit = useCallback(async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    logger.info('Form submitted');
-
+  const handleSave = useCallback(async (): Promise<void> => {
     if (!validateAndProceed() || !connectionTested) {
-      logger.warn('Form submission blocked:', {
+      logger.warn('Save attempted without validation or connection test', {
         hasValidationErrors: !validateAndProceed(),
         isConnectionTested: connectionTested,
       });
@@ -134,7 +131,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     }
 
     if (loading) {
-      logger.warn('Form submission blocked: already loading');
+      logger.warn('Save attempted while loading');
       return;
     }
 
@@ -242,7 +239,11 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
         <Box
           component="form"
           noValidate
-          onSubmit={handleFormSubmit}
+          onSubmit={(e): void => {
+            e.preventDefault();
+            logger.info('Form submitted');
+            void handleSave();
+          }}
         >
           <TextField
             fullWidth
@@ -321,7 +322,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
             <Button
               variant="outlined"
               type="button"
-              onClick={handleTestConnection}
+              onClick={(): Promise<void> => handleTestConnection()}
               disabled={loading || testingConnection}
               startIcon={testingConnection ? <CircularProgress size={20} /> : null}
               fullWidth
