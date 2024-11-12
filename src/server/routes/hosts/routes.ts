@@ -7,10 +7,10 @@ import { checkRole } from '../../middleware/auth';
 const router: Router = Router();
 
 // List hosts
-router.get('/', hostController.listHosts);
+router.get('/', createAuthHandler(hostController.listHosts));
 
 // Get host details
-router.get('/:id', hostController.getHost);
+router.get('/:id', createAuthHandler(hostController.getHost));
 
 // Test connection without creating host
 router.post(

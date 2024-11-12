@@ -1,8 +1,10 @@
 import path from 'path';
 
-import { Router, RequestHandler } from 'express';
+import { Router } from 'express';
 import { Client } from 'ssh2';
 
+import { handleApiError } from '../../types/error';
+import { AuthenticatedRequestHandler, createAuthHandler } from '../../types/express';
 import {
   FileItem,
   FileListResponse,
@@ -14,7 +16,6 @@ import {
 } from '../../types/files';
 import { serverLogger as logger } from '../../utils/serverLogger';
 import { query } from '../db';
-import { AuthenticatedRequest } from '../middleware/auth';
 
 const router: Router = Router();
 
@@ -26,40 +27,20 @@ interface RequestQuery {
   path?: string;
 }
 
-type FileListHandler = RequestHandler<
+// List directory contents
+const listDirectory: AuthenticatedRequestHandler<
   RequestParams,
   FileListResponse,
   any,
   RequestQuery
->;
-
-type FileDownloadHandler = RequestHandler<
-  RequestParams,
-  any,
-  any,
-  RequestQuery
->;
-
-type FileUploadHandler = RequestHandler<
-  RequestParams,
-  FileOperationResponse,
-  FileUploadRequest
->;
-
-type FileDeleteHandler = RequestHandler<
-  RequestParams,
-  FileOperationResponse,
-  any,
-  RequestQuery
->;
-
-// List directory contents
-const listDirectory: FileListHandler = async (req, res) => {
+> = async (req, res) => {
   const { path: dirPath = '/' } = req.query;
   const normalizedPath = path.normalize(dirPath || '').replace(/^(\.\.[\\/])+/, '');
-  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
+    logger.info('Listing directory', { hostId: req.params.hostId, path: normalizedPath });
+
     // Get host connection details
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
@@ -67,7 +48,9 @@ const listDirectory: FileListHandler = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Host not found' });
+      logger.warn('Host not found', { hostId: req.params.hostId });
+      res.status(404).json({ success: false, error: 'Host not found' });
+      return;
     }
 
     const host = result.rows[0];
@@ -115,31 +98,47 @@ const listDirectory: FileListHandler = async (req, res) => {
     });
 
     const files = await listDirectory;
+    logger.info('Directory listed successfully', {
+      hostId: req.params.hostId,
+      path: normalizedPath,
+      count: files.length,
+    });
     res.json({ success: true, data: files });
-  } catch (err) {
-    logger.error('Error listing directory:', { error: (err as Error).message, stack: (err as Error).stack });
-    res.status(500).json({ success: false, error: (err as Error).message });
+  } catch (error) {
+    const errorResult = handleApiError<FileItem[]>(error, 'listDirectory');
+    res.status(500).json(errorResult);
   }
 };
 
 // Download file
-const downloadFile: FileDownloadHandler = async (req, res) => {
+const downloadFile: AuthenticatedRequestHandler<
+  RequestParams,
+  any,
+  any,
+  RequestQuery
+> = async (req, res) => {
   const { path: filePath } = req.query;
   if (!filePath) {
-    return res.status(400).json({ success: false, error: 'File path required' });
+    logger.warn('No file path provided', { hostId: req.params.hostId });
+    res.status(400).json({ success: false, error: 'File path required' });
+    return;
   }
 
   const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\\/])+/, '');
-  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
+    logger.info('Downloading file', { hostId: req.params.hostId, path: normalizedPath });
+
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
       [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Host not found' });
+      logger.warn('Host not found', { hostId: req.params.hostId });
+      res.status(404).json({ success: false, error: 'Host not found' });
+      return;
     }
 
     const host = result.rows[0];
@@ -148,7 +147,8 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
     conn.on('ready', () => {
       conn.sftp((err, sftp) => {
         if (err) {
-          res.status(500).json({ success: false, error: err.message });
+          const errorResult = handleApiError(err, 'downloadFile');
+          res.status(500).json(errorResult);
           return;
         }
 
@@ -156,7 +156,8 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
         const readStream = sftpWrapper.createReadStream(normalizedPath);
 
         readStream.on('error', (err: Error) => {
-          res.status(500).json({ success: false, error: err.message });
+          const errorResult = handleApiError(err, 'downloadFile');
+          res.status(500).json(errorResult);
           conn.end();
         });
 
@@ -164,13 +165,18 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
         readStream.pipe(res);
 
         readStream.on('end', () => {
+          logger.info('File downloaded successfully', {
+            hostId: req.params.hostId,
+            path: normalizedPath,
+          });
           conn.end();
         });
       });
     });
 
     conn.on('error', (err: Error) => {
-      res.status(500).json({ success: false, error: err.message });
+      const errorResult = handleApiError(err, 'downloadFile');
+      res.status(500).json(errorResult);
     });
 
     conn.connect({
@@ -180,30 +186,40 @@ const downloadFile: FileDownloadHandler = async (req, res) => {
       privateKey: host.private_key,
       passphrase: host.passphrase,
     });
-  } catch (err) {
-    logger.error('Error downloading file:', { error: (err as Error).message, stack: (err as Error).stack });
-    res.status(500).json({ success: false, error: (err as Error).message });
+  } catch (error) {
+    const errorResult = handleApiError(error, 'downloadFile');
+    res.status(500).json(errorResult);
   }
 };
 
 // Upload file
-const uploadFile: FileUploadHandler = async (req, res) => {
+const uploadFile: AuthenticatedRequestHandler<
+  RequestParams,
+  FileOperationResponse,
+  FileUploadRequest
+> = async (req, res) => {
   const { path: uploadPath, content } = req.body;
   if (!uploadPath || !content) {
-    return res.status(400).json({ success: false, error: 'Path and content required' });
+    logger.warn('Missing path or content', { hostId: req.params.hostId });
+    res.status(400).json({ success: false, error: 'Path and content required' });
+    return;
   }
 
   const normalizedPath = path.normalize(uploadPath).replace(/^(\.\.[\\/])+/, '');
-  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
+    logger.info('Uploading file', { hostId: req.params.hostId, path: normalizedPath });
+
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
       [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Host not found' });
+      logger.warn('Host not found', { hostId: req.params.hostId });
+      res.status(404).json({ success: false, error: 'Host not found' });
+      return;
     }
 
     const host = result.rows[0];
@@ -240,31 +256,46 @@ const uploadFile: FileUploadHandler = async (req, res) => {
     });
 
     await uploadFile;
+    logger.info('File uploaded successfully', {
+      hostId: req.params.hostId,
+      path: normalizedPath,
+    });
     res.json({ success: true });
-  } catch (err) {
-    logger.error('Error uploading file:', { error: (err as Error).message, stack: (err as Error).stack });
-    res.status(500).json({ success: false, error: (err as Error).message });
+  } catch (error) {
+    const errorResult = handleApiError(error, 'uploadFile');
+    res.status(500).json(errorResult);
   }
 };
 
 // Delete file/directory
-const deleteFile: FileDeleteHandler = async (req, res) => {
+const deleteFile: AuthenticatedRequestHandler<
+  RequestParams,
+  FileOperationResponse,
+  any,
+  RequestQuery
+> = async (req, res) => {
   const { path: deletePath } = req.query;
   if (!deletePath) {
-    return res.status(400).json({ success: false, error: 'Path required' });
+    logger.warn('No path provided', { hostId: req.params.hostId });
+    res.status(400).json({ success: false, error: 'Path required' });
+    return;
   }
 
   const normalizedPath = path.normalize(deletePath).replace(/^(\.\.[\\/])+/, '');
-  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : (req as AuthenticatedRequest<RequestParams>).user.username;
+  const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
+    logger.info('Deleting file/directory', { hostId: req.params.hostId, path: normalizedPath });
+
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
       [req.params.hostId],
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Host not found' });
+      logger.warn('Host not found', { hostId: req.params.hostId });
+      res.status(404).json({ success: false, error: 'Host not found' });
+      return;
     }
 
     const host = result.rows[0];
@@ -313,17 +344,21 @@ const deleteFile: FileDeleteHandler = async (req, res) => {
     });
 
     await deleteFile;
+    logger.info('File/directory deleted successfully', {
+      hostId: req.params.hostId,
+      path: normalizedPath,
+    });
     res.json({ success: true });
-  } catch (err) {
-    logger.error('Error deleting file:', { error: (err as Error).message, stack: (err as Error).stack });
-    res.status(500).json({ success: false, error: (err as Error).message });
+  } catch (error) {
+    const errorResult = handleApiError(error, 'deleteFile');
+    res.status(500).json(errorResult);
   }
 };
 
 // Register routes
-router.get('/:hostId/list', listDirectory);
-router.get('/:hostId/download', downloadFile);
-router.post('/:hostId/upload', uploadFile);
-router.delete('/:hostId', deleteFile);
+router.get('/:hostId/list', createAuthHandler(listDirectory));
+router.get('/:hostId/download', createAuthHandler(downloadFile));
+router.post('/:hostId/upload', createAuthHandler(uploadFile));
+router.delete('/:hostId', createAuthHandler(deleteFile));
 
 export default router;

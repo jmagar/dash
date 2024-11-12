@@ -9,8 +9,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
+import { Host } from '../../types';
 import { addHost, testConnection } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
@@ -80,6 +81,13 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(handleClose, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [success, handleClose]);
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
     setHostData(prev => ({
@@ -123,58 +131,27 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
 
   const handleSave = useCallback(async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
-    logger.info('Form submitted');
-
-    if (!validateAndProceed() || !connectionTested) {
-      logger.warn('Form submission blocked:', {
-        hasValidationErrors: !validateAndProceed(),
-        isConnectionTested: connectionTested,
-      });
-      return;
-    }
-
-    if (loading) {
-      logger.warn('Form submission blocked: already loading');
-      return;
-    }
 
     try {
       setLoading(true);
       setError(null);
-      setSuccess(null);
 
-      logger.info('Attempting to save host', { hostname: hostData.hostname });
       const result = await addHost(hostData);
 
       if (result.success && result.data) {
-        logger.info('Host created successfully', {
-          hostId: result.data.id,
-          hostname: hostData.hostname,
-        });
-        setSuccess('Host created successfully');
-
-        // Update the host context
         await refreshHosts();
-        setSelectedHost(result.data);
-
-        // Show success message briefly before closing
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        handleClose();
+        const newHost = result.data as Host;
+        setSelectedHost(newHost);
+        setSuccess('Host created successfully');
       } else {
         throw new Error(result.error || 'Failed to create host');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred while creating the host';
-      logger.error('Setup error:', {
-        error: errorMessage,
-        stack: err instanceof Error ? err.stack : undefined,
-        hostData: { ...hostData, password: '[REDACTED]' },
-      });
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to create host');
     } finally {
       setLoading(false);
     }
-  }, [validateAndProceed, connectionTested, loading, hostData, refreshHosts, setSelectedHost, handleClose]);
+  }, [hostData, refreshHosts, setSelectedHost, addHost]);
 
   const handleTestConnection = useCallback(async (event: React.MouseEvent): Promise<void> => {
     event.preventDefault();

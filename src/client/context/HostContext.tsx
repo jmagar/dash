@@ -12,6 +12,7 @@ interface HostContextType {
   hasHosts: boolean;
   refreshHosts: () => Promise<void>;
   error: string | null;
+  addNewHost: (newHost: Host) => void;
 }
 
 const HostContext = createContext<HostContextType | undefined>(undefined);
@@ -131,6 +132,14 @@ export function HostProvider({ children }: Props): JSX.Element {
     });
   }, [selectedHost, loading, hasHosts, hosts, error]);
 
+  const addNewHost = useCallback((newHost: Host) => {
+    setHosts(prevHosts => [...prevHosts, newHost]);
+    setHasHosts(true);
+    setSelectedHost(newHost);
+    setError(null);
+    logger.info('New host added and selected', { hostId: newHost.id });
+  }, []);
+
   const value = {
     selectedHost,
     setSelectedHost: handleSetSelectedHost,
@@ -138,6 +147,7 @@ export function HostProvider({ children }: Props): JSX.Element {
     hasHosts,
     refreshHosts: fetchHosts,
     error,
+    addNewHost,
   };
 
   return (

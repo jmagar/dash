@@ -1,9 +1,9 @@
-import { Router, Request, Response } from 'express';
+import { Router, RequestHandler } from 'express';
 
 import { ApiResult } from '../../types/api-shared';
+import { handleApiError } from '../../types/error';
 import { serverLogger as logger } from '../../utils/serverLogger';
 import { query } from '../db';
-import { type AuthenticatedRequest } from '../middleware/auth';
 
 const router: Router = Router();
 
@@ -20,9 +20,20 @@ interface PackageResponse {
   error?: string;
 }
 
+interface PackageRequestParams {
+  hostId: string;
+}
+
+interface PackageRequestBody {
+  package: string;
+}
+
 // List packages
-router.get('/:hostId', async (_req: Request, res: Response<PackageResponse>) => {
+const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = async (req, res) => {
   try {
+    const { hostId } = req.params;
+    logger.info('Listing packages', { hostId });
+
     // This is a placeholder. In a real implementation, this would
     // connect to the host and list installed packages.
     const result = await query('SELECT 1');
@@ -30,96 +41,126 @@ router.get('/:hostId', async (_req: Request, res: Response<PackageResponse>) => 
       throw new Error('Failed to connect to database');
     }
 
+    const packages = [
+      {
+        name: 'example-package',
+        version: '1.0.0',
+        description: 'Example package',
+        installed: true,
+      },
+    ];
+
+    logger.info('Packages listed successfully', { hostId, count: packages.length });
     res.json({
       success: true,
-      data: [
-        {
-          name: 'example-package',
-          version: '1.0.0',
-          description: 'Example package',
-          installed: true,
-        },
-      ],
+      data: packages,
     });
-  } catch (err) {
-    logger.error('Error listing packages:', { error: (err as Error).message, stack: (err as Error).stack });
-    res.status(500).json({ success: false, error: 'Failed to list packages' });
+  } catch (error) {
+    const errorResult = handleApiError<Package[]>(error, 'listPackages');
+    res.status(500).json(errorResult);
   }
-});
+};
 
 // Install package
-router.post(
-  '/:hostId/install',
-  async (req: Request | AuthenticatedRequest, res: Response<ApiResult<void>>) => {
-    try {
-      const { package: packageName } = req.body;
-      if (!packageName) {
-        return res.status(400).json({ success: false, error: 'Package name required' });
-      }
+const installPackage: RequestHandler<
+  PackageRequestParams,
+  ApiResult<void>,
+  PackageRequestBody
+> = async (req, res) => {
+  try {
+    const { hostId } = req.params;
+    const { package: packageName } = req.body;
 
-      // This is a placeholder. In a real implementation, this would
-      // connect to the host and install the package.
-      const result = await query('SELECT 1');
-      if (!result) {
-        throw new Error('Failed to connect to database');
-      }
-
-      res.json({ success: true });
-    } catch (err) {
-      logger.error('Error installing package:', { error: (err as Error).message, stack: (err as Error).stack });
-      res.status(500).json({ success: false, error: 'Failed to install package' });
+    if (!packageName) {
+      logger.warn('Package installation failed: No package name provided', { hostId });
+      return res.status(400).json({ success: false, error: 'Package name required' });
     }
-  },
-);
+
+    logger.info('Installing package', { hostId, package: packageName });
+
+    // This is a placeholder. In a real implementation, this would
+    // connect to the host and install the package.
+    const result = await query('SELECT 1');
+    if (!result) {
+      throw new Error('Failed to connect to database');
+    }
+
+    logger.info('Package installed successfully', { hostId, package: packageName });
+    res.json({ success: true });
+  } catch (error) {
+    const errorResult = handleApiError<void>(error, 'installPackage');
+    res.status(500).json(errorResult);
+  }
+};
 
 // Uninstall package
-router.post(
-  '/:hostId/uninstall',
-  async (req: Request | AuthenticatedRequest, res: Response<ApiResult<void>>) => {
-    try {
-      const { package: packageName } = req.body;
-      if (!packageName) {
-        return res.status(400).json({ success: false, error: 'Package name required' });
-      }
+const uninstallPackage: RequestHandler<
+  PackageRequestParams,
+  ApiResult<void>,
+  PackageRequestBody
+> = async (req, res) => {
+  try {
+    const { hostId } = req.params;
+    const { package: packageName } = req.body;
 
-      // This is a placeholder. In a real implementation, this would
-      // connect to the host and uninstall the package.
-      const result = await query('SELECT 1');
-      if (!result) {
-        throw new Error('Failed to connect to database');
-      }
-
-      res.json({ success: true });
-    } catch (err) {
-      logger.error('Error uninstalling package:', { error: (err as Error).message, stack: (err as Error).stack });
-      res.status(500).json({ success: false, error: 'Failed to uninstall package' });
+    if (!packageName) {
+      logger.warn('Package uninstallation failed: No package name provided', { hostId });
+      return res.status(400).json({ success: false, error: 'Package name required' });
     }
-  },
-);
+
+    logger.info('Uninstalling package', { hostId, package: packageName });
+
+    // This is a placeholder. In a real implementation, this would
+    // connect to the host and uninstall the package.
+    const result = await query('SELECT 1');
+    if (!result) {
+      throw new Error('Failed to connect to database');
+    }
+
+    logger.info('Package uninstalled successfully', { hostId, package: packageName });
+    res.json({ success: true });
+  } catch (error) {
+    const errorResult = handleApiError<void>(error, 'uninstallPackage');
+    res.status(500).json(errorResult);
+  }
+};
 
 // Update package
-router.post(
-  '/:hostId/update',
-  async (req: Request | AuthenticatedRequest, res: Response<ApiResult<void>>) => {
-    try {
-      const { package: packageName } = req.body;
-      if (!packageName) {
-        return res.status(400).json({ success: false, error: 'Package name required' });
-      }
+const updatePackage: RequestHandler<
+  PackageRequestParams,
+  ApiResult<void>,
+  PackageRequestBody
+> = async (req, res) => {
+  try {
+    const { hostId } = req.params;
+    const { package: packageName } = req.body;
 
-      // This is a placeholder. In a real implementation, this would
-      // connect to the host and update the package.
-      const result = await query('SELECT 1');
-      if (!result) {
-        throw new Error('Failed to connect to database');
-      }
-
-      res.json({ success: true });
-    } catch (err) {
-      logger.error('Error updating package:', { error: (err as Error).message, stack: (err as Error).stack });
-      res.status(500).json({ success: false, error: 'Failed to update package' });
+    if (!packageName) {
+      logger.warn('Package update failed: No package name provided', { hostId });
+      return res.status(400).json({ success: false, error: 'Package name required' });
     }
-  },
-);
+
+    logger.info('Updating package', { hostId, package: packageName });
+
+    // This is a placeholder. In a real implementation, this would
+    // connect to the host and update the package.
+    const result = await query('SELECT 1');
+    if (!result) {
+      throw new Error('Failed to connect to database');
+    }
+
+    logger.info('Package updated successfully', { hostId, package: packageName });
+    res.json({ success: true });
+  } catch (error) {
+    const errorResult = handleApiError<void>(error, 'updatePackage');
+    res.status(500).json(errorResult);
+  }
+};
+
+// Register routes
+router.get('/:hostId', listPackages);
+router.post('/:hostId/install', installPackage);
+router.post('/:hostId/uninstall', uninstallPackage);
+router.post('/:hostId/update', updatePackage);
 
 export default router;

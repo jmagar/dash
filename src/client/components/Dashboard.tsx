@@ -9,7 +9,7 @@ import {
   LinearProgress,
   Typography,
 } from '@mui/material';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
 import type { SystemStats } from '../../types';
 import { getSystemStats, getHostStatus, testExistingHost } from '../api/hosts.client';
@@ -19,7 +19,7 @@ import LoadingScreen from './LoadingScreen';
 import SetupWizard from './SetupWizard';
 
 interface DashboardProps {
-  hostId?: number;
+  hostId: number;
 }
 
 interface StatCardProps {
@@ -77,7 +77,7 @@ const WelcomeMessage: React.FC<{ onAddHost: () => void }> = ({ onAddHost }) => (
   </Box>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ hostId }) => {
+export default function Dashboard({ hostId }: DashboardProps): JSX.Element {
   const { selectedHost, loading: hostContextLoading, hasHosts } = useHost();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -139,6 +139,12 @@ const Dashboard: React.FC<DashboardProps> = ({ hostId }) => {
   const handleCloseSetup = (): void => {
     setSetupDialogOpen(false);
   };
+
+  useEffect(() => {
+    if (hostId) {
+      fetchHostData(hostId);
+    }
+  }, [hostId]);
 
   if (hostContextLoading || statsLoading || statusLoading) {
     return <LoadingScreen fullscreen={false} message="Loading system stats..." />;
@@ -287,6 +293,4 @@ const Dashboard: React.FC<DashboardProps> = ({ hostId }) => {
       <SetupWizard open={setupDialogOpen} onClose={handleCloseSetup} />
     </>
   );
-};
-
-export default Dashboard;
+}
