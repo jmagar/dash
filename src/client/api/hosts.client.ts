@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import type { Host, SystemStats, ApiResult } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
-import { handleApiError, createApiError, logError } from '../../types/error';
+import { handleApiError } from '../../types/error';
 import { APP_CONFIG } from '../config';
 import { logger } from '../utils/frontendLogger';
 
@@ -25,7 +25,13 @@ const api = axios.create({
 api.interceptors.response.use(
   response => response,
   error => {
-    logError(error, 'API request failed');
+    logger.error('API request failed:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      error: error.message,
+      response: error.response?.data,
+    });
     return Promise.reject(error);
   },
 );
@@ -62,13 +68,13 @@ async function retryOperation<T>(
       const response = await Promise.race([
         operation(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(createApiError('Operation timed out', 408)), timeout),
+          setTimeout(() => reject(new Error('Operation timed out')), timeout),
         ),
       ]);
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      logError(error, `${context}: Attempt ${attempt + 1} failed`);
+      logger.warn(`${context}: Attempt ${attempt + 1} failed`, { error: lastError });
 
       if (attempt < retries) {
         const backoffDelay = delay * Math.pow(2, attempt);
@@ -78,7 +84,7 @@ async function retryOperation<T>(
     }
   }
 
-  throw lastError || createApiError('Operation failed after retries');
+  throw lastError || new Error('Operation failed after retries');
 }
 
 export async function listHosts(): Promise<ApiResult<Host[]>> {
@@ -102,14 +108,20 @@ export async function addHost(host: Omit<Host, 'id'>): Promise<ApiResult<Host>> 
     const validationError = validateHost(host);
     if (validationError) {
       logger.warn('Host validation failed:', { host: { ...host, password: '[REDACTED]' }, error: validationError });
-      throw createApiError(validationError, 400);
+      return {
+        success: false,
+        error: validationError,
+      };
     }
 
     // First test the connection
     logger.info('Testing connection before adding host:', { hostname: host.hostname });
     const testResult = await testConnection(host);
     if (!testResult.success) {
-      throw createApiError(testResult.error || 'Connection test failed', 400);
+      return {
+        success: false,
+        error: testResult.error || 'Connection test failed',
+      };
     }
 
     // If connection test succeeds, add the host
@@ -148,7 +160,10 @@ export async function testConnection(host: Omit<Host, 'id'>): Promise<ApiResult<
     const validationError = validateHost(host);
     if (validationError) {
       logger.warn('Host validation failed:', { host: { ...host, password: '[REDACTED]' }, error: validationError });
-      throw createApiError(validationError, 400);
+      return {
+        success: false,
+        error: validationError,
+      };
     }
 
     logger.info('Testing connection with retries:', { hostname: host.hostname });
