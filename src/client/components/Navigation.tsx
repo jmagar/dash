@@ -14,11 +14,13 @@ import {
   ListItemText,
   Typography,
   Divider,
+  Button,
 } from '@mui/material';
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import HostSelector from './HostSelector';
+import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
 
 const menuItems = [
@@ -33,12 +35,36 @@ const menuItems = [
 
 export default function Navigation(): JSX.Element {
   const location = useLocation();
-  const { selectedHost } = useHost();
+  const { selectedHost, setSelectedHost } = useHost();
+  const [isHostSelectorOpen, setIsHostSelectorOpen] = useState(false);
+
+  const handleHostSelect = (hosts: Host[]): void => {
+    if (hosts.length > 0) {
+      setSelectedHost(hosts[0]);
+    }
+    setIsHostSelectorOpen(false);
+  };
+
+  const handleClose = (): void => {
+    setIsHostSelectorOpen(false);
+  };
 
   return (
     <Box sx={{ overflow: 'auto' }}>
       <Box sx={{ p: 2 }}>
-        <HostSelector />
+        <Button
+          variant="contained"
+          onClick={(): void => setIsHostSelectorOpen(true)}
+          fullWidth
+          color={selectedHost ? 'primary' : 'secondary'}
+        >
+          {selectedHost ? `Connected: ${selectedHost.name}` : 'Select Host'}
+        </Button>
+        <HostSelector
+          open={isHostSelectorOpen}
+          onClose={handleClose}
+          onSelect={handleHostSelect}
+        />
       </Box>
 
       <Divider />
@@ -49,6 +75,7 @@ export default function Navigation(): JSX.Element {
             <ListItemButton
               component={Link}
               to={path}
+              replace
               selected={location.pathname === path}
               disabled={!selectedHost && path !== '/'}
               sx={{

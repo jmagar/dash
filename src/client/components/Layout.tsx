@@ -14,7 +14,7 @@ import {
   styled,
 } from '@mui/material';
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import Navigation from './Navigation';
 import ThemeControls from './ThemeControls';
@@ -65,6 +65,8 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 }));
 
 export default function Layout({ children }: LayoutProps): JSX.Element {
+  const location = useLocation();
+
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
@@ -80,6 +82,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
             noWrap
             component={Link}
             to="/"
+            replace
             sx={{
               color: 'inherit',
               textDecoration: 'none',
@@ -109,6 +112,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
               color="inherit"
               component={Link}
               to="/settings"
+              replace
               size="large"
               sx={{ '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.1)' } }}
             >
@@ -118,6 +122,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
               color="inherit"
               component={Link}
               to="/profile"
+              replace
               size="large"
               sx={{ '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.1)' } }}
             >

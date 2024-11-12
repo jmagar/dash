@@ -41,7 +41,7 @@ export async function getHost(id: string): Promise<Host> {
 }
 
 export async function createHost(data: CreateHostRequest): Promise<Host> {
-  const { name, hostname, port, ip, username, password, sshKeyId } = data;
+  const { name, hostname, port, username, password, sshKeyId } = data;
 
   // Test connection before creating host
   await testSSHConnection({
@@ -64,8 +64,8 @@ export async function createHost(data: CreateHostRequest): Promise<Host> {
 
     // Create new host
     const result = await client.query<Host>(
-      'INSERT INTO hosts (name, hostname, port, ip, username, password, ssh_key_id, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING *',
-      [name, hostname, port, ip, username, password, sshKeyId],
+      'INSERT INTO hosts (name, hostname, port, username, password, ssh_key_id, is_active) VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *',
+      [name, hostname, port, username, password, sshKeyId],
     );
 
     const host = result.rows[0];
@@ -81,7 +81,7 @@ export async function createHost(data: CreateHostRequest): Promise<Host> {
 }
 
 export async function updateHost(id: string, data: UpdateHostRequest): Promise<Host> {
-  const { name, hostname, port, ip, username, password, sshKeyId, isActive } = data;
+  const { name, hostname, port, username, password, sshKeyId, isActive } = data;
 
   // If connection details changed, test connection first
   if (hostname || port || username || password) {
@@ -105,10 +105,10 @@ export async function updateHost(id: string, data: UpdateHostRequest): Promise<H
 
     const result = await client.query<Host>(
       `UPDATE hosts
-       SET name = $1, hostname = $2, port = $3, ip = $4, username = $5, password = $6, ssh_key_id = $7, is_active = $8, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
+       SET name = $1, hostname = $2, port = $3, username = $4, password = $5, ssh_key_id = $6, is_active = $7, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
        RETURNING *`,
-      [name, hostname, port, ip, username, password, sshKeyId, isActive, id],
+      [name, hostname, port, username, password, sshKeyId, isActive, id],
     );
 
     const host = result.rows[0];

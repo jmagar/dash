@@ -5,7 +5,6 @@ export interface Host {
     name: string;
     hostname: string;
     port: number;
-    ip: string;
     username?: string;
     password?: string;
     ssh_key_id?: string;
@@ -40,7 +39,6 @@ export interface CreateHostRequest {
   name: string;
   hostname: string;
   port: number;
-  ip: string;
   username?: string;
   password?: string;
   sshKeyId?: string;

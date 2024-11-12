@@ -10,7 +10,6 @@ import { logger } from '../utils/frontendLogger';
 const validateHost = (host: Partial<Host>): string | null => {
   if (!host.name?.trim()) return 'Display name is required';
   if (!host.hostname?.trim()) return 'Hostname is required';
-  if (!host.ip?.trim()) return 'IP address is required';
   if (!host.username?.trim()) return 'Username is required';
   if (typeof host.port !== 'number' || host.port < 1 || host.port > 65535) {
     return 'Port must be a number between 1 and 65535';

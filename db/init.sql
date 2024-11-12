@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS hosts (
     name VARCHAR(255) NOT NULL,
     hostname VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL DEFAULT 22,
-    ip VARCHAR(45) NOT NULL,
     username VARCHAR(255),
     password TEXT,
     ssh_key_id INTEGER,

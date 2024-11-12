@@ -10,7 +10,6 @@ export interface Host {
     password?: string;
     privateKey?: string;
   };
-  ip?: string;
   isActive?: boolean;
 }
 

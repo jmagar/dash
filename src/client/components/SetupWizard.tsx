@@ -24,7 +24,6 @@ interface ValidationErrors {
   name?: string;
   hostname?: string;
   port?: string;
-  ip?: string;
   username?: string;
 }
 
@@ -34,7 +33,6 @@ interface HostData {
   name: string;
   hostname: string;
   port: number;
-  ip: string;
   username: string;
   password: string;
   status: HostStatus;
@@ -49,16 +47,6 @@ const validateForm = (data: HostData): ValidationErrors => {
 
   if (!data.hostname?.trim()) {
     errors.hostname = 'Hostname is required';
-  }
-
-  if (!data.ip?.trim()) {
-    errors.ip = 'IP address is required';
-  } else {
-    // Basic IP validation
-    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!ipPattern.test(data.ip)) {
-      errors.ip = 'Invalid IP address format';
-    }
   }
 
   if (!data.username?.trim()) {
@@ -76,24 +64,23 @@ const initialHostData: HostData = {
   name: '',
   hostname: '',
   port: 22,
-  ip: '',
   username: '',
   password: '',
   status: 'disconnected',
 };
 
-const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
+export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [connectionTested, setConnectionTested] = useState(false);
-  const { setSelectedHost } = useHost();
+  const { setSelectedHost, refreshHosts } = useHost();
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
     setHostData(prev => ({
       ...prev,
@@ -104,7 +91,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     setSuccess(null);
     setConnectionTested(false);
     setValidationErrors(prev => ({ ...prev, [name]: undefined }));
-  };
+  }, []);
 
   const resetForm = useCallback((): void => {
     setHostData(initialHostData);
@@ -128,14 +115,27 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     }
   }, [open, resetForm]);
 
-  const validateAndProceed = (): boolean => {
+  const validateAndProceed = useCallback((): boolean => {
     const errors = validateForm(hostData);
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  };
+  }, [hostData]);
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = useCallback(async (e?: React.FormEvent): Promise<void> => {
+    if (e) {
+      e.preventDefault();
+    }
+
     if (!validateAndProceed() || !connectionTested) {
+      logger.warn('Save attempted without validation or connection test', {
+        hasValidationErrors: !validateAndProceed(),
+        isConnectionTested: connectionTested,
+      });
+      return;
+    }
+
+    if (loading) {
+      logger.warn('Save attempted while loading');
       return;
     }
 
@@ -144,30 +144,47 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     setLoading(true);
 
     try {
+      logger.info('Attempting to save host', { hostname: hostData.hostname });
       const result = await addHost(hostData);
+
       if (result.success && result.data) {
-        logger.info('Host created successfully:', { hostname: hostData.hostname });
+        logger.info('Host created successfully', {
+          hostId: result.data.id,
+          hostname: hostData.hostname,
+        });
         setSuccess('Host created successfully');
+
+        // Update the host context and refresh the list
+        await refreshHosts();
         setSelectedHost(result.data);
 
-        // Close drawer after showing success message briefly
-        setTimeout(() => {
-          handleClose();
-        }, 1000);
+        // Show success message briefly before closing
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        handleClose();
       } else {
         throw new Error(result.error || 'Failed to create host');
       }
     } catch (err) {
-      const errorMessage = (err as Error).message || 'An error occurred while creating the host';
-      logger.error('Setup error:', { error: err, hostData });
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred while creating the host';
+      logger.error('Setup error:', {
+        error: errorMessage,
+        stack: err instanceof Error ? err.stack : undefined,
+        hostData: { ...hostData, password: '[REDACTED]' },
+      });
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [validateAndProceed, connectionTested, loading, hostData, refreshHosts, setSelectedHost, handleClose]);
 
-  const handleTestConnection = async (): Promise<void> => {
+  const handleTestConnection = useCallback(async (): Promise<void> => {
     if (!validateAndProceed()) {
+      logger.warn('Connection test attempted without validation');
+      return;
+    }
+
+    if (testingConnection) {
+      logger.warn('Connection test attempted while already testing');
       return;
     }
 
@@ -177,9 +194,11 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
     setConnectionTested(false);
 
     try {
+      logger.info('Testing connection', { hostname: hostData.hostname });
       const result = await testConnection(hostData);
+
       if (result.success) {
-        logger.info('Connection test successful:', { hostname: hostData.hostname });
+        logger.info('Connection test successful', { hostname: hostData.hostname });
         setSuccess('Connection test successful!');
         setHostData(prev => ({ ...prev, status: 'connected' }));
         setConnectionTested(true);
@@ -187,15 +206,19 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
         throw new Error(result.error || 'Connection test failed');
       }
     } catch (err) {
-      const errorMessage = (err as Error).message || 'Connection test failed';
-      logger.error('Connection test error:', { error: err, hostData });
+      const errorMessage = err instanceof Error ? err.message : 'Connection test failed';
+      logger.error('Connection test error:', {
+        error: errorMessage,
+        stack: err instanceof Error ? err.stack : undefined,
+        hostData: { ...hostData, password: '[REDACTED]' },
+      });
       setError(errorMessage);
       setHostData(prev => ({ ...prev, status: 'error' }));
       setConnectionTested(false);
     } finally {
       setTestingConnection(false);
     }
-  };
+  }, [validateAndProceed, testingConnection, hostData]);
 
   return (
     <Drawer
@@ -217,7 +240,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
           </IconButton>
         </Box>
 
-        <Box component="form" noValidate>
+        <Box
+          component="form"
+          noValidate
+          onSubmit={(e: React.FormEvent): void => {
+            void handleSave(e);
+          }}
+        >
           <TextField
             fullWidth
             label="Display Name"
@@ -232,14 +261,14 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
           />
           <TextField
             fullWidth
-            label="DNS Hostname"
+            label="Hostname or IP Address"
             name="hostname"
             value={hostData.hostname}
             onChange={handleInputChange}
             margin="normal"
             required
             error={!!validationErrors.hostname}
-            helperText={validationErrors.hostname || 'e.g., server.example.com or localhost'}
+            helperText={validationErrors.hostname || 'e.g., server.example.com or 192.168.1.100'}
             disabled={loading || testingConnection}
           />
           <TextField
@@ -253,18 +282,6 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
             required
             error={!!validationErrors.port}
             helperText={validationErrors.port || 'SSH port (default: 22)'}
-            disabled={loading || testingConnection}
-          />
-          <TextField
-            fullWidth
-            label="IP Address"
-            name="ip"
-            value={hostData.ip}
-            onChange={handleInputChange}
-            margin="normal"
-            required
-            error={!!validationErrors.ip}
-            helperText={validationErrors.ip || 'Direct IP address e.g., 192.168.1.100'}
             disabled={loading || testingConnection}
           />
           <TextField
@@ -306,7 +323,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
           <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
             <Button
               variant="outlined"
-              onClick={handleTestConnection}
+              type="button"
+              onClick={(): Promise<void> => handleTestConnection()}
               disabled={loading || testingConnection}
               startIcon={testingConnection ? <CircularProgress size={20} /> : null}
               fullWidth
@@ -316,7 +334,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
             {connectionTested && (
               <Button
                 variant="contained"
-                onClick={handleSave}
+                type="submit"
                 disabled={loading || testingConnection}
                 startIcon={loading ? <CircularProgress size={20} /> : null}
                 fullWidth
@@ -329,6 +347,4 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ open, onClose }) => {
       </Box>
     </Drawer>
   );
-};
-
-export default SetupWizard;
+}
