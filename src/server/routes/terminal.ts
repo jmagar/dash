@@ -56,7 +56,10 @@ router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
       command,
     });
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      data: null,
+    });
   } catch (error) {
     const metadata: LogMetadata = {
       userId,
@@ -97,7 +100,7 @@ router.get('/:hostId/history', async (req: AuthenticatedRequest, res: Response) 
     const commands = await cache.getCommands(userId, hostId);
     res.json({
       success: true,
-      commands: commands || [],
+      data: commands || [],
     });
   } catch (error) {
     const metadata: LogMetadata = {

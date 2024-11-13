@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 
 import { validateConfig } from './config';
+import type { CacheCommand } from '../../types/cache';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import type { Container, Stack } from '../../types/models-shared';
@@ -147,44 +148,6 @@ export class CacheService {
     }
   }
 
-  public async getCommandHistory(hostId: string): Promise<string[]> {
-    try {
-      const result = await this.redis.lrange(`history:${hostId}`, 0, -1);
-      if (!Array.isArray(result)) {
-        const metadata: LogMetadata = {
-          hostId,
-          result,
-        };
-        logger.error('Invalid response from Redis lrange command:', metadata);
-        throw createApiError('Invalid response from Redis lrange command', 500, metadata);
-      }
-      return result;
-    } catch (error) {
-      const metadata: LogMetadata = {
-        hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to get command history:', metadata);
-      throw createApiError('Failed to get command history', 500, metadata);
-    }
-  }
-
-  public async addToCommandHistory(hostId: string, command: string): Promise<void> {
-    try {
-      await this.redis.lpush(`history:${hostId}`, command);
-      await this.redis.ltrim(`history:${hostId}`, 0, 99); // Keep last 100 commands
-    } catch (error) {
-      const metadata: LogMetadata = {
-        hostId,
-        command,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to add command to history:', metadata);
-      throw createApiError('Failed to add command to history', 500, metadata);
-    }
-  }
-
-  // Docker-related methods
   public async getDockerContainers(hostId: string): Promise<Container[]> {
     try {
       const data = await this.redis.get(`docker:containers:${hostId}`);
@@ -236,6 +199,39 @@ export class CacheService {
       };
       logger.error('Failed to cache Docker stacks:', metadata);
       throw createApiError('Failed to cache Docker stacks', 500, metadata);
+    }
+  }
+
+  public async cacheCommand(userId: string, hostId: string, command: CacheCommand | CacheCommand[]): Promise<void> {
+    try {
+      const key = `command:${userId}:${hostId}`;
+      const commands = Array.isArray(command) ? command : [command];
+      await this.redis.lpush(key, ...commands.map(cmd => JSON.stringify(cmd)));
+      await this.redis.ltrim(key, 0, 99); // Keep last 100 commands
+    } catch (error) {
+      const metadata: LogMetadata = {
+        userId,
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to cache command:', metadata);
+      throw createApiError('Failed to cache command', 500, metadata);
+    }
+  }
+
+  public async getCommands(userId: string, hostId: string): Promise<CacheCommand[]> {
+    try {
+      const key = `command:${userId}:${hostId}`;
+      const commands = await this.redis.lrange(key, 0, -1);
+      return commands.map(cmd => JSON.parse(cmd));
+    } catch (error) {
+      const metadata: LogMetadata = {
+        userId,
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to get commands:', metadata);
+      throw createApiError('Failed to get commands', 500, metadata);
     }
   }
 }
