@@ -126,12 +126,30 @@ export async function deleteHost(id: number): Promise<ApiResult<void>> {
   }
 }
 
-export async function testConnection(id: number): Promise<ApiResult<void>> {
+export async function testConnection(hostData: number | Partial<Host>): Promise<ApiResult<void>> {
   try {
-    logger.info('Testing host connection', { hostId: String(id) });
-    const response = await api.post(API_ENDPOINTS.HOSTS.TEST);
-    logger.info('Host connection test successful', { hostId: String(id) });
-    return response.data;
+    if (typeof hostData === 'number') {
+      // Testing existing host
+      logger.info('Testing existing host connection', { hostId: String(hostData) });
+      const response = await api.post(API_ENDPOINTS.HOSTS.TEST);
+      logger.info('Host connection test successful', { hostId: String(hostData) });
+      return response.data;
+    } else {
+      // Testing new host configuration
+      logger.info('Testing new host connection', {
+        host: {
+          ...hostData,
+          credentials: hostData.credentials ? {
+            ...hostData.credentials,
+            password: '[REDACTED]',
+            privateKey: '[REDACTED]',
+          } : undefined,
+        },
+      });
+      const response = await api.post(API_ENDPOINTS.HOSTS.TEST_CONNECTION, hostData);
+      logger.info('New host connection test successful');
+      return response.data;
+    }
   } catch (error) {
     return handleApiError(error, 'testConnection');
   }

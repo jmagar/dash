@@ -77,7 +77,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
   const [success, setSuccess] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [connectionTested, setConnectionTested] = useState(false);
-  const { setSelectedHost, refreshHosts } = useHost();
+  const { selectHost, refreshHosts } = useHost();
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
@@ -86,7 +86,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
       const timer = setTimeout(handleClose, 1500);
       return () => clearTimeout(timer);
     }
-  }, [success, handleClose]);
+  }, [success]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
@@ -136,12 +136,21 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
       setLoading(true);
       setError(null);
 
-      const result = await addHost(hostData);
+      const hostToAdd: Partial<Host> = {
+        name: hostData.name,
+        hostname: hostData.hostname,
+        port: hostData.port,
+        username: hostData.username,
+        credentials: {
+          password: hostData.password,
+        },
+      };
+
+      const result = await addHost(hostToAdd);
 
       if (result.success && result.data) {
         await refreshHosts();
-        const newHost = result.data as Host;
-        setSelectedHost(newHost);
+        selectHost(result.data);
         setSuccess('Host created successfully');
       } else {
         throw new Error(result.error || 'Failed to create host');
@@ -151,7 +160,7 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     } finally {
       setLoading(false);
     }
-  }, [hostData, refreshHosts, setSelectedHost, addHost]);
+  }, [hostData, refreshHosts, selectHost]);
 
   const handleTestConnection = useCallback(async (event: React.MouseEvent): Promise<void> => {
     event.preventDefault();
@@ -172,8 +181,17 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
       setSuccess(null);
       setConnectionTested(false);
 
+      const hostToTest: Partial<Host> = {
+        hostname: hostData.hostname,
+        port: hostData.port,
+        username: hostData.username,
+        credentials: {
+          password: hostData.password,
+        },
+      };
+
       logger.info('Testing connection', { hostname: hostData.hostname });
-      const result = await testConnection(hostData);
+      const result = await testConnection(hostToTest);
 
       if (result.success) {
         logger.info('Connection test successful', { hostname: hostData.hostname });
