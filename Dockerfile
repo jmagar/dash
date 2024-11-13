@@ -23,26 +23,31 @@ RUN npm config set registry https://registry.npmjs.org/ && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000
 
-# Copy package files first to leverage layer caching
-COPY package*.json ./
+# Copy package files and Babel config first
+COPY package*.json .babelrc ./
 
-# Install core Babel dependencies first
+# Install Babel and its plugins first
 RUN npm install --no-package-lock \
     @babel/core@7.23.7 \
     @babel/runtime@7.23.7 \
     @babel/plugin-proposal-private-property-in-object@7.21.11 \
     @babel/plugin-transform-private-property-in-object@7.23.4 \
+    @babel/plugin-proposal-class-properties@7.18.6 \
+    @babel/plugin-proposal-private-methods@7.18.6 \
     babel-preset-react-app@10.0.1
 
-# Install ALL dependencies (including devDependencies)
+# Now install all dependencies
 RUN npm install --legacy-peer-deps && \
     npm install -g typescript rimraf && \
     npm config set legacy-peer-deps true
 
 # Verify critical dependencies are installed correctly
-RUN npm list @babel/plugin-proposal-private-property-in-object && \
-    npm list @babel/plugin-transform-private-property-in-object && \
+RUN echo "Verifying Babel dependencies..." && \
     npm list @babel/core && \
+    npm list @babel/plugin-proposal-private-property-in-object && \
+    npm list @babel/plugin-transform-private-property-in-object && \
+    npm list @babel/plugin-proposal-class-properties && \
+    npm list @babel/plugin-proposal-private-methods && \
     npm list babel-preset-react-app
 
 # Copy configuration files
