@@ -1,264 +1,137 @@
-import { EventEmitter } from 'events';
-
 import Redis from 'ioredis';
 
-import { cacheConfig } from './config';
-import type { RedisClient } from '../../types/cache';
+import { validateConfig, type CacheConfig } from './config';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
-export enum ConnectionState {
-  DISCONNECTED = 'disconnected',
-  CONNECTING = 'connecting',
-  CONNECTED = 'connected',
-  RECONNECTING = 'reconnecting',
-  ERROR = 'error',
-}
-
-export interface RedisMetrics {
-  memoryUsage: number;
-  keyCount: number;
-  lastError?: Error;
-  lastErrorTime?: Date;
-  uptime: number;
-  connectionState: ConnectionState;
-  operationsPerSecond: number;
-}
-
-export class RedisManager extends EventEmitter implements RedisClient {
+export class RedisManager {
   private static instance: RedisManager;
-  protected client: Redis | null = null;
-  private metrics: RedisMetrics;
-  private maxReconnectAttempts = 5;
+  private redis: Redis;
+  private isConnected = false;
 
-  protected constructor() {
-    super();
-    this.metrics = {
-      memoryUsage: 0,
-      keyCount: 0,
-      uptime: 0,
-      connectionState: ConnectionState.DISCONNECTED,
-      operationsPerSecond: 0,
-    };
+  private constructor(config: CacheConfig) {
+    this.redis = new Redis({
+      host: config.connection.host,
+      port: config.connection.port,
+      password: config.connection.password,
+      db: config.connection.db,
+      retryStrategy: (times: number): number => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      maxRetriesPerRequest: config.connection.maxRetriesPerRequest,
+      enableReadyCheck: true,
+      reconnectOnError: (err: Error): boolean => {
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          return true;
+        }
+        return false;
+      },
+    });
+
+    this.redis.on('connect', () => {
+      this.isConnected = true;
+      logger.info('Redis connected');
+    });
+
+    this.redis.on('error', (error) => {
+      this.isConnected = false;
+      logger.error('Redis error:', { error: error.message });
+    });
   }
 
   public static getInstance(): RedisManager {
     if (!RedisManager.instance) {
-      RedisManager.instance = new RedisManager();
+      const config = validateConfig();
+      RedisManager.instance = new RedisManager(config);
     }
     return RedisManager.instance;
   }
 
-  async connect(): Promise<void> {
+  public async healthCheck(): Promise<{
+    status: string;
+    connected: boolean;
+    error?: string;
+  }> {
     try {
-      this.client = new Redis({
-        ...cacheConfig.connection,
-        retryStrategy: (times: number): number | null => {
-          const metadata: LogMetadata = {
-            attempt: times,
-            maxAttempts: this.maxReconnectAttempts,
-          };
-
-          if (times > this.maxReconnectAttempts) {
-            logger.error('Max reconnection attempts reached', metadata);
-            return null;
-          }
-
-          logger.info('Attempting reconnection', metadata);
-          return Math.min(times * 100, 3000);
-        },
-      });
-
-      this.setupEventHandlers();
-      await this.validateConnection();
-      this.startMetricsCollection();
+      await this.redis.ping();
+      return {
+        status: 'ok',
+        connected: this.isConnected,
+      };
     } catch (error) {
-      const metadata: LogMetadata = {
+      return {
+        status: 'error',
+        connected: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
-      logger.error('Failed to setup Redis client:', metadata);
-      throw createApiError('Failed to setup Redis client', 500, metadata);
     }
   }
 
-  // RedisClient interface implementation
-  async get(key: string): Promise<string | null> {
-    const client = await this.getClient();
-    return client.get(key);
-  }
-
-  async set(key: string, value: string, mode?: string, duration?: number): Promise<'OK' | null> {
-    const client = await this.getClient();
-    if (mode && duration) {
-      return client.set(key, value, mode, duration);
-    }
-    return client.set(key, value);
-  }
-
-  async del(key: string): Promise<number> {
-    const client = await this.getClient();
-    return client.del(key);
-  }
-
-  async lpush(key: string, ...values: string[]): Promise<number> {
-    const client = await this.getClient();
-    return client.lpush(key, ...values);
-  }
-
-  async lrange(key: string, start: number, stop: number): Promise<string[]> {
-    const client = await this.getClient();
-    return client.lrange(key, start, stop);
-  }
-
-  async expire(key: string, seconds: number): Promise<number> {
-    const client = await this.getClient();
-    return client.expire(key, seconds);
-  }
-
-  async ping(): Promise<string> {
-    const client = await this.getClient();
-    return client.ping();
-  }
-
-  async quit(): Promise<'OK' | null> {
-    const client = await this.getClient();
-    return client.quit();
-  }
-
-  async shutdown(): Promise<void> {
-    logger.info('Shutting down Redis connection');
-    if (this.client) {
-      await this.client.quit();
-      this.client = null;
+  public async disconnect(): Promise<void> {
+    if (this.isConnected) {
+      await this.redis.quit();
+      this.isConnected = false;
+      logger.info('Redis disconnected');
     }
   }
 
-  private setupEventHandlers(): void {
-    if (!this.client) return;
-
-    this.client.on('connect', () => {
-      this.updateState(ConnectionState.CONNECTED);
-      logger.info('Redis connected successfully');
-      this.emit('connect');
-    });
-
-    this.client.on('error', (error: Error) => {
-      const metadata: LogMetadata = {
-        error: error.message,
-      };
-      logger.error('Redis connection error:', metadata);
-      this.metrics.lastError = error;
-      this.metrics.lastErrorTime = new Date();
-      this.updateState(ConnectionState.ERROR);
-      this.emit('error', error);
-    });
-
-    this.client.on('end', () => {
-      this.updateState(ConnectionState.DISCONNECTED);
-      logger.info('Redis connection ended');
-      this.emit('end');
-    });
-  }
-
-  private async validateConnection(): Promise<void> {
-    if (!this.client) {
-      throw createApiError('Redis client not initialized', 500);
-    }
-
+  public async get(key: string): Promise<string | null> {
     try {
-      await this.client.ping();
+      return await this.redis.get(key);
     } catch (error) {
       const metadata: LogMetadata = {
+        key,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
-      throw createApiError('Failed to validate Redis connection', 500, metadata);
+      logger.error('Failed to get value:', metadata);
+      throw createApiError('Failed to get value', 500, metadata);
     }
   }
 
-  private startMetricsCollection(): void {
-    setInterval(async () => {
-      try {
-        if (!this.client) return;
-
-        const info = await this.client.info();
-        const metrics = this.parseRedisInfo(info);
-
-        // Update metrics
-        this.metrics = {
-          ...this.metrics,
-          ...metrics,
-        };
-
-        this.emit('metrics:update', this.metrics);
-
-        // Check limits
-        if (this.metrics.memoryUsage && this.metrics.memoryUsage > cacheConfig.limits.maxMemoryMB * 1024 * 1024) {
-          logger.warn('Redis memory usage exceeds limit', {
-            current: this.metrics.memoryUsage,
-            limit: cacheConfig.limits.maxMemoryMB * 1024 * 1024,
-          });
-        }
-
-        if (this.metrics.keyCount && this.metrics.keyCount > cacheConfig.limits.maxKeys) {
-          logger.warn('Redis key count exceeds limit', {
-            current: this.metrics.keyCount,
-            limit: cacheConfig.limits.maxKeys,
-          });
-        }
-      } catch (error) {
-        const metadata: LogMetadata = {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
-        logger.error('Failed to update Redis metrics:', metadata);
+  public async set(key: string, value: string, expiry?: number): Promise<void> {
+    try {
+      if (expiry) {
+        await this.redis.set(key, value, 'EX', expiry);
+      } else {
+        await this.redis.set(key, value);
       }
-    }, cacheConfig.monitoring.metricsInterval);
-  }
-
-  private parseRedisInfo(info: string): Partial<RedisMetrics> {
-    const metrics: Partial<RedisMetrics> = {};
-    const lines = info.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('used_memory:')) {
-        metrics.memoryUsage = parseInt(line.split(':')[1], 10);
-      }
-      if (line.startsWith('db0:')) {
-        const keyCount = line.split('=')[1].split(',')[0];
-        metrics.keyCount = parseInt(keyCount, 10);
-      }
-      if (line.startsWith('uptime_in_seconds:')) {
-        metrics.uptime = parseInt(line.split(':')[1], 10);
-      }
-      if (line.startsWith('instantaneous_ops_per_sec:')) {
-        metrics.operationsPerSecond = parseInt(line.split(':')[1], 10);
-      }
+    } catch (error) {
+      const metadata: LogMetadata = {
+        key,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to set value:', metadata);
+      throw createApiError('Failed to set value', 500, metadata);
     }
-
-    return metrics;
   }
 
-  private updateState(state: ConnectionState): void {
-    this.metrics.connectionState = state;
-    this.emit('state:change', state);
-  }
-
-  getState(): ConnectionState {
-    return this.metrics.connectionState;
-  }
-
-  isConnected(): boolean {
-    return this.metrics.connectionState === ConnectionState.CONNECTED;
-  }
-
-  async getClient(): Promise<Redis> {
-    if (!this.client) {
-      throw createApiError('Redis client not initialized', 500);
+  public async del(key: string): Promise<void> {
+    try {
+      await this.redis.del(key);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        key,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to delete value:', metadata);
+      throw createApiError('Failed to delete value', 500, metadata);
     }
-    return this.client;
   }
 
-  getMetrics(): RedisMetrics {
-    return { ...this.metrics };
+  public async exists(key: string): Promise<boolean> {
+    try {
+      const result = await this.redis.exists(key);
+      return result === 1;
+    } catch (error) {
+      const metadata: LogMetadata = {
+        key,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to check existence:', metadata);
+      throw createApiError('Failed to check existence', 500, metadata);
+    }
   }
 }

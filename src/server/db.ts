@@ -75,11 +75,19 @@ export async function healthCheck(): Promise<{
   }
 }
 
+/**
+ * Close all database connections
+ */
+export async function end(): Promise<void> {
+  await pool.end();
+}
+
 // Export database interface
 export const db = {
   query,
   healthCheck,
   pool,
+  end,
 };
 
 export default db;

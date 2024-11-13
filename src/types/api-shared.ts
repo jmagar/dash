@@ -114,6 +114,8 @@ export const API_ENDPOINTS = {
     SAVED: (hostId: number): string => `/hosts/${hostId}/saved-commands`,
     SAVED_COMMAND: (hostId: number, commandId: string): string =>
       `/hosts/${hostId}/saved-commands/${commandId}`,
+    DELETE_SAVED_COMMAND: (hostId: number, commandId: string): string =>
+      `/hosts/${hostId}/saved-commands/${commandId}`,
   },
   PACKAGES: {
     LIST: (hostId: number): string => `/hosts/${hostId}/packages`,

@@ -2,38 +2,22 @@ import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
-interface CacheConfig {
+export interface CacheConfig {
   connection: {
     host: string;
     port: number;
     password?: string;
     db?: number;
+    maxRetriesPerRequest?: number;
   };
-  limits: {
-    maxMemoryMB: number;
+  memory: {
+    limit: string;
     maxKeys: number;
   };
-  monitoring: {
-    metricsInterval: number;
+  metrics: {
+    interval: number;
   };
 }
-
-export const KEY_PREFIXES = {
-  SESSION: 'session:',
-  HOST: 'host:',
-  COMMAND: 'command:',
-  DOCKER: {
-    CONTAINERS: 'docker:containers:',
-    STACKS: 'docker:stacks:',
-  },
-} as const;
-
-export const TTL_CONFIG = {
-  SESSION: 24 * 60 * 60, // 24 hours
-  HOST: 5 * 60, // 5 minutes
-  COMMAND: 7 * 24 * 60 * 60, // 7 days
-  DOCKER: 5 * 60, // 5 minutes
-} as const;
 
 const DEFAULT_CONFIG: CacheConfig = {
   connection: {
@@ -41,31 +25,46 @@ const DEFAULT_CONFIG: CacheConfig = {
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD,
     db: parseInt(process.env.REDIS_DB || '0', 10),
+    maxRetriesPerRequest: parseInt(process.env.REDIS_MAX_RETRIES || '3', 10),
   },
-  limits: {
-    maxMemoryMB: parseInt(process.env.REDIS_MAX_MEMORY_MB || '128', 10),
+  memory: {
+    limit: process.env.REDIS_MEMORY_LIMIT || '128mb',
     maxKeys: parseInt(process.env.REDIS_MAX_KEYS || '10000', 10),
   },
-  monitoring: {
-    metricsInterval: parseInt(process.env.REDIS_METRICS_INTERVAL || '5000', 10),
+  metrics: {
+    interval: parseInt(process.env.REDIS_METRICS_INTERVAL || '5000', 10),
   },
 };
 
 export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfig {
   // Validate memory limit
-  if (config.limits.maxMemoryMB < 64) {
+  const memoryMatch = config.memory.limit.match(/^(\d+)(mb|gb)$/i);
+  if (!memoryMatch) {
     const metadata: LogMetadata = {
-      value: config.limits.maxMemoryMB,
-      minimumRequired: 64,
+      limit: config.memory.limit,
+      format: 'Expected format: <number>mb or <number>gb',
+    };
+    logger.warn('Invalid cache memory limit:', metadata);
+    throw createApiError('Cache memory limit must be specified in MB or GB', 400, metadata);
+  }
+
+  const memoryValue = parseInt(memoryMatch[1], 10);
+  const memoryUnit = memoryMatch[2].toLowerCase();
+  const memoryInMB = memoryUnit === 'gb' ? memoryValue * 1024 : memoryValue;
+
+  if (memoryInMB < 64) {
+    const metadata: LogMetadata = {
+      limit: config.memory.limit,
+      minimumRequired: '64MB',
     };
     logger.warn('Invalid cache memory limit:', metadata);
     throw createApiError('Cache memory limit must be at least 64MB', 400, metadata);
   }
 
-  // Validate key limit
-  if (config.limits.maxKeys < 1000) {
+  // Validate max keys
+  if (config.memory.maxKeys < 1000) {
     const metadata: LogMetadata = {
-      value: config.limits.maxKeys,
+      maxKeys: config.memory.maxKeys,
       minimumRequired: 1000,
     };
     logger.warn('Invalid cache key limit:', metadata);
@@ -73,9 +72,9 @@ export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfi
   }
 
   // Validate metrics interval
-  if (config.monitoring.metricsInterval < 1000) {
+  if (config.metrics.interval < 1000) {
     const metadata: LogMetadata = {
-      value: config.monitoring.metricsInterval,
+      interval: config.metrics.interval,
       minimumRequired: 1000,
     };
     logger.warn('Invalid metrics interval:', metadata);
@@ -86,14 +85,10 @@ export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfi
   logger.info('Cache configuration validated', {
     host: config.connection.host,
     port: config.connection.port,
-    maxMemoryMB: config.limits.maxMemoryMB,
-    maxKeys: config.limits.maxKeys,
-    metricsInterval: config.monitoring.metricsInterval,
+    memoryLimit: config.memory.limit,
+    maxKeys: config.memory.maxKeys,
+    metricsInterval: config.metrics.interval,
   });
 
   return config;
 }
-
-export const cacheConfig = validateConfig();
-
-export default cacheConfig;

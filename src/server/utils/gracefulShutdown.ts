@@ -1,88 +1,56 @@
 import type { Server } from 'http';
 
 import { logger } from './logger';
-import type { LogMetadata } from '../../types/logger';
 import cache from '../cache';
 import { db } from '../db';
-import { errorAggregator } from '../services/errorAggregator';
 
-/**
- * Setup graceful shutdown handlers
- */
-export function setupGracefulShutdown(server: Server): void {
+export function configureGracefulShutdown(server: Server): void {
   // Handle process termination signals
-  process.on('SIGTERM', () => handleShutdown(server));
-  process.on('SIGINT', () => handleShutdown(server));
+  const signals = ['SIGTERM', 'SIGINT'] as const;
 
-  logger.info('Graceful shutdown handlers configured');
-}
+  signals.forEach((signal) => {
+    process.on(signal, async () => {
+      logger.info(`${signal} received. Starting graceful shutdown...`);
 
-/**
- * Handle the shutdown process
- */
-async function handleShutdown(server: Server): Promise<void> {
-  logger.info('Starting graceful shutdown...');
-
-  try {
-    // Close server first to stop accepting new connections
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => {
-        if (err) {
-          logger.error('Error closing server:', { error: err.message });
-          reject(err);
-        } else {
-          logger.info('Server closed successfully');
-          resolve();
-        }
+      // Close HTTP server
+      server.close(() => {
+        logger.info('HTTP server closed');
       });
+
+      try {
+        // Close database connections
+        await db.end();
+        logger.info('Database connections closed');
+
+        // Close cache connections
+        await cache.disconnect();
+        logger.info('Cache connections closed');
+
+        // Exit process
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during graceful shutdown:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        process.exit(1);
+      }
     });
+  });
 
-    // Cleanup resources
-    await Promise.allSettled([
-      closeDatabase(),
-      closeCache(),
-      // Add other cleanup tasks here
-    ]);
-
-    logger.info('Graceful shutdown completed');
-    process.exit(0);
-  } catch (error) {
-    const metadata: LogMetadata = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Error during graceful shutdown:', metadata);
-    errorAggregator.trackError(
-      error instanceof Error ? error : new Error('Graceful shutdown failed'),
-      metadata,
-    );
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception:', {
+      error: error.message,
+      stack: error.stack,
+    });
     process.exit(1);
-  }
-}
+  });
 
-async function closeDatabase(): Promise<void> {
-  try {
-    // Close all database connections in the pool
-    await db.pool.end();
-    logger.info('Database connections closed');
-  } catch (error) {
-    const metadata: LogMetadata = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Error closing database connections:', metadata);
-    throw error;
-  }
-}
-
-async function closeCache(): Promise<void> {
-  try {
-    // Close Redis connection through the Redis manager
-    await cache.redis.shutdown();
-    logger.info('Cache connections closed');
-  } catch (error) {
-    const metadata: LogMetadata = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Error closing cache connections:', metadata);
-    throw error;
-  }
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled promise rejection:', {
+      reason: reason instanceof Error ? reason.message : String(reason),
+    });
+    process.exit(1);
+  });
 }

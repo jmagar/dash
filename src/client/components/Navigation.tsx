@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { HostSelector } from './HostSelector';
@@ -10,12 +10,12 @@ export function Navigation(): JSX.Element {
   const location = useLocation();
   const { hosts, selectedHost, selectHost } = useHost();
 
-  const handleSelect = useCallback((host: Host): void => {
+  const handleSelect = React.useCallback((host: Host): void => {
     selectHost(host);
     logger.info('Host selected', { hostId: String(host.id) });
   }, [selectHost]);
 
-  const handleDeselect = useCallback((): void => {
+  const handleDeselect = React.useCallback((): void => {
     selectHost(null);
     logger.info('Host deselected');
   }, [selectHost]);

@@ -55,7 +55,7 @@ export async function deleteSavedCommand(
   try {
     logger.info('Deleting saved command', { hostId: String(hostId), commandId });
     const response = await api.delete(
-      API_ENDPOINTS.EXECUTE.DELETE_COMMAND(hostId, commandId),
+      API_ENDPOINTS.EXECUTE.DELETE_SAVED_COMMAND(hostId, commandId),
     );
     logger.info('Saved command deleted successfully', { hostId: String(hostId), commandId });
     return response.data;
