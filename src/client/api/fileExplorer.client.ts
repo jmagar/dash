@@ -32,12 +32,12 @@ api.interceptors.response.use(
 
 export async function listFiles(hostId: number, path?: string): Promise<ApiResult<FileItem[]>> {
   try {
-    logger.info('Listing files', { hostId, path });
+    logger.info('Listing files', { hostId: hostId.toString(), path });
     const response = await api.get(API_ENDPOINTS.FILES.LIST(hostId), {
       params: { path },
     });
     logger.info('Files listed successfully', {
-      hostId,
+      hostId: hostId.toString(),
       path,
       count: response.data?.data?.length,
     });
@@ -49,12 +49,12 @@ export async function listFiles(hostId: number, path?: string): Promise<ApiResul
 
 export async function readFile(hostId: number, path: string): Promise<ApiResult<string>> {
   try {
-    logger.info('Reading file', { hostId, path });
+    logger.info('Reading file', { hostId: hostId.toString(), path });
     const response = await api.get(API_ENDPOINTS.FILES.DOWNLOAD(hostId), {
       params: { path },
       responseType: 'text',
     });
-    logger.info('File read successfully', { hostId, path });
+    logger.info('File read successfully', { hostId: hostId.toString(), path });
     return {
       success: true,
       data: response.data,
@@ -70,12 +70,12 @@ export async function writeFile(
   content: string,
 ): Promise<ApiResult<void>> {
   try {
-    logger.info('Writing file', { hostId, path });
+    logger.info('Writing file', { hostId: hostId.toString(), path });
     const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
       path,
       content,
     });
-    logger.info('File written successfully', { hostId, path });
+    logger.info('File written successfully', { hostId: hostId.toString(), path });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'writeFile');
@@ -84,11 +84,11 @@ export async function writeFile(
 
 export async function deleteFile(hostId: number, path: string): Promise<ApiResult<void>> {
   try {
-    logger.info('Deleting file', { hostId, path });
+    logger.info('Deleting file', { hostId: hostId.toString(), path });
     const response = await api.delete(API_ENDPOINTS.FILES.DELETE(hostId), {
       params: { path },
     });
-    logger.info('File deleted successfully', { hostId, path });
+    logger.info('File deleted successfully', { hostId: hostId.toString(), path });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'deleteFile');
@@ -100,12 +100,12 @@ export async function createDirectory(
   path: string,
 ): Promise<ApiResult<void>> {
   try {
-    logger.info('Creating directory', { hostId, path });
+    logger.info('Creating directory', { hostId: hostId.toString(), path });
     const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
       path,
       isDirectory: true,
     });
-    logger.info('Directory created successfully', { hostId, path });
+    logger.info('Directory created successfully', { hostId: hostId.toString(), path });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'createDirectory');
