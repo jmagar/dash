@@ -1,6 +1,5 @@
-import express, { RequestHandler } from 'express';
+import express from 'express';
 
-import { ApiResult } from '../../types/api-shared';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
@@ -30,18 +29,18 @@ interface PackageRequestBody {
 }
 
 // List packages
-const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = async (req, res) => {
+const listPackages = async (req: express.Request, res: express.Response): Promise<void> => {
   const { hostId } = req.params;
 
   try {
-    logger.info('Listing packages', { hostId });
+    logger.info('Listing packages', { hostId: String(hostId) });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and list installed packages.
     const result = await query('SELECT 1');
     if (!result) {
       const metadata: LogMetadata = {
-        hostId,
+        hostId: String(hostId),
       };
       logger.error('Database connection failed:', metadata);
       throw createApiError('Failed to connect to database', 500, metadata);
@@ -56,14 +55,14 @@ const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = asyn
       },
     ];
 
-    logger.info('Packages listed successfully', { hostId, count: packages.length });
+    logger.info('Packages listed successfully', { hostId: String(hostId), count: packages.length });
     res.json({
       success: true,
       data: packages,
     });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to list packages:', metadata);
@@ -81,40 +80,36 @@ const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = asyn
 };
 
 // Install package
-const installPackage: RequestHandler<
-  PackageRequestParams,
-  ApiResult<void>,
-  PackageRequestBody
-> = async (req, res) => {
+const installPackage = async (req: express.Request, res: express.Response): Promise<void> => {
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 
   try {
     if (!packageName) {
-      const metadata: LogMetadata = { hostId };
+      const metadata: LogMetadata = { hostId: String(hostId) };
       logger.warn('Package installation failed: No package name provided', metadata);
       throw createApiError('Package name is required', 400, metadata);
     }
 
-    logger.info('Installing package', { hostId, package: packageName });
+    logger.info('Installing package', { hostId: String(hostId), package: packageName });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and install the package.
     const result = await query('SELECT 1');
     if (!result) {
       const metadata: LogMetadata = {
-        hostId,
+        hostId: String(hostId),
         package: packageName,
       };
       logger.error('Database connection failed:', metadata);
       throw createApiError('Failed to connect to database', 500, metadata);
     }
 
-    logger.info('Package installed successfully', { hostId, package: packageName });
+    logger.info('Package installed successfully', { hostId: String(hostId), package: packageName });
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       package: packageName,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
@@ -133,40 +128,36 @@ const installPackage: RequestHandler<
 };
 
 // Uninstall package
-const uninstallPackage: RequestHandler<
-  PackageRequestParams,
-  ApiResult<void>,
-  PackageRequestBody
-> = async (req, res) => {
+const uninstallPackage = async (req: express.Request, res: express.Response): Promise<void> => {
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 
   try {
     if (!packageName) {
-      const metadata: LogMetadata = { hostId };
+      const metadata: LogMetadata = { hostId: String(hostId) };
       logger.warn('Package uninstallation failed: No package name provided', metadata);
       throw createApiError('Package name is required', 400, metadata);
     }
 
-    logger.info('Uninstalling package', { hostId, package: packageName });
+    logger.info('Uninstalling package', { hostId: String(hostId), package: packageName });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and uninstall the package.
     const result = await query('SELECT 1');
     if (!result) {
       const metadata: LogMetadata = {
-        hostId,
+        hostId: String(hostId),
         package: packageName,
       };
       logger.error('Database connection failed:', metadata);
       throw createApiError('Failed to connect to database', 500, metadata);
     }
 
-    logger.info('Package uninstalled successfully', { hostId, package: packageName });
+    logger.info('Package uninstalled successfully', { hostId: String(hostId), package: packageName });
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       package: packageName,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
@@ -185,40 +176,36 @@ const uninstallPackage: RequestHandler<
 };
 
 // Update package
-const updatePackage: RequestHandler<
-  PackageRequestParams,
-  ApiResult<void>,
-  PackageRequestBody
-> = async (req, res) => {
+const updatePackage = async (req: express.Request, res: express.Response): Promise<void> => {
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 
   try {
     if (!packageName) {
-      const metadata: LogMetadata = { hostId };
+      const metadata: LogMetadata = { hostId: String(hostId) };
       logger.warn('Package update failed: No package name provided', metadata);
       throw createApiError('Package name is required', 400, metadata);
     }
 
-    logger.info('Updating package', { hostId, package: packageName });
+    logger.info('Updating package', { hostId: String(hostId), package: packageName });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and update the package.
     const result = await query('SELECT 1');
     if (!result) {
       const metadata: LogMetadata = {
-        hostId,
+        hostId: String(hostId),
         package: packageName,
       };
       logger.error('Database connection failed:', metadata);
       throw createApiError('Failed to connect to database', 500, metadata);
     }
 
-    logger.info('Package updated successfully', { hostId, package: packageName });
+    logger.info('Package updated successfully', { hostId: String(hostId), package: packageName });
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       package: packageName,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
