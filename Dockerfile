@@ -16,11 +16,17 @@ ENV CI=true
 ENV REACT_APP_DISABLE_AUTH=true
 ENV REACT_APP_WDS_SOCKET_PORT=0
 
+# Configure npm to use a more reliable registry and add retry logic
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000
+
 # Copy package files first to leverage layer caching
 COPY package*.json ./
 
 # Install ALL dependencies (including devDependencies)
-RUN npm install --legacy-peer-deps && \
+RUN npm install --legacy-peer-deps --no-optional && \
     npm install -g typescript && \
     npm config set legacy-peer-deps true
 
@@ -65,9 +71,16 @@ RUN apk add --no-cache openssh-client
 ENV NODE_ENV=production
 ENV REACT_APP_DISABLE_AUTH=true
 
+# Configure npm for production install
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000
+
 # Copy package files and install only production dependencies
 COPY package*.json ./
-RUN npm install --omit=dev --legacy-peer-deps --no-optional
+RUN npm ci --only=production --legacy-peer-deps --no-optional || \
+    npm install --only=production --legacy-peer-deps --no-optional
 
 # Copy built files
 COPY --from=builder /app/build ./build
