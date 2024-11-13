@@ -51,7 +51,7 @@
     "test": "react-scripts test",
     "test:server": "jest --config jest.config.js",
     "migrate": "ts-node scripts/migrate.ts",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
   },
   "eslintConfig": {
@@ -97,7 +97,7 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-unused-imports": "^2.0.0",
+    "eslint-plugin-unused-imports": "^3.0.0",
     "ioredis-mock": "^8.9.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",

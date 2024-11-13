@@ -22,6 +22,7 @@ COPY package*.json ./
 # Install ALL dependencies (including devDependencies) in one command
 RUN npm install --legacy-peer-deps && \
     npm install -g typescript && \
+    npm install eslint-plugin-unused-imports@latest && \
     npm config set legacy-peer-deps true
 
 # Copy configuration files
