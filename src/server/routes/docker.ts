@@ -3,6 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
+import type { Container, Stack } from '../../types/models-shared';
 import cache from '../cache';
 import { logger } from '../utils/logger';
 
@@ -31,7 +32,7 @@ router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
     const containers = await cache.getDockerContainers(hostId);
     res.json({
       success: true,
-      containers: containers || [],
+      data: containers || [],
     });
   } catch (error) {
     const metadata: LogMetadata = {
@@ -62,7 +63,7 @@ router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
     const stacks = await cache.getDockerStacks(hostId);
     res.json({
       success: true,
-      stacks: stacks || [],
+      data: stacks || [],
     });
   } catch (error) {
     const metadata: LogMetadata = {
@@ -88,7 +89,7 @@ router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
  */
 router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => {
   const { hostId } = req.params;
-  const containers = req.body;
+  const containers = req.body as Container[];
 
   try {
     await cache.cacheDockerContainers(hostId, containers);
@@ -117,7 +118,7 @@ router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => 
  */
 router.post('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
   const { hostId } = req.params;
-  const stacks = req.body;
+  const stacks = req.body as Stack[];
 
   try {
     await cache.cacheDockerStacks(hostId, stacks);

@@ -3,6 +3,7 @@ import Redis from 'ioredis';
 import { validateConfig } from './config';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
+import type { Container, Stack } from '../../types/models-shared';
 import { logger } from '../utils/logger';
 
 export class CacheService {
@@ -180,6 +181,61 @@ export class CacheService {
       };
       logger.error('Failed to add command to history:', metadata);
       throw createApiError('Failed to add command to history', 500, metadata);
+    }
+  }
+
+  // Docker-related methods
+  public async getDockerContainers(hostId: string): Promise<Container[]> {
+    try {
+      const data = await this.redis.get(`docker:containers:${hostId}`);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      const metadata: LogMetadata = {
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to get Docker containers:', metadata);
+      throw createApiError('Failed to get Docker containers', 500, metadata);
+    }
+  }
+
+  public async cacheDockerContainers(hostId: string, containers: Container[]): Promise<void> {
+    try {
+      await this.redis.set(`docker:containers:${hostId}`, JSON.stringify(containers), 'EX', 300); // 5 minutes expiry
+    } catch (error) {
+      const metadata: LogMetadata = {
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to cache Docker containers:', metadata);
+      throw createApiError('Failed to cache Docker containers', 500, metadata);
+    }
+  }
+
+  public async getDockerStacks(hostId: string): Promise<Stack[]> {
+    try {
+      const data = await this.redis.get(`docker:stacks:${hostId}`);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      const metadata: LogMetadata = {
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to get Docker stacks:', metadata);
+      throw createApiError('Failed to get Docker stacks', 500, metadata);
+    }
+  }
+
+  public async cacheDockerStacks(hostId: string, stacks: Stack[]): Promise<void> {
+    try {
+      await this.redis.set(`docker:stacks:${hostId}`, JSON.stringify(stacks), 'EX', 300); // 5 minutes expiry
+    } catch (error) {
+      const metadata: LogMetadata = {
+        hostId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logger.error('Failed to cache Docker stacks:', metadata);
+      throw createApiError('Failed to cache Docker stacks', 500, metadata);
     }
   }
 }
