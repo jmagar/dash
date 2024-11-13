@@ -26,7 +26,7 @@ RUN npm install --legacy-peer-deps && \
 
 # Copy configuration files
 COPY tsconfig*.json ./
-COPY .eslintrc.* ./
+COPY .eslintrc.json ./
 COPY .prettierrc.js ./
 
 # Copy source code and public assets
@@ -55,7 +55,7 @@ ENV REACT_APP_DISABLE_AUTH=true
 
 # Copy package files and install only production dependencies
 COPY package*.json ./
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm install --omit=dev --legacy-peer-deps --no-optional
 
 # Copy built files
 COPY --from=builder /app/build ./build
