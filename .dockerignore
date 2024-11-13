@@ -12,29 +12,45 @@ dist
 .git
 .gitignore
 
-# Development files
-.env.development
+# Environment files
+.env
 .env.local
 .env.*.local
-README.md
-.vscode
+
+# IDE files
 .idea
+.vscode
+*.swp
+*.swo
+
+# Test files
+coverage
+__tests__
 *.test.ts
 *.test.tsx
-*.spec.ts
-*.spec.tsx
-__tests__
-__mocks__
 
 # Logs
 logs
 *.log
 
-# Cache
-.npm
-.eslintcache
-.tsbuildinfo
-
-# System Files
+# Temporary files
 .DS_Store
-Thumbs.db
+*.tmp
+*.temp
+
+# Docker files
+Dockerfile*
+docker-compose*
+.docker
+
+# Documentation
+README.md
+docs
+*.md
+
+# Development configs
+.editorconfig
+.eslintcache
+.prettierignore
+jest.config.*
+tsconfig.tsbuildinfo
