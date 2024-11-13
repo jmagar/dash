@@ -13,10 +13,8 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false,
+    "noEmit": true,
     "jsx": "react-jsx",
-    "outDir": "build",
-    "rootDir": "src",
     "baseUrl": "src",
     "paths": {
       "@types/*": ["types/*"]
@@ -28,16 +26,15 @@
     "types": ["node", "jest"]
   },
   "include": [
-    "src/**/*",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.d.ts",
+    "src/client/**/*",
     "src/types/**/*"
   ],
   "exclude": [
     "node_modules",
     "build",
+    "dist",
     "scripts",
-    "test"
+    "test",
+    "src/server/**/*"
   ]
 }
