@@ -5,6 +5,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import {
+  Alert,
   Box,
   IconButton,
   Paper,
@@ -14,6 +15,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import React, { useState } from 'react';
@@ -21,10 +23,12 @@ import React, { useState } from 'react';
 import { startContainer, stopContainer, restartContainer, removeContainer } from '../api';
 import { useDockerUpdates } from '../hooks';
 import LoadingScreen from './LoadingScreen';
+import { logger } from '../utils/frontendLogger';
 
 export default function DockerContainers(): JSX.Element {
   const { containers, loading, error } = useDockerUpdates({ interval: 5000 });
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
 
   const handleAction = async (
     containerId: string,
@@ -32,6 +36,10 @@ export default function DockerContainers(): JSX.Element {
   ): Promise<void> => {
     try {
       setActionError(null);
+      setActionLoading(prev => ({ ...prev, [containerId]: true }));
+
+      logger.info(`${action}ing container`, { containerId, action });
+
       const actionMap = {
         start: startContainer,
         stop: stopContainer,
@@ -41,10 +49,18 @@ export default function DockerContainers(): JSX.Element {
 
       const result = await actionMap[action](containerId);
       if (!result.success) {
-        setActionError(result.error || `Failed to ${action} container`);
+        const errorMessage = result.error || `Failed to ${action} container`;
+        logger.error(`Failed to ${action} container:`, { error: errorMessage, containerId });
+        setActionError(errorMessage);
+      } else {
+        logger.info(`Container ${action}ed successfully`, { containerId });
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : `Failed to ${action} container`);
+      const errorMessage = err instanceof Error ? err.message : `Failed to ${action} container`;
+      logger.error(`Error ${action}ing container:`, { error: errorMessage, containerId });
+      setActionError(errorMessage);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [containerId]: false }));
     }
   };
 
@@ -55,7 +71,7 @@ export default function DockerContainers(): JSX.Element {
   if (error) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
+        <Alert severity="error">{error}</Alert>
       </Box>
     );
   }
@@ -67,9 +83,9 @@ export default function DockerContainers(): JSX.Element {
       </Typography>
 
       {actionError && (
-        <Typography color="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={(): void => setActionError(null)}>
           {actionError}
-        </Typography>
+        </Alert>
       )}
 
       <TableContainer component={Paper}>
@@ -89,32 +105,54 @@ export default function DockerContainers(): JSX.Element {
                 <TableCell>{container.image}</TableCell>
                 <TableCell>{container.status}</TableCell>
                 <TableCell>
-                  <IconButton
-                    onClick={(): void => void handleAction(container.id, 'start')}
-                    disabled={container.state === 'running'}
-                  >
-                    <StartIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={(): void => void handleAction(container.id, 'stop')}
-                    disabled={container.state === 'stopped'}
-                  >
-                    <StopIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={(): void => void handleAction(container.id, 'restart')}
-                    disabled={container.state === 'stopped'}
-                  >
-                    <RestartIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={(): void => void handleAction(container.id, 'remove')}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                  <Tooltip title={container.state === 'running' ? 'Already running' : 'Start container'}>
+                    <span>
+                      <IconButton
+                        onClick={(): void => void handleAction(container.id, 'start')}
+                        disabled={container.state === 'running' || actionLoading[container.id]}
+                      >
+                        <StartIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={container.state === 'stopped' ? 'Already stopped' : 'Stop container'}>
+                    <span>
+                      <IconButton
+                        onClick={(): void => void handleAction(container.id, 'stop')}
+                        disabled={container.state === 'stopped' || actionLoading[container.id]}
+                      >
+                        <StopIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={container.state === 'stopped' ? 'Cannot restart stopped container' : 'Restart container'}>
+                    <span>
+                      <IconButton
+                        onClick={(): void => void handleAction(container.id, 'restart')}
+                        disabled={container.state === 'stopped' || actionLoading[container.id]}
+                      >
+                        <RestartIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Remove container">
+                    <IconButton
+                      onClick={(): void => void handleAction(container.id, 'remove')}
+                      disabled={actionLoading[container.id]}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}
+            {containers.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  <Typography color="textSecondary">No containers found</Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
