@@ -2,29 +2,19 @@ import express from 'express';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
+import type { Package, ApiResponse } from '../../types/models-shared';
 import { query } from '../db';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface Package {
-  name: string;
-  version: string;
-  description?: string;
-  installed: boolean;
-}
+type PackageResponse = ApiResponse<Package[]>
 
-interface _PackageResponse {
-  success: boolean;
-  data?: Package[];
-  error?: string;
-}
-
-interface _PackageRequestParams {
+interface PackageRequestParams {
   hostId: string;
 }
 
-interface _PackageRequestBody {
+interface PackageRequestBody {
   package: string;
 }
 
@@ -46,12 +36,13 @@ const listPackages = async (req: express.Request, res: express.Response): Promis
       throw createApiError('Failed to connect to database', 500, metadata);
     }
 
-    const packages = [
+    const packages: Package[] = [
       {
         name: 'example-package',
         version: '1.0.0',
         description: 'Example package',
         installed: true,
+        updateAvailable: false,
       },
     ];
 

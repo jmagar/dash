@@ -5,21 +5,8 @@ import type { Request, Response } from 'express-serve-static-core';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
+import type { FileItem, ApiResponse } from '../../types/models-shared';
 import { logger } from '../utils/logger';
-
-interface FileInfo {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modified?: Date;
-}
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
 
 export async function listFiles(req: Request, res: Response): Promise<void> {
   const dirPath = req.query.path as string;
@@ -37,7 +24,7 @@ export async function listFiles(req: Request, res: Response): Promise<void> {
     logger.info('Listing files', { path: dirPath });
     const files = await fs.readdir(dirPath, { withFileTypes: true });
 
-    const fileList: FileInfo[] = await Promise.all(
+    const fileList: FileItem[] = await Promise.all(
       files.map(async (file) => {
         const filePath = path.join(dirPath, file.name);
         const stats = await fs.stat(filePath);
@@ -52,7 +39,7 @@ export async function listFiles(req: Request, res: Response): Promise<void> {
     );
 
     logger.info('Files listed successfully', { count: fileList.length });
-    const result: ApiResponse<FileInfo[]> = {
+    const result: ApiResponse<FileItem[]> = {
       success: true,
       data: fileList,
     };

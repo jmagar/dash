@@ -1,19 +1,18 @@
 import { ParamsDictionary } from 'express-serve-static-core';
 
-import { AuthenticatedUser } from './jwt';
+import type { User } from './models-shared';
+
+export type { User };
+
+export interface AuthenticatedUser {
+  id: string | number;
+  username: string;
+  role: string;
+}
 
 export interface LoginRequest {
   username: string;
   password: string;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  password_hash: string;
-  role: string;
-  is_active: boolean;
-  last_login?: Date;
 }
 
 export type SessionData = AuthenticatedUser;
@@ -43,4 +42,4 @@ export interface AuthResult {
   error?: string;
 }
 
-export type RequestParams = ParamsDictionary
+export type RequestParams = ParamsDictionary;

@@ -1,38 +1,13 @@
 import { ParamsDictionary } from 'express-serve-static-core';
 
-export interface Host {
-    id: string;
-    name: string;
-    hostname: string;
-    port: number;
-    username?: string;
-    password?: string;
-    ssh_key_id?: string;
-    is_active?: boolean;
-    private_key?: string;
-    passphrase?: string;
-}
+import type { Host, SSHConfig, ApiResponse } from '../../../types/models-shared';
 
-export interface HostResponse {
-  success: boolean;
-  data?: Host | Host[];
-  error?: string;
-}
+export type { Host, SSHConfig };
+
+export type HostResponse = ApiResponse<Host | Host[]>
 
 export interface RequestParams extends ParamsDictionary {
   id: string;
-}
-
-export interface SSHConfig {
-  host: string;
-  port: number;
-  username?: string;
-  password?: string;
-  privateKey?: string;
-  passphrase?: string;
-  readyTimeout?: number;
-  keepaliveInterval?: number;
-  keepaliveCountMax?: number;
 }
 
 export interface CreateHostRequest {
@@ -48,7 +23,4 @@ export interface UpdateHostRequest extends CreateHostRequest {
   isActive?: boolean;
 }
 
-export interface DeleteHostResponse {
-  success: boolean;
-  error?: string;
-}
+export type DeleteHostResponse = ApiResponse<void>

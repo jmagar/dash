@@ -9,8 +9,10 @@ export interface Host {
   credentials?: {
     password?: string;
     privateKey?: string;
+    passphrase?: string;
   };
   isActive?: boolean;
+  sshKeyId?: string;
 }
 
 export interface Container {
@@ -43,8 +45,11 @@ export interface User {
   username: string;
   email?: string;
   password?: string;
+  password_hash?: string;
   role: string;
+  is_active: boolean;
   lastLogin?: Date;
+  last_login?: Date;
   createdAt?: Date;
   currentPassword?: string;
   newPassword?: string;
@@ -71,4 +76,22 @@ export interface UserRegistration {
   email: string;
   password: string;
   confirmPassword?: string;
+}
+
+export interface SSHConfig {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+  readyTimeout?: number;
+  keepaliveInterval?: number;
+  keepaliveCountMax?: number;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
 }
