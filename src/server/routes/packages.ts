@@ -8,18 +8,8 @@ import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-type PackageResponse = ApiResponse<Package[]>
-
-interface PackageRequestParams {
-  hostId: string;
-}
-
-interface PackageRequestBody {
-  package: string;
-}
-
 // List packages
-const listPackages = async (req: express.Request, res: express.Response): Promise<void> => {
+const listPackages = async (req: express.Request<{ hostId: string }>, res: express.Response): Promise<void> => {
   const { hostId } = req.params;
 
   try {
@@ -47,10 +37,11 @@ const listPackages = async (req: express.Request, res: express.Response): Promis
     ];
 
     logger.info('Packages listed successfully', { hostId: String(hostId), count: packages.length });
-    res.json({
+    const response: ApiResponse<Package[]> = {
       success: true,
       data: packages,
-    });
+    };
+    res.json(response);
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
@@ -71,7 +62,10 @@ const listPackages = async (req: express.Request, res: express.Response): Promis
 };
 
 // Install package
-const installPackage = async (req: express.Request, res: express.Response): Promise<void> => {
+const installPackage = async (
+  req: express.Request<{ hostId: string }, unknown, { package: string }>,
+  res: express.Response
+): Promise<void> => {
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 
@@ -97,7 +91,8 @@ const installPackage = async (req: express.Request, res: express.Response): Prom
     }
 
     logger.info('Package installed successfully', { hostId: String(hostId), package: packageName });
-    res.json({ success: true });
+    const response: ApiResponse<void> = { success: true };
+    res.json(response);
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
