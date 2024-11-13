@@ -10,7 +10,7 @@ const isAuthDisabled = process.env.REACT_APP_DISABLE_AUTH === 'true';
 
 // Default dev user when auth is disabled
 const devUser: User = {
-  id: 1,
+  id: '1',
   username: 'dev',
   role: 'admin',
   is_active: true,
@@ -120,12 +120,12 @@ export async function updateUser(data: Partial<User>): Promise<ApiResult<User>> 
   }
 
   try {
-    logger.info('Updating user', { userId: data.id?.toString() });
+    logger.info('Updating user', { userId: data.id });
     const response = await api.put(
-      API_ENDPOINTS.AUTH.UPDATE(data.id as number),
+      API_ENDPOINTS.AUTH.UPDATE(data.id as string),
       data,
     );
-    logger.info('User update successful', { userId: data.id?.toString() });
+    logger.info('User update successful', { userId: data.id });
     return response.data;
   } catch (error) {
     return handleApiError<User>(error, 'updateUser');

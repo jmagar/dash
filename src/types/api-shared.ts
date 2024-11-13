@@ -72,7 +72,7 @@ export const API_ENDPOINTS = {
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/refresh',
     VALIDATE: '/auth/validate',
-    UPDATE: (userId: number): string => `/auth/users/${userId}`,
+    UPDATE: (userId: string): string => `/auth/users/${userId}`,
     VERIFY_MFA: '/auth/verify-mfa',
     SETUP_MFA: '/auth/setup-mfa',
     DISABLE_MFA: '/auth/disable-mfa',

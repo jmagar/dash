@@ -8,7 +8,7 @@ import helmet from 'helmet';
 import { createApiError } from '../types/error';
 import type { LogMetadata } from '../types/logger';
 import { authenticate } from './middleware/auth';
-import { errorHandler } from './middleware/errorHandler';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { logger } from './utils/logger';
@@ -95,15 +95,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Error handling
-app.use((req, res, next) => {
-  const metadata: LogMetadata = {
-    path: req.path,
-    method: req.method,
-  };
-  const error = createApiError('Not Found', 404, metadata);
-  next(error);
-});
-
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server

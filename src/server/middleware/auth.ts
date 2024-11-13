@@ -1,29 +1,26 @@
 import type { Request, Response, NextFunction } from 'express';
 
 import { createApiError } from '../../types/error';
+import type { AuthenticatedRequest } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import type { User, ApiResponse } from '../../types/models-shared';
+import type { ApiResponse } from '../../types/models-shared';
 import { verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
-
-export interface AuthenticatedRequest extends Request {
-  user?: User;
-}
 
 function validateToken(token: unknown): token is string {
   return typeof token === 'string' && token.trim().length > 0;
 }
 
-function validateDecodedToken(decoded: unknown): decoded is User {
+function validateDecodedToken(decoded: unknown): decoded is AuthenticatedRequest['user'] {
   return typeof decoded === 'object' &&
     decoded !== null &&
-    typeof (decoded as User).id !== 'undefined' &&
-    typeof (decoded as User).username === 'string' &&
-    typeof (decoded as User).role === 'string' &&
-    typeof (decoded as User).is_active === 'boolean';
+    typeof (decoded as AuthenticatedRequest['user']).id === 'string' &&
+    typeof (decoded as AuthenticatedRequest['user']).username === 'string' &&
+    typeof (decoded as AuthenticatedRequest['user']).role === 'string' &&
+    typeof (decoded as AuthenticatedRequest['user']).is_active === 'boolean';
 }
 
-export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function authenticate(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -49,8 +46,8 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
       throw new Error('User account is inactive');
     }
 
-    req.user = decoded;
-    logger.info('Authentication successful', { userId: String(decoded.id) });
+    (req as AuthenticatedRequest).user = decoded;
+    logger.info('Authentication successful', { userId: decoded.id });
     next();
   } catch (error) {
     const metadata: LogMetadata = {
@@ -72,9 +69,10 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
 }
 
 export function requireRole(roles: string[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authReq = req as AuthenticatedRequest;
     try {
-      if (!req.user) {
+      if (!authReq.user) {
         const error = createApiError('Authentication required', 401);
         logger.warn('Role check failed: No user in request');
         const response: ApiResponse<void> = {
@@ -85,11 +83,11 @@ export function requireRole(roles: string[]) {
         return;
       }
 
-      if (!roles.includes(req.user.role)) {
+      if (!roles.includes(authReq.user.role)) {
         const metadata: LogMetadata = {
           requiredRoles: roles,
-          userRole: req.user.role,
-          userId: String(req.user.id),
+          userRole: authReq.user.role,
+          userId: authReq.user.id,
         };
         const error = createApiError('Insufficient permissions', 403, metadata);
         logger.warn('Role check failed: Insufficient permissions', metadata);
@@ -102,8 +100,8 @@ export function requireRole(roles: string[]) {
       }
 
       logger.info('Role check passed', {
-        userId: String(req.user.id),
-        role: req.user.role,
+        userId: authReq.user.id,
+        role: authReq.user.role,
         requiredRoles: roles,
       });
       next();
@@ -111,8 +109,8 @@ export function requireRole(roles: string[]) {
       const metadata: LogMetadata = {
         error: error instanceof Error ? error.message : 'Unknown error',
         roles,
-        userRole: req.user?.role,
-        userId: req.user ? String(req.user.id) : undefined,
+        userRole: authReq.user?.role,
+        userId: authReq.user?.id,
       };
       logger.error('Role check error:', metadata);
 

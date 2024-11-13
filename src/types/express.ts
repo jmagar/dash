@@ -4,6 +4,15 @@ import type { ParsedQs } from 'qs';
 
 import type { AuthenticatedUser } from './jwt';
 
+// Extend base Request interface
+declare module 'express' {
+  interface Request {
+    requestId?: string;
+    user?: AuthenticatedUser;
+  }
+}
+
+// Authenticated request requires user to be present
 export interface AuthenticatedRequest<
   P = ParamsDictionary,
   ResBody = any,
@@ -11,6 +20,7 @@ export interface AuthenticatedRequest<
   ReqQuery = ParsedQs,
 > extends Request<P, ResBody, ReqBody, ReqQuery> {
   user: AuthenticatedUser;
+  requestId: string;
 }
 
 export type AuthenticatedRequestHandler<

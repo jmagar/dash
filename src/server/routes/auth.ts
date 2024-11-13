@@ -1,25 +1,19 @@
-import express from 'express';
-import type { Request, Response } from 'express-serve-static-core';
+import express, { type Response, type RequestHandler } from 'express';
 
 import { createApiError } from '../../types/error';
+import type { AuthenticatedRequest } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { User, AuthResult } from '../../types/models-shared';
 import cache from '../cache';
+import { generateToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface LoginRequest extends Request {
+interface LoginRequest extends express.Request {
   body: {
     username: string;
     password: string;
-  };
-}
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    [key: string]: unknown;
   };
 }
 
@@ -35,7 +29,7 @@ function validateLoginRequest(body: unknown): body is { username: string; passwo
 /**
  * User login endpoint
  */
-router.post('/login', async (req: LoginRequest, res: Response) => {
+const loginHandler: RequestHandler = async (req, res: Response) => {
   try {
     if (!validateLoginRequest(req.body)) {
       throw createApiError('Invalid request format', 400);
@@ -80,12 +74,12 @@ router.post('/login', async (req: LoginRequest, res: Response) => {
       error: apiError.message,
     });
   }
-});
+};
 
 /**
  * Check if user is authenticated
  */
-router.get('/check', async (req: AuthenticatedRequest, res: Response) => {
+const checkAuthHandler: RequestHandler = async (req, res: Response) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
@@ -109,11 +103,11 @@ router.get('/check', async (req: AuthenticatedRequest, res: Response) => {
       throw createApiError('Invalid session data', 401);
     }
 
-    if (!user || typeof user.id === 'undefined' || !user.username || !user.role) {
+    if (!user || !user.id || !user.username || !user.role || typeof user.is_active === 'undefined') {
       throw createApiError('Invalid user data in session', 401);
     }
 
-    logger.info('Session validated successfully', { userId: String(user.id) });
+    logger.info('Session validated successfully', { userId: user.id });
 
     const result: AuthResult = {
       success: true,
@@ -139,7 +133,7 @@ router.get('/check', async (req: AuthenticatedRequest, res: Response) => {
       error: apiError.message,
     });
   }
-});
+};
 
 /**
  * Validate user credentials
@@ -161,13 +155,8 @@ async function validateCredentials(username: string, password: string): Promise<
   return null;
 }
 
-/**
- * Generate session token
- */
-function generateToken(user: User): string {
-  // TODO: Implement proper token generation
-  // This is just a placeholder implementation
-  return Buffer.from(`${user.id}:${user.username}:${Date.now()}`).toString('base64');
-}
+// Register routes
+router.post('/login', loginHandler);
+router.get('/check', checkAuthHandler);
 
 export default router;

@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { ErrorRequestHandler, Request, Response } from 'express';
 
 import { createApiError, type ApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
@@ -9,12 +9,13 @@ interface ValidationError extends Error {
   errors?: Record<string, unknown>;
 }
 
-export function errorHandler(
+export const errorHandler: ErrorRequestHandler = (
   error: Error,
   req: Request,
   res: Response,
-  next: NextFunction,
-): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  next,
+): void => {
   const metadata: LogMetadata = {
     path: req.path,
     method: req.method,
@@ -90,9 +91,9 @@ export function errorHandler(
     status: apiError.status,
     details: apiError.details,
   });
-}
+};
 
-export function notFoundHandler(req: Request, res: Response): void {
+export const notFoundHandler = (req: Request, res: Response): void => {
   const metadata: LogMetadata = {
     path: req.path,
     method: req.method,
@@ -111,4 +112,4 @@ export function notFoundHandler(req: Request, res: Response): void {
     status: apiError.status,
     details: apiError.details,
   });
-}
+};

@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { RequestHandler } from 'express';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
@@ -8,8 +8,20 @@ import { logger } from '../utils/logger';
 
 const router = express.Router();
 
+interface ListPackagesParams {
+  hostId: string;
+}
+
+interface InstallPackageParams {
+  hostId: string;
+}
+
+interface InstallPackageBody {
+  package: string;
+}
+
 // List packages
-const listPackages = async (req: express.Request<{ hostId: string }>, res: express.Response): Promise<void> => {
+const listPackages: RequestHandler<ListPackagesParams> = async (req, res) => {
   const { hostId } = req.params;
 
   try {
@@ -62,10 +74,10 @@ const listPackages = async (req: express.Request<{ hostId: string }>, res: expre
 };
 
 // Install package
-const installPackage = async (
-  req: express.Request<{ hostId: string }, unknown, { package: string }>,
-  res: express.Response
-): Promise<void> => {
+const installPackage: RequestHandler<InstallPackageParams, unknown, InstallPackageBody> = async (
+  req,
+  res,
+) => {
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 

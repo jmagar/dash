@@ -58,7 +58,7 @@ export interface FileItem {
 }
 
 export interface User {
-  id: string | number;
+  id: string;
   username: string;
   email?: string;
   password?: string;

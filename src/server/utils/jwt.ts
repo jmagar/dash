@@ -22,7 +22,7 @@ if (!validateExpiration(JWT_EXPIRATION)) {
 }
 
 interface JwtUser {
-  id: string | number;
+  id: string;
   username: string;
   role: string;
   exp?: number;
@@ -49,7 +49,7 @@ export function generateToken(user: User): string {
     const token = jwt.sign(payload, JWT_SECRET, options);
 
     logger.info('Token generated successfully', {
-      userId: String(user.id),
+      userId: user.id,
       expiration: JWT_EXPIRATION,
     });
 
@@ -57,7 +57,7 @@ export function generateToken(user: User): string {
   } catch (error) {
     logger.error('Failed to generate token:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      userId: String(user.id),
+      userId: user.id,
     });
     throw createApiError(
       'Failed to generate authentication token',
@@ -87,7 +87,7 @@ export function verifyToken(token: string): JwtUser {
       throw createApiError('Token has expired', 401);
     }
 
-    logger.info('Token verified successfully', { userId: String(decoded.id) });
+    logger.info('Token verified successfully', { userId: decoded.id });
     return decoded;
   } catch (error) {
     if (error instanceof Error && error.name === 'TokenExpiredError') {
@@ -118,11 +118,7 @@ export function isValidToken(payload: unknown): payload is JwtUser {
   const requiredFields = ['id', 'username', 'role'] as const;
   const hasRequiredFields = requiredFields.every(field =>
     field in payload &&
-    (
-      field === 'id'
-        ? (typeof (payload as JwtUser).id === 'string' || typeof (payload as JwtUser).id === 'number')
-        : typeof (payload as JwtUser)[field] === 'string'
-    ),
+    typeof (payload as JwtUser)[field] === 'string'
   );
 
   if (!hasRequiredFields) {
