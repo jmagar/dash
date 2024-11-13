@@ -15,6 +15,7 @@ ENV SKIP_PREFLIGHT_CHECK=true
 ENV CI=true
 ENV REACT_APP_DISABLE_AUTH=true
 ENV REACT_APP_WDS_SOCKET_PORT=0
+ENV BABEL_ENV=production
 
 # Configure npm to use a more reliable registry and add retry logic
 RUN npm config set registry https://registry.npmjs.org/ && \
@@ -25,11 +26,24 @@ RUN npm config set registry https://registry.npmjs.org/ && \
 # Copy package files first to leverage layer caching
 COPY package*.json ./
 
-# Install ALL dependencies (including devDependencies) and global packages
-RUN npm install --legacy-peer-deps --no-optional && \
+# Install core Babel dependencies first
+RUN npm install --no-package-lock \
+    @babel/core@7.23.7 \
+    @babel/runtime@7.23.7 \
+    @babel/plugin-proposal-private-property-in-object@7.21.11 \
+    @babel/plugin-transform-private-property-in-object@7.23.4 \
+    babel-preset-react-app@10.0.1
+
+# Install ALL dependencies (including devDependencies)
+RUN npm install --legacy-peer-deps && \
     npm install -g typescript rimraf && \
-    npm install --save-dev @babel/plugin-proposal-private-property-in-object@latest && \
     npm config set legacy-peer-deps true
+
+# Verify critical dependencies are installed correctly
+RUN npm list @babel/plugin-proposal-private-property-in-object && \
+    npm list @babel/plugin-transform-private-property-in-object && \
+    npm list @babel/core && \
+    npm list babel-preset-react-app
 
 # Copy configuration files
 COPY tsconfig*.json ./
@@ -43,22 +57,9 @@ COPY public ./public
 # Create empty .env file if none exists
 RUN touch .env
 
-# Install additional dependencies that might be needed for the build
-RUN npm install --save-dev \
-    @types/node \
-    @types/react \
-    @types/react-dom \
-    @typescript-eslint/eslint-plugin \
-    @typescript-eslint/parser \
-    eslint-import-resolver-typescript \
-    eslint-plugin-import \
-    eslint-plugin-react \
-    eslint-plugin-react-hooks \
-    @babel/plugin-transform-private-property-in-object
-
 # Clean and build
 RUN rimraf dist build && \
-    DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true npm run build && \
+    DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true BABEL_ENV=production npm run build && \
     npm run build:server
 
 # Production stage
