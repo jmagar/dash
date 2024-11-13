@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction, RequestHandler as ExpressRequestHandler } from 'express';
+import type { Request as ExpressRequest, Response, NextFunction, RequestHandler as ExpressRequestHandler } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 
@@ -11,6 +11,14 @@ declare module 'express' {
     user?: AuthenticatedUser;
   }
 }
+
+// Export extended Request type
+export type Request<
+  P = ParamsDictionary,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = ParsedQs,
+> = ExpressRequest<P, ResBody, ReqBody, ReqQuery>;
 
 // Authenticated request requires user to be present
 export interface AuthenticatedRequest<

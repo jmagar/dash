@@ -1,12 +1,12 @@
 import { randomUUID } from 'crypto';
 import { performance } from 'perf_hooks';
 
-import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express-serve-static-core';
+import type { Response as ExpressResponse, NextFunction } from 'express-serve-static-core';
 
+import type { Request } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
-type Request = ExpressRequest;
 type Response = ExpressResponse;
 
 interface RequestTiming {
@@ -18,12 +18,10 @@ interface RequestTiming {
 const timings = new WeakMap<Request, RequestTiming>();
 
 /**
- * Request tracing middleware that adds correlation IDs and timing information
+ * Request tracing middleware that adds timing information
  * to help track requests through the system.
  */
 export function requestTracer(req: Request, res: Response, next: NextFunction): void {
-  // Generate unique request ID
-  const requestId = randomUUID();
   const startTime = performance.now();
 
   // Store timing information
@@ -33,13 +31,10 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
     processingTime: 0,
   });
 
-  // Add request ID to request object
-  req.requestId = requestId;
-
   // Create child logger with request context
   const requestLogger = logger.withContext({
     component: 'HTTP',
-    requestId,
+    requestId: req.requestId,
     userId: req.user?.id,
   });
 

@@ -10,6 +10,7 @@ import type { LogMetadata } from '../types/logger';
 import { authenticate } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import { requestTracer, performanceMonitor } from './middleware/requestTracer';
 import routes from './routes';
 import { logger } from './utils/logger';
 
@@ -76,8 +77,10 @@ app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Request logging
-app.use(requestLogger);
+// Request logging and tracing
+app.use(requestLogger);  // Add request ID first
+app.use(requestTracer);  // Then add tracing
+app.use(performanceMonitor());
 
 // Static files in production
 if (process.env.NODE_ENV === 'production') {
