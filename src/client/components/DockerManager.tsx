@@ -65,7 +65,9 @@ export default function DockerManager(): JSX.Element {
     if (!result.success) {
       throw new Error(result.error || 'Failed to load stacks');
     }
-    return result.data || [];
+    // Explicitly assert the type and provide empty array as default
+    const stacks: Stack[] = result.data ?? [];
+    return stacks;
   };
 
   const {
@@ -73,7 +75,7 @@ export default function DockerManager(): JSX.Element {
     loading,
     error,
     execute: loadStacks,
-  } = useAsync(loadStacksList, { immediate: true });
+  } = useAsync<Stack[]>(loadStacksList, { immediate: true });
 
   const handleChange = (_event: React.SyntheticEvent, newValue: number): void => {
     setValue(newValue);
@@ -121,7 +123,7 @@ export default function DockerManager(): JSX.Element {
           <Typography color="error">{error}</Typography>
         ) : (
           <List>
-            {stacks?.map((stack) => (
+            {(stacks ?? []).map((stack) => (
               <ListItem
                 key={stack.name}
                 secondaryAction={
