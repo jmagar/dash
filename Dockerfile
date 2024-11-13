@@ -18,6 +18,7 @@ ENV DISABLE_AUTH=true
 ENV REACT_APP_DISABLE_AUTH=true
 ENV REACT_APP_WDS_SOCKET_PORT=0
 ENV BABEL_ENV=production
+ENV DISABLE_ESLINT_PLUGIN=true
 
 # Copy npm and Babel configs first
 COPY .npmrc package*.json .babelrc babel.config.js ./
@@ -39,19 +40,14 @@ RUN npm install --ignore-scripts && \
 
 # Copy configuration files
 COPY tsconfig*.json ./
-COPY .eslintrc.json ./
-COPY .prettierrc.js ./
 
 # Copy source code and public assets
 COPY src ./src
 COPY public ./public
 
-# Create empty .env file if none exists
-RUN touch .env
-
 # Clean and build
 RUN rimraf dist build && \
-    DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true BABEL_ENV=production npm run build && \
+    npm run build && \
     npm run build:server
 
 # Production stage
@@ -81,9 +77,6 @@ COPY --from=builder /app/dist ./dist
 # Create SSH directory with proper permissions
 RUN mkdir -p /root/.ssh && \
     chmod 700 /root/.ssh
-
-# Create empty .env file if none exists
-RUN touch .env
 
 # Expose port
 EXPOSE 4000

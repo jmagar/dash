@@ -46,7 +46,6 @@ temp
 *.tmp
 
 # Docker files
-Dockerfile*
 docker-compose*
 .docker
 
@@ -77,13 +76,3 @@ monitoring
 *.bak
 *.backup
 *~
-
-# Other unnecessary files
-.prettierrc*
-.eslintrc*
-*.config.js
-!babel.config.js
-!jest.config.js
-tsconfig*.json
-!tsconfig.json
-!tsconfig.server.json
