@@ -1,168 +1,50 @@
-import { Check as CheckIcon } from '@mui/icons-material';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Typography,
-  CircularProgress,
-  Box,
-} from '@mui/material';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 
 import type { Host } from '../../types';
-import { listHosts } from '../api/hosts.client';
-import { useAsync } from '../hooks';
 import { logger } from '../utils/frontendLogger';
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (hosts: Host[]) => void;
+interface HostSelectorProps {
+  hosts: Host[];
+  selectedHost: Host | null;
+  onSelect: (host: Host) => void;
+  onDeselect: () => void;
   multiSelect?: boolean;
-  selectedHosts?: Host[];
 }
 
-export default function HostSelector({
-  open,
-  onClose,
+export function HostSelector({
+  hosts,
+  selectedHost,
   onSelect,
+  onDeselect,
   multiSelect = false,
-  selectedHosts = [],
-}: Props): JSX.Element | null {
-  const [selected, setSelected] = useState<Host[]>(selectedHosts);
-
-  const loadHostsList = useCallback(async (): Promise<Host[]> => {
-    logger.info('Loading hosts list');
-    const result = await listHosts();
-    if (!result.success) {
-      const error = result.error || 'Failed to load hosts';
-      logger.error('Failed to load hosts', { error });
-      throw new Error(error);
+}: HostSelectorProps): JSX.Element {
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const hostId = event.target.value;
+    if (hostId === '') {
+      onDeselect();
+      logger.info('Host deselected');
+      return;
     }
-    logger.info('Hosts loaded successfully', { count: result.data?.length });
-    return result.data || [];
-  }, []);
 
-  const {
-    data: hosts,
-    loading,
-    error,
-    execute: loadHosts,
-  } = useAsync(loadHostsList, { immediate: false });
-
-  useEffect(() => {
-    if (open) {
-      logger.info('Host selector opened, loading hosts');
-      void loadHosts();
+    const host = hosts.find(h => String(h.id) === hostId);
+    if (host) {
+      onSelect(host);
+      logger.info('Host selected', { hostId: String(host.id) });
     }
-  }, [open, loadHosts]);
-
-  const handleSelect = useCallback((host: Host): void => {
-    logger.info('Host selected', { hostId: host.id });
-    if (multiSelect) {
-      const isSelected = selected.some((h) => h.id === host.id);
-      if (isSelected) {
-        setSelected(selected.filter((h) => h.id !== host.id));
-      } else {
-        setSelected([...selected, host]);
-      }
-    } else {
-      setSelected([host]);
-      onSelect([host]);
-      onClose();
-    }
-  }, [multiSelect, selected, onSelect, onClose]);
-
-  // Don't render anything if not open
-  if (!open) {
-    return null;
-  }
+  }, [hosts, onSelect, onDeselect]);
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      aria-labelledby="host-selector-title"
+    <select
+      value={selectedHost?.id || ''}
+      onChange={handleChange}
+      className="host-selector"
     >
-      <DialogTitle id="host-selector-title">
-        Select Host{multiSelect ? 's' : ''}
-      </DialogTitle>
-      <DialogContent>
-        {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        )}
-
-        {error && (
-          <Typography color="error" gutterBottom>
-            {error}
-          </Typography>
-        )}
-
-        {hosts && hosts.length === 0 && (
-          <Typography color="text.secondary" sx={{ p: 2 }}>
-            No hosts available. Add a new host to get started.
-          </Typography>
-        )}
-
-        {hosts && hosts.length > 0 && (
-          <List>
-            {hosts.map((host: Host) => {
-              const isSelected = selected.some((h) => h.id === host.id);
-              return (
-                <ListItem
-                  key={host.id}
-                  button
-                  onClick={(): void => handleSelect(host)}
-                  selected={isSelected}
-                  sx={{
-                    borderRadius: 1,
-                    mb: 0.5,
-                    '&.Mui-selected': {
-                      backgroundColor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '&:hover': {
-                        backgroundColor: 'primary.dark',
-                      },
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={host.name}
-                    secondary={`${host.hostname}:${host.port}`}
-                    secondaryTypographyProps={{
-                      sx: {
-                        color: isSelected ? 'inherit' : 'text.secondary',
-                        opacity: isSelected ? 0.9 : 0.7,
-                      },
-                    }}
-                  />
-                  {isSelected && (
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        edge="end"
-                        sx={{
-                          color: isSelected ? 'primary.contrastText' : 'inherit',
-                        }}
-                      >
-                        <CheckIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  )}
-                </ListItem>
-              );
-            })}
-          </List>
-        )}
-      </DialogContent>
-    </Dialog>
+      <option value="">Select a host...</option>
+      {hosts.map(host => (
+        <option key={host.id} value={host.id}>
+          {host.name} ({host.hostname})
+        </option>
+      ))}
+    </select>
   );
 }

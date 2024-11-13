@@ -1,153 +1,78 @@
-import CodeIcon from '@mui/icons-material/Code';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import FolderIcon from '@mui/icons-material/Folder';
-import PackageIcon from '@mui/icons-material/Inventory';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import StorageIcon from '@mui/icons-material/Storage';
-import TerminalIcon from '@mui/icons-material/Terminal';
-import {
-  Box,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-  Divider,
-  Button,
-} from '@mui/material';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import HostSelector from './HostSelector';
-import SetupWizard from './SetupWizard';
+import { HostSelector } from './HostSelector';
 import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
-const menuItems = [
-  { icon: DashboardIcon, text: 'Dashboard', path: '/', shortcut: 'Alt+D' },
-  { icon: FolderIcon, text: 'Files', path: '/files', shortcut: 'Alt+F' },
-  { icon: PackageIcon, text: 'Packages', path: '/packages', shortcut: 'Alt+P' },
-  { icon: TerminalIcon, text: 'Terminal', path: '/terminal', shortcut: 'Alt+T' },
-  { icon: CodeIcon, text: 'Execute', path: '/execute', shortcut: 'Alt+E' },
-  { icon: LocalShippingIcon, text: 'Docker', path: '/docker', shortcut: 'Alt+K' },
-  { icon: StorageIcon, text: 'Storage', path: '/storage', shortcut: 'Alt+S' },
-];
-
-export default function Navigation(): JSX.Element {
+export function Navigation(): JSX.Element {
   const location = useLocation();
-  const { selectedHost, setSelectedHost, hasHosts } = useHost();
-  const [isHostSelectorOpen, setIsHostSelectorOpen] = useState(false);
-  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
+  const { hosts, selectedHost, selectHost } = useHost();
 
-  const handleHostSelect = useCallback((hosts: Host[]): void => {
-    logger.info('Host selected', { hostId: hosts[0]?.id });
-    if (hosts.length > 0) {
-      setSelectedHost(hosts[0]);
+  const handleSelect = useCallback((host: Host): void => {
+    selectHost(host);
+    logger.info('Host selected', { hostId: String(host.id) });
+  }, [selectHost]);
+
+  const handleDeselect = useCallback((): void => {
+    selectHost(null);
+    logger.info('Host deselected');
+  }, [selectHost]);
+
+  // Auto-select first host if none selected
+  React.useEffect(() => {
+    if (!selectedHost && hosts.length > 0) {
+      logger.info('Auto-selecting first host', { hostId: String(hosts[0].id) });
+      selectHost(hosts[0]);
     }
-    setIsHostSelectorOpen(false);
-  }, [setSelectedHost]);
-
-  const handleHostSelectorClose = useCallback((): void => {
-    logger.info('Host selector closed');
-    setIsHostSelectorOpen(false);
-  }, []);
-
-  const handleOpenSelector = useCallback((): void => {
-    if (!hasHosts) {
-      logger.info('No hosts available, opening setup wizard');
-      setIsSetupWizardOpen(true);
-    } else {
-      logger.info('Opening host selector');
-      setIsHostSelectorOpen(true);
-    }
-  }, [hasHosts]);
-
-  const handleSetupWizardClose = useCallback((): void => {
-    logger.info('Setup wizard closed');
-    setIsSetupWizardOpen(false);
-  }, []);
+  }, [hosts, selectedHost, selectHost]);
 
   return (
-    <Box sx={{ overflow: 'auto' }}>
-      <Box sx={{ p: 2 }}>
-        <Button
-          variant="contained"
-          onClick={handleOpenSelector}
-          fullWidth
-          color="primary"
+    <nav className="navigation">
+      <div className="nav-header">
+        <Link to="/" className="logo">
+          SSH Dashboard
+        </Link>
+        <HostSelector
+          hosts={hosts}
+          selectedHost={selectedHost}
+          onSelect={handleSelect}
+          onDeselect={handleDeselect}
+        />
+      </div>
+      <div className="nav-links">
+        <Link
+          to="/"
+          className={location.pathname === '/' ? 'active' : ''}
         >
-          {selectedHost ? `Connected: ${selectedHost.name}` : 'Select Host'}
-        </Button>
-      </Box>
-
-      <Divider />
-
-      <List sx={{ pt: 0 }}>
-        {menuItems.map(({ icon: Icon, text, path, shortcut }) => (
-          <ListItem key={text} disablePadding>
-            <ListItemButton
-              component={Link}
-              to={path}
-              replace
-              selected={location.pathname === path}
-              disabled={!selectedHost && path !== '/'}
-              sx={{
-                borderRadius: 1,
-                mx: 1,
-                my: 0.5,
-                '&.Mui-selected': {
-                  backgroundColor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '&:hover': {
-                    backgroundColor: 'primary.dark',
-                  },
-                  '& .MuiListItemIcon-root': {
-                    color: 'inherit',
-                  },
-                },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <Icon />
-              </ListItemIcon>
-              <ListItemText
-                primary={text}
-                secondary={
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      opacity: 0.7,
-                      display: { xs: 'none', sm: 'block' },
-                    }}
-                  >
-                    {shortcut}
-                  </Typography>
-                }
-                secondaryTypographyProps={{
-                  sx: {
-                    color: 'inherit',
-                    opacity: location.pathname === path ? 0.9 : 0.7,
-                  },
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-
-      <HostSelector
-        open={isHostSelectorOpen}
-        onClose={handleHostSelectorClose}
-        onSelect={handleHostSelect}
-        selectedHosts={selectedHost ? [selectedHost] : []}
-      />
-
-      <SetupWizard
-        open={isSetupWizardOpen}
-        onClose={handleSetupWizardClose}
-      />
-    </Box>
+          Dashboard
+        </Link>
+        <Link
+          to="/files"
+          className={location.pathname === '/files' ? 'active' : ''}
+        >
+          Files
+        </Link>
+        <Link
+          to="/docker"
+          className={location.pathname === '/docker' ? 'active' : ''}
+        >
+          Docker
+        </Link>
+        <Link
+          to="/packages"
+          className={location.pathname === '/packages' ? 'active' : ''}
+        >
+          Packages
+        </Link>
+        <Link
+          to="/terminal"
+          className={location.pathname === '/terminal' ? 'active' : ''}
+        >
+          Terminal
+        </Link>
+      </div>
+    </nav>
   );
 }
