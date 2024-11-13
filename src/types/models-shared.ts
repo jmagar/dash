@@ -53,6 +53,7 @@ export interface User {
 export interface Package {
   name: string;
   version: string;
+  description?: string;
   installed: boolean;
   updateAvailable?: boolean;
 }

@@ -19,13 +19,13 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
+import type { Package } from '../../types';
 import {
   listInstalledPackages,
   installPackage,
   uninstallPackage,
   updatePackage,
   searchPackages,
-  Package,
 } from '../api';
 import { useAsync } from '../hooks';
 import LoadingScreen from './LoadingScreen';
