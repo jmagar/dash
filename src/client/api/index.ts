@@ -43,6 +43,8 @@ export {
   deleteHost,
   testConnection,
   getHostStatus,
+  connectHost,
+  disconnectHost,
 } from './hosts.client';
 
 // Package Manager API
@@ -52,6 +54,7 @@ export {
   uninstallPackage,
   updatePackage,
   getPackageInfo,
+  listInstalledPackages,
 } from './packageManager.client';
 
 // Remote Execution API

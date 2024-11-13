@@ -30,6 +30,17 @@ api.interceptors.response.use(
   },
 );
 
+export async function listInstalledPackages(hostId: number): Promise<ApiResult<Package[]>> {
+  try {
+    logger.info('Listing installed packages', { hostId: String(hostId) });
+    const response = await api.get(API_ENDPOINTS.PACKAGES.LIST(hostId));
+    logger.info('Installed packages listed successfully', { hostId: String(hostId), count: response.data?.data?.length });
+    return response.data;
+  } catch (error) {
+    return handleApiError<Package[]>(error, 'listInstalledPackages');
+  }
+}
+
 export async function searchPackages(
   hostId: number,
   query: string,

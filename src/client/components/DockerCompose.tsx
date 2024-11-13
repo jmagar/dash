@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { createStack, updateStackComposeFile, getStackComposeFile } from '../api';
 import CodeEditor from './CodeEditor';
 import { useAsync } from '../hooks';
+import { logger } from '../utils/frontendLogger';
 
 interface Props {
   stackName: string;
@@ -26,11 +27,20 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
 
   const loadComposeFile = useCallback(async () => {
     if (!stackName) return '';
-    const result = await getStackComposeFile(stackName);
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to load compose file');
+
+    try {
+      logger.info('Loading compose file', { stackName });
+      const result = await getStackComposeFile(stackName);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load compose file');
+      }
+      logger.info('Compose file loaded successfully', { stackName });
+      return result.data || '';
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load compose file';
+      logger.error('Error loading compose file:', { error: errorMessage, stackName });
+      throw err;
     }
-    return result.data || '';
   }, [stackName]);
 
   const {
@@ -48,24 +58,43 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
           setComposeFile(content);
         }
       });
+    } else if (open) {
+      // Clear compose file when creating new stack
+      setComposeFile('');
     }
   }, [open, stackName, loadFile]);
 
   const handleSave = async (): Promise<void> => {
     try {
       setError(null);
-      const result = stackName
-        ? await updateStackComposeFile(stackName, composeFile)
-        : await createStack(stackName, composeFile);
+      if (!composeFile.trim()) {
+        setError('Compose file cannot be empty');
+        return;
+      }
+
+      let result;
+      if (stackName) {
+        logger.info('Updating stack compose file', { stackName });
+        result = await updateStackComposeFile(stackName, composeFile);
+      } else {
+        logger.info('Creating new stack');
+        result = await createStack('new-stack', composeFile);
+      }
 
       if (result.success) {
+        logger.info(stackName ? 'Stack updated successfully' : 'Stack created successfully',
+          stackName ? { stackName } : undefined);
         onSave();
         onClose();
       } else {
-        setError(result.error || 'Failed to save compose file');
+        const errorMessage = result.error || 'Failed to save compose file';
+        logger.error('Error saving compose file:', { error: errorMessage, stackName });
+        setError(errorMessage);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      logger.error('Error in compose file operation:', { error: errorMessage, stackName });
+      setError(errorMessage);
     }
   };
 
@@ -97,7 +126,11 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={(): void => void handleSave()} variant="contained">
+        <Button
+          onClick={(): void => void handleSave()}
+          variant="contained"
+          disabled={!composeFile.trim()}
+        >
           Save
         </Button>
       </DialogActions>

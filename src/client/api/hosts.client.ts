@@ -129,7 +129,7 @@ export async function deleteHost(id: number): Promise<ApiResult<void>> {
 export async function testConnection(id: number): Promise<ApiResult<void>> {
   try {
     logger.info('Testing host connection', { hostId: String(id) });
-    const response = await api.post(API_ENDPOINTS.HOSTS.TEST_CONNECTION);
+    const response = await api.post(API_ENDPOINTS.HOSTS.TEST);
     logger.info('Host connection test successful', { hostId: String(id) });
     return response.data;
   } catch (error) {
@@ -145,6 +145,28 @@ export async function getHostStatus(id: number): Promise<ApiResult<SystemStats>>
     return response.data;
   } catch (error) {
     return handleApiError<SystemStats>(error, 'getHostStatus');
+  }
+}
+
+export async function connectHost(id: number): Promise<ApiResult<void>> {
+  try {
+    logger.info('Connecting to host', { hostId: String(id) });
+    const response = await api.post(API_ENDPOINTS.HOSTS.CONNECT(id));
+    logger.info('Host connection successful', { hostId: String(id) });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'connectHost');
+  }
+}
+
+export async function disconnectHost(id: number): Promise<ApiResult<void>> {
+  try {
+    logger.info('Disconnecting from host', { hostId: String(id) });
+    const response = await api.post(API_ENDPOINTS.HOSTS.DISCONNECT(id));
+    logger.info('Host disconnection successful', { hostId: String(id) });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'disconnectHost');
   }
 }
 
