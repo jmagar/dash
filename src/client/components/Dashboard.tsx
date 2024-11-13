@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import type { SystemStats } from '../../types';
-import { getHostStatus, testConnection } from '../api/hosts.client';
+import { getHostStatus, testConnection } from '../api';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
@@ -28,6 +28,7 @@ export default function Dashboard({ hostId }: DashboardProps): JSX.Element {
           setStats(result.data);
         } else {
           setError(result.error || 'Failed to fetch host status');
+          logger.error('Failed to fetch host status:', { error: result.error });
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -54,6 +55,9 @@ export default function Dashboard({ hostId }: DashboardProps): JSX.Element {
       const result = await testConnection(effectiveHostId);
       if (!result.success) {
         setError(result.error || 'Connection test failed');
+        logger.error('Connection test failed:', { error: result.error });
+      } else {
+        logger.info('Connection test successful');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';

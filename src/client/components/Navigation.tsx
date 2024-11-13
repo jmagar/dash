@@ -6,27 +6,42 @@ import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
-export function Navigation(): JSX.Element {
+export default function Navigation(): JSX.Element {
   const location = useLocation();
   const { hosts, selectedHost, selectHost } = useHost();
 
   const handleSelect = useCallback((selectedHosts: Host[]): void => {
-    if (selectedHosts.length > 0) {
-      selectHost(selectedHosts[0]);
-      logger.info('Host selected', { hostId: String(selectedHosts[0].id) });
+    try {
+      if (selectedHosts.length > 0) {
+        selectHost(selectedHosts[0]);
+        logger.info('Host selected in navigation', { hostId: String(selectedHosts[0].id) });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to select host';
+      logger.error('Error selecting host:', { error: errorMessage });
     }
   }, [selectHost]);
 
   const handleDeselect = useCallback((): void => {
-    selectHost(null);
-    logger.info('Host deselected');
+    try {
+      selectHost(null);
+      logger.info('Host deselected in navigation');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to deselect host';
+      logger.error('Error deselecting host:', { error: errorMessage });
+    }
   }, [selectHost]);
 
   // Auto-select first host if none selected
   useEffect(() => {
     if (!selectedHost && hosts.length > 0) {
-      logger.info('Auto-selecting first host', { hostId: String(hosts[0].id) });
-      selectHost(hosts[0]);
+      try {
+        logger.info('Auto-selecting first host', { hostId: String(hosts[0].id) });
+        selectHost(hosts[0]);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to auto-select host';
+        logger.error('Error auto-selecting host:', { error: errorMessage });
+      }
     }
   }, [hosts, selectedHost, selectHost]);
 

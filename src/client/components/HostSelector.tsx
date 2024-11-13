@@ -33,6 +33,10 @@ export default function HostSelector({
     }
   }, [hosts, onSelect, onClose]);
 
+  if (!open) {
+    return <></>;
+  }
+
   return (
     <select
       value=""

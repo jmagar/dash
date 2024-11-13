@@ -31,6 +31,7 @@ import { useAsync, useDebounce, useKeyPress } from '../hooks';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
+import { logger } from '../utils/frontendLogger';
 
 export default function FileExplorer(): JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>('/');
@@ -47,6 +48,7 @@ export default function FileExplorer(): JSX.Element {
     if (!selectedHost) return [];
     const response = await listFiles(selectedHost.id, currentPath);
     if (!response.success) {
+      logger.error('Failed to load files:', { error: response.error });
       throw new Error(response.error || 'Failed to load files');
     }
     return response.data || [];
@@ -69,17 +71,20 @@ export default function FileExplorer(): JSX.Element {
   const handleHostSelect = (selectedHosts: Host[]): void => {
     if (selectedHosts.length > 0) {
       setSelectedHost(selectedHosts[0]);
+      logger.info('Host selected for file explorer', { hostId: String(selectedHosts[0].id) });
     }
     setHostSelectorOpen(false);
   };
 
   const handleNavigate = (path: string): void => {
     setCurrentPath(path);
+    logger.info('Navigated to path', { path });
   };
 
   const handleNavigateUp = (): void => {
     const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
     setCurrentPath(parentPath);
+    logger.info('Navigated up to path', { path: parentPath });
   };
 
   const handleCreateFolder = async (): Promise<void> => {
@@ -89,14 +94,18 @@ export default function FileExplorer(): JSX.Element {
       const newPath = `${currentPath}/${newFolderName}`.replace(/\/+/g, '/');
       const result = await createDirectory(selectedHost.id, newPath);
       if (result.success) {
+        logger.info('Created new folder', { path: newPath });
         setCreateFolderDialogOpen(false);
         setNewFolderName('');
         void loadFiles();
       } else {
+        logger.error('Failed to create folder:', { error: result.error });
         setError(result.error || 'Failed to create folder');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create folder');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create folder';
+      logger.error('Error creating folder:', { error: errorMessage });
+      setError(errorMessage);
     }
   };
 
@@ -106,12 +115,16 @@ export default function FileExplorer(): JSX.Element {
     try {
       const result = await deleteFile(selectedHost.id, path);
       if (result.success) {
+        logger.info('Deleted file', { path });
         void loadFiles();
       } else {
+        logger.error('Failed to delete file:', { error: result.error });
         setError(result.error || 'Failed to delete file');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete file');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete file';
+      logger.error('Error deleting file:', { error: errorMessage });
+      setError(errorMessage);
     }
   };
 
