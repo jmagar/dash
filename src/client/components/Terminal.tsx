@@ -1,9 +1,9 @@
 import { Box } from '@mui/material';
+import { Terminal as XTerm } from '@xterm/xterm';
 import React, { useEffect, useRef } from 'react';
-import { Terminal as XTerm } from 'xterm';
 
 import type { Host } from '../../types';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 interface Props {
   host: Host;
