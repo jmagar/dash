@@ -56,7 +56,6 @@ export default function Navigation(): JSX.Element {
           open={true}
           onClose={handleDeselect}
           onSelect={handleSelect}
-          multiSelect={false}
         />
       </div>
       <div className="nav-links">

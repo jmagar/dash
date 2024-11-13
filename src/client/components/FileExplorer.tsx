@@ -148,7 +148,6 @@ export default function FileExplorer(): JSX.Element {
           open={hostSelectorOpen}
           onClose={(): void => setHostSelectorOpen(false)}
           onSelect={handleHostSelect}
-          multiSelect={false}
         />
       </Box>
     );
