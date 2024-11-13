@@ -25,9 +25,9 @@ RUN npm config set registry https://registry.npmjs.org/ && \
 # Copy package files first to leverage layer caching
 COPY package*.json ./
 
-# Install ALL dependencies (including devDependencies)
+# Install ALL dependencies (including devDependencies) and global packages
 RUN npm install --legacy-peer-deps --no-optional && \
-    npm install -g typescript && \
+    npm install -g typescript rimraf && \
     npm config set legacy-peer-deps true
 
 # Copy configuration files
@@ -55,7 +55,7 @@ RUN npm install --save-dev \
     eslint-plugin-react-hooks
 
 # Clean and build
-RUN npm run clean && \
+RUN rimraf dist build && \
     SKIP_PREFLIGHT_CHECK=true npm run build && \
     npm run build:server
 
