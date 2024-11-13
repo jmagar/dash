@@ -62,7 +62,7 @@ function AppContent(): JSX.Element {
 
   // Show main app with routes when host is selected
   logger.info('Host selected, showing main app', {
-    hostId: selectedHost.id,
+    hostId: String(selectedHost.id),
     hostname: selectedHost.hostname,
   });
 

@@ -9,8 +9,8 @@ export interface LogMetadata {
   timestamp?: string;
   context?: string;
   requestId?: string;
-  userId?: string;
-  hostId?: string;
+  userId?: string | number;
+  hostId?: string | number;
   component?: string;
 }
 
@@ -30,8 +30,8 @@ export interface LogOptions {
 export interface LogContext {
   component: string;
   requestId?: string;
-  userId?: string;
-  hostId?: string;
+  userId?: string | number;
+  hostId?: string | number;
 }
 
 /**
