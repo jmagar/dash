@@ -17,14 +17,8 @@ ENV REACT_APP_DISABLE_AUTH=true
 ENV REACT_APP_WDS_SOCKET_PORT=0
 ENV BABEL_ENV=production
 
-# Configure npm to use a more reliable registry and add retry logic
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm config set fetch-retries 5 && \
-    npm config set fetch-retry-mintimeout 20000 && \
-    npm config set fetch-retry-maxtimeout 120000
-
-# Copy package files and Babel configs first
-COPY package*.json .babelrc babel.config.js ./
+# Copy npm and Babel configs first
+COPY .npmrc package*.json .babelrc babel.config.js ./
 
 # Install Babel and its plugins first
 RUN npm install --no-package-lock \
@@ -37,9 +31,8 @@ RUN npm install --no-package-lock \
     babel-preset-react-app@10.0.1
 
 # Now install all dependencies
-RUN npm install --legacy-peer-deps && \
-    npm install -g typescript rimraf && \
-    npm config set legacy-peer-deps true
+RUN npm install && \
+    npm install -g typescript rimraf
 
 # Verify critical dependencies are installed correctly
 RUN echo "Verifying Babel dependencies..." && \
@@ -81,16 +74,12 @@ RUN apk add --no-cache openssh-client
 ENV NODE_ENV=production
 ENV REACT_APP_DISABLE_AUTH=true
 
-# Configure npm for production install
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm config set fetch-retries 5 && \
-    npm config set fetch-retry-mintimeout 20000 && \
-    npm config set fetch-retry-maxtimeout 120000
+# Copy npm config and package files
+COPY .npmrc package*.json ./
 
-# Copy package files and install only production dependencies
-COPY package*.json ./
-RUN npm ci --only=production --legacy-peer-deps --no-optional || \
-    npm install --only=production --legacy-peer-deps --no-optional
+# Install only production dependencies
+RUN npm ci --only=production --no-optional || \
+    npm install --only=production --no-optional
 
 # Copy built files
 COPY --from=builder /app/build ./build
