@@ -5,52 +5,85 @@ yarn-debug.log
 yarn-error.log
 
 # Build outputs
-build
 dist
+build
+coverage
 
-# Version control
+# Development files
 .git
 .gitignore
-
-# Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.log
+logs
+*.md
+!README.md
 
-# IDE files
+# Test files
+__tests__
+*.test.*
+*.spec.*
+test
+tests
+
+# IDE and editor files
 .idea
 .vscode
 *.swp
 *.swo
+.DS_Store
 
-# Test files
-coverage
-__tests__
-*.test.ts
-*.test.tsx
-
-# Logs
-logs
-*.log
+# Cache directories
+.npm
+.eslintcache
+.stylelintcache
+.cache
 
 # Temporary files
-.DS_Store
+tmp
+temp
 *.tmp
-*.temp
 
 # Docker files
 Dockerfile*
 docker-compose*
 .docker
 
-# Documentation
-README.md
-docs
-*.md
+# Development configuration
+.husky
+.github
+.circleci
+.travis.yml
+.gitlab-ci.yml
 
-# Development configs
-.editorconfig
-.eslintcache
-.prettierignore
-jest.config.*
-tsconfig.tsbuildinfo
+# Monitoring and debugging
+monitoring
+*.heapsnapshot
+*.cpuprofile
+
+# Database files
+*.sqlite
+*.db
+
+# SSH keys and certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Other unnecessary files
+.prettierrc*
+.eslintrc*
+*.config.js
+!babel.config.js
+!jest.config.js
+tsconfig*.json
+!tsconfig.json
+!tsconfig.server.json

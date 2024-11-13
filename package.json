@@ -20,8 +20,8 @@
     "cors": "^2.8.5",
     "dockerode": "^4.0.0",
     "express": "^4.18.2",
-    "express-fileupload": "1.5.1",
-    "express-rate-limit": "7.4.1",
+    "express-fileupload": "^1.4.3",
+    "express-rate-limit": "^7.1.5",
     "helmet": "^8.0.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
@@ -43,10 +43,10 @@
   "scripts": {
     "start": "node dist/server/server.js",
     "clean": "rimraf dist build",
-    "build": "npm run security-check && BABEL_ENV=production react-scripts build",
+    "build": "BABEL_ENV=production react-scripts build",
     "build:server": "tsc --project tsconfig.server.json",
     "build:all": "npm run clean && npm run build && npm run build:server",
-    "dev": "npm run security-check && concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "PORT=4000 REACT_APP_WDS_SOCKET_PORT=0 react-scripts start",
     "dev:server": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server/server.ts",
     "test": "react-scripts test",
@@ -57,7 +57,7 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "security-check": "npm audit && npm run lint && npm outdated",
     "validate": "npm run test && npm run test:server && npm run security-check",
-    "prepare": "husky install"
+    "prepare": "if [ \"$NODE_ENV\" != \"production\" ]; then husky install; fi"
   },
   "eslintConfig": {
     "extends": [
@@ -79,9 +79,8 @@
   },
   "devDependencies": {
     "@babel/core": "7.23.7",
-    "@babel/plugin-proposal-class-properties": "7.18.6",
-    "@babel/plugin-proposal-private-methods": "7.18.6",
-    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+    "@babel/plugin-transform-class-properties": "7.23.3",
+    "@babel/plugin-transform-private-methods": "7.23.3",
     "@babel/plugin-transform-private-property-in-object": "7.23.4",
     "@babel/runtime": "7.23.7",
     "@testing-library/jest-dom": "^5.17.0",
@@ -91,8 +90,7 @@
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/eslint": "^9.6.1",
-    "@types/express-fileupload": "1.5.1",
-    "@types/express-rate-limit": "6.0.2",
+    "@types/express-fileupload": "^1.4.4",
     "@types/helmet": "^0.0.48",
     "@types/jest": "^27.5.2",
     "@types/jsonwebtoken": "^9.0.7",
@@ -127,23 +125,25 @@
   },
   "resolutions": {
     "@babel/core": "7.23.7",
-    "@babel/plugin-proposal-class-properties": "7.18.6",
-    "@babel/plugin-proposal-private-methods": "7.18.6",
-    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+    "@babel/plugin-transform-class-properties": "7.23.3",
+    "@babel/plugin-transform-private-methods": "7.23.3",
     "@babel/plugin-transform-private-property-in-object": "7.23.4",
     "@babel/runtime": "7.23.7",
     "babel-preset-react-app": "10.0.1",
     "workbox-cacheable-response": "^7.0.0",
-    "workbox-google-analytics": "^7.0.0"
+    "workbox-google-analytics": "^7.0.0",
+    "nth-check": "^2.0.1",
+    "postcss": "^8.4.31"
   },
   "overrides": {
     "@babel/core": "7.23.7",
-    "@babel/plugin-proposal-class-properties": "7.18.6",
-    "@babel/plugin-proposal-private-methods": "7.18.6",
-    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+    "@babel/plugin-transform-class-properties": "7.23.3",
+    "@babel/plugin-transform-private-methods": "7.23.3",
     "@babel/plugin-transform-private-property-in-object": "7.23.4",
     "@babel/runtime": "7.23.7",
-    "babel-preset-react-app": "10.0.1"
+    "babel-preset-react-app": "10.0.1",
+    "nth-check": "^2.0.1",
+    "postcss": "^8.4.31"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

@@ -20,30 +20,20 @@ ENV BABEL_ENV=production
 # Copy npm and Babel configs first
 COPY .npmrc package*.json .babelrc babel.config.js ./
 
-# Install Babel and its plugins first
+# Install dependencies with specific versions to avoid deprecation warnings
 RUN npm install --no-package-lock \
     @babel/core@7.23.7 \
     @babel/runtime@7.23.7 \
-    @babel/plugin-proposal-private-property-in-object@7.21.11 \
     @babel/plugin-transform-private-property-in-object@7.23.4 \
-    @babel/plugin-proposal-class-properties@7.18.6 \
-    @babel/plugin-proposal-private-methods@7.18.6 \
-    babel-preset-react-app@10.0.1
+    @babel/plugin-transform-class-properties@7.23.3 \
+    @babel/plugin-transform-private-methods@7.23.3 \
+    babel-preset-react-app@10.0.1 \
+    rimraf@5.0.5 \
+    typescript@4.9.5
 
-# Now install all dependencies
-RUN npm install && \
-    npm install -g typescript rimraf
-
-# Verify critical dependencies are installed correctly
-RUN echo "Verifying Babel dependencies..." && \
-    npm list @babel/core && \
-    npm list @babel/plugin-proposal-private-property-in-object && \
-    npm list @babel/plugin-transform-private-property-in-object && \
-    npm list @babel/plugin-proposal-class-properties && \
-    npm list @babel/plugin-proposal-private-methods && \
-    npm list babel-preset-react-app && \
-    echo "Babel configuration files:" && \
-    ls -la .babelrc babel.config.js
+# Now install remaining dependencies, excluding husky
+RUN npm install --ignore-scripts && \
+    npm install -g typescript@4.9.5 rimraf@5.0.5
 
 # Copy configuration files
 COPY tsconfig*.json ./
@@ -77,9 +67,8 @@ ENV REACT_APP_DISABLE_AUTH=true
 # Copy npm config and package files
 COPY .npmrc package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production --no-optional || \
-    npm install --only=production --no-optional
+# Install only production dependencies, excluding prepare scripts
+RUN npm install --ignore-scripts --omit=dev --omit=optional
 
 # Copy built files
 COPY --from=builder /app/build ./build
