@@ -2,34 +2,49 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
+import type { User, ApiResponse } from '../../types/models-shared';
 import { verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    username: string;
-    role: string;
-  };
+export interface AuthenticatedRequest extends Request {
+  user?: User;
+}
+
+function validateToken(token: unknown): token is string {
+  return typeof token === 'string' && token.trim().length > 0;
+}
+
+function validateDecodedToken(decoded: unknown): decoded is User {
+  return typeof decoded === 'object' &&
+    decoded !== null &&
+    typeof (decoded as User).id !== 'undefined' &&
+    typeof (decoded as User).username === 'string' &&
+    typeof (decoded as User).role === 'string';
 }
 
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-  if (!token) {
-    const error = createApiError('No token provided', 401);
-    logger.warn('Authentication failed: No token provided');
-    res.status(401).json({
+  if (!validateToken(token)) {
+    const error = createApiError('No valid token provided', 401);
+    logger.warn('Authentication failed: No valid token provided');
+    const response: ApiResponse<void> = {
       success: false,
       error: error.message,
-      status: error.status,
-    });
+    };
+    res.status(401).json(response);
     return;
   }
 
   try {
     const decoded = verifyToken(token);
+    if (!validateDecodedToken(decoded)) {
+      throw new Error('Invalid token format');
+    }
+
     req.user = decoded;
+    logger.info('Authentication successful', { userId: String(decoded.id) });
     next();
   } catch (error) {
     const metadata: LogMetadata = {
@@ -42,11 +57,11 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
       401,
       metadata,
     );
-    res.status(401).json({
+    const response: ApiResponse<void> = {
       success: false,
       error: apiError.message,
-      status: apiError.status,
-    });
+    };
+    res.status(401).json(response);
   }
 }
 
@@ -56,11 +71,11 @@ export function requireRole(roles: string[]) {
       if (!req.user) {
         const error = createApiError('Authentication required', 401);
         logger.warn('Role check failed: No user in request');
-        res.status(401).json({
+        const response: ApiResponse<void> = {
           success: false,
           error: error.message,
-          status: error.status,
-        });
+        };
+        res.status(401).json(response);
         return;
       }
 
@@ -68,23 +83,30 @@ export function requireRole(roles: string[]) {
         const metadata: LogMetadata = {
           requiredRoles: roles,
           userRole: req.user.role,
+          userId: String(req.user.id),
         };
         const error = createApiError('Insufficient permissions', 403, metadata);
         logger.warn('Role check failed: Insufficient permissions', metadata);
-        res.status(403).json({
+        const response: ApiResponse<void> = {
           success: false,
           error: error.message,
-          status: error.status,
-        });
+        };
+        res.status(403).json(response);
         return;
       }
 
+      logger.info('Role check passed', {
+        userId: String(req.user.id),
+        role: req.user.role,
+        requiredRoles: roles,
+      });
       next();
     } catch (error) {
       const metadata: LogMetadata = {
         error: error instanceof Error ? error.message : 'Unknown error',
         roles,
         userRole: req.user?.role,
+        userId: req.user ? String(req.user.id) : undefined,
       };
       logger.error('Role check error:', metadata);
 
@@ -93,11 +115,11 @@ export function requireRole(roles: string[]) {
         500,
         metadata,
       );
-      res.status(500).json({
+      const response: ApiResponse<void> = {
         success: false,
         error: apiError.message,
-        status: apiError.status,
-      });
+      };
+      res.status(500).json(response);
     }
   };
 }
