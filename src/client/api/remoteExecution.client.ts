@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import type { Command, CommandResult, ApiResult } from '../../types';
+import type { ApiResult } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
@@ -30,101 +30,21 @@ api.interceptors.response.use(
   },
 );
 
-export async function executeCommand(
-  hostId: number,
-  command: Command,
-): Promise<ApiResult<CommandResult>> {
-  try {
-    logger.info('Executing command', {
-      hostId,
-      command: command.command,
-      workingDirectory: command.workingDirectory,
-    });
-    const response = await api.post(
-      API_ENDPOINTS.EXECUTE.COMMAND(hostId),
-      command,
-    );
-    logger.info('Command executed successfully', {
-      hostId,
-      command: command.command,
-      exitCode: response.data?.data?.exitCode,
-    });
-    return response.data;
-  } catch (error) {
-    return handleApiError<CommandResult>(error, 'executeCommand');
-  }
-}
-
 export async function executeScript(
   hostId: number,
   script: string,
   args?: string[],
-): Promise<ApiResult<CommandResult>> {
+): Promise<ApiResult<string>> {
   try {
-    logger.info('Executing script', { hostId, args });
+    logger.info('Executing script', { hostId: String(hostId), args });
     const response = await api.post(API_ENDPOINTS.EXECUTE.SCRIPT(hostId), {
       script,
       args,
     });
-    logger.info('Script executed successfully', {
-      hostId,
-      exitCode: response.data?.data?.exitCode,
-    });
+    logger.info('Script executed successfully', { hostId: String(hostId) });
     return response.data;
   } catch (error) {
-    return handleApiError<CommandResult>(error, 'executeScript');
-  }
-}
-
-export async function getCommandHistory(hostId: number): Promise<ApiResult<Command[]>> {
-  try {
-    logger.info('Fetching command history', { hostId });
-    const response = await api.get(API_ENDPOINTS.EXECUTE.HISTORY(hostId));
-    logger.info('Command history fetched successfully', {
-      hostId,
-      count: response.data?.data?.length,
-    });
-    return response.data;
-  } catch (error) {
-    return handleApiError<Command[]>(error, 'getCommandHistory');
-  }
-}
-
-export async function getSavedCommands(hostId: number): Promise<ApiResult<Command[]>> {
-  try {
-    logger.info('Fetching saved commands', { hostId });
-    const response = await api.get(API_ENDPOINTS.EXECUTE.SAVED(hostId));
-    logger.info('Saved commands fetched successfully', {
-      hostId,
-      count: response.data?.data?.length,
-    });
-    return response.data;
-  } catch (error) {
-    return handleApiError<Command[]>(error, 'getSavedCommands');
-  }
-}
-
-export async function saveCommand(
-  hostId: number,
-  command: Command,
-): Promise<ApiResult<Command>> {
-  try {
-    logger.info('Saving command', {
-      hostId,
-      command: command.command,
-      workingDirectory: command.workingDirectory,
-    });
-    const response = await api.post(
-      API_ENDPOINTS.EXECUTE.SAVED(hostId),
-      command,
-    );
-    logger.info('Command saved successfully', {
-      hostId,
-      command: command.command,
-    });
-    return response.data;
-  } catch (error) {
-    return handleApiError<Command>(error, 'saveCommand');
+    return handleApiError<string>(error, 'executeScript');
   }
 }
 
@@ -133,11 +53,11 @@ export async function deleteSavedCommand(
   commandId: string,
 ): Promise<ApiResult<void>> {
   try {
-    logger.info('Deleting saved command', { hostId, commandId });
+    logger.info('Deleting saved command', { hostId: String(hostId), commandId });
     const response = await api.delete(
-      API_ENDPOINTS.EXECUTE.SAVED_COMMAND(hostId, commandId),
+      API_ENDPOINTS.EXECUTE.DELETE_COMMAND(hostId, commandId),
     );
-    logger.info('Saved command deleted successfully', { hostId, commandId });
+    logger.info('Saved command deleted successfully', { hostId: String(hostId), commandId });
     return response.data;
   } catch (error) {
     return handleApiError(error, 'deleteSavedCommand');
