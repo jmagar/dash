@@ -23,8 +23,8 @@ RUN npm config set registry https://registry.npmjs.org/ && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000
 
-# Copy package files and Babel config first
-COPY package*.json .babelrc ./
+# Copy package files and Babel configs first
+COPY package*.json .babelrc babel.config.js ./
 
 # Install Babel and its plugins first
 RUN npm install --no-package-lock \
@@ -48,7 +48,9 @@ RUN echo "Verifying Babel dependencies..." && \
     npm list @babel/plugin-transform-private-property-in-object && \
     npm list @babel/plugin-proposal-class-properties && \
     npm list @babel/plugin-proposal-private-methods && \
-    npm list babel-preset-react-app
+    npm list babel-preset-react-app && \
+    echo "Babel configuration files:" && \
+    ls -la .babelrc babel.config.js
 
 # Copy configuration files
 COPY tsconfig*.json ./
