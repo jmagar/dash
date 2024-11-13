@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import type { ApiResult, Container, ContainerStats } from '../../types';
+import type { ApiResult, Container, ContainerStats, Stack } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
@@ -107,14 +107,14 @@ export async function getContainerStats(id: string): Promise<ApiResult<Container
   }
 }
 
-export async function getStacks(): Promise<ApiResult<string[]>> {
+export async function getStacks(): Promise<ApiResult<Stack[]>> {
   try {
     logger.info('Fetching stacks');
-    const response = await api.get(API_ENDPOINTS.DOCKER.STACKS);
+    const response = await api.get<ApiResult<Stack[]>>(API_ENDPOINTS.DOCKER.STACKS);
     logger.info('Stacks fetched successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
-    return handleApiError<string[]>(error, 'getStacks');
+    return handleApiError<Stack[]>(error, 'getStacks');
   }
 }
 
