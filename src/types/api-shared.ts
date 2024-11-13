@@ -1,9 +1,13 @@
 import type { AxiosError } from 'axios';
 
+import type { LogMetadata } from './logger';
+
 export interface ApiResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  status?: number;
+  metadata?: LogMetadata;
 }
 
 export interface Command {
@@ -57,6 +61,8 @@ export interface ExecutionResult {
 interface ApiErrorResponse {
   error?: string;
   message?: string;
+  status?: number;
+  metadata?: LogMetadata;
 }
 
 export const API_ENDPOINTS = {
@@ -120,6 +126,9 @@ export const API_ENDPOINTS = {
   },
 } as const;
 
+/**
+ * Client-side API error handler
+ */
 export function handleApiError<T>(error: unknown, context: string): ApiResult<T> {
   if (error && typeof error === 'object' && 'isAxiosError' in error) {
     const axiosError = error as AxiosError<ApiErrorResponse>;
@@ -131,6 +140,8 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
     return {
       success: false,
       error: errorMessage,
+      status: axiosError.response?.status,
+      metadata: axiosError.response?.data?.metadata,
     };
   }
 
@@ -139,6 +150,7 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
     return {
       success: false,
       error: error.message,
+      status: 500,
     };
   }
 
@@ -146,5 +158,6 @@ export function handleApiError<T>(error: unknown, context: string): ApiResult<T>
   return {
     success: false,
     error: 'An unexpected error occurred',
+    status: 500,
   };
 }

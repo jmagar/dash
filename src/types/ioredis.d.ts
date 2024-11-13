@@ -33,11 +33,24 @@ declare module 'ioredis' {
         hmset(key: string, ...args: (string | number | Buffer)[]): Pipeline;
         hset(key: string, field: string, value: string | number | Buffer): Pipeline;
         expire(key: string, seconds: number): Pipeline;
+        lpush(key: string, ...values: string[]): Pipeline;
+        lrange(key: string, start: number, stop: number): Pipeline;
         [command: string]: (...args: unknown[]) => Pipeline;
     }
 
     interface Multi extends Pipeline {
         exec(): Promise<Array<[Error | null, unknown]>>;
+    }
+
+    interface RedisEvents {
+        connect: () => void;
+        ready: () => void;
+        error: (error: Error) => void;
+        close: () => void;
+        reconnecting: (params: { delay: number; attempt: number }) => void;
+        end: () => void;
+        warning: (warning: string) => void;
+        beforeRequest: () => void;
     }
 
     class Redis extends EventEmitter {
@@ -46,9 +59,12 @@ declare module 'ioredis' {
 
       connect(): Promise<void>;
       disconnect(): void;
+      quit(): Promise<'OK'>;
+      ping(): Promise<'PONG'>;
+      info(section?: string): Promise<string>;
 
       get(key: string): Promise<string | null>;
-      set(key: string, value: string | number | Buffer, ...args: unknown[]): Promise<'OK' | null>;
+      set(key: string, value: string | number | Buffer, mode?: string, duration?: number): Promise<'OK' | null>;
       del(...keys: string[]): Promise<number>;
 
       hdel(key: string, ...fields: string[]): Promise<number>;
@@ -58,12 +74,16 @@ declare module 'ioredis' {
       hset(key: string, field: string, value: string | number | Buffer): Promise<number>;
 
       expire(key: string, seconds: number): Promise<number>;
+      lpush(key: string, ...values: string[]): Promise<number>;
+      lrange(key: string, start: number, stop: number): Promise<string[]>;
 
       pipeline(): Pipeline;
       multi(): Multi;
 
-      on(event: string, listener: (...args: unknown[]) => void): this;
-      once(event: string, listener: (...args: unknown[]) => void): this;
+      on<K extends keyof RedisEvents>(event: K, listener: RedisEvents[K]): this;
+      once<K extends keyof RedisEvents>(event: K, listener: RedisEvents[K]): this;
+      off<K extends keyof RedisEvents>(event: K, listener: RedisEvents[K]): this;
+      removeListener<K extends keyof RedisEvents>(event: K, listener: RedisEvents[K]): this;
 
       status: string;
         [command: string]: (...args: unknown[]) => Promise<unknown>;

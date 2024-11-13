@@ -3,7 +3,7 @@ import path from 'path';
 import { Router } from 'express';
 import { Client } from 'ssh2';
 
-import { handleApiError } from '../../types/error';
+import { createApiError } from '../../types/error';
 import { AuthenticatedRequestHandler, createAuthHandler } from '../../types/express';
 import {
   FileItem,
@@ -14,8 +14,9 @@ import {
   SFTPError,
   SFTPWrapper,
 } from '../../types/files';
-import { serverLogger as logger } from '../../utils/serverLogger';
+import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
+import { logger } from '../utils/logger';
 
 const router: Router = Router();
 
@@ -37,18 +38,19 @@ const listDirectory: AuthenticatedRequestHandler<
   const { path: dirPath = '/' } = req.query;
   const normalizedPath = path.normalize(dirPath || '').replace(/^(\.\.[\\/])+/, '');
   const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
+  const { hostId } = req.params;
 
   try {
-    logger.info('Listing directory', { hostId: req.params.hostId, path: normalizedPath });
+    logger.info('Listing directory', { hostId, path: normalizedPath });
 
     // Get host connection details
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId],
+      [hostId],
     );
 
     if (result.rows.length === 0) {
-      logger.warn('Host not found', { hostId: req.params.hostId });
+      logger.warn('Host not found', { hostId });
       res.status(404).json({ success: false, error: 'Host not found' });
       return;
     }
@@ -99,14 +101,28 @@ const listDirectory: AuthenticatedRequestHandler<
 
     const files = await listDirectory;
     logger.info('Directory listed successfully', {
-      hostId: req.params.hostId,
+      hostId,
       path: normalizedPath,
       count: files.length,
     });
     res.json({ success: true, data: files });
   } catch (error) {
-    const errorResult = handleApiError<FileItem[]>(error, 'listDirectory');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      path: normalizedPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to list directory:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to list directory',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -118,9 +134,15 @@ const downloadFile: AuthenticatedRequestHandler<
   RequestQuery
 > = async (req, res) => {
   const { path: filePath } = req.query;
+  const { hostId } = req.params;
+
   if (!filePath) {
-    logger.warn('No file path provided', { hostId: req.params.hostId });
-    res.status(400).json({ success: false, error: 'File path required' });
+    const error = createApiError('File path is required', 400);
+    logger.warn('No file path provided', { hostId });
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
     return;
   }
 
@@ -128,16 +150,20 @@ const downloadFile: AuthenticatedRequestHandler<
   const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
-    logger.info('Downloading file', { hostId: req.params.hostId, path: normalizedPath });
+    logger.info('Downloading file', { hostId, path: normalizedPath });
 
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId],
+      [hostId],
     );
 
     if (result.rows.length === 0) {
-      logger.warn('Host not found', { hostId: req.params.hostId });
-      res.status(404).json({ success: false, error: 'Host not found' });
+      const error = createApiError('Host not found', 404);
+      logger.warn('Host not found', { hostId });
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
       return;
     }
 
@@ -147,8 +173,17 @@ const downloadFile: AuthenticatedRequestHandler<
     conn.on('ready', () => {
       conn.sftp((err, sftp) => {
         if (err) {
-          const errorResult = handleApiError(err, 'downloadFile');
-          res.status(500).json(errorResult);
+          const metadata: LogMetadata = {
+            hostId,
+            path: normalizedPath,
+            error: err.message,
+          };
+          logger.error('SFTP error:', metadata);
+          const apiError = createApiError('SFTP connection failed', 500, metadata);
+          res.status(500).json({
+            success: false,
+            error: apiError.message,
+          });
           return;
         }
 
@@ -156,8 +191,17 @@ const downloadFile: AuthenticatedRequestHandler<
         const readStream = sftpWrapper.createReadStream(normalizedPath);
 
         readStream.on('error', (err: Error) => {
-          const errorResult = handleApiError(err, 'downloadFile');
-          res.status(500).json(errorResult);
+          const metadata: LogMetadata = {
+            hostId,
+            path: normalizedPath,
+            error: err.message,
+          };
+          logger.error('File read error:', metadata);
+          const apiError = createApiError('Failed to read file', 500, metadata);
+          res.status(500).json({
+            success: false,
+            error: apiError.message,
+          });
           conn.end();
         });
 
@@ -166,7 +210,7 @@ const downloadFile: AuthenticatedRequestHandler<
 
         readStream.on('end', () => {
           logger.info('File downloaded successfully', {
-            hostId: req.params.hostId,
+            hostId,
             path: normalizedPath,
           });
           conn.end();
@@ -175,8 +219,17 @@ const downloadFile: AuthenticatedRequestHandler<
     });
 
     conn.on('error', (err: Error) => {
-      const errorResult = handleApiError(err, 'downloadFile');
-      res.status(500).json(errorResult);
+      const metadata: LogMetadata = {
+        hostId,
+        path: normalizedPath,
+        error: err.message,
+      };
+      logger.error('SSH connection error:', metadata);
+      const apiError = createApiError('SSH connection failed', 500, metadata);
+      res.status(500).json({
+        success: false,
+        error: apiError.message,
+      });
     });
 
     conn.connect({
@@ -187,8 +240,22 @@ const downloadFile: AuthenticatedRequestHandler<
       passphrase: host.passphrase,
     });
   } catch (error) {
-    const errorResult = handleApiError(error, 'downloadFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      path: normalizedPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to download file:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to download file',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -199,9 +266,15 @@ const uploadFile: AuthenticatedRequestHandler<
   FileUploadRequest
 > = async (req, res) => {
   const { path: uploadPath, content } = req.body;
+  const { hostId } = req.params;
+
   if (!uploadPath || !content) {
-    logger.warn('Missing path or content', { hostId: req.params.hostId });
-    res.status(400).json({ success: false, error: 'Path and content required' });
+    const error = createApiError('Path and content are required', 400);
+    logger.warn('Missing path or content', { hostId });
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
     return;
   }
 
@@ -209,16 +282,20 @@ const uploadFile: AuthenticatedRequestHandler<
   const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
-    logger.info('Uploading file', { hostId: req.params.hostId, path: normalizedPath });
+    logger.info('Uploading file', { hostId, path: normalizedPath });
 
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId],
+      [hostId],
     );
 
     if (result.rows.length === 0) {
-      logger.warn('Host not found', { hostId: req.params.hostId });
-      res.status(404).json({ success: false, error: 'Host not found' });
+      const error = createApiError('Host not found', 404);
+      logger.warn('Host not found', { hostId });
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
       return;
     }
 
@@ -257,13 +334,27 @@ const uploadFile: AuthenticatedRequestHandler<
 
     await uploadFile;
     logger.info('File uploaded successfully', {
-      hostId: req.params.hostId,
+      hostId,
       path: normalizedPath,
     });
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError(error, 'uploadFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      path: normalizedPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to upload file:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to upload file',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -275,9 +366,15 @@ const deleteFile: AuthenticatedRequestHandler<
   RequestQuery
 > = async (req, res) => {
   const { path: deletePath } = req.query;
+  const { hostId } = req.params;
+
   if (!deletePath) {
-    logger.warn('No path provided', { hostId: req.params.hostId });
-    res.status(400).json({ success: false, error: 'Path required' });
+    const error = createApiError('Path is required', 400);
+    logger.warn('No path provided', { hostId });
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
     return;
   }
 
@@ -285,16 +382,20 @@ const deleteFile: AuthenticatedRequestHandler<
   const username = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username;
 
   try {
-    logger.info('Deleting file/directory', { hostId: req.params.hostId, path: normalizedPath });
+    logger.info('Deleting file/directory', { hostId, path: normalizedPath });
 
     const result = await query<HostConnection>(
       'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-      [req.params.hostId],
+      [hostId],
     );
 
     if (result.rows.length === 0) {
-      logger.warn('Host not found', { hostId: req.params.hostId });
-      res.status(404).json({ success: false, error: 'Host not found' });
+      const error = createApiError('Host not found', 404);
+      logger.warn('Host not found', { hostId });
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
       return;
     }
 
@@ -345,13 +446,27 @@ const deleteFile: AuthenticatedRequestHandler<
 
     await deleteFile;
     logger.info('File/directory deleted successfully', {
-      hostId: req.params.hostId,
+      hostId,
       path: normalizedPath,
     });
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError(error, 'deleteFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      path: normalizedPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to delete file/directory:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to delete file/directory',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 

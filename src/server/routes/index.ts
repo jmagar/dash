@@ -1,14 +1,15 @@
-import express, { Router } from 'express';
+import express from 'express';
 
-import hostsRouter from './hosts';
-import { getStatus } from './status';
+import testRoutes from './test';
 
-const router: Router = express.Router();
+const router = express.Router();
 
-// Define status route first
-router.get('/status', getStatus);
+// Mount routes
+router.use('/test', testRoutes);
 
-// Then mount the hosts router
-router.use('/api/hosts', hostsRouter);
+// Add more route modules here as needed
+// router.use('/auth', authRoutes);
+// router.use('/api', apiRoutes);
+// etc.
 
 export default router;

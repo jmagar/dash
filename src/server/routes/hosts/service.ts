@@ -1,203 +1,138 @@
-import { startHostMonitoring, stopHostMonitoring } from './monitoring';
-import { closeConnection, testSSHConnection } from './pool';
+import type { QueryResult } from 'pg';
+
 import type { Host, CreateHostRequest, UpdateHostRequest } from './types';
-import { cacheHostStatus, getHostStatus, invalidateHostCache } from '../../cache';
-import { query, transaction } from '../../db';
+import { createApiError } from '../../../types/error';
+import type { LogMetadata } from '../../../types/logger';
+import cache from '../../cache';
+import { db } from '../../db';
+import { logger } from '../../utils/logger';
 
-export async function listHosts(): Promise<Host[]> {
-  const cachedHosts = await getHostStatus('all');
-  if (cachedHosts) {
-    return cachedHosts as Host[];
-  }
-
-  const result = await query<Host>(
-    'SELECT * FROM hosts ORDER BY name',
-    [],
-  );
-
-  const hosts = result.rows;
-  await cacheHostStatus('all', hosts);
-  return hosts;
-}
-
-export async function getHost(id: string): Promise<Host> {
-  const cachedHost = await getHostStatus(id);
-  if (cachedHost) {
-    return cachedHost as Host;
-  }
-
-  const result = await query<Host>(
-    'SELECT h.*, sk.name as key_name FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-    [id],
-  );
-
-  if (result.rows.length === 0) {
-    throw new Error('Host not found');
-  }
-
-  const host = result.rows[0];
-  await cacheHostStatus(id, host);
-  return host;
-}
-
-export async function createHost(data: CreateHostRequest): Promise<Host> {
-  const { name, hostname, port, username, password, sshKeyId } = data;
-
-  // Test connection before creating host
-  await testSSHConnection({
-    host: hostname,
-    port,
-    username,
-    password,
-  });
-
-  const result = await transaction(async (client) => {
-    // Check if host already exists
-    const existing = await client.query(
-      'SELECT id FROM hosts WHERE hostname = $1 AND port = $2',
-      [hostname, port],
-    );
-
-    if (existing.rows.length > 0) {
-      throw new Error('Host already exists');
-    }
-
-    // Create new host
-    const result = await client.query<Host>(
-      'INSERT INTO hosts (name, hostname, port, username, password, ssh_key_id, is_active) VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *',
-      [name, hostname, port, username, password, sshKeyId],
-    );
-
-    const host = result.rows[0];
-
-    // Start monitoring the new host
-    await startHostMonitoring(host);
-
-    return host;
-  });
-
-  await invalidateHostCache('all');
-  return result;
-}
-
-export async function updateHost(id: string, data: UpdateHostRequest): Promise<Host> {
-  const { name, hostname, port, username, password, sshKeyId, isActive } = data;
-
-  // If connection details changed, test connection first
-  if (hostname || port || username || password) {
-    await testSSHConnection({
-      host: hostname,
-      port,
-      username,
-      password,
-    });
-  }
-
-  const result = await transaction(async (client) => {
-    const existing = await client.query(
-      'SELECT id FROM hosts WHERE id = $1',
-      [id],
-    );
-
-    if (existing.rows.length === 0) {
-      throw new Error('Host not found');
-    }
-
-    const result = await client.query<Host>(
-      `UPDATE hosts
-       SET name = $1, hostname = $2, port = $3, username = $4, password = $5, ssh_key_id = $6, is_active = $7, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8
-       RETURNING *`,
-      [name, hostname, port, username, password, sshKeyId, isActive, id],
-    );
-
-    const host = result.rows[0];
-
-    // Update host monitoring
-    if (isActive) {
-      await startHostMonitoring(host);
-    } else {
-      stopHostMonitoring(host.id);
-      await closeConnection(host.id);
-    }
-
-    return host;
-  });
-
-  await invalidateHostCache(id);
-  await invalidateHostCache('all');
-  return result;
-}
-
-export async function deleteHost(id: string): Promise<void> {
-  await transaction(async (client) => {
-    // Check for active connections or dependencies
-    const activeCommands = await client.query<{ count: string }>(
-      'SELECT COUNT(*) FROM command_history WHERE host_id = $1 AND created_at > NOW() - INTERVAL \'5 minutes\'',
-      [id],
-    );
-
-    if (parseInt(activeCommands.rows[0].count) > 0) {
-      throw new Error('Host has active connections');
-    }
-
-    // Stop monitoring and close connections before deleting
-    stopHostMonitoring(id);
-    await closeConnection(id);
-
-    await client.query('DELETE FROM hosts WHERE id = $1', [id]);
-  });
-
-  await invalidateHostCache(id);
-  await invalidateHostCache('all');
-}
-
-export async function testHost(id: string): Promise<void> {
-  const result = await query<Host>(
-    'SELECT h.*, sk.private_key, sk.passphrase FROM hosts h LEFT JOIN ssh_keys sk ON h.ssh_key_id = sk.id WHERE h.id = $1',
-    [id],
-  );
-
-  if (result.rows.length === 0) {
-    throw new Error('Host not found');
-  }
-
-  const host = result.rows[0];
-
+/**
+ * Get all hosts
+ */
+export async function getAllHosts(): Promise<Host[]> {
   try {
-    await testSSHConnection({
-      host: host.hostname,
-      port: host.port,
-      username: host.username,
-      password: host.password,
-      privateKey: host.private_key,
-      passphrase: host.passphrase,
-    });
-
-    // Update host status to active
-    await query(
-      'UPDATE hosts SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-      [id],
-    );
-
-    await invalidateHostCache(id);
-    await invalidateHostCache('all');
-
-    // Start monitoring if not already started
-    await startHostMonitoring(host);
+    const result: QueryResult<Host> = await db.query('SELECT * FROM hosts ORDER BY name');
+    return result.rows;
   } catch (error) {
-    // Update host status to inactive
-    await query(
-      'UPDATE hosts SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to get hosts:', metadata);
+    throw createApiError('Failed to get hosts', 500, metadata);
+  }
+}
+
+/**
+ * Get host by ID
+ */
+export async function getHostById(id: string): Promise<Host | null> {
+  try {
+    // Check cache first
+    const cachedHost = await cache.getHostStatus(id);
+    if (cachedHost) {
+      return cachedHost as Host;
+    }
+
+    // If not in cache, get from database
+    const result: QueryResult<Host> = await db.query(
+      'SELECT * FROM hosts WHERE id = $1',
       [id],
     );
-    await invalidateHostCache(id);
-    await invalidateHostCache('all');
+    if (result.rows.length === 0) {
+      return null;
+    }
 
-    // Stop monitoring and close connection
-    stopHostMonitoring(id);
-    await closeConnection(id);
+    // Cache the result
+    const host = result.rows[0];
+    await cache.cacheHostStatus(id, host);
 
-    throw error;
+    return host;
+  } catch (error) {
+    const metadata: LogMetadata = {
+      hostId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to get host:', metadata);
+    throw createApiError('Failed to get host', 500, metadata);
+  }
+}
+
+/**
+ * Create new host
+ */
+export async function createHost(data: CreateHostRequest): Promise<Host> {
+  try {
+    const result: QueryResult<Host> = await db.query(
+      'INSERT INTO hosts (name, hostname, port, username) VALUES ($1, $2, $3, $4) RETURNING *',
+      [data.name, data.hostname, data.port, data.username],
+    );
+
+    const host = result.rows[0];
+    await cache.cacheHostStatus(host.id, host);
+
+    return host;
+  } catch (error) {
+    const metadata: LogMetadata = {
+      data,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to create host:', metadata);
+    throw createApiError('Failed to create host', 500, metadata);
+  }
+}
+
+/**
+ * Update host
+ */
+export async function updateHost(id: string, data: UpdateHostRequest): Promise<Host> {
+  try {
+    const result: QueryResult<Host> = await db.query(
+      'UPDATE hosts SET name = $1, hostname = $2, port = $3, username = $4 WHERE id = $5 RETURNING *',
+      [data.name, data.hostname, data.port, data.username, id],
+    );
+
+    if (result.rows.length === 0) {
+      throw createApiError('Host not found', 404);
+    }
+
+    const host = result.rows[0];
+    await cache.cacheHostStatus(id, host);
+
+    return host;
+  } catch (error) {
+    const metadata: LogMetadata = {
+      hostId: id,
+      data,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to update host:', metadata);
+    throw createApiError('Failed to update host', 500, metadata);
+  }
+}
+
+/**
+ * Delete host
+ */
+export async function deleteHost(id: string): Promise<void> {
+  try {
+    const result: QueryResult<Host> = await db.query(
+      'DELETE FROM hosts WHERE id = $1 RETURNING *',
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      throw createApiError('Host not found', 404);
+    }
+
+    // Invalidate cache
+    await cache.invalidateHostCache(id);
+  } catch (error) {
+    const metadata: LogMetadata = {
+      hostId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to delete host:', metadata);
+    throw createApiError('Failed to delete host', 500, metadata);
   }
 }

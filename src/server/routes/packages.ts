@@ -1,11 +1,12 @@
-import { Router, RequestHandler } from 'express';
+import express, { RequestHandler } from 'express';
 
 import { ApiResult } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
-import { serverLogger as logger } from '../../utils/serverLogger';
+import { createApiError } from '../../types/error';
+import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
+import { logger } from '../utils/logger';
 
-const router: Router = Router();
+const router = express.Router();
 
 interface Package {
   name: string;
@@ -30,15 +31,20 @@ interface PackageRequestBody {
 
 // List packages
 const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = async (req, res) => {
+  const { hostId } = req.params;
+
   try {
-    const { hostId } = req.params;
     logger.info('Listing packages', { hostId });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and list installed packages.
     const result = await query('SELECT 1');
     if (!result) {
-      throw new Error('Failed to connect to database');
+      const metadata: LogMetadata = {
+        hostId,
+      };
+      logger.error('Database connection failed:', metadata);
+      throw createApiError('Failed to connect to database', 500, metadata);
     }
 
     const packages = [
@@ -56,8 +62,21 @@ const listPackages: RequestHandler<PackageRequestParams, PackageResponse> = asyn
       data: packages,
     });
   } catch (error) {
-    const errorResult = handleApiError<Package[]>(error, 'listPackages');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to list packages:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to list packages',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -67,13 +86,14 @@ const installPackage: RequestHandler<
   ApiResult<void>,
   PackageRequestBody
 > = async (req, res) => {
-  try {
-    const { hostId } = req.params;
-    const { package: packageName } = req.body;
+  const { hostId } = req.params;
+  const { package: packageName } = req.body;
 
+  try {
     if (!packageName) {
-      logger.warn('Package installation failed: No package name provided', { hostId });
-      return res.status(400).json({ success: false, error: 'Package name required' });
+      const metadata: LogMetadata = { hostId };
+      logger.warn('Package installation failed: No package name provided', metadata);
+      throw createApiError('Package name is required', 400, metadata);
     }
 
     logger.info('Installing package', { hostId, package: packageName });
@@ -82,14 +102,33 @@ const installPackage: RequestHandler<
     // connect to the host and install the package.
     const result = await query('SELECT 1');
     if (!result) {
-      throw new Error('Failed to connect to database');
+      const metadata: LogMetadata = {
+        hostId,
+        package: packageName,
+      };
+      logger.error('Database connection failed:', metadata);
+      throw createApiError('Failed to connect to database', 500, metadata);
     }
 
     logger.info('Package installed successfully', { hostId, package: packageName });
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError<void>(error, 'installPackage');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      package: packageName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to install package:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to install package',
+      error instanceof Error && error.message.includes('required') ? 400 : 500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -99,13 +138,14 @@ const uninstallPackage: RequestHandler<
   ApiResult<void>,
   PackageRequestBody
 > = async (req, res) => {
-  try {
-    const { hostId } = req.params;
-    const { package: packageName } = req.body;
+  const { hostId } = req.params;
+  const { package: packageName } = req.body;
 
+  try {
     if (!packageName) {
-      logger.warn('Package uninstallation failed: No package name provided', { hostId });
-      return res.status(400).json({ success: false, error: 'Package name required' });
+      const metadata: LogMetadata = { hostId };
+      logger.warn('Package uninstallation failed: No package name provided', metadata);
+      throw createApiError('Package name is required', 400, metadata);
     }
 
     logger.info('Uninstalling package', { hostId, package: packageName });
@@ -114,14 +154,33 @@ const uninstallPackage: RequestHandler<
     // connect to the host and uninstall the package.
     const result = await query('SELECT 1');
     if (!result) {
-      throw new Error('Failed to connect to database');
+      const metadata: LogMetadata = {
+        hostId,
+        package: packageName,
+      };
+      logger.error('Database connection failed:', metadata);
+      throw createApiError('Failed to connect to database', 500, metadata);
     }
 
     logger.info('Package uninstalled successfully', { hostId, package: packageName });
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError<void>(error, 'uninstallPackage');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      package: packageName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to uninstall package:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to uninstall package',
+      error instanceof Error && error.message.includes('required') ? 400 : 500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 
@@ -131,13 +190,14 @@ const updatePackage: RequestHandler<
   ApiResult<void>,
   PackageRequestBody
 > = async (req, res) => {
-  try {
-    const { hostId } = req.params;
-    const { package: packageName } = req.body;
+  const { hostId } = req.params;
+  const { package: packageName } = req.body;
 
+  try {
     if (!packageName) {
-      logger.warn('Package update failed: No package name provided', { hostId });
-      return res.status(400).json({ success: false, error: 'Package name required' });
+      const metadata: LogMetadata = { hostId };
+      logger.warn('Package update failed: No package name provided', metadata);
+      throw createApiError('Package name is required', 400, metadata);
     }
 
     logger.info('Updating package', { hostId, package: packageName });
@@ -146,14 +206,33 @@ const updatePackage: RequestHandler<
     // connect to the host and update the package.
     const result = await query('SELECT 1');
     if (!result) {
-      throw new Error('Failed to connect to database');
+      const metadata: LogMetadata = {
+        hostId,
+        package: packageName,
+      };
+      logger.error('Database connection failed:', metadata);
+      throw createApiError('Failed to connect to database', 500, metadata);
     }
 
     logger.info('Package updated successfully', { hostId, package: packageName });
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError<void>(error, 'updatePackage');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      hostId,
+      package: packageName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to update package:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to update package',
+      error instanceof Error && error.message.includes('required') ? 400 : 500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 };
 

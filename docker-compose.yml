@@ -22,6 +22,12 @@ services:
       - DB_NAME=shh
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_MAX_RETRIES=3
+      - REDIS_MAX_MEMORY=512
+      - REDIS_MAX_KEYS=10000
+      - REDIS_METRICS_INTERVAL=60000
+      - REDIS_ERROR_THRESHOLD=10
       - JWT_SECRET=production-secret-key
       - JWT_EXPIRATION=30m
       - LOG_LEVEL=info
@@ -67,6 +73,13 @@ services:
       --appendfsync everysec
       --auto-aof-rewrite-percentage 100
       --auto-aof-rewrite-min-size 64mb
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --tcp-keepalive 300
+      --databases 16
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

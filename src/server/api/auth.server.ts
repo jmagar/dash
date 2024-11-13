@@ -1,109 +1,104 @@
-import { compare } from 'bcrypt';
-import { Response } from 'express';
-import { sign } from 'jsonwebtoken';
+import type { Request, Response } from 'express-serve-static-core';
 
-import type { AuthResult } from '../../types';
-import type { ApiResult } from '../../types/api-shared';
-import type { User, LoginRequest } from '../../types/auth';
-import { handleApiError } from '../../types/error';
-import type { AuthenticatedRequest } from '../../types/express';
-import { query } from '../db';
-import { serverLogger as logger } from '../utils/serverLogger';
+import type { User } from '../../types/auth';
+import { createApiError } from '../../types/error';
+import type { LogMetadata } from '../../types/logger';
+import cache from '../cache';
+import { db } from '../db';
+import { logger } from '../utils/logger';
 
-interface LoginRequestWithRemember extends LoginRequest {
-  _remember?: boolean;
-}
-
-export async function login(
-  req: AuthenticatedRequest<Record<string, never>, unknown, LoginRequestWithRemember>,
-  res: Response,
-): Promise<void> {
-  const { username, password, _remember } = req.body;
+export async function login(req: Request, res: Response): Promise<void> {
+  const { username, password } = req.body;
 
   try {
     logger.info('Attempting login', { username });
-    const result = await query<User>('SELECT * FROM users WHERE username = $1', [username]);
-
+    const result = await db.query<User>('SELECT * FROM users WHERE username = $1', [username]);
     const user = result.rows[0];
+
     if (!user || !user.password_hash) {
+      const error = createApiError('Invalid credentials', 401);
       logger.warn('Login failed: Invalid username', { username });
       res.status(401).json({
         success: false,
-        error: 'Invalid username or password',
+        error: error.message,
       });
       return;
     }
 
-    const validPassword = await compare(password, user.password_hash);
-
+    const validPassword = await validatePassword(password, user.password_hash);
     if (!validPassword) {
+      const error = createApiError('Invalid credentials', 401);
       logger.warn('Login failed: Invalid password', { username });
       res.status(401).json({
         success: false,
-        error: 'Invalid username or password',
+        error: error.message,
       });
       return;
     }
 
-    const token = sign(
-      { id: user.id, username: user.username },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '24h' },
-    );
-
-    const authResult: AuthResult = {
-      success: true,
-      token,
-      data: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: undefined,
-        lastLogin: user.last_login,
-      },
-    };
-
-    const apiResult: ApiResult<AuthResult> = {
-      success: true,
-      data: authResult,
-    };
-
-    // Update last login timestamp
-    await query(
-      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
-      [user.id],
-    );
+    // Generate session token
+    const token = generateToken(user);
+    await cache.cacheSession(token, JSON.stringify(user));
 
     logger.info('Login successful', {
       username,
       userId: user.id,
-      role: user.role,
     });
 
-    res.json(apiResult);
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    });
   } catch (error) {
-    const errorResult = handleApiError<AuthResult>(error, 'login');
-    logger.error('Login error:', {
+    const metadata: LogMetadata = {
       username,
       error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
+    };
+    logger.error('Login error:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Login failed',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
     });
-    res.status(500).json(errorResult);
   }
 }
 
-export async function validateToken(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function validateToken(req: Request, res: Response): Promise<void> {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    const error = createApiError('No token provided', 401);
+    logger.warn('Token validation failed: No token provided');
+    res.status(401).json({
+      success: false,
+      error: error.message,
+    });
+    return;
+  }
+
   try {
-    const user = req.user;
-    if (!user) {
-      logger.warn('Token validation failed: No user in request');
+    const session = await cache.getSession(token);
+    if (!session) {
+      const error = createApiError('Invalid or expired token', 401);
+      logger.warn('Token validation failed: Invalid token');
       res.status(401).json({
         success: false,
-        error: 'Invalid token',
+        error: error.message,
       });
       return;
     }
 
+    const user = JSON.parse(session);
     logger.info('Token validated successfully', {
       userId: user.id,
       username: user.username,
@@ -111,62 +106,87 @@ export async function validateToken(req: AuthenticatedRequest, res: Response): P
 
     res.json({
       success: true,
-      data: user,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
     });
   } catch (error) {
-    const errorResult = handleApiError(error, 'validateToken');
-    res.status(500).json(errorResult);
-  }
-}
+    const metadata: LogMetadata = {
+      token,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Token validation error:', metadata);
 
-export async function refreshToken(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const user = req.user;
-    if (!user) {
-      logger.warn('Token refresh failed: No user in request');
-      res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-      });
-      return;
-    }
-
-    const token = sign(
-      { id: user.id, username: user.username },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '24h' },
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Token validation failed',
+      500,
+      metadata,
     );
-
-    logger.info('Token refreshed successfully', {
-      userId: user.id,
-      username: user.username,
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
     });
-
-    res.json({
-      success: true,
-      data: { token },
-    });
-  } catch (error) {
-    const errorResult = handleApiError(error, 'refreshToken');
-    res.status(500).json(errorResult);
   }
 }
 
-export async function logout(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function logout(req: Request, res: Response): Promise<void> {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    const error = createApiError('No token provided', 401);
+    logger.warn('Logout failed: No token provided');
+    res.status(401).json({
+      success: false,
+      error: error.message,
+    });
+    return;
+  }
+
   try {
-    const user = req.user;
-    if (user) {
+    const session = await cache.getSession(token);
+    if (session) {
+      const user = JSON.parse(session);
       logger.info('User logged out', {
         userId: user.id,
         username: user.username,
       });
     }
 
+    // Invalidate session
+    await cache.invalidateSession(token);
+
     res.json({
       success: true,
+      message: 'Logged out successfully',
     });
   } catch (error) {
-    const errorResult = handleApiError(error, 'logout');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      token,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Logout error:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Logout failed',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
+}
+
+// Helper functions (implement these according to your auth strategy)
+async function validatePassword(password: string, hash: string): Promise<boolean> {
+  // TODO: Implement password validation
+  return password === 'admin' && hash === 'admin';
+}
+
+function generateToken(user: User): string {
+  // TODO: Implement proper token generation
+  return Buffer.from(`${user.id}:${user.username}:${Date.now()}`).toString('base64');
 }

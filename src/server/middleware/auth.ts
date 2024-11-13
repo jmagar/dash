@@ -1,113 +1,103 @@
-import { Request, Response, NextFunction } from 'express';
-import { verify } from 'jsonwebtoken';
-import { ParsedQs } from 'qs';
+import type { Request, Response, NextFunction } from 'express';
 
-import { AuthenticatedUser } from '../../types/jwt';
-import { serverLogger as logger } from '../../utils/serverLogger';
+import { createApiError } from '../../types/error';
+import type { LogMetadata } from '../../types/logger';
+import { verifyToken } from '../utils/jwt';
+import { logger } from '../utils/logger';
 
-export interface AuthenticatedRequest<
-  P = Record<string, string>,
-  ResBody = unknown,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> extends Request<P, ResBody, ReqBody, ReqQuery> {
-  user: AuthenticatedUser;
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    username: string;
+    role: string;
+  };
 }
 
-interface JWTVerificationResult {
-  id: string;
-  username: string;
-  role: string;
-  iat: number;
-  exp: number;
-}
+export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  const token = req.headers.authorization?.replace('Bearer ', '');
 
-const isValidToken = (decoded: unknown): decoded is JWTVerificationResult => {
-  if (!decoded || typeof decoded !== 'object') return false;
-
-  const token = decoded as Record<string, unknown>;
-  return (
-    typeof token.id === 'string' &&
-    typeof token.username === 'string' &&
-    typeof token.role === 'string' &&
-    typeof token.iat === 'number' &&
-    typeof token.exp === 'number'
-  );
-};
-
-export const authenticateToken = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void => {
-  // Skip authentication if DISABLE_AUTH is set
-  if (process.env.DISABLE_AUTH === 'true') {
-    (req as AuthenticatedRequest).user = {
-      id: 'dev',
-      username: 'dev',
-      role: 'admin',
-    };
-    next();
+  if (!token) {
+    const error = createApiError('No token provided', 401);
+    logger.warn('Authentication failed: No token provided');
+    res.status(401).json({
+      success: false,
+      error: error.message,
+      status: error.status,
+    });
     return;
   }
 
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
-
-    if (!token) {
-      res.status(401).json({ success: false, error: 'No token provided' });
-      return;
-    }
-
-    const decoded = verify(token, process.env.JWT_SECRET || '');
-
-    if (!isValidToken(decoded)) {
-      throw new Error('Invalid token format');
-    }
-
-    (req as AuthenticatedRequest).user = {
-      id: decoded.id,
-      username: decoded.username,
-      role: decoded.role,
-    };
+    const decoded = verifyToken(token);
+    req.user = decoded;
     next();
-  } catch (err) {
-    logger.error('Authentication error:', {
-      error: (err as Error).message,
-      stack: (err as Error).stack,
+  } catch (error) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Authentication error:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Invalid token',
+      401,
+      metadata,
+    );
+    res.status(401).json({
+      success: false,
+      error: apiError.message,
+      status: apiError.status,
     });
-    res.status(401).json({ success: false, error: 'Invalid token' });
   }
-};
+}
 
-export const checkRole = (roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    // Skip role check if DISABLE_AUTH is set
-    if (process.env.DISABLE_AUTH === 'true') {
-      next();
-      return;
-    }
-
+export function requireRole(roles: string[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
+      if (!req.user) {
+        const error = createApiError('Authentication required', 401);
+        logger.warn('Role check failed: No user in request');
+        res.status(401).json({
+          success: false,
+          error: error.message,
+          status: error.status,
+        });
         return;
       }
 
-      if (!roles.includes(authReq.user.role)) {
-        res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      if (!roles.includes(req.user.role)) {
+        const metadata: LogMetadata = {
+          requiredRoles: roles,
+          userRole: req.user.role,
+        };
+        const error = createApiError('Insufficient permissions', 403, metadata);
+        logger.warn('Role check failed: Insufficient permissions', metadata);
+        res.status(403).json({
+          success: false,
+          error: error.message,
+          status: error.status,
+        });
         return;
       }
 
       next();
-    } catch (err) {
-      logger.error('Role check error:', {
-        error: (err as Error).message,
-        stack: (err as Error).stack,
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        roles,
+        userRole: req.user?.role,
+      };
+      logger.error('Role check error:', metadata);
+
+      const apiError = createApiError(
+        error instanceof Error ? error.message : 'Role check failed',
+        500,
+        metadata,
+      );
+      res.status(500).json({
+        success: false,
+        error: apiError.message,
+        status: apiError.status,
       });
-      res.status(500).json({ success: false, error: 'Internal server error' });
     }
   };
-};
+}

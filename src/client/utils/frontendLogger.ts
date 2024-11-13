@@ -1,63 +1,48 @@
-import type { Logger } from '../../types/logging';
+import type {
+  Logger,
+  ContextualLogger,
+  LogMetadata,
+  LogContext,
+  LogOptions,
+} from '../../types/logger';
 
-class FrontendLogger implements Logger {
+/**
+ * Frontend logger implementation with context support and browser-specific features
+ */
+class FrontendLogger implements ContextualLogger {
   private static instance: FrontendLogger;
+  private context: LogContext | null = null;
 
-  private constructor() {}
+  private constructor() {
+    this.setupErrorHandlers();
+  }
 
-  static getInstance(): FrontendLogger {
+  /**
+   * Get singleton instance
+   */
+  public static getInstance(): FrontendLogger {
     if (!FrontendLogger.instance) {
       FrontendLogger.instance = new FrontendLogger();
     }
     return FrontendLogger.instance;
   }
 
-  info(message: string, meta?: Record<string, unknown>): void {
-    const formattedMeta = this.formatMeta(meta);
-    const timestamp = new Date().toISOString();
-    // eslint-disable-next-line no-console
-    console.info(`[${timestamp}] INFO:`, message, formattedMeta);
-  }
-
-  warn(message: string, meta?: Record<string, unknown>): void {
-    const formattedMeta = this.formatMeta(meta);
-    const timestamp = new Date().toISOString();
-    // eslint-disable-next-line no-console
-    console.warn(`[${timestamp}] WARN:`, message, formattedMeta);
-  }
-
-  error(message: string, meta?: Record<string, unknown>): void {
-    const formattedMeta = this.formatMeta(meta);
-    const timestamp = new Date().toISOString();
-    // eslint-disable-next-line no-console
-    console.error(`[${timestamp}] ERROR:`, message, formattedMeta);
-  }
-
-  debug(message: string, meta?: Record<string, unknown>): void {
-    const formattedMeta = this.formatMeta(meta);
-    const timestamp = new Date().toISOString();
-    // eslint-disable-next-line no-console
-    console.debug(`[${timestamp}] DEBUG:`, message, formattedMeta);
-  }
-
-  private formatMeta(meta?: Record<string, unknown>): Record<string, unknown> {
-    if (!meta) return {};
-    return meta;
-  }
-
-  static init(): void {
+  /**
+   * Set up global error handlers
+   */
+  private setupErrorHandlers(): void {
     if (typeof window !== 'undefined') {
+      // Handle unhandled promise rejections
       window.addEventListener('unhandledrejection', (event) => {
-        const logger = FrontendLogger.getInstance();
-        logger.error('Unhandled Promise Rejection:', {
+        this.error('Unhandled Promise Rejection:', {
           reason: event.reason,
           error: event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
         });
       });
 
+      // Handle uncaught errors
       window.addEventListener('error', (event) => {
-        const logger = FrontendLogger.getInstance();
-        logger.error('Uncaught Error:', {
+        this.error('Uncaught Error:', {
           message: event.message,
           filename: event.filename,
           lineno: event.lineno,
@@ -67,12 +52,88 @@ class FrontendLogger implements Logger {
       });
     }
   }
+
+  /**
+   * Create a new logger instance with context
+   */
+  withContext(context: LogContext): Logger {
+    const contextualLogger = new FrontendLogger();
+    contextualLogger.context = context;
+    return contextualLogger;
+  }
+
+  /**
+   * Create a child logger with additional options
+   */
+  child(options: LogOptions): Logger {
+    const childLogger = new FrontendLogger();
+    childLogger.context = this.context;
+    return childLogger;
+  }
+
+  /**
+   * Format metadata with context
+   */
+  private formatMeta(meta?: LogMetadata): LogMetadata {
+    const formattedMeta: LogMetadata = {
+      timestamp: new Date().toISOString(),
+      ...meta,
+    };
+
+    if (this.context) {
+      formattedMeta.component = this.context.component;
+      formattedMeta.requestId = this.context.requestId;
+      formattedMeta.userId = this.context.userId;
+      formattedMeta.hostId = this.context.hostId;
+    }
+
+    return formattedMeta;
+  }
+
+  /**
+   * Format log message with context
+   */
+  private formatMessage(level: string, message: string, meta?: LogMetadata): string {
+    const contextStr = this.context ? `[${this.context.component}] ` : '';
+    return `[${level}] ${contextStr}${message}`;
+  }
+
+  /**
+   * Log methods with context and metadata support
+   */
+  info(message: string, meta?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(meta);
+    // eslint-disable-next-line no-console
+    console.info(this.formatMessage('INFO', message), formattedMeta);
+  }
+
+  warn(message: string, meta?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(meta);
+    // eslint-disable-next-line no-console
+    console.warn(this.formatMessage('WARN', message), formattedMeta);
+  }
+
+  error(message: string, meta?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(meta);
+    // eslint-disable-next-line no-console
+    console.error(this.formatMessage('ERROR', message), formattedMeta);
+
+    // In development, also log to error monitoring service if available
+    if (process.env.NODE_ENV === 'development' && meta?.error instanceof Error) {
+      console.error('Error details:', {
+        name: meta.error.name,
+        message: meta.error.message,
+        stack: meta.error.stack,
+      });
+    }
+  }
+
+  debug(message: string, meta?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(meta);
+    // eslint-disable-next-line no-console
+    console.debug(this.formatMessage('DEBUG', message), formattedMeta);
+  }
 }
 
-// Initialize logger if in browser environment
-if (typeof window !== 'undefined') {
-  FrontendLogger.init();
-}
-
-// Export the logger instance
+// Export singleton instance
 export const logger = FrontendLogger.getInstance();

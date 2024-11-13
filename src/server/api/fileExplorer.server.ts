@@ -1,22 +1,45 @@
-import fs from 'fs/promises';
+import { promises as fs } from 'fs';
 import path from 'path';
 
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express-serve-static-core';
 
-import type { ApiResult } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
-import type { FileItem } from '../../types/models-shared';
-import { serverLogger as logger } from '../utils/serverLogger';
+import { createApiError } from '../../types/error';
+import type { LogMetadata } from '../../types/logger';
+import { logger } from '../utils/logger';
+
+interface FileInfo {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modified?: Date;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 export async function listFiles(req: Request, res: Response): Promise<void> {
-  const { path: dirPath } = req.query;
+  const dirPath = req.query.path as string;
 
   try {
+    if (!dirPath) {
+      const error = createApiError('Path is required', 400);
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     logger.info('Listing files', { path: dirPath });
-    const files = await fs.readdir(dirPath as string, { withFileTypes: true });
-    const fileList: FileItem[] = await Promise.all(
+    const files = await fs.readdir(dirPath, { withFileTypes: true });
+
+    const fileList: FileInfo[] = await Promise.all(
       files.map(async (file) => {
-        const filePath = path.join(dirPath as string, file.name);
+        const filePath = path.join(dirPath, file.name);
         const stats = await fs.stat(filePath);
         return {
           name: file.name,
@@ -28,35 +51,69 @@ export async function listFiles(req: Request, res: Response): Promise<void> {
       }),
     );
 
-    const result: ApiResult<FileItem[]> = {
+    logger.info('Files listed successfully', { count: fileList.length });
+    const result: ApiResponse<FileInfo[]> = {
       success: true,
       data: fileList,
     };
-
-    logger.info('Files listed successfully', { count: fileList.length });
     res.json(result);
   } catch (error) {
-    const errorResult = handleApiError<FileItem[]>(error, 'listFiles');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      path: dirPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to list files:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to list files',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 }
 
 export async function readFile(req: Request, res: Response): Promise<void> {
-  const { path: filePath } = req.query;
+  const filePath = req.query.path as string;
 
   try {
+    if (!filePath) {
+      const error = createApiError('Path is required', 400);
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     logger.info('Reading file', { path: filePath });
-    const content = await fs.readFile(filePath as string, 'utf-8');
-    const result: ApiResult<string> = {
+    const content = await fs.readFile(filePath, 'utf-8');
+
+    logger.info('File read successfully', { path: filePath });
+    const result: ApiResponse<string> = {
       success: true,
       data: content,
     };
-
-    logger.info('File read successfully', { path: filePath });
     res.json(result);
   } catch (error) {
-    const errorResult = handleApiError<string>(error, 'readFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      path: filePath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to read file:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to read file',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 }
 
@@ -64,59 +121,125 @@ export async function writeFile(req: Request, res: Response): Promise<void> {
   const { path: filePath, content } = req.body;
 
   try {
+    if (!filePath || content === undefined) {
+      const error = createApiError('Path and content are required', 400);
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     logger.info('Writing file', { path: filePath });
     await fs.writeFile(filePath, content, 'utf-8');
-    const result: ApiResult<void> = {
-      success: true,
-    };
 
     logger.info('File written successfully', { path: filePath });
+    const result: ApiResponse<void> = {
+      success: true,
+    };
     res.json(result);
   } catch (error) {
-    const errorResult = handleApiError(error, 'writeFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      path: filePath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to write file:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to write file',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 }
 
 export async function deleteFile(req: Request, res: Response): Promise<void> {
-  const { path: filePath } = req.query;
+  const filePath = req.query.path as string;
 
   try {
+    if (!filePath) {
+      const error = createApiError('Path is required', 400);
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     logger.info('Deleting file/directory', { path: filePath });
-    const stats = await fs.stat(filePath as string);
+    const stats = await fs.stat(filePath);
+
     if (stats.isDirectory()) {
-      await fs.rmdir(filePath as string);
+      await fs.rmdir(filePath);
       logger.info('Directory deleted successfully', { path: filePath });
     } else {
-      await fs.unlink(filePath as string);
+      await fs.unlink(filePath);
       logger.info('File deleted successfully', { path: filePath });
     }
 
-    const result: ApiResult<void> = {
+    const result: ApiResponse<void> = {
       success: true,
     };
-
     res.json(result);
   } catch (error) {
-    const errorResult = handleApiError(error, 'deleteFile');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      path: filePath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to delete file/directory:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to delete file/directory',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 }
 
 export async function createDirectory(req: Request, res: Response): Promise<void> {
-  const { path: dirPath } = req.body;
+  const dirPath = req.body.path as string;
 
   try {
+    if (!dirPath) {
+      const error = createApiError('Path is required', 400);
+      res.status(400).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     logger.info('Creating directory', { path: dirPath });
     await fs.mkdir(dirPath, { recursive: true });
-    const result: ApiResult<void> = {
-      success: true,
-    };
 
     logger.info('Directory created successfully', { path: dirPath });
+    const result: ApiResponse<void> = {
+      success: true,
+    };
     res.json(result);
   } catch (error) {
-    const errorResult = handleApiError(error, 'createDirectory');
-    res.status(500).json(errorResult);
+    const metadata: LogMetadata = {
+      path: dirPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to create directory:', metadata);
+
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to create directory',
+      500,
+      metadata,
+    );
+    res.status(500).json({
+      success: false,
+      error: apiError.message,
+    });
   }
 }

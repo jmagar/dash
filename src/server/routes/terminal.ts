@@ -1,216 +1,122 @@
-import { Router } from 'express';
-import type { Socket } from 'socket.io/dist/socket';
-import { Client } from 'ssh2';
+import express from 'express';
+import type { Request as ExpressRequest, Response } from 'express-serve-static-core';
 
-import type { ApiResult } from '../../types/api-shared';
 import type { CacheCommand } from '../../types/cache';
-import { handleApiError } from '../../types/error';
-import { type AuthenticatedRequestHandler, createAuthHandler } from '../../types/express';
-import type { SSHClient, SSHStream } from '../../types/ssh';
-import type {
-  AuthenticatedSocket,
-  TerminalData,
-} from '../../types/terminal';
-import { serverLogger as logger } from '../../utils/serverLogger';
-import { redis, CACHE_KEYS } from '../cache';
+import { createApiError } from '../../types/error';
+import type { LogMetadata } from '../../types/logger';
+import cache from '../cache';
+import { logger } from '../utils/logger';
 
-const router: Router = Router();
-let ioServer: any;
+const router = express.Router();
 
-// Store active SSH connections
-const sshConnections = new Map<string, SSHClient>();
-
-// Initialize Socket.IO
-export const initializeSocketIO = async (socketIO: any): Promise<void> => {
-  ioServer = socketIO;
-
-  ioServer.on('connection', (socket: Socket) => {
-    const authenticatedSocket = socket as AuthenticatedSocket;
-    logger.info('Socket connected', { id: authenticatedSocket.id });
-
-    authenticatedSocket.on('disconnect', () => {
-      logger.info('Socket disconnected', { id: authenticatedSocket.id });
-    });
-
-    authenticatedSocket.on('terminal:data', (data: TerminalData) => {
-      const { hostId } = data;
-      const sshClient = sshConnections.get(hostId);
-
-      if (sshClient && data.data) {
-        (sshClient as unknown as { write: (data: string) => void }).write(data.data);
-      }
-    });
-
-    authenticatedSocket.on('terminal:resize', (data: TerminalData) => {
-      const { hostId, rows, cols } = data;
-      const sshClient = sshConnections.get(hostId);
-
-      if (sshClient && rows && cols) {
-        (sshClient as unknown as { setWindow: (rows: number, cols: number) => void })
-          .setWindow(rows, cols);
-      }
-    });
-  });
-};
-
-interface SSHConnectionRequest {
-  username: string;
-  hostname: string;
-  port: number;
-  privateKey: string;
+// Extend Request type to include user property
+interface AuthenticatedRequest extends ExpressRequest {
+  user?: {
+    id: string;
+    [key: string]: unknown;
+  };
 }
 
-interface TerminalRequestParams {
-  hostId: string;
+interface CommandRequest extends AuthenticatedRequest {
+  body: {
+    command: string;
+  };
+  params: {
+    hostId: string;
+  };
 }
 
-// Connect to SSH server
-const connectSSH: AuthenticatedRequestHandler<
-  TerminalRequestParams,
-  ApiResult<void>,
-  SSHConnectionRequest
-> = async (req, res) => {
+/**
+ * Cache a terminal command for a specific host
+ */
+router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
   const { hostId } = req.params;
-  const { username, hostname, port, privateKey } = req.body;
+  const { command } = req.body;
+  const userId = req.user?.id;
 
-  try {
-    logger.info('Establishing SSH connection', { hostId, hostname, username });
-
-    // Close existing connection if any
-    const existingConnection = sshConnections.get(hostId);
-    if (existingConnection) {
-      logger.info('Closing existing connection', { hostId });
-      existingConnection.end();
-      sshConnections.delete(hostId);
-    }
-
-    const sshClient = new Client() as SSHClient;
-
-    sshClient
-      .on('ready', () => {
-        logger.info('SSH connection established', {
-          hostId,
-          hostname,
-          username,
-        });
-
-        sshClient.shell({ term: 'xterm-256color' }, (err, stream: SSHStream) => {
-          if (err) {
-            logger.error('Failed to create shell', {
-              error: err.message,
-              stack: err.stack,
-              hostId,
-            });
-            res.status(500).json({
-              success: false,
-              error: 'Failed to create shell',
-            });
-            return;
-          }
-
-          stream.on('data', (data: Buffer) => {
-            ioServer.emit(`terminal:data:${hostId}`, data.toString('utf8'));
-          });
-
-          stream.on('close', () => {
-            logger.info('Shell stream closed', { hostId });
-            sshClient.end();
-            sshConnections.delete(hostId);
-            ioServer.emit(`terminal:close:${hostId}`);
-          });
-
-          sshConnections.set(hostId, sshClient);
-          res.json({ success: true });
-        });
-      })
-      .on('error', (err) => {
-        logger.error('SSH connection error', {
-          error: err.message,
-          stack: err.stack,
-          hostId,
-        });
-        res.status(500).json({
-          success: false,
-          error: err.message,
-        });
-      })
-      .connect({
-        host: hostname,
-        port,
-        username: process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.username || username,
-        privateKey,
-      });
-  } catch (error) {
-    const errorResult = handleApiError<void>(error, 'connectSSH');
-    res.status(500).json(errorResult);
+  if (!userId) {
+    const error = createApiError('Unauthorized', 401);
+    return res.status(error.status || 401).json({
+      success: false,
+      error: error.message,
+    });
   }
-};
-
-// Disconnect from SSH server
-const disconnectSSH: AuthenticatedRequestHandler<
-  TerminalRequestParams,
-  ApiResult<void>
-> = async (req, res) => {
-  const { hostId } = req.params;
 
   try {
-    logger.info('Disconnecting SSH connection', { hostId });
-    const sshClient = sshConnections.get(hostId);
-    if (sshClient) {
-      sshClient.end();
-      sshConnections.delete(hostId);
-      logger.info('SSH connection closed', { hostId });
-    }
+    const commandData: CacheCommand = {
+      command,
+      timestamp: new Date(),
+    };
+
+    await cache.cacheCommand(userId, hostId, commandData);
+
+    logger.info('Command cached', {
+      userId,
+      hostId,
+      command,
+    });
 
     res.json({ success: true });
   } catch (error) {
-    const errorResult = handleApiError<void>(error, 'disconnectSSH');
-    res.status(500).json(errorResult);
-  }
-};
+    const metadata: LogMetadata = {
+      userId,
+      hostId,
+      command,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to cache command:', metadata);
 
-// Get command history
-const getCommandHistory: AuthenticatedRequestHandler<
-  TerminalRequestParams,
-  ApiResult<CacheCommand[]>
-> = async (req, res) => {
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to cache command',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
+  }
+});
+
+/**
+ * Get command history for a specific host
+ */
+router.get('/:hostId/history', async (req: AuthenticatedRequest, res: Response) => {
   const { hostId } = req.params;
-  const userId = process.env.DISABLE_AUTH === 'true' ? 'dev' : req.user?.id;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    const error = createApiError('Unauthorized', 401);
+    return res.status(error.status || 401).json({
+      success: false,
+      error: error.message,
+    });
+  }
 
   try {
-    logger.info('Fetching command history', { hostId, userId });
-    const client = await redis.getClient();
-    if (!client) {
-      logger.warn('Redis client not available', { hostId, userId });
-      res.json({
-        success: true,
-        data: [],
-      });
-      return;
-    }
-
-    const commands = await client.get(`${CACHE_KEYS.COMMAND}${userId}:${hostId}`);
-    const history = commands ? (JSON.parse(commands) as CacheCommand[]) : [];
-
-    logger.info('Command history fetched successfully', {
-      hostId,
-      userId,
-      count: history.length,
-    });
-
+    const commands = await cache.getCommands(userId, hostId);
     res.json({
       success: true,
-      data: history,
+      commands: commands || [],
     });
   } catch (error) {
-    const errorResult = handleApiError<CacheCommand[]>(error, 'getCommandHistory');
-    res.status(500).json(errorResult);
-  }
-};
+    const metadata: LogMetadata = {
+      userId,
+      hostId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to get command history:', metadata);
 
-// Register routes
-router.post('/:hostId/connect', createAuthHandler(connectSSH));
-router.post('/:hostId/disconnect', createAuthHandler(disconnectSSH));
-router.get('/:hostId/history', createAuthHandler(getCommandHistory));
+    const apiError = createApiError(
+      error instanceof Error ? error.message : 'Failed to get command history',
+      500,
+      metadata,
+    );
+    res.status(apiError.status || 500).json({
+      success: false,
+      error: apiError.message,
+    });
+  }
+});
 
 export default router;

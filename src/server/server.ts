@@ -1,327 +1,172 @@
-import fs from 'fs';
-import http from 'http';
-import os from 'os';
-import path from 'path';
+import { createServer } from 'http';
+
+import compression from 'compression';
+import helmet from 'helmet';
+import { Server } from 'socket.io';
 
 import cors from 'cors';
-import express, {
-  Request,
-  Response,
-  NextFunction,
-  json as expressJson,
-  static as expressStatic,
-} from 'express';
+import express from 'express';
 
-import {
-  isConnected as cacheIsConnected,
-  redis,
-  initializeCache,
-} from './cache';
-import { pool, initializeDatabase } from './db';
-import { requestLogger } from './middleware/requestLogger';
+import { cacheService } from './cache/CacheService';
+import { db } from './db';
+import { configureApplicationHandlers } from './middleware/applicationHandler';
 import routes from './routes';
-import { initializeSocketIO } from './routes/terminal';
-import { serverLogger as logger } from './utils/serverLogger';
+import { setupGracefulShutdown } from './utils/gracefulShutdown';
+import { logger } from './utils/logger';
+import { createApiError } from '../types/error';
+import type { LogMetadata } from '../types/logger';
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
+async function initializeServices(): Promise<void> {
+  try {
+    // Check database connection
+    const dbHealth = await db.healthCheck();
+    if (!dbHealth.connected) {
+      const metadata: LogMetadata = {
+        error: dbHealth.error,
+      };
+      logger.error('Database connection failed:', metadata);
+      throw createApiError(`Database connection failed: ${dbHealth.error}`, 500, metadata);
+    }
 
-// Import socket.io using require since it has issues with ES modules
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Server: SocketServer } = require('socket.io');
+    // Check cache connection
+    const cacheHealth = await cacheService.healthCheck();
+    if (!cacheHealth.connected) {
+      const metadata: LogMetadata = {
+        error: cacheHealth.error,
+      };
+      logger.error('Cache connection failed:', metadata);
+      throw createApiError(`Cache connection failed: ${cacheHealth.error}`, 500, metadata);
+    }
 
-// Create express app
-const app = express();
-const server = http.createServer(app);
-
-// Configure CORS
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:4000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-}));
-
-// Parse JSON bodies
-app.use(expressJson());
-
-// Request logging middleware
-app.use(requestLogger);
-
-// Mount API routes
-app.use('/api', routes);
-
-// Serve static files from the React build directory
-const buildPath = path.resolve(__dirname, '../../build');
-if (fs.existsSync(buildPath)) {
-  app.use(expressStatic(buildPath, {
-    etag: true,
-    lastModified: true,
-    setHeaders: (res: Response) => {
-      res.set('Cache-Control', 'no-cache');
-    },
-  }));
-}
-
-// Error handler for JSON parsing
-app.use((err: Error & { status?: number; body?: unknown }, req: Request, res: Response, _next: NextFunction) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    logger.error('JSON parsing error', { error: err.message });
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid JSON',
-    });
+    logger.info('Services initialized successfully');
+  } catch (error) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Service initialization failed:', metadata);
+    throw createApiError(
+      'Failed to initialize services',
+      500,
+      metadata,
+    );
   }
-  _next(err);
-});
+}
 
-// Initialize WebSocket
-const io = new SocketServer(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:4000',
-    methods: ['GET', 'POST'],
+export function createApplication(): express.Application {
+  const app = express();
+
+  // Basic security middleware
+  app.use(helmet());
+
+  // CORS configuration
+  const corsOptions = {
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
-  },
-});
-
-// Initialize WebSocket handlers
-initializeSocketIO(io);
-
-interface HealthCheckResponse {
-  success: boolean;
-  status: string;
-  services: {
-    database: string;
-    redis: string;
-    websocket: string;
+    maxAge: 86400, // 24 hours
   };
-  error?: string;
+  app.use(cors(corsOptions));
+
+  // Compression middleware
+  app.use(compression());
+
+  // Body parsing middleware
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+  // Configure application handlers (logging, monitoring, error handling)
+  configureApplicationHandlers(app);
+
+  // Mount routes
+  app.use('/api', routes);
+
+  return app;
 }
 
-// Health check endpoint
-app.get('/health', async (_req: Request, res: Response) => {
+async function startServer(): Promise<void> {
   try {
-    const dbResult = await pool.query('SELECT 1');
-    const redisConnected = cacheIsConnected();
+    // Initialize services
+    await initializeServices();
 
-    const response: HealthCheckResponse = {
-      success: true,
-      status: 'healthy',
-      services: {
-        database: dbResult.rows[0] ? 'connected' : 'error',
-        redis: redisConnected ? 'connected' : 'disconnected',
-        websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
+    // Create Express application
+    const app = createApplication();
+
+    // Create HTTP server
+    const server = createServer(app);
+
+    // Create Socket.IO server
+    const io = new Server(server, {
+      cors: {
+        origin: process.env.CORS_ORIGIN || '*',
+        methods: ['GET', 'POST'],
       },
+    });
+
+    // Configure WebSocket events
+    io.on('connection', (socket) => {
+      logger.info('Client connected', { socketId: socket.id });
+
+      socket.on('disconnect', () => {
+        logger.info('Client disconnected', { socketId: socket.id });
+      });
+    });
+
+    // Configure graceful shutdown
+    setupGracefulShutdown(server);
+
+    // Start server
+    const port = parseInt(process.env.PORT || '3000', 10);
+    const host = process.env.HOST || 'localhost';
+
+    server.listen(port, () => {
+      const metadata: LogMetadata = {
+        host,
+        port,
+        nodeEnv: process.env.NODE_ENV,
+        nodeVersion: process.version,
+        platform: process.platform,
+        memoryUsage: process.memoryUsage(),
+      };
+      logger.info('Server started', metadata);
+    });
+  } catch (error) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Health check failed', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
-    });
-
-    const response: HealthCheckResponse = {
-      success: false,
-      status: 'unhealthy',
-      error: (error as Error).message,
-      services: {
-        database: 'error',
-        redis: cacheIsConnected() ? 'connected' : 'disconnected',
-        websocket: io.engine.clientsCount >= 0 ? 'connected' : 'error',
-      },
-    };
-
-    res.status(503).json(response);
-  }
-});
-
-// Serve React app for all other routes
-app.get('*', (_req: Request, res: Response) => {
-  try {
-    const indexPath = path.resolve(buildPath, 'index.html');
-    if (!fs.existsSync(indexPath)) {
-      throw new Error('index.html not found');
-    }
-
-    // Read and send the file directly instead of using sendFile
-    const indexHtml = fs.readFileSync(indexPath, 'utf8');
-    res.set('Cache-Control', 'no-cache');
-    res.set('Content-Type', 'text/html');
-    res.send(indexHtml);
-  } catch (error) {
-    logger.error('Error serving index.html', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
-    });
-    if (!res.headersSent) {
-      res.status(500).send('Internal Server Error');
-    }
-  }
-});
-
-// Global error handler
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  logger.error('Unhandled error', {
-    error: err.message,
-    stack: err.stack,
-    method: req.method,
-    url: req.url,
-  });
-
-  if (!res.headersSent) {
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-    });
-  }
-});
-
-// Get server IP addresses
-const getServerIPs = (): string[] => {
-  const interfaces = os.networkInterfaces();
-  const addresses: string[] = [];
-
-  Object.values(interfaces).forEach((iface) => {
-    if (iface) {
-      iface.forEach((addr) => {
-        if (addr.family === 'IPv4' && !addr.internal) {
-          addresses.push(addr.address);
-        }
-      });
-    }
-  });
-
-  return addresses;
-};
-
-// Initialize server
-const startServer = async (): Promise<void> => {
-  try {
-    // Initialize database first
-    await initializeDatabase();
-    logger.info('Database initialized successfully');
-
-    // Initialize Redis (non-blocking)
-    void initializeCache().then(() => {
-      logger.info('Redis initialization completed');
-    });
-
-    // Start HTTP server
-    const PORT = process.env.PORT || 4000;
-    const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
-
-    server.listen(portNumber, '0.0.0.0', () => {
-      const ips = getServerIPs();
-      const addresses = ips.map(ip => `http://${ip}:${portNumber}`);
-
-      logger.info('Server started', {
-        environment: process.env.NODE_ENV,
-        port: portNumber,
-        addresses,
-        frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4000',
-        dbHost: process.env.DB_HOST,
-        redisHost: process.env.REDIS_HOST,
-      });
-
-      // Log server addresses for visibility
-      logger.info('Server is running on:', {
-        addresses,
-      });
-    });
-  } catch (error) {
-    logger.error('Failed to start server', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
-    });
+    logger.error('Failed to start application:', metadata);
     process.exit(1);
   }
-};
+}
 
-// Graceful shutdown handling
-let isShuttingDown = false;
-
-const shutdown = async (): Promise<void> => {
-  if (isShuttingDown) {
-    logger.info('Shutdown already in progress...');
-    return;
-  }
-
-  isShuttingDown = true;
-  logger.info('Initiating graceful shutdown...');
-
-  // Create a promise for server close
-  const serverClosePromise = new Promise<void>((resolve) => {
-    server.close(() => {
-      logger.info('HTTP server closed');
-      resolve();
-    });
-  });
-
-  // Create a promise for WebSocket close
-  const wsClosePromise = new Promise<void>((resolve) => {
-    io.close(() => {
-      logger.info('WebSocket server closed');
-      resolve();
-    });
-  });
-
-  try {
-    // Wait for all connections to close
-    await Promise.all([serverClosePromise, wsClosePromise]);
-
-    // Close database pool
-    if (pool) {
-      await pool.end();
-      logger.info('Database pool closed');
-    }
-
-    // Close Redis connection if available
-    if (cacheIsConnected()) {
-      const redisClient = await redis.getClient();
-      if (redisClient) {
-        await redisClient.quit();
-        logger.info('Redis connection closed');
-      }
-    }
-
-    // Exit process
-    process.exit(0);
-  } catch (err) {
-    logger.error('Error during shutdown', {
-      error: (err as Error).message,
-      stack: (err as Error).stack,
-    });
-    process.exit(1);
-  }
-};
-
-// Handle shutdown signals
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-// Handle uncaught errors
-process.on('uncaughtException', (err: Error) => {
-  logger.error('Uncaught exception', {
-    error: err.message,
-    stack: err.stack,
-  });
-  shutdown();
+// Handle unhandled errors
+process.on('unhandledRejection', (error: unknown) => {
+  const metadata: LogMetadata = {
+    error: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined,
+  };
+  logger.error('Unhandled rejection:', metadata);
 });
 
-process.on('unhandledRejection', (err: unknown) => {
-  const error = err instanceof Error ? err : new Error(String(err));
-  logger.error('Unhandled rejection', {
+process.on('uncaughtException', (error: Error) => {
+  const metadata: LogMetadata = {
     error: error.message,
     stack: error.stack,
-  });
-  shutdown();
+  };
+  logger.error('Uncaught exception:', metadata);
+  process.exit(1);
 });
 
-// Start server
-void startServer();
+// Start the server if this is the main module
+if (require.main === module) {
+  startServer().catch((error) => {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Unhandled error during startup:', metadata);
+    process.exit(1);
+  });
+}
 
-export default app;
+// Export for testing
+export { startServer, initializeServices };

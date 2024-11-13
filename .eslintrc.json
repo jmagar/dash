@@ -1,67 +1,72 @@
 {
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true,
+    "jest": true
+  },
   "extends": [
-    "react-app",
-    "react-app/jest",
-    "plugin:@typescript-eslint/recommended"
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended"
   ],
   "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "ecmaVersion": 12,
+    "sourceType": "module",
+    "project": ["./tsconfig.json", "./tsconfig.test.json"]
+  },
   "plugins": [
     "@typescript-eslint",
-    "unused-imports"
+    "react",
+    "react-hooks",
+    "jest"
   ],
   "rules": {
-    "no-console": ["error", {
-      "allow": ["warn", "error", "info", "debug"]
-    }],
-    "@typescript-eslint/explicit-function-return-type": ["error", {
-      "allowExpressions": true,
-      "allowTypedFunctionExpressions": true
-    }],
+    "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-unused-vars": "error",
-    "@typescript-eslint/no-non-null-assertion": "error",
-    "unused-imports/no-unused-imports": "error"
+    "react/react-in-jsx-scope": "off"
   },
-  "overrides": [
-    {
-      "files": ["src/utils/*Logger.ts"],
-      "rules": {
-        "no-console": "off"
-      }
-    },
-    {
-      "files": ["*.test.ts", "*.test.tsx"],
-      "rules": {
-        "@typescript-eslint/explicit-function-return-type": "off"
-      }
-    },
-    {
-      "files": ["*.js", "*.jsx", "*.config.js"],
-      "excludedFiles": ["src/**/*.js", "src/**/*.jsx"],
-      "env": {
-        "node": true
-      },
-      "parser": "espree",
-      "parserOptions": {
-        "ecmaVersion": 2020,
-        "sourceType": "module"
-      },
-      "rules": {
-        "@typescript-eslint/no-var-requires": "off",
-        "@typescript-eslint/explicit-function-return-type": "off"
-      }
-    }
-  ],
   "settings": {
     "react": {
       "version": "detect"
-    },
-    "import/resolver": {
-      "typescript": {},
-      "node": {
-        "extensions": [".js", ".jsx", ".ts", ".tsx"]
-      }
     }
   },
-  "ignorePatterns": ["dist/", "build/", "coverage/", "node_modules/", "jest.config.js"]
+  "overrides": [
+    {
+      "files": ["*.d.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/ban-types": "off",
+        "@typescript-eslint/no-empty-interface": "off",
+        "@typescript-eslint/triple-slash-reference": "off"
+      }
+    },
+    {
+      "files": ["test/**/*.ts", "test/**/*.tsx"],
+      "env": {
+        "jest": true
+      },
+      "extends": ["plugin:jest/recommended"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "jest/expect-expect": "error",
+        "jest/no-disabled-tests": "warn",
+        "jest/no-focused-tests": "error",
+        "jest/no-identical-title": "error",
+        "jest/valid-expect": "error"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "build",
+    "node_modules",
+    "*.js",
+    "*.jsx"
+  ]
 }
