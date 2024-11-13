@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import type { ApiResult, Host } from '../../types';
+import type { ApiResult, Host, SystemStats } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
@@ -134,6 +134,17 @@ export async function testConnection(id: number): Promise<ApiResult<void>> {
     return response.data;
   } catch (error) {
     return handleApiError(error, 'testConnection');
+  }
+}
+
+export async function getHostStatus(id: number): Promise<ApiResult<SystemStats>> {
+  try {
+    logger.info('Getting host status', { hostId: String(id) });
+    const response = await api.get(API_ENDPOINTS.HOSTS.STATS(id));
+    logger.info('Host status retrieved successfully', { hostId: String(id) });
+    return response.data;
+  } catch (error) {
+    return handleApiError<SystemStats>(error, 'getHostStatus');
   }
 }
 
