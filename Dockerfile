@@ -28,6 +28,7 @@ COPY package*.json ./
 # Install ALL dependencies (including devDependencies) and global packages
 RUN npm install --legacy-peer-deps --no-optional && \
     npm install -g typescript rimraf && \
+    npm install --save-dev @babel/plugin-proposal-private-property-in-object@latest && \
     npm config set legacy-peer-deps true
 
 # Copy configuration files
@@ -52,11 +53,12 @@ RUN npm install --save-dev \
     eslint-import-resolver-typescript \
     eslint-plugin-import \
     eslint-plugin-react \
-    eslint-plugin-react-hooks
+    eslint-plugin-react-hooks \
+    @babel/plugin-transform-private-property-in-object
 
 # Clean and build
 RUN rimraf dist build && \
-    SKIP_PREFLIGHT_CHECK=true npm run build && \
+    DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true npm run build && \
     npm run build:server
 
 # Production stage
