@@ -14,12 +14,14 @@ import {
   ListItemText,
   TextField,
   Typography,
+  Alert,
 } from '@mui/material';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { FileItem, ApiResult } from '../../types';
+import type { FileItem } from '../../types';
 import { readFile, writeFile } from '../api';
 import { useAsync, useKeyPress } from '../hooks';
+import { logger } from '../utils/frontendLogger';
 
 interface Props {
   item: FileItem;
@@ -36,13 +38,43 @@ export default function FileListItem({
 }: Props): JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const editRef = useRef<HTMLDivElement>(null);
 
-  const handleReadFile = useCallback(() => readFile(hostId, item.path), [hostId, item.path]);
-  const handleWriteFile = useCallback(() => writeFile(hostId, item.path, content), [hostId, item.path, content]);
+  const handleReadFile = useCallback(async () => {
+    try {
+      logger.info('Reading file', { path: item.path, hostId: String(hostId) });
+      const result = await readFile(hostId, item.path);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to read file');
+      }
+      logger.info('File read successfully', { path: item.path });
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to read file';
+      logger.error('Error reading file:', { error: errorMessage, path: item.path });
+      throw err;
+    }
+  }, [hostId, item.path]);
 
-  const { execute: executeRead, loading: loadingRead } = useAsync<ApiResult<string>>(handleReadFile);
-  const { execute: executeWrite, loading: loadingWrite } = useAsync<ApiResult<void>>(handleWriteFile);
+  const handleWriteFile = useCallback(async () => {
+    try {
+      logger.info('Writing file', { path: item.path, hostId: String(hostId) });
+      const result = await writeFile(hostId, item.path, content);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to write file');
+      }
+      logger.info('File written successfully', { path: item.path });
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to write file';
+      logger.error('Error writing file:', { error: errorMessage, path: item.path });
+      throw err;
+    }
+  }, [hostId, item.path, content]);
+
+  const { execute: executeRead, loading: loadingRead } = useAsync(handleReadFile);
+  const { execute: executeWrite, loading: loadingWrite } = useAsync(handleWriteFile);
 
   const handleKeyPress = (e: KeyboardEvent): void => {
     if (e.key === 'Enter' && isEditing) {
@@ -75,19 +107,32 @@ export default function FileListItem({
 
   const handleEdit = async (): Promise<void> => {
     if (item.type === 'file') {
-      const result = await executeRead();
-      if (result.success && result.data) {
-        setContent(result.data);
-        setIsEditing(true);
+      try {
+        setError(null);
+        const result = await executeRead();
+        if (result.success && result.data) {
+          setContent(result.data);
+          setIsEditing(true);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to read file';
+        setError(errorMessage);
       }
     }
   };
 
   const handleSave = async (): Promise<void> => {
     if (item.type === 'file') {
-      const result = await executeWrite();
-      if (result.success) {
-        setIsEditing(false);
+      try {
+        setError(null);
+        const result = await executeWrite();
+        if (result.success) {
+          setIsEditing(false);
+          setContent('');
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to save file';
+        setError(errorMessage);
       }
     }
   };
@@ -95,6 +140,7 @@ export default function FileListItem({
   const handleCancel = (): void => {
     setIsEditing(false);
     setContent('');
+    setError(null);
   };
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
@@ -103,11 +149,13 @@ export default function FileListItem({
 
   const handleClick = (): void => {
     if (item.type === 'directory' && onNavigate) {
+      logger.info('Navigating to directory', { path: item.path });
       onNavigate(item.path);
     }
   };
 
   const handleDelete = (): void => {
+    logger.info('Deleting file/directory', { path: item.path });
     onDelete(item.path);
   };
 
@@ -122,6 +170,11 @@ export default function FileListItem({
           onChange={handleContentChange}
           disabled={loadingWrite}
         />
+        {error && (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {error}
+          </Alert>
+        )}
         <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
           <IconButton onClick={handleCancel} disabled={loadingWrite}>
             <CancelIcon />
