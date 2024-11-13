@@ -27,8 +27,11 @@ COPY .npmrc package*.json .babelrc babel.config.js ./
 RUN npm install --no-package-lock \
     @babel/core@7.23.7 \
     @babel/runtime@7.23.7 \
+    @babel/plugin-proposal-private-property-in-object@7.21.11 \
     @babel/plugin-transform-private-property-in-object@7.23.4 \
+    @babel/plugin-proposal-class-properties@7.18.6 \
     @babel/plugin-transform-class-properties@7.23.3 \
+    @babel/plugin-proposal-private-methods@7.18.6 \
     @babel/plugin-transform-private-methods@7.23.3 \
     babel-preset-react-app@10.0.1 \
     rimraf@5.0.5 \
