@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { HostSelector } from './HostSelector';
+import HostSelector from './HostSelector';
 import type { Host } from '../../types';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
@@ -10,9 +10,11 @@ export function Navigation(): JSX.Element {
   const location = useLocation();
   const { hosts, selectedHost, selectHost } = useHost();
 
-  const handleSelect = useCallback((host: Host): void => {
-    selectHost(host);
-    logger.info('Host selected', { hostId: String(host.id) });
+  const handleSelect = useCallback((selectedHosts: Host[]): void => {
+    if (selectedHosts.length > 0) {
+      selectHost(selectedHosts[0]);
+      logger.info('Host selected', { hostId: String(selectedHosts[0].id) });
+    }
   }, [selectHost]);
 
   const handleDeselect = useCallback((): void => {
@@ -36,9 +38,10 @@ export function Navigation(): JSX.Element {
         </Link>
         <HostSelector
           hosts={hosts}
-          selectedHost={selectedHost}
+          open={true}
+          onClose={handleDeselect}
           onSelect={handleSelect}
-          onDeselect={handleDeselect}
+          multiSelect={false}
         />
       </div>
       <div className="nav-links">

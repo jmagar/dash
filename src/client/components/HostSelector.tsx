@@ -5,40 +5,42 @@ import { logger } from '../utils/frontendLogger';
 
 interface HostSelectorProps {
   hosts: Host[];
-  selectedHost: Host | null;
-  onSelect: (host: Host) => void;
-  onDeselect: () => void;
+  open: boolean;
+  onClose: () => void;
+  onSelect: (hosts: Host[]) => void;
+  multiSelect?: boolean;
 }
 
-export function HostSelector({
+export default function HostSelector({
   hosts,
-  selectedHost,
+  open,
+  onClose,
   onSelect,
-  onDeselect,
+  multiSelect = false,
 }: HostSelectorProps): JSX.Element {
   const handleChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const hostId = event.target.value;
     if (hostId === '') {
-      onDeselect();
+      onClose();
       logger.info('Host deselected');
       return;
     }
 
-    const host = hosts.find(h => String(h.id) === hostId);
+    const host = hosts.find((h: Host) => String(h.id) === hostId);
     if (host) {
-      onSelect(host);
+      onSelect([host]);
       logger.info('Host selected', { hostId: String(host.id) });
     }
-  }, [hosts, onSelect, onDeselect]);
+  }, [hosts, onSelect, onClose]);
 
   return (
     <select
-      value={selectedHost?.id || ''}
+      value=""
       onChange={handleChange}
       className="host-selector"
     >
       <option value="">Select a host...</option>
-      {hosts.map(host => (
+      {hosts.map((host: Host) => (
         <option key={host.id} value={host.id}>
           {host.name} ({host.hostname})
         </option>

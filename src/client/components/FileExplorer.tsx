@@ -26,6 +26,7 @@ import React, { useState } from 'react';
 
 import type { FileItem, Host } from '../../types';
 import { listFiles, deleteFile, createDirectory } from '../api';
+import { useHost } from '../context/HostContext';
 import { useAsync, useDebounce, useKeyPress } from '../hooks';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
@@ -40,6 +41,7 @@ export default function FileExplorer(): JSX.Element {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const debouncedSearch = useDebounce(searchTerm, 300);
+  const { hosts } = useHost();
 
   const loadFilesList = async (): Promise<FileItem[]> => {
     if (!selectedHost) return [];
@@ -64,8 +66,10 @@ export default function FileExplorer(): JSX.Element {
     file.name.toLowerCase().includes(debouncedSearch.toLowerCase()),
   );
 
-  const handleHostSelect = (hosts: Host[]): void => {
-    setSelectedHost(hosts[0]);
+  const handleHostSelect = (selectedHosts: Host[]): void => {
+    if (selectedHosts.length > 0) {
+      setSelectedHost(selectedHosts[0]);
+    }
     setHostSelectorOpen(false);
   };
 
@@ -127,6 +131,7 @@ export default function FileExplorer(): JSX.Element {
           Select Host
         </Button>
         <HostSelector
+          hosts={hosts}
           open={hostSelectorOpen}
           onClose={(): void => setHostSelectorOpen(false)}
           onSelect={handleHostSelect}

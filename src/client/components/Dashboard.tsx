@@ -5,19 +5,25 @@ import { getHostStatus, testConnection } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
-export default function Dashboard(): JSX.Element {
+interface DashboardProps {
+  hostId?: number;
+}
+
+export default function Dashboard({ hostId }: DashboardProps): JSX.Element {
   const { selectedHost } = useHost();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveHostId = hostId || selectedHost?.id;
+
   useEffect(() => {
-    if (!selectedHost) return;
+    if (!effectiveHostId) return;
 
     const fetchStats = async (): Promise<void> => {
       try {
         setError(null);
-        const result = await getHostStatus(selectedHost.id);
+        const result = await getHostStatus(effectiveHostId);
         if (result.success && result.data) {
           setStats(result.data);
         } else {
@@ -38,14 +44,14 @@ export default function Dashboard(): JSX.Element {
     return () => {
       clearInterval(timer);
     };
-  }, [selectedHost]);
+  }, [effectiveHostId]);
 
   const handleTestConnection = async (): Promise<void> => {
-    if (!selectedHost) return;
+    if (!effectiveHostId) return;
 
     try {
       setError(null);
-      const result = await testConnection(selectedHost.id);
+      const result = await testConnection(effectiveHostId);
       if (!result.success) {
         setError(result.error || 'Connection test failed');
       }
@@ -56,7 +62,7 @@ export default function Dashboard(): JSX.Element {
     }
   };
 
-  if (!selectedHost) {
+  if (!effectiveHostId) {
     return (
       <div className="dashboard">
         <h2>Dashboard</h2>
@@ -99,8 +105,8 @@ export default function Dashboard(): JSX.Element {
     <div className="dashboard">
       <h2>Dashboard</h2>
       <div className="host-info">
-        <h3>{selectedHost.name}</h3>
-        <p>{selectedHost.hostname}</p>
+        <h3>{selectedHost?.name}</h3>
+        <p>{selectedHost?.hostname}</p>
       </div>
       <div className="stats">
         <div className="stat">
