@@ -8,7 +8,6 @@ interface HostSelectorProps {
   selectedHost: Host | null;
   onSelect: (host: Host) => void;
   onDeselect: () => void;
-  multiSelect?: boolean;
 }
 
 export function HostSelector({
@@ -16,7 +15,6 @@ export function HostSelector({
   selectedHost,
   onSelect,
   onDeselect,
-  multiSelect = false,
 }: HostSelectorProps): JSX.Element {
   const handleChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const hostId = event.target.value;

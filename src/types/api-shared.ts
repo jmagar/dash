@@ -131,7 +131,7 @@ export const API_ENDPOINTS = {
 /**
  * Client-side API error handler
  */
-export function handleApiError<T>(error: unknown, context: string): ApiResult<T> {
+export function handleApiError<T>(error: unknown): ApiResult<T> {
   if (error && typeof error === 'object' && 'isAxiosError' in error) {
     const axiosError = error as AxiosError<ApiErrorResponse>;
     const errorMessage = axiosError.response?.data?.error ||

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { HostSelector } from './HostSelector';
@@ -10,18 +10,18 @@ export function Navigation(): JSX.Element {
   const location = useLocation();
   const { hosts, selectedHost, selectHost } = useHost();
 
-  const handleSelect = React.useCallback((host: Host): void => {
+  const handleSelect = useCallback((host: Host): void => {
     selectHost(host);
     logger.info('Host selected', { hostId: String(host.id) });
   }, [selectHost]);
 
-  const handleDeselect = React.useCallback((): void => {
+  const handleDeselect = useCallback((): void => {
     selectHost(null);
     logger.info('Host deselected');
   }, [selectHost]);
 
   // Auto-select first host if none selected
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedHost && hosts.length > 0) {
       logger.info('Auto-selecting first host', { hostId: String(hosts[0].id) });
       selectHost(hosts[0]);

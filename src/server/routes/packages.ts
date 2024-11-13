@@ -14,17 +14,17 @@ interface Package {
   installed: boolean;
 }
 
-interface PackageResponse {
+interface _PackageResponse {
   success: boolean;
   data?: Package[];
   error?: string;
 }
 
-interface PackageRequestParams {
+interface _PackageRequestParams {
   hostId: string;
 }
 
-interface PackageRequestBody {
+interface _PackageRequestBody {
   package: string;
 }
 
@@ -127,106 +127,8 @@ const installPackage = async (req: express.Request, res: express.Response): Prom
   }
 };
 
-// Uninstall package
-const uninstallPackage = async (req: express.Request, res: express.Response): Promise<void> => {
-  const { hostId } = req.params;
-  const { package: packageName } = req.body;
-
-  try {
-    if (!packageName) {
-      const metadata: LogMetadata = { hostId: String(hostId) };
-      logger.warn('Package uninstallation failed: No package name provided', metadata);
-      throw createApiError('Package name is required', 400, metadata);
-    }
-
-    logger.info('Uninstalling package', { hostId: String(hostId), package: packageName });
-
-    // This is a placeholder. In a real implementation, this would
-    // connect to the host and uninstall the package.
-    const result = await query('SELECT 1');
-    if (!result) {
-      const metadata: LogMetadata = {
-        hostId: String(hostId),
-        package: packageName,
-      };
-      logger.error('Database connection failed:', metadata);
-      throw createApiError('Failed to connect to database', 500, metadata);
-    }
-
-    logger.info('Package uninstalled successfully', { hostId: String(hostId), package: packageName });
-    res.json({ success: true });
-  } catch (error) {
-    const metadata: LogMetadata = {
-      hostId: String(hostId),
-      package: packageName,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Failed to uninstall package:', metadata);
-
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Failed to uninstall package',
-      error instanceof Error && error.message.includes('required') ? 400 : 500,
-      metadata,
-    );
-    res.status(apiError.status || 500).json({
-      success: false,
-      error: apiError.message,
-    });
-  }
-};
-
-// Update package
-const updatePackage = async (req: express.Request, res: express.Response): Promise<void> => {
-  const { hostId } = req.params;
-  const { package: packageName } = req.body;
-
-  try {
-    if (!packageName) {
-      const metadata: LogMetadata = { hostId: String(hostId) };
-      logger.warn('Package update failed: No package name provided', metadata);
-      throw createApiError('Package name is required', 400, metadata);
-    }
-
-    logger.info('Updating package', { hostId: String(hostId), package: packageName });
-
-    // This is a placeholder. In a real implementation, this would
-    // connect to the host and update the package.
-    const result = await query('SELECT 1');
-    if (!result) {
-      const metadata: LogMetadata = {
-        hostId: String(hostId),
-        package: packageName,
-      };
-      logger.error('Database connection failed:', metadata);
-      throw createApiError('Failed to connect to database', 500, metadata);
-    }
-
-    logger.info('Package updated successfully', { hostId: String(hostId), package: packageName });
-    res.json({ success: true });
-  } catch (error) {
-    const metadata: LogMetadata = {
-      hostId: String(hostId),
-      package: packageName,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Failed to update package:', metadata);
-
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Failed to update package',
-      error instanceof Error && error.message.includes('required') ? 400 : 500,
-      metadata,
-    );
-    res.status(apiError.status || 500).json({
-      success: false,
-      error: apiError.message,
-    });
-  }
-};
-
 // Register routes
 router.get('/:hostId', listPackages);
 router.post('/:hostId/install', installPackage);
-router.post('/:hostId/uninstall', uninstallPackage);
-router.post('/:hostId/update', updatePackage);
 
 export default router;
