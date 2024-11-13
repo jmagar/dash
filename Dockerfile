@@ -19,7 +19,7 @@ ENV REACT_APP_WDS_SOCKET_PORT=0
 # Copy package files first to leverage layer caching
 COPY package*.json ./
 
-# Install dependencies with legacy peer deps
+# Install ALL dependencies (including devDependencies)
 RUN npm install --legacy-peer-deps && \
     npm install -g typescript && \
     npm config set legacy-peer-deps true
@@ -36,9 +36,21 @@ COPY public ./public
 # Create empty .env file if none exists
 RUN touch .env
 
+# Install additional dependencies that might be needed for the build
+RUN npm install --save-dev \
+    @types/node \
+    @types/react \
+    @types/react-dom \
+    @typescript-eslint/eslint-plugin \
+    @typescript-eslint/parser \
+    eslint-import-resolver-typescript \
+    eslint-plugin-import \
+    eslint-plugin-react \
+    eslint-plugin-react-hooks
+
 # Clean and build
 RUN npm run clean && \
-    npm run build && \
+    SKIP_PREFLIGHT_CHECK=true npm run build && \
     npm run build:server
 
 # Production stage

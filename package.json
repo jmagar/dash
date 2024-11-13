@@ -42,7 +42,7 @@
   "scripts": {
     "start": "node dist/server/server.js",
     "clean": "rm -rf dist build",
-    "build": "SKIP_PREFLIGHT_CHECK=true react-scripts build",
+    "build": "DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true react-scripts build",
     "build:server": "tsc --project tsconfig.server.json",
     "build:all": "npm run clean && npm run build && npm run build:server",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

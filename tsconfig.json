@@ -15,26 +15,23 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "baseUrl": "src",
+    "baseUrl": ".",
     "paths": {
-      "@types/*": ["types/*"]
-    },
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
-    "types": ["node", "jest"]
+      "*": ["node_modules/*"],
+      "src/*": ["src/*"]
+    }
   },
   "include": [
-    "src/client/**/*",
-    "src/types/**/*"
+    "src/**/*",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "build",
     "dist",
     "scripts",
-    "test",
-    "src/server/**/*"
+    "test"
   ]
 }
