@@ -27,8 +27,8 @@ export interface Container {
 
 export interface Stack {
   name: string;
-  services: string;
-  status: string;
+  services: number;
+  status: 'running' | 'partial' | 'stopped';
   created: Date;
 }
 

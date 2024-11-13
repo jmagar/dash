@@ -26,13 +26,6 @@ export interface FormattedContainer {
   ports: string[];
 }
 
-export interface DockerStack {
-  name: string;
-  services: number;
-  status: 'running' | 'partial';
-  created: number;
-}
-
 export interface DockerResponse {
   success?: boolean;
   error?: string;

@@ -1,3 +1,4 @@
+import type { Container, Stack } from './models-shared';
 
 export interface Cache {
   redis: RedisClient;
@@ -18,10 +19,10 @@ export interface Cache {
   invalidateHostCache(id: string): Promise<void>;
 
   // Docker management
-  getDockerContainers(hostId: string): Promise<unknown>;
-  cacheDockerContainers(hostId: string, data: unknown): Promise<void>;
-  getDockerStacks(hostId: string): Promise<unknown>;
-  cacheDockerStacks(hostId: string, data: unknown): Promise<void>;
+  getDockerContainers(hostId: string): Promise<Container[]>;
+  cacheDockerContainers(hostId: string, data: Container[]): Promise<void>;
+  getDockerStacks(hostId: string): Promise<Stack[]>;
+  cacheDockerStacks(hostId: string, data: Stack[]): Promise<void>;
 
   // Command history
   cacheCommand(userId: string, hostId: string, command: CacheCommand | CacheCommand[]): Promise<void>;
