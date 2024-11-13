@@ -10,19 +10,13 @@ export {
 
 // Docker API
 export {
-  getContainers,
+  listContainers,
   getContainerLogs,
   startContainer,
   stopContainer,
   restartContainer,
   removeContainer,
-  getStacks,
-  createStack,
-  deleteStack,
-  startStack,
-  stopStack,
-  getStackComposeFile,
-  updateStackComposeFile,
+  getContainerStats,
 } from './docker.client';
 
 // File Explorer API
@@ -38,18 +32,13 @@ export {
 export {
   listHosts,
   addHost,
-  removeHost,
-  getHostStatus,
+  updateHost,
+  deleteHost,
   testConnection,
-  getSystemStats,
-  connectHost,
-  disconnectHost,
 } from './hosts.client';
 
 // Package Manager API
 export {
-  type Package,
-  listInstalledPackages,
   searchPackages,
   installPackage,
   uninstallPackage,
@@ -59,10 +48,6 @@ export {
 
 // Remote Execution API
 export {
-  executeCommand,
   executeScript,
-  getCommandHistory,
-  getSavedCommands,
-  saveCommand,
   deleteSavedCommand,
 } from './remoteExecution.client';

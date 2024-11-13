@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { Container } from '../../types';
-import { getContainers } from '../api';
+import { listContainers } from '../api';
 import { logger } from '../utils/frontendLogger';
 
 export interface UseDockerUpdatesOptions {
@@ -25,7 +25,7 @@ export function useDockerUpdates(options: UseDockerUpdatesOptions = {}): {
     const fetchContainers = async (): Promise<void> => {
       try {
         setError(null);
-        const result = await getContainers();
+        const result = await listContainers();
         if (result.success) {
           setContainers(result.data || []);
         } else {
