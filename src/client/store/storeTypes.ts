@@ -1,33 +1,13 @@
-import type { ThunkAction, Action, Dispatch } from '@reduxjs/toolkit';
+import type { ThunkDispatch, AnyAction } from '@reduxjs/toolkit';
 
 import type { DockerState } from './slices/types/docker';
 import type { HostState } from './slices/types/host';
 
-/**
- * Root state type combining all slice states
- */
 export interface RootState {
-  hosts: HostState;
   docker: DockerState;
+  hosts: HostState;
 }
 
-/**
- * Type for Redux Thunks
- */
-export type AppThunk<ReturnType = void> = ThunkAction<
-  ReturnType,
-  RootState,
-  unknown,
-  Action<string>
->;
+export type AppDispatch = ThunkDispatch<RootState, unknown, AnyAction>;
 
-/**
- * Type for store dispatch
- */
-export type AppDispatch = Dispatch<Action<string>> &
-  ((action: AppThunk) => Promise<void>);
-
-/**
- * Type for middleware dispatch
- */
-export type MiddlewareDispatch = Dispatch<Action<string>>;
+export type MiddlewareDispatch = ThunkDispatch<RootState, undefined, AnyAction>;

@@ -24,7 +24,7 @@ export default function HostSelector({
       return;
     }
 
-    const host = hosts.find((h: Host) => String(h.id) === hostId);
+    const host = hosts.find((h: Host) => h.id === parseInt(hostId, 10));
     if (host) {
       onSelect([host]);
       logger.info('Host selected', { hostId: String(host.id) });
@@ -43,7 +43,7 @@ export default function HostSelector({
     >
       <option value="">Select a host...</option>
       {hosts.map((host: Host) => (
-        <option key={host.id} value={host.id}>
+        <option key={host.id} value={String(host.id)}>
           {host.name} ({host.hostname})
         </option>
       ))}

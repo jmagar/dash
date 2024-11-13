@@ -5,11 +5,11 @@ import type { LogMetadata } from '../../../types/logger';
 import type { Host } from '../../../types/models-shared';
 import { listHosts, connectHost, disconnectHost } from '../../api/hosts.client';
 import { logger } from '../../utils/frontendLogger';
-import type { RootState } from '../types';
+import type { RootState } from '../storeTypes';
 
 const initialState: HostState = {
   hosts: {},
-  selectedHostId: null,
+  selectedHost: null,
   connections: {},
   loading: false,
   error: null,
@@ -40,15 +40,15 @@ export const fetchHosts = createAsyncThunk<
 });
 
 export const connectToHost = createAsyncThunk<
-  string,
-  string,
+  number,
+  number,
   {
     rejectValue: string;
     state: RootState;
   }
 >('hosts/connect', async (hostId, { rejectWithValue }) => {
   try {
-    const response = await connectHost(parseInt(hostId));
+    const response = await connectHost(hostId);
     if (!response.success) {
       throw new Error(response.error || 'Failed to connect to host');
     }
@@ -65,14 +65,14 @@ export const connectToHost = createAsyncThunk<
 });
 
 export const disconnectFromHost = createAsyncThunk<
-  string,
-  string,
+  number,
+  number,
   {
     rejectValue: string;
   }
 >('hosts/disconnect', async (hostId, { rejectWithValue }) => {
   try {
-    const response = await disconnectHost(parseInt(hostId));
+    const response = await disconnectHost(hostId);
     if (!response.success) {
       throw new Error(response.error || 'Failed to disconnect from host');
     }
@@ -92,8 +92,9 @@ const hostSlice = createSlice({
   name: 'hosts',
   initialState,
   reducers: {
-    selectHost: (state, action: PayloadAction<string | null>) => {
-      state.selectedHostId = action.payload;
+    selectHost: (state, action: PayloadAction<number | null>) => {
+      const hostId = action.payload;
+      state.selectedHost = hostId ? state.hosts[hostId] || null : null;
     },
     updateConnectionState: (state, action: PayloadAction<HostConnectionUpdate>) => {
       const { hostId, connectionState } = action.payload;
@@ -112,7 +113,7 @@ const hostSlice = createSlice({
       })
       .addCase(fetchHosts.fulfilled, (state, action) => {
         state.loading = false;
-        state.hosts = action.payload.reduce<Record<string, Host>>((acc, host) => {
+        state.hosts = action.payload.reduce<Record<number, Host>>((acc, host) => {
           acc[host.id] = host;
           return acc;
         }, {});
@@ -126,6 +127,7 @@ const hostSlice = createSlice({
         const hostId = action.meta.arg;
         state.connections[hostId] = {
           status: 'connecting',
+          lastConnected: undefined,
         };
       })
       .addCase(connectToHost.fulfilled, (state, action) => {
@@ -139,6 +141,7 @@ const hostSlice = createSlice({
         const hostId = action.meta.arg;
         state.connections[hostId] = {
           status: 'error',
+          lastConnected: undefined,
           error: action.payload || 'Connection failed',
         };
       })
@@ -147,9 +150,10 @@ const hostSlice = createSlice({
         const hostId = action.payload;
         state.connections[hostId] = {
           status: 'disconnected',
+          lastConnected: undefined,
         };
-        if (state.selectedHostId === hostId) {
-          state.selectedHostId = null;
+        if (state.selectedHost?.id === hostId) {
+          state.selectedHost = null;
         }
       });
   },
@@ -164,9 +168,9 @@ export const selectAllHosts = (state: RootState): Host[] =>
   Object.values(state.hosts.hosts);
 
 export const selectSelectedHost = (state: RootState): Host | null =>
-  state.hosts.selectedHostId ? state.hosts.hosts[state.hosts.selectedHostId] : null;
+  state.hosts.selectedHost;
 
-export const selectConnectionState = (state: RootState, hostId: string): ConnectionState | undefined =>
+export const selectConnectionState = (state: RootState, hostId: number): ConnectionState | undefined =>
   state.hosts.connections[hostId];
 
 export const selectIsLoading = (state: RootState): boolean =>

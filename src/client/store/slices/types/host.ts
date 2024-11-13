@@ -1,20 +1,22 @@
-import type { Host } from '../../../../types/models-shared';
+import type { Host } from '../../../../types';
+
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface ConnectionState {
-  status: 'connected' | 'disconnected' | 'connecting' | 'error';
-  error?: string;
+  status: ConnectionStatus;
   lastConnected?: Date;
-}
-
-export interface HostState {
-  hosts: Record<string, Host>;
-  selectedHostId: string | null;
-  connections: Record<string, ConnectionState>;
-  loading: boolean;
-  error: string | null;
+  error?: string;
 }
 
 export interface HostConnectionUpdate {
-  hostId: string;
+  hostId: number;
   connectionState: ConnectionState;
+}
+
+export interface HostState {
+  hosts: Record<number, Host>;
+  selectedHost: Host | null;
+  loading: boolean;
+  error: string | null;
+  connections: Record<number, ConnectionState>;
 }

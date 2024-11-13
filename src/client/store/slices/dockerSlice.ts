@@ -1,10 +1,10 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 
-import type { RootState } from '../types';
+import type { RootState } from '../storeTypes';
 import type { Container, DockerState, ContainerUpdate } from './types/docker';
 import type { LogMetadata } from '../../../types/logger';
 import {
-  getContainers,
+  listContainers,
   startContainer,
   stopContainer,
   removeContainer,
@@ -28,7 +28,7 @@ export const fetchContainers = createAsyncThunk<
   }
 >('docker/fetchContainers', async (_, { rejectWithValue }) => {
   try {
-    const response = await getContainers();
+    const response = await listContainers();
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Failed to fetch containers');
     }
@@ -206,7 +206,7 @@ const dockerSlice = createSlice({
         if (state.containers[containerId]) {
           state.containers[containerId] = {
             ...state.containers[containerId],
-            state: 'stopped',
+            state: 'exited',
           };
         }
       })
