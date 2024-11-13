@@ -9,10 +9,12 @@ RUN apk add --no-cache \
     g++ \
     openssh-client
 
-# Set production mode and build configuration
+# Set environment variables
 ENV NODE_ENV=production
+ENV DOCKER_BUILD=1
 ENV SKIP_PREFLIGHT_CHECK=true
 ENV CI=true
+ENV DISABLE_AUTH=true
 ENV REACT_APP_DISABLE_AUTH=true
 ENV REACT_APP_WDS_SOCKET_PORT=0
 ENV BABEL_ENV=production
@@ -31,7 +33,7 @@ RUN npm install --no-package-lock \
     rimraf@5.0.5 \
     typescript@4.9.5
 
-# Now install remaining dependencies, excluding husky
+# Now install remaining dependencies
 RUN npm install --ignore-scripts && \
     npm install -g typescript@4.9.5 rimraf@5.0.5
 
@@ -60,14 +62,16 @@ WORKDIR /app
 # Install SSH client for remote execution
 RUN apk add --no-cache openssh-client
 
-# Set production mode
+# Set environment variables
 ENV NODE_ENV=production
+ENV DOCKER_BUILD=1
+ENV DISABLE_AUTH=true
 ENV REACT_APP_DISABLE_AUTH=true
 
 # Copy npm config and package files
 COPY .npmrc package*.json ./
 
-# Install only production dependencies, excluding prepare scripts
+# Install only production dependencies
 RUN npm install --ignore-scripts --omit=dev --omit=optional
 
 # Copy built files

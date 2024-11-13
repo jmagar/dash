@@ -5,12 +5,20 @@ services:
       dockerfile: Dockerfile
       args:
         - NODE_ENV=production
+        - DOCKER_BUILD=1
+        - SKIP_PREFLIGHT_CHECK=true
+        - CI=true
+        - DISABLE_AUTH=true
+        - REACT_APP_DISABLE_AUTH=true
+        - REACT_APP_WDS_SOCKET_PORT=0
+        - BABEL_ENV=production
     ports:
       - "4000:4000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - NODE_ENV=production
+      - DOCKER_BUILD=1
       - PORT=4000
       - FRONTEND_URL=http://localhost:4000
       - REACT_APP_API_URL=http://localhost:4000/api
