@@ -37,6 +37,7 @@ interface Props {
 export default function PackageManager({ hostId }: Props): JSX.Element {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<Package[] | null>(null);
 
   const loadPackages = async (): Promise<Package[]> => {
     const result = await listInstalledPackages(hostId);
@@ -56,13 +57,14 @@ export default function PackageManager({ hostId }: Props): JSX.Element {
   const handleSearch = async (): Promise<void> => {
     if (!searchTerm.trim()) return;
     setError(null);
+    setSearchResults(null);
 
     try {
       const result = await searchPackages(hostId, searchTerm);
-      if (!result.success) {
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Search failed');
       }
-      // Handle search results
+      setSearchResults(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     }
@@ -76,6 +78,7 @@ export default function PackageManager({ hostId }: Props): JSX.Element {
         throw new Error(result.error || 'Installation failed');
       }
       void refreshPackages();
+      setSearchResults(null); // Clear search results after successful install
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Installation failed');
     }
@@ -110,6 +113,8 @@ export default function PackageManager({ hostId }: Props): JSX.Element {
   if (loading) {
     return <LoadingScreen fullscreen={false} message="Loading packages..." />;
   }
+
+  const displayPackages = searchResults ?? packages ?? [];
 
   return (
     <Box sx={{ p: 3 }}>
@@ -154,42 +159,52 @@ export default function PackageManager({ hostId }: Props): JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {packages?.map((pkg) => (
-              <TableRow key={pkg.name}>
-                <TableCell>{pkg.name}</TableCell>
-                <TableCell>{pkg.version}</TableCell>
-                <TableCell>{pkg.description}</TableCell>
-                <TableCell align="right">
-                  {pkg.installed ? (
-                    <>
-                      <Button
-                        size="small"
-                        onClick={(): void => void handleUninstall(pkg)}
-                      >
-                        Uninstall
-                      </Button>
-                      {pkg.updateAvailable && (
-                        <Button
-                          size="small"
-                          color="primary"
-                          onClick={(): void => void handleUpdate(pkg)}
-                        >
-                          Update
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <Button
-                      size="small"
-                      color="primary"
-                      onClick={(): void => void handleInstall(pkg)}
-                    >
-                      Install
-                    </Button>
-                  )}
+            {displayPackages.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  <Typography color="textSecondary">
+                    {searchResults ? 'No packages found' : 'No packages installed'}
+                  </Typography>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              displayPackages.map((pkg) => (
+                <TableRow key={pkg.name}>
+                  <TableCell>{pkg.name}</TableCell>
+                  <TableCell>{pkg.version}</TableCell>
+                  <TableCell>{pkg.description}</TableCell>
+                  <TableCell align="right">
+                    {pkg.installed ? (
+                      <>
+                        <Button
+                          size="small"
+                          onClick={(): void => void handleUninstall(pkg)}
+                        >
+                          Uninstall
+                        </Button>
+                        {pkg.updateAvailable && (
+                          <Button
+                            size="small"
+                            color="primary"
+                            onClick={(): void => void handleUpdate(pkg)}
+                          >
+                            Update
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <Button
+                        size="small"
+                        color="primary"
+                        onClick={(): void => void handleInstall(pkg)}
+                      >
+                        Install
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>

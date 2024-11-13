@@ -20,20 +20,34 @@ interface AuthenticatedRequest extends ExpressRequest {
 interface CommandRequest extends AuthenticatedRequest {
   body: {
     command: string;
+    workingDirectory?: string;
   };
   params: {
     hostId: string;
   };
 }
 
+function validateCommand(command: unknown): command is { command: string; workingDirectory?: string } {
+  return typeof command === 'object' &&
+    command !== null &&
+    typeof (command as { command: string }).command === 'string' &&
+    ((command as { workingDirectory?: string }).workingDirectory === undefined ||
+      typeof (command as { workingDirectory?: string }).workingDirectory === 'string');
+}
+
 /**
  * Cache a terminal command for a specific host
  */
 router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
-  const { hostId } = req.params;
-  const { command } = req.body;
-  const userId = req.user?.id;
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
 
+  const userId = req.user?.id;
   if (!userId) {
     const error = createApiError('Unauthorized', 401);
     return res.status(error.status || 401).json({
@@ -42,18 +56,35 @@ router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
     });
   }
 
+  if (!validateCommand(req.body)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid command format',
+    });
+  }
+
+  const { command, workingDirectory } = req.body;
+  if (!command.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: 'Command cannot be empty',
+    });
+  }
+
   try {
     const commandData: CacheCommand = {
       command,
+      workingDirectory,
       timestamp: new Date(),
     };
 
-    await cache.cacheCommand(userId, hostId, commandData);
+    await cache.cacheCommand(userId, String(hostId), commandData);
 
     logger.info('Command cached', {
       userId,
-      hostId,
+      hostId: String(hostId),
       command,
+      workingDirectory,
     });
 
     res.json({
@@ -63,8 +94,9 @@ router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
   } catch (error) {
     const metadata: LogMetadata = {
       userId,
-      hostId,
+      hostId: String(hostId),
       command,
+      workingDirectory,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to cache command:', metadata);
@@ -85,9 +117,15 @@ router.post('/:hostId/command', async (req: CommandRequest, res: Response) => {
  * Get command history for a specific host
  */
 router.get('/:hostId/history', async (req: AuthenticatedRequest, res: Response) => {
-  const { hostId } = req.params;
-  const userId = req.user?.id;
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
 
+  const userId = req.user?.id;
   if (!userId) {
     const error = createApiError('Unauthorized', 401);
     return res.status(error.status || 401).json({
@@ -97,15 +135,22 @@ router.get('/:hostId/history', async (req: AuthenticatedRequest, res: Response) 
   }
 
   try {
-    const commands = await cache.getCommands(userId, hostId);
+    const commands = await cache.getCommands(userId, String(hostId));
+    if (!Array.isArray(commands)) {
+      throw new Error('Invalid command history format');
+    }
+
     res.json({
       success: true,
-      data: commands || [],
+      data: commands.map(cmd => ({
+        ...cmd,
+        timestamp: cmd.timestamp instanceof Date ? cmd.timestamp : new Date(cmd.timestamp),
+      })),
     });
   } catch (error) {
     const metadata: LogMetadata = {
       userId,
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to get command history:', metadata);

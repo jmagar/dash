@@ -47,11 +47,11 @@ export default function FileExplorer(): JSX.Element {
   const loadFilesList = async (): Promise<FileItem[]> => {
     if (!selectedHost) return [];
     const response = await listFiles(selectedHost.id, currentPath);
-    if (!response.success) {
+    if (!response.success || !response.data) {
       logger.error('Failed to load files:', { error: response.error });
       throw new Error(response.error || 'Failed to load files');
     }
-    return response.data || [];
+    return response.data;
   };
 
   const {
@@ -64,7 +64,7 @@ export default function FileExplorer(): JSX.Element {
     immediate: !!selectedHost,
   });
 
-  const filteredFiles = files?.filter(file =>
+  const filteredFiles = (files ?? []).filter(file =>
     file.name.toLowerCase().includes(debouncedSearch.toLowerCase()),
   );
 
@@ -93,15 +93,13 @@ export default function FileExplorer(): JSX.Element {
     try {
       const newPath = `${currentPath}/${newFolderName}`.replace(/\/+/g, '/');
       const result = await createDirectory(selectedHost.id, newPath);
-      if (result.success) {
-        logger.info('Created new folder', { path: newPath });
-        setCreateFolderDialogOpen(false);
-        setNewFolderName('');
-        void loadFiles();
-      } else {
-        logger.error('Failed to create folder:', { error: result.error });
-        setError(result.error || 'Failed to create folder');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create folder');
       }
+      logger.info('Created new folder', { path: newPath });
+      setCreateFolderDialogOpen(false);
+      setNewFolderName('');
+      void loadFiles();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create folder';
       logger.error('Error creating folder:', { error: errorMessage });
@@ -114,13 +112,11 @@ export default function FileExplorer(): JSX.Element {
 
     try {
       const result = await deleteFile(selectedHost.id, path);
-      if (result.success) {
-        logger.info('Deleted file', { path });
-        void loadFiles();
-      } else {
-        logger.error('Failed to delete file:', { error: result.error });
-        setError(result.error || 'Failed to delete file');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete file');
       }
+      logger.info('Deleted file', { path });
+      void loadFiles();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete file';
       logger.error('Error deleting file:', { error: errorMessage });
@@ -226,15 +222,25 @@ export default function FileExplorer(): JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredFiles?.map((item) => (
-              <FileListItem
-                key={item.path}
-                item={item}
-                hostId={selectedHost.id}
-                onNavigate={handleNavigate}
-                onDelete={handleDeleteFile}
-              />
-            ))}
+            {filteredFiles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} align="center">
+                  <Typography color="textSecondary">
+                    {searchTerm ? 'No matching files found' : 'No files in this directory'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredFiles.map((item) => (
+                <FileListItem
+                  key={item.path}
+                  item={item}
+                  hostId={selectedHost.id}
+                  onNavigate={handleNavigate}
+                  onDelete={handleDeleteFile}
+                />
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>

@@ -15,6 +15,23 @@ export interface Host {
   sshKeyId?: string;
 }
 
+export interface CreateHostRequest {
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  credentials?: {
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+  };
+  sshKeyId?: string;
+}
+
+export interface UpdateHostRequest extends CreateHostRequest {
+  isActive?: boolean;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -88,6 +105,22 @@ export interface SSHConfig {
   readyTimeout?: number;
   keepaliveInterval?: number;
   keepaliveCountMax?: number;
+}
+
+export interface SystemStats {
+  cpu: number;
+  memory: {
+    used: number;
+    total: number;
+  };
+  disk: {
+    used: number;
+    total: number;
+  };
+  network: {
+    rx: number;
+    tx: number;
+  };
 }
 
 export interface ApiResponse<T> {

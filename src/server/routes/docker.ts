@@ -22,21 +22,50 @@ interface DockerRequest extends AuthenticatedRequest {
   };
 }
 
+function validateContainers(containers: unknown): containers is Container[] {
+  return Array.isArray(containers) && containers.every(container =>
+    typeof container === 'object' &&
+    container !== null &&
+    typeof container.id === 'string' &&
+    typeof container.name === 'string' &&
+    typeof container.image === 'string' &&
+    typeof container.status === 'string' &&
+    ['running', 'stopped', 'paused'].includes(container.state)
+  );
+}
+
+function validateStacks(stacks: unknown): stacks is Stack[] {
+  return Array.isArray(stacks) && stacks.every(stack =>
+    typeof stack === 'object' &&
+    stack !== null &&
+    typeof stack.name === 'string' &&
+    typeof stack.services === 'number' &&
+    ['running', 'partial', 'stopped'].includes(stack.status) &&
+    stack.created instanceof Date
+  );
+}
+
 /**
  * Get Docker containers for a host
  */
 router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
-  const { hostId } = req.params;
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
 
   try {
-    const containers = await cache.getDockerContainers(hostId);
+    const containers = await cache.getDockerContainers(String(hostId));
     res.json({
       success: true,
       data: containers || [],
     });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to get Docker containers:', metadata);
@@ -57,17 +86,23 @@ router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
  * Get Docker stacks for a host
  */
 router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
-  const { hostId } = req.params;
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
 
   try {
-    const stacks = await cache.getDockerStacks(hostId);
+    const stacks = await cache.getDockerStacks(String(hostId));
     res.json({
       success: true,
       data: stacks || [],
     });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to get Docker stacks:', metadata);
@@ -88,15 +123,27 @@ router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
  * Cache Docker containers for a host
  */
 router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => {
-  const { hostId } = req.params;
-  const containers = req.body as Container[];
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
+
+  if (!validateContainers(req.body)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid container data',
+    });
+  }
 
   try {
-    await cache.cacheDockerContainers(hostId, containers);
+    await cache.cacheDockerContainers(String(hostId), req.body);
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to cache Docker containers:', metadata);
@@ -117,15 +164,27 @@ router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => 
  * Cache Docker stacks for a host
  */
 router.post('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
-  const { hostId } = req.params;
-  const stacks = req.body as Stack[];
+  const hostId = parseInt(req.params.hostId, 10);
+  if (isNaN(hostId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid host ID',
+    });
+  }
+
+  if (!validateStacks(req.body)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid stack data',
+    });
+  }
 
   try {
-    await cache.cacheDockerStacks(hostId, stacks);
+    await cache.cacheDockerStacks(String(hostId), req.body);
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId,
+      hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to cache Docker stacks:', metadata);

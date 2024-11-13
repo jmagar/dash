@@ -1,8 +1,8 @@
 import type { QueryResult } from 'pg';
 
-import type { Host, CreateHostRequest, UpdateHostRequest } from './types';
 import { createApiError } from '../../../types/error';
 import type { LogMetadata } from '../../../types/logger';
+import type { Host, CreateHostRequest, UpdateHostRequest, SystemStats } from '../../../types/models-shared';
 import cache from '../../cache';
 import { db } from '../../db';
 import { logger } from '../../utils/logger';
@@ -26,15 +26,9 @@ export async function getAllHosts(): Promise<Host[]> {
 /**
  * Get host by ID
  */
-export async function getHostById(id: string): Promise<Host | null> {
+export async function getHostById(id: number): Promise<Host | null> {
   try {
-    // Check cache first
-    const cachedHost = await cache.getHostStatus(id);
-    if (cachedHost) {
-      return cachedHost as Host;
-    }
-
-    // If not in cache, get from database
+    // Get from database
     const result: QueryResult<Host> = await db.query(
       'SELECT * FROM hosts WHERE id = $1',
       [id],
@@ -43,18 +37,31 @@ export async function getHostById(id: string): Promise<Host | null> {
       return null;
     }
 
-    // Cache the result
-    const host = result.rows[0];
-    await cache.cacheHostStatus(id, host);
-
-    return host;
+    return result.rows[0];
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId: id,
+      hostId: String(id),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to get host:', metadata);
     throw createApiError('Failed to get host', 500, metadata);
+  }
+}
+
+/**
+ * Get host status
+ */
+export async function getHostStatus(id: number): Promise<SystemStats | null> {
+  try {
+    const stats = await cache.getHostStatus(String(id));
+    return stats as SystemStats | null;
+  } catch (error) {
+    const metadata: LogMetadata = {
+      hostId: String(id),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('Failed to get host status:', metadata);
+    throw createApiError('Failed to get host status', 500, metadata);
   }
 }
 
@@ -68,10 +75,7 @@ export async function createHost(data: CreateHostRequest): Promise<Host> {
       [data.name, data.hostname, data.port, data.username],
     );
 
-    const host = result.rows[0];
-    await cache.cacheHostStatus(host.id, host);
-
-    return host;
+    return result.rows[0];
   } catch (error) {
     const metadata: LogMetadata = {
       data,
@@ -85,7 +89,7 @@ export async function createHost(data: CreateHostRequest): Promise<Host> {
 /**
  * Update host
  */
-export async function updateHost(id: string, data: UpdateHostRequest): Promise<Host> {
+export async function updateHost(id: number, data: UpdateHostRequest): Promise<Host> {
   try {
     const result: QueryResult<Host> = await db.query(
       'UPDATE hosts SET name = $1, hostname = $2, port = $3, username = $4 WHERE id = $5 RETURNING *',
@@ -96,13 +100,10 @@ export async function updateHost(id: string, data: UpdateHostRequest): Promise<H
       throw createApiError('Host not found', 404);
     }
 
-    const host = result.rows[0];
-    await cache.cacheHostStatus(id, host);
-
-    return host;
+    return result.rows[0];
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId: id,
+      hostId: String(id),
       data,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
@@ -114,7 +115,7 @@ export async function updateHost(id: string, data: UpdateHostRequest): Promise<H
 /**
  * Delete host
  */
-export async function deleteHost(id: string): Promise<void> {
+export async function deleteHost(id: number): Promise<void> {
   try {
     const result: QueryResult<Host> = await db.query(
       'DELETE FROM hosts WHERE id = $1 RETURNING *',
@@ -126,10 +127,10 @@ export async function deleteHost(id: string): Promise<void> {
     }
 
     // Invalidate cache
-    await cache.invalidateHostCache(id);
+    await cache.invalidateHostCache(String(id));
   } catch (error) {
     const metadata: LogMetadata = {
-      hostId: id,
+      hostId: String(id),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to delete host:', metadata);

@@ -34,17 +34,17 @@ export function useDockerUpdates(options: UseDockerUpdatesOptions = {}): {
       logger.info('Fetching container list');
 
       const result = await listContainers();
-      if (result.success) {
-        const prevCount = containers.length;
-        setContainers(result.data || []);
-        logger.info('Containers updated', {
-          count: result.data?.length || 0,
-          changed: prevCount !== (result.data?.length || 0),
-        });
-        setRetryCount(0); // Reset retry count on success
-      } else {
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to fetch containers');
       }
+
+      const prevCount = containers.length;
+      setContainers(result.data);
+      logger.info('Containers updated', {
+        count: result.data.length,
+        changed: prevCount !== result.data.length,
+      });
+      setRetryCount(0); // Reset retry count on success
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       logger.error('Error fetching containers:', {

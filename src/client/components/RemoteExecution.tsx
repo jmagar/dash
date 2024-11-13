@@ -12,6 +12,7 @@ import type { Command, CommandResult } from '../../types';
 import { executeCommand } from '../api';
 import { useAsync } from '../hooks';
 import LoadingScreen from './LoadingScreen';
+import { logger } from '../utils/frontendLogger';
 
 interface Props {
   hostId: number;
@@ -27,10 +28,20 @@ export default function RemoteExecution({ hostId }: Props): JSX.Element {
       command,
       workingDirectory: workingDirectory || undefined,
     };
+
+    logger.info('Executing command', { command: cmd.command, workingDirectory: cmd.workingDirectory });
     const result = await executeCommand(hostId, cmd);
     if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to execute command');
+      const errorMessage = result.error || 'Failed to execute command';
+      logger.error('Command execution failed:', { error: errorMessage });
+      throw new Error(errorMessage);
     }
+
+    logger.info('Command executed successfully', {
+      exitCode: result.data.exitCode,
+      hasStdout: !!result.data.stdout,
+      hasStderr: !!result.data.stderr,
+    });
     return result.data;
   };
 
@@ -44,14 +55,20 @@ export default function RemoteExecution({ hostId }: Props): JSX.Element {
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError(null);
+
     if (!command.trim()) {
-      setError('Please enter a command');
+      const errorMessage = 'Please enter a command';
+      logger.warn('Command submission failed:', { error: errorMessage });
+      setError(errorMessage);
       return;
     }
+
     try {
       await execute();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      logger.error('Command execution error:', { error: errorMessage });
+      setError(errorMessage);
     }
   };
 

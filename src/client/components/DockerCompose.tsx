@@ -31,15 +31,15 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
     try {
       logger.info('Loading compose file', { stackName });
       const result = await getStackComposeFile(stackName);
-      if (!result.success) {
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to load compose file');
       }
       logger.info('Compose file loaded successfully', { stackName });
-      return result.data || '';
+      return result.data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load compose file';
       logger.error('Error loading compose file:', { error: errorMessage, stackName });
-      throw err;
+      throw new Error(errorMessage);
     }
   }, [stackName]);
 
@@ -47,16 +47,14 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
     loading,
     error: loadError,
     execute: loadFile,
-  } = useAsync(loadComposeFile, {
+  } = useAsync<string>(loadComposeFile, {
     immediate: false,
   });
 
   useEffect(() => {
     if (open && stackName) {
-      void loadFile().then((content) => {
-        if (content) {
-          setComposeFile(content);
-        }
+      void loadFile().then(content => {
+        setComposeFile(content);
       });
     } else if (open) {
       // Clear compose file when creating new stack
@@ -68,8 +66,7 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
     try {
       setError(null);
       if (!composeFile.trim()) {
-        setError('Compose file cannot be empty');
-        return;
+        throw new Error('Compose file cannot be empty');
       }
 
       let result;
@@ -81,16 +78,14 @@ export default function DockerCompose({ stackName, onClose, onSave, open }: Prop
         result = await createStack('new-stack', composeFile);
       }
 
-      if (result.success) {
-        logger.info(stackName ? 'Stack updated successfully' : 'Stack created successfully',
-          stackName ? { stackName } : undefined);
-        onSave();
-        onClose();
-      } else {
-        const errorMessage = result.error || 'Failed to save compose file';
-        logger.error('Error saving compose file:', { error: errorMessage, stackName });
-        setError(errorMessage);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save compose file');
       }
+
+      logger.info(stackName ? 'Stack updated successfully' : 'Stack created successfully',
+        stackName ? { stackName } : undefined);
+      onSave();
+      onClose();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       logger.error('Error in compose file operation:', { error: errorMessage, stackName });

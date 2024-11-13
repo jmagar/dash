@@ -45,15 +45,15 @@ export default function FileListItem({
     try {
       logger.info('Reading file', { path: item.path, hostId: String(hostId) });
       const result = await readFile(hostId, item.path);
-      if (!result.success) {
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to read file');
       }
       logger.info('File read successfully', { path: item.path });
-      return result;
+      return result.data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to read file';
       logger.error('Error reading file:', { error: errorMessage, path: item.path });
-      throw err;
+      throw new Error(errorMessage);
     }
   }, [hostId, item.path]);
 
@@ -65,16 +65,16 @@ export default function FileListItem({
         throw new Error(result.error || 'Failed to write file');
       }
       logger.info('File written successfully', { path: item.path });
-      return result;
+      return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to write file';
       logger.error('Error writing file:', { error: errorMessage, path: item.path });
-      throw err;
+      throw new Error(errorMessage);
     }
   }, [hostId, item.path, content]);
 
-  const { execute: executeRead, loading: loadingRead } = useAsync(handleReadFile);
-  const { execute: executeWrite, loading: loadingWrite } = useAsync(handleWriteFile);
+  const { execute: executeRead, loading: loadingRead } = useAsync<string>(handleReadFile);
+  const { execute: executeWrite, loading: loadingWrite } = useAsync<boolean>(handleWriteFile);
 
   const handleKeyPress = (e: KeyboardEvent): void => {
     if (e.key === 'Enter' && isEditing) {
@@ -109,11 +109,9 @@ export default function FileListItem({
     if (item.type === 'file') {
       try {
         setError(null);
-        const result = await executeRead();
-        if (result.success && result.data) {
-          setContent(result.data);
-          setIsEditing(true);
-        }
+        const fileContent = await executeRead();
+        setContent(fileContent);
+        setIsEditing(true);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to read file';
         setError(errorMessage);
@@ -125,11 +123,9 @@ export default function FileListItem({
     if (item.type === 'file') {
       try {
         setError(null);
-        const result = await executeWrite();
-        if (result.success) {
-          setIsEditing(false);
-          setContent('');
-        }
+        await executeWrite();
+        setIsEditing(false);
+        setContent('');
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save file';
         setError(errorMessage);
