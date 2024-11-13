@@ -5,7 +5,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
-    project: './tsconfig.json',
+    project: './tsconfig.eslint.json',
     tsconfigRootDir: __dirname,
     ecmaFeatures: {
       jsx: true,
@@ -16,7 +16,6 @@ module.exports = {
     'react',
     'react-hooks',
     'import',
-    'unused-imports',
   ],
   extends: [
     'eslint:recommended',
@@ -36,7 +35,7 @@ module.exports = {
     'import/resolver': {
       typescript: {
         alwaysTryTypes: true,
-        project: './tsconfig.json',
+        project: './tsconfig.eslint.json',
       },
       node: {
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
@@ -52,7 +51,6 @@ module.exports = {
       varsIgnorePattern: '^_',
       destructuredArrayIgnorePattern: '^_',
     }],
-    'unused-imports/no-unused-imports': 'error',
 
     // Import rules
     'import/order': ['error', {
@@ -128,7 +126,7 @@ module.exports = {
       },
     },
     {
-      files: ['scripts/**/*.ts', 'src/**/*.js', 'routes/**/*.js'],
+      files: ['scripts/**/*.ts', 'src/**/*.js', 'routes/**/*.js', '*.cjs'],
       env: {
         node: true,
       },
