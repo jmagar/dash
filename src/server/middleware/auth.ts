@@ -19,7 +19,8 @@ function validateDecodedToken(decoded: unknown): decoded is User {
     decoded !== null &&
     typeof (decoded as User).id !== 'undefined' &&
     typeof (decoded as User).username === 'string' &&
-    typeof (decoded as User).role === 'string';
+    typeof (decoded as User).role === 'string' &&
+    typeof (decoded as User).is_active === 'boolean';
 }
 
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
@@ -41,6 +42,11 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     const decoded = verifyToken(token);
     if (!validateDecodedToken(decoded)) {
       throw new Error('Invalid token format');
+    }
+
+    // Check if user is active
+    if (!decoded.is_active) {
+      throw new Error('User account is inactive');
     }
 
     req.user = decoded;

@@ -20,6 +20,8 @@
     "cors": "^2.8.5",
     "dockerode": "^4.0.0",
     "express": "^4.18.2",
+    "express-fileupload": "1.5.1",
+    "express-rate-limit": "7.4.1",
     "helmet": "^8.0.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
@@ -40,18 +42,22 @@
   },
   "scripts": {
     "start": "node dist/server/server.js",
-    "clean": "rimraf dist build || rm -rf dist build",
-    "build": "DISABLE_ESLINT_PLUGIN=true SKIP_PREFLIGHT_CHECK=true BABEL_ENV=production react-scripts build",
+    "clean": "rimraf dist build",
+    "build": "npm run security-check && BABEL_ENV=production react-scripts build",
     "build:server": "tsc --project tsconfig.server.json",
     "build:all": "npm run clean && npm run build && npm run build:server",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:client": "PORT=4000 REACT_APP_DISABLE_AUTH=true REACT_APP_WDS_SOCKET_PORT=0 SKIP_PREFLIGHT_CHECK=true react-scripts start",
+    "dev": "npm run security-check && concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "PORT=4000 REACT_APP_WDS_SOCKET_PORT=0 react-scripts start",
     "dev:server": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server/server.ts",
     "test": "react-scripts test",
     "test:server": "jest --config jest.config.js",
+    "test:security": "npm audit && npm run lint",
     "migrate": "ts-node scripts/migrate.ts",
     "lint": "eslint .",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
+    "security-check": "npm audit && npm run lint && npm outdated",
+    "validate": "npm run test && npm run test:server && npm run security-check",
+    "prepare": "husky install"
   },
   "eslintConfig": {
     "extends": [
@@ -85,6 +91,8 @@
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/eslint": "^9.6.1",
+    "@types/express-fileupload": "1.5.1",
+    "@types/express-rate-limit": "6.0.2",
     "@types/helmet": "^0.0.48",
     "@types/jest": "^27.5.2",
     "@types/jsonwebtoken": "^9.0.7",
@@ -102,8 +110,11 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-security": "^2.1.0",
+    "husky": "^8.0.3",
     "ioredis-mock": "^8.9.0",
     "jest": "^29.7.0",
+    "lint-staged": "^15.2.0",
     "nodemon": "^3.0.2",
     "prettier": "^3.1.0",
     "rimraf": "^5.0.5",
@@ -133,5 +144,14 @@
     "@babel/plugin-transform-private-property-in-object": "7.23.4",
     "@babel/runtime": "7.23.7",
     "babel-preset-react-app": "10.0.1"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   }
 }

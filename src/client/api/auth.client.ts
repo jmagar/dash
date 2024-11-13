@@ -13,6 +13,10 @@ const devUser: User = {
   id: 1,
   username: 'dev',
   role: 'admin',
+  is_active: true,
+  email: 'dev@example.com',
+  lastLogin: new Date(),
+  createdAt: new Date(),
 };
 
 // Default response when auth is disabled
