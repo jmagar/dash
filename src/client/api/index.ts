@@ -17,6 +17,13 @@ export {
   restartContainer,
   removeContainer,
   getContainerStats,
+  getStacks,
+  createStack,
+  deleteStack,
+  startStack,
+  stopStack,
+  getStackComposeFile,
+  updateStackComposeFile,
 } from './docker.client';
 
 // File Explorer API
@@ -35,6 +42,7 @@ export {
   updateHost,
   deleteHost,
   testConnection,
+  getHostStatus,
 } from './hosts.client';
 
 // Package Manager API
@@ -48,6 +56,10 @@ export {
 
 // Remote Execution API
 export {
+  executeCommand,
   executeScript,
+  getCommandHistory,
+  getSavedCommands,
+  saveCommand,
   deleteSavedCommand,
 } from './remoteExecution.client';

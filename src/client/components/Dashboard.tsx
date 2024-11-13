@@ -5,7 +5,7 @@ import { getHostStatus, testConnection } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/frontendLogger';
 
-export function Dashboard(): JSX.Element {
+export default function Dashboard(): JSX.Element {
   const { selectedHost } = useHost();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);

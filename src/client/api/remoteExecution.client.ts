@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import type { ApiResult } from '../../types';
+import type { ApiResult, Command, CommandResult } from '../../types';
 import { API_ENDPOINTS } from '../../types/api-shared';
 import { handleApiError } from '../../types/error';
 import { BASE_URL } from '../config';
@@ -30,6 +30,20 @@ api.interceptors.response.use(
   },
 );
 
+export async function executeCommand(
+  hostId: number,
+  command: Command,
+): Promise<ApiResult<CommandResult>> {
+  try {
+    logger.info('Executing command', { hostId: String(hostId), command: command.command });
+    const response = await api.post(API_ENDPOINTS.EXECUTE.COMMAND(hostId), command);
+    logger.info('Command executed successfully', { hostId: String(hostId) });
+    return response.data;
+  } catch (error) {
+    return handleApiError<CommandResult>(error, 'executeCommand');
+  }
+}
+
 export async function executeScript(
   hostId: number,
   script: string,
@@ -45,6 +59,42 @@ export async function executeScript(
     return response.data;
   } catch (error) {
     return handleApiError<string>(error, 'executeScript');
+  }
+}
+
+export async function getCommandHistory(hostId: number): Promise<ApiResult<string[]>> {
+  try {
+    logger.info('Getting command history', { hostId: String(hostId) });
+    const response = await api.get(API_ENDPOINTS.EXECUTE.HISTORY(hostId));
+    logger.info('Command history retrieved successfully', { hostId: String(hostId) });
+    return response.data;
+  } catch (error) {
+    return handleApiError<string[]>(error, 'getCommandHistory');
+  }
+}
+
+export async function getSavedCommands(hostId: number): Promise<ApiResult<Command[]>> {
+  try {
+    logger.info('Getting saved commands', { hostId: String(hostId) });
+    const response = await api.get(API_ENDPOINTS.EXECUTE.SAVED(hostId));
+    logger.info('Saved commands retrieved successfully', { hostId: String(hostId) });
+    return response.data;
+  } catch (error) {
+    return handleApiError<Command[]>(error, 'getSavedCommands');
+  }
+}
+
+export async function saveCommand(
+  hostId: number,
+  command: Command,
+): Promise<ApiResult<void>> {
+  try {
+    logger.info('Saving command', { hostId: String(hostId), command: command.command });
+    const response = await api.post(API_ENDPOINTS.EXECUTE.SAVED(hostId), command);
+    logger.info('Command saved successfully', { hostId: String(hostId) });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'saveCommand');
   }
 }
 
