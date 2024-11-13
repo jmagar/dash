@@ -116,12 +116,12 @@ export async function updateUser(data: Partial<User>): Promise<ApiResult<User>> 
   }
 
   try {
-    logger.info('Updating user', { userId: data.id });
+    logger.info('Updating user', { userId: data.id?.toString() });
     const response = await api.put(
       API_ENDPOINTS.AUTH.UPDATE(data.id as number),
       data,
     );
-    logger.info('User update successful', { userId: data.id });
+    logger.info('User update successful', { userId: data.id?.toString() });
     return response.data;
   } catch (error) {
     return handleApiError<User>(error, 'updateUser');
