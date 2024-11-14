@@ -21,21 +21,21 @@ router.post(
 // Create host
 router.post(
   '/',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction): void => next(),
+  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
   createAuthHandler(hostController.createHost),
 );
 
 // Update host
 router.patch(
   '/:id',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction): void => next(),
+  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
   createAuthHandler(hostController.updateHost),
 );
 
 // Delete host
 router.delete(
   '/:id',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction): void => next(),
+  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
   createAuthHandler(hostController.deleteHost),
 );
 

@@ -81,26 +81,6 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
 
   const [hostData, setHostData] = useState<HostData>(initialHostData);
 
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(handleClose, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
-    setHostData(prev => ({
-      ...prev,
-      [name]: name === 'port' ? parseInt(value) || 22 : value,
-    }));
-    // Clear messages and validation errors for the changed field
-    setError(null);
-    setSuccess(null);
-    setConnectionTested(false);
-    setValidationErrors(prev => ({ ...prev, [name]: undefined }));
-  }, []);
-
   const resetForm = useCallback((): void => {
     setHostData(initialHostData);
     setError(null);
@@ -116,12 +96,32 @@ export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.El
     onClose();
   }, [onClose, resetForm]);
 
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(handleClose, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [success, handleClose]);
+
   // Cleanup when drawer closes
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) {
       resetForm();
     }
   }, [open, resetForm]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
+    const { name, value } = e.target;
+    setHostData(prev => ({
+      ...prev,
+      [name]: name === 'port' ? parseInt(value) || 22 : value,
+    }));
+    // Clear messages and validation errors for the changed field
+    setError(null);
+    setSuccess(null);
+    setConnectionTested(false);
+    setValidationErrors(prev => ({ ...prev, [name]: undefined }));
+  }, []);
 
   const validateAndProceed = useCallback((): boolean => {
     const errors = validateForm(hostData);

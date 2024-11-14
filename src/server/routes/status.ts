@@ -1,6 +1,7 @@
-import express, { RequestHandler } from 'express';
+import express from 'express';
 
 import { createApiError } from '../../types/error';
+import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { cacheService } from '../cache/CacheService';
 import { db } from '../db';
@@ -67,7 +68,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
 
     logger.info('System status check completed', status);
 
-    res.json({
+    return res.json({
       success: true,
       status,
     });
@@ -82,7 +83,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       status: {
         database: {

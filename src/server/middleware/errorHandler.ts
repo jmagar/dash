@@ -1,115 +1,50 @@
-import type { ErrorRequestHandler, Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 
-import { createApiError, type ApiError } from '../../types/error';
+import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
-interface ValidationError extends Error {
-  name: 'ValidationError';
-  errors?: Record<string, unknown>;
+/**
+ * Global error handler middleware
+ */
+export function errorHandler(error: Error, req: Request, res: Response, next: NextFunction) {
+  const metadata: LogMetadata = {
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    },
+    path: req.path,
+    method: req.method,
+    requestId: req.requestId,
+    userId: req.user?.id,
+  };
+
+  logger.error('Unhandled error:', metadata);
+
+  const apiError = createApiError(error.message, 500, metadata);
+  res.status(apiError.status || 500).json({
+    success: false,
+    error: apiError.message,
+  });
 }
 
-export const errorHandler: ErrorRequestHandler = (
-  error: Error,
-  req: Request,
-  res: Response,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  next,
-): void => {
+/**
+ * 404 Not Found handler
+ */
+export function notFoundHandler(req: Request, res: Response) {
   const metadata: LogMetadata = {
     path: req.path,
     method: req.method,
-    error: error.message,
-    stack: error.stack,
+    requestId: req.requestId,
+    userId: req.user?.id,
   };
 
-  // Handle API Errors
-  if (error.name === 'APIError') {
-    const apiError = error as ApiError;
-    logger.warn('API Error:', {
-      ...metadata,
-      status: apiError.status,
-      details: apiError.details,
-    });
+  logger.warn('Route not found:', metadata);
 
-    res.status(apiError.status || 500).json({
-      success: false,
-      error: error.message,
-      status: apiError.status,
-      details: apiError.details,
-    });
-    return;
-  }
-
-  // Handle Validation Errors
-  if (error.name === 'ValidationError') {
-    const validationError = error as ValidationError;
-    const details = {
-      errors: validationError.errors,
-    };
-
-    logger.warn('Validation Error:', {
-      ...metadata,
-      details,
-    });
-
-    res.status(400).json({
-      success: false,
-      error: 'Validation failed',
-      status: 400,
-      details,
-    });
-    return;
-  }
-
-  // Handle Resource Not Found
-  if (error.message.toLowerCase().includes('not found')) {
-    logger.warn('Resource not found:', metadata);
-
-    const apiError = createApiError(error.message, 404, metadata);
-    res.status(404).json({
-      success: false,
-      error: apiError.message,
-      status: apiError.status,
-      details: apiError.details,
-    });
-    return;
-  }
-
-  // Handle unknown errors
-  logger.error('Unhandled Error:', metadata);
-
-  const apiError = createApiError(
-    'An unexpected error occurred',
-    500,
-    metadata,
-  );
-
-  res.status(500).json({
-    success: false,
-    error: apiError.message,
-    status: apiError.status,
-    details: apiError.details,
-  });
-};
-
-export const notFoundHandler = (req: Request, res: Response): void => {
-  const metadata: LogMetadata = {
-    path: req.path,
-    method: req.method,
-  };
-  logger.warn('Resource not found:', metadata);
-
-  const apiError = createApiError(
-    `Resource not found: ${req.path}`,
-    404,
-    metadata,
-  );
-
+  const error = createApiError('Route not found', 404, metadata);
   res.status(404).json({
     success: false,
-    error: apiError.message,
-    status: apiError.status,
-    details: apiError.details,
+    error: error.message,
   });
-};
+}

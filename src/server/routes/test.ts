@@ -1,12 +1,13 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 
 import { createApiError } from '../../types/error';
+import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
 const router = Router();
 
-export const testRoute = async (req: Request, res: Response): Promise<void> => {
+export const testRoute: RequestHandler = async (req, res) => {
   try {
     const metadata: LogMetadata = {
       method: req.method,
@@ -14,7 +15,7 @@ export const testRoute = async (req: Request, res: Response): Promise<void> => {
     };
     logger.info('Test route accessed:', metadata);
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Test route working',
     });
@@ -29,7 +30,7 @@ export const testRoute = async (req: Request, res: Response): Promise<void> => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });

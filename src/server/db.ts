@@ -4,25 +4,47 @@ import { logger } from './utils/logger';
 
 // Database configuration
 const DB_CONFIG = {
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'shh',
-  max: parseInt(process.env.DB_POOL_SIZE || '20'),
-  idleTimeoutMillis: 30000,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  host: process.env.POSTGRES_HOST,
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB,
+  max: parseInt(process.env.POSTGRES_POOL_SIZE || '20'),
+  idleTimeoutMillis: parseInt(process.env.POSTGRES_IDLE_TIMEOUT || '30000'),
+  connectionTimeoutMillis: parseInt(process.env.POSTGRES_CONNECT_TIMEOUT || '10000'),
 };
+
+// Validate required config
+const requiredConfig = ['user', 'password', 'host', 'database'];
+for (const field of requiredConfig) {
+  if (!DB_CONFIG[field]) {
+    const error = `Missing required Postgres config: ${field}`;
+    logger.error(error);
+    throw new Error(error);
+  }
+}
 
 // Create connection pool
 export const pool = new Pool(DB_CONFIG);
 
 // Log pool events
 pool.on('connect', () => {
-  logger.info('Database connected');
+  logger.info('Database connected', {
+    host: DB_CONFIG.host,
+    port: DB_CONFIG.port,
+    database: DB_CONFIG.database,
+    user: DB_CONFIG.user,
+  });
 });
 
 pool.on('error', (err) => {
-  logger.error('Database error:', { error: err });
+  logger.error('Database error:', { 
+    error: err.message,
+    code: err.code,
+    detail: err.detail,
+    host: DB_CONFIG.host,
+    port: DB_CONFIG.port,
+  });
 });
 
 /**

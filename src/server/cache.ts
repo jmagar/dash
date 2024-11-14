@@ -3,6 +3,11 @@
  * Provides a centralized interface for caching operations
  */
 
-export { cacheService as default } from './cache/CacheService';
+import type { ICacheService } from './cache/types';
+import { cacheService } from './cache/CacheService';
+
+const cache: ICacheService = cacheService;
+
+export default cache;
 export * from './cache/types';
 export * from './cache/config';

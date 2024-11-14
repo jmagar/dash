@@ -23,7 +23,7 @@ const DEFAULT_CONFIG: CacheConfig = {
   connection: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    password: process.env.REDIS_PASSWORD,
+    password: process.env.REDIS_PASSWORD || undefined,
     db: parseInt(process.env.REDIS_DB || '0', 10),
     maxRetriesPerRequest: parseInt(process.env.REDIS_MAX_RETRIES || '3', 10),
   },
@@ -37,6 +37,21 @@ const DEFAULT_CONFIG: CacheConfig = {
 };
 
 export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfig {
+  // Validate host
+  if (!config.connection.host) {
+    const error = createApiError('Redis host is required', 400);
+    logger.error('Redis host validation failed:', { error: error.message });
+    throw error;
+  }
+
+  // Validate port
+  if (config.connection.port < 1 || config.connection.port > 65535) {
+    const metadata: LogMetadata = { port: config.connection.port };
+    const error = createApiError('Redis port must be between 1 and 65535', 400, metadata);
+    logger.error('Redis port validation failed:', { error: error.message, ...metadata });
+    throw error;
+  }
+
   // Validate memory limit
   const memoryMatch = config.memory.limit.match(/^(\d+)(mb|gb)$/i);
   if (!memoryMatch) {
@@ -44,51 +59,30 @@ export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfi
       limit: config.memory.limit,
       format: 'Expected format: <number>mb or <number>gb',
     };
-    logger.warn('Invalid cache memory limit:', metadata);
+    logger.error('Redis memory limit validation failed:', { error: 'Invalid format', ...metadata });
     throw createApiError('Cache memory limit must be specified in MB or GB', 400, metadata);
   }
 
   const memoryValue = parseInt(memoryMatch[1], 10);
-  const memoryUnit = memoryMatch[2].toLowerCase();
-  const memoryInMB = memoryUnit === 'gb' ? memoryValue * 1024 : memoryValue;
-
-  if (memoryInMB < 64) {
-    const metadata: LogMetadata = {
-      limit: config.memory.limit,
-      minimumRequired: '64MB',
-    };
-    logger.warn('Invalid cache memory limit:', metadata);
-    throw createApiError('Cache memory limit must be at least 64MB', 400, metadata);
+  if (memoryValue < 1) {
+    const metadata: LogMetadata = { limit: config.memory.limit };
+    logger.error('Redis memory limit validation failed:', { error: 'Value too small', ...metadata });
+    throw createApiError('Cache memory limit must be at least 1MB/GB', 400, metadata);
   }
 
   // Validate max keys
-  if (config.memory.maxKeys < 1000) {
-    const metadata: LogMetadata = {
-      maxKeys: config.memory.maxKeys,
-      minimumRequired: 1000,
-    };
-    logger.warn('Invalid cache key limit:', metadata);
-    throw createApiError('Cache must allow at least 1000 keys', 400, metadata);
+  if (config.memory.maxKeys < 1) {
+    const metadata: LogMetadata = { maxKeys: config.memory.maxKeys };
+    logger.error('Redis max keys validation failed:', { error: 'Value too small', ...metadata });
+    throw createApiError('Cache max keys must be at least 1', 400, metadata);
   }
 
   // Validate metrics interval
   if (config.metrics.interval < 1000) {
-    const metadata: LogMetadata = {
-      interval: config.metrics.interval,
-      minimumRequired: 1000,
-    };
-    logger.warn('Invalid metrics interval:', metadata);
-    throw createApiError('Metrics interval must be at least 1 second', 400, metadata);
+    const metadata: LogMetadata = { interval: config.metrics.interval };
+    logger.error('Redis metrics interval validation failed:', { error: 'Value too small', ...metadata });
+    throw createApiError('Cache metrics interval must be at least 1000ms', 400, metadata);
   }
-
-  // Log successful validation
-  logger.info('Cache configuration validated', {
-    host: config.connection.host,
-    port: config.connection.port,
-    memoryLimit: config.memory.limit,
-    maxKeys: config.memory.maxKeys,
-    metricsInterval: config.metrics.interval,
-  });
 
   return config;
 }

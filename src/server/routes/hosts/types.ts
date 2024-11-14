@@ -1,10 +1,10 @@
-import { ParamsDictionary } from 'express-serve-static-core';
+import type { ParamsDictionary } from 'express-serve-static-core';
 
 import type { Host, SSHConfig, ApiResponse } from '../../../types/models-shared';
 
 export type { Host, SSHConfig };
 
-export type HostResponse = ApiResponse<Host | Host[]>
+export type HostResponse = ApiResponse<Host | Host[]>;
 
 export interface RequestParams extends ParamsDictionary {
   id: string;
@@ -23,4 +23,4 @@ export interface UpdateHostRequest extends CreateHostRequest {
   isActive?: boolean;
 }
 
-export type DeleteHostResponse = ApiResponse<void>
+export type DeleteHostResponse = ApiResponse<void>;

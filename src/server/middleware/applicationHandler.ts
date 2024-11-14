@@ -1,6 +1,7 @@
-import type { Application, Request, Response, NextFunction } from 'express-serve-static-core';
+import type { Application, Response, NextFunction } from 'express';
 
 import { errorHandler, notFoundHandler } from './errorHandler';
+import type { Request } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
@@ -51,7 +52,7 @@ export function configureApplicationHandlers(app: Application): void {
 /**
  * Helper function to wrap async route handlers
  */
-export function asyncHandler<P = any, ResBody = any, ReqBody = any>(
+export function asyncHandler<P = unknown, ResBody = unknown, ReqBody = unknown>(
   fn: (
     req: Request<P, ResBody, ReqBody>,
     res: Response<ResBody>,

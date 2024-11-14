@@ -1,13 +1,10 @@
-import { randomUUID } from 'crypto';
 import { performance } from 'perf_hooks';
 
-import type { Response as ExpressResponse, NextFunction } from 'express-serve-static-core';
+import type { Response, NextFunction } from 'express';
 
 import type { Request } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
-
-type Response = ExpressResponse;
 
 interface RequestTiming {
   startTime: number;
@@ -15,13 +12,32 @@ interface RequestTiming {
   processingTime: number;
 }
 
+type JsonResponseFunction = <T>(body: T) => Response;
+
+interface ExtendedResponse extends Response {
+  __originalJson?: JsonResponseFunction;
+}
+
 const timings = new WeakMap<Request, RequestTiming>();
+
+/**
+ * Safely cleans up request timing data and event listeners
+ */
+function cleanupRequest(req: Request, res: ExtendedResponse): void {
+  timings.delete(req);
+  res.removeAllListeners("finish");
+  res.removeAllListeners("error");
+  if (res.__originalJson) {
+    res.json = res.__originalJson;
+    delete res.__originalJson;
+  }
+}
 
 /**
  * Request tracing middleware that adds timing information
  * to help track requests through the system.
  */
-export function requestTracer(req: Request, res: Response, next: NextFunction): void {
+export function requestTracer(req: Request, res: Response, next: NextFunction) {
   const startTime = performance.now();
 
   // Store timing information
@@ -57,8 +73,10 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
   const startHrTime = process.hrtime();
 
   // Patch response methods to track timing
-  const originalJson = res.json.bind(res);
-  res.json = function(body: any): Response {
+  const extendedRes = res as ExtendedResponse;
+  const originalJson = res.json.bind(res) as JsonResponseFunction;
+  extendedRes.__originalJson = originalJson;
+  res.json = function(body: unknown): Response {
     const timing = timings.get(req);
     if (timing) {
       timing.processingTime = performance.now() - timing.startTime;
@@ -92,8 +110,7 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
       requestLogger.info('Request completed:', responseMetadata);
     }
 
-    // Cleanup timing data
-    timings.delete(req);
+    cleanupRequest(req, extendedRes);
   });
 
   // Add response listener to log errors
@@ -118,14 +135,14 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
     };
 
     requestLogger.error('Request error:', errorMetadata);
-    timings.delete(req);
+    cleanupRequest(req, extendedRes);
   });
 
   // Add helper to get request logger
   res.locals.logger = requestLogger;
 
   // Add helper to track DB time
-  res.locals.trackDbTime = (time: number): void => {
+  res.locals.trackDbTime = (time: number) => {
     const timing = timings.get(req);
     if (timing) {
       timing.dbTime += time;
@@ -140,10 +157,11 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
  * and reports slow requests
  */
 export function performanceMonitor(threshold = 1000): (req: Request, res: Response, next: NextFunction) => void {
-  return function(req: Request, res: Response, next: NextFunction): void {
+  return function(req: Request, res: Response, next: NextFunction) {
     const start = performance.now();
 
     res.on('finish', () => {
+      const cleanup = () => res.removeAllListeners("finish");
       const duration = performance.now() - start;
       if (duration > threshold) {
         const timing = timings.get(req);
@@ -159,6 +177,7 @@ export function performanceMonitor(threshold = 1000): (req: Request, res: Respon
           } : undefined,
         });
       }
+      cleanup();
     });
 
     next();

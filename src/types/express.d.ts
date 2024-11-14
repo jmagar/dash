@@ -1,15 +1,12 @@
 /// <reference types="express" />
 import type { Logger } from './logger';
+import type { AuthenticatedUser } from './jwt';
 
 declare global {
   namespace Express {
     interface Request {
-      requestId: string;
-      user?: {
-        id: string;
-        username: string;
-        role: string;
-      };
+      requestId?: string;
+      user?: AuthenticatedUser;
     }
 
     interface Locals {
@@ -21,12 +18,8 @@ declare global {
 
 declare module 'express-serve-static-core' {
   interface Request {
-    requestId: string;
-    user?: {
-      id: string;
-      username: string;
-      role: string;
-    };
+    requestId?: string;
+    user?: AuthenticatedUser;
   }
 
   interface Locals {

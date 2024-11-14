@@ -1,7 +1,7 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Response, NextFunction } from 'express';
 
 import { createApiError } from '../../types/error';
-import type { AuthenticatedRequest } from '../../types/express';
+import type { Request, AuthenticatedRequest, AuthMiddleware } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { ApiResponse } from '../../types/models-shared';
 import { verifyToken } from '../utils/jwt';
@@ -20,7 +20,7 @@ function validateDecodedToken(decoded: unknown): decoded is AuthenticatedRequest
     typeof (decoded as AuthenticatedRequest['user']).is_active === 'boolean';
 }
 
-export function authenticate(req: Request, res: Response, next: NextFunction): void {
+export const authenticate: AuthMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -31,8 +31,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
       success: false,
       error: error.message,
     };
-    res.status(401).json(response);
-    return;
+    return res.status(401).json(response);
   }
 
   try {
@@ -64,12 +63,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
       success: false,
       error: apiError.message,
     };
-    res.status(401).json(response);
+    return res.status(401).json(response);
   }
-}
+};
 
-export function requireRole(roles: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+export function requireRole(roles: string[]): AuthMiddleware {
+  return (req: Request, res: Response, next: NextFunction) => {
     const authReq = req as AuthenticatedRequest;
     try {
       if (!authReq.user) {
@@ -79,8 +78,7 @@ export function requireRole(roles: string[]) {
           success: false,
           error: error.message,
         };
-        res.status(401).json(response);
-        return;
+        return res.status(401).json(response);
       }
 
       if (!roles.includes(authReq.user.role)) {
@@ -95,8 +93,7 @@ export function requireRole(roles: string[]) {
           success: false,
           error: error.message,
         };
-        res.status(403).json(response);
-        return;
+        return res.status(403).json(response);
       }
 
       logger.info('Role check passed', {
@@ -123,7 +120,7 @@ export function requireRole(roles: string[]) {
         success: false,
         error: apiError.message,
       };
-      res.status(500).json(response);
+      return res.status(500).json(response);
     }
   };
 }

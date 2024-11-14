@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-import type { Request, Response } from 'express-serve-static-core';
+import type { Request, Response } from 'express';
 
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
@@ -22,17 +22,16 @@ function validateFileContent(content: unknown): content is string {
   return typeof content === 'string';
 }
 
-export async function listFiles(req: Request, res: Response): Promise<void> {
+export async function listFiles(req: Request, res: Response): Promise<Response> {
   const rawPath = req.query.path;
 
   try {
     if (!validatePath(rawPath)) {
       const error = createApiError('Valid path is required', 400);
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message,
       });
-      return;
     }
 
     const dirPath = sanitizePath(rawPath);
@@ -70,7 +69,7 @@ export async function listFiles(req: Request, res: Response): Promise<void> {
       success: true,
       data: fileList,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       path: rawPath,
@@ -83,24 +82,23 @@ export async function listFiles(req: Request, res: Response): Promise<void> {
       error instanceof Error && error.message.includes('not found') ? 404 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
 }
 
-export async function readFile(req: Request, res: Response): Promise<void> {
+export async function readFile(req: Request, res: Response): Promise<Response> {
   const rawPath = req.query.path;
 
   try {
     if (!validatePath(rawPath)) {
       const error = createApiError('Valid path is required', 400);
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: error.message,
       });
-      return;
     }
 
     const filePath = sanitizePath(rawPath);
@@ -125,7 +123,7 @@ export async function readFile(req: Request, res: Response): Promise<void> {
       success: true,
       data: content,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       path: rawPath,
@@ -138,14 +136,14 @@ export async function readFile(req: Request, res: Response): Promise<void> {
       error instanceof Error && error.message.includes('not found') ? 404 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
 }
 
-export async function writeFile(req: Request, res: Response): Promise<void> {
+export async function writeFile(req: Request, res: Response): Promise<Response> {
   const { path: rawPath, content } = req.body;
 
   try {
@@ -170,7 +168,7 @@ export async function writeFile(req: Request, res: Response): Promise<void> {
     const result: ApiResponse<void> = {
       success: true,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       path: rawPath,
@@ -183,14 +181,14 @@ export async function writeFile(req: Request, res: Response): Promise<void> {
       error instanceof Error && error.message.includes('required') ? 400 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
 }
 
-export async function deleteFile(req: Request, res: Response): Promise<void> {
+export async function deleteFile(req: Request, res: Response): Promise<Response> {
   const rawPath = req.query.path;
 
   try {
@@ -220,7 +218,7 @@ export async function deleteFile(req: Request, res: Response): Promise<void> {
     const result: ApiResponse<void> = {
       success: true,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       path: rawPath,
@@ -236,14 +234,14 @@ export async function deleteFile(req: Request, res: Response): Promise<void> {
         : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
 }
 
-export async function createDirectory(req: Request, res: Response): Promise<void> {
+export async function createDirectory(req: Request, res: Response): Promise<Response> {
   const rawPath = req.body.path;
 
   try {
@@ -267,7 +265,7 @@ export async function createDirectory(req: Request, res: Response): Promise<void
     const result: ApiResponse<void> = {
       success: true,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       path: rawPath,
@@ -283,7 +281,7 @@ export async function createDirectory(req: Request, res: Response): Promise<void
         : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });

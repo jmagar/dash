@@ -139,7 +139,7 @@ class ServerLogger implements ContextualLogger {
   /**
    * Create a child logger with additional options
    */
-  child(options: LogOptions): Logger {
+  child(_options: LogOptions): Logger {
     const childLogger = new ServerLogger();
     childLogger.context = this.context;
     return childLogger;

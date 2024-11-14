@@ -1,26 +1,21 @@
 import express from 'express';
-import type { Request, Response } from 'express-serve-static-core';
 
 import { createApiError } from '../../types/error';
+import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import type { Container, Stack } from '../../types/models-shared';
+import type { Container, Stack, ApiResponse } from '../../types/models-shared';
 import cache from '../cache';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    [key: string]: unknown;
-  };
+interface DockerParams {
+  hostId: string;
 }
 
-interface DockerRequest extends AuthenticatedRequest {
-  params: {
-    hostId: string;
-  };
-}
+type ContainersResponse = ApiResponse<Container[]>;
+type StacksResponse = ApiResponse<Stack[]>;
+type EmptyResponse = ApiResponse<void>;
 
 function validateContainers(containers: unknown): containers is Container[] {
   return Array.isArray(containers) && containers.every(container =>
@@ -48,7 +43,7 @@ function validateStacks(stacks: unknown): stacks is Stack[] {
 /**
  * Get Docker containers for a host
  */
-router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
+const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersResponse> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
     return res.status(400).json({
@@ -59,7 +54,7 @@ router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
 
   try {
     const containers = await cache.getDockerContainers(String(hostId));
-    res.json({
+    return res.json({
       success: true,
       data: containers || [],
     });
@@ -75,17 +70,17 @@ router.get('/:hostId/containers', async (req: DockerRequest, res: Response) => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
-});
+};
 
 /**
  * Get Docker stacks for a host
  */
-router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
+const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
     return res.status(400).json({
@@ -96,7 +91,7 @@ router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
 
   try {
     const stacks = await cache.getDockerStacks(String(hostId));
-    res.json({
+    return res.json({
       success: true,
       data: stacks || [],
     });
@@ -112,17 +107,17 @@ router.get('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
-});
+};
 
 /**
  * Cache Docker containers for a host
  */
-router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => {
+const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Container[]> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
     return res.status(400).json({
@@ -140,7 +135,7 @@ router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => 
 
   try {
     await cache.cacheDockerContainers(String(hostId), req.body);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
@@ -153,17 +148,17 @@ router.post('/:hostId/containers', async (req: DockerRequest, res: Response) => 
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
-});
+};
 
 /**
  * Cache Docker stacks for a host
  */
-router.post('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
+const cacheStacks: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Stack[]> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
     return res.status(400).json({
@@ -181,7 +176,7 @@ router.post('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
 
   try {
     await cache.cacheDockerStacks(String(hostId), req.body);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
@@ -194,11 +189,17 @@ router.post('/:hostId/stacks', async (req: DockerRequest, res: Response) => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
   }
-});
+};
+
+// Register routes
+router.get('/:hostId/containers', createAuthHandler(getContainers));
+router.get('/:hostId/stacks', createAuthHandler(getStacks));
+router.post('/:hostId/containers', createAuthHandler(cacheContainers));
+router.post('/:hostId/stacks', createAuthHandler(cacheStacks));
 
 export default router;

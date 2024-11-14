@@ -1,6 +1,7 @@
-import express, { RequestHandler } from 'express';
+import express from 'express';
 
 import { createApiError } from '../../types/error';
+import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { Package, ApiResponse } from '../../types/models-shared';
 import { query } from '../db';
@@ -8,11 +9,7 @@ import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface ListPackagesParams {
-  hostId: string;
-}
-
-interface InstallPackageParams {
+interface PackageParams {
   hostId: string;
 }
 
@@ -20,8 +17,11 @@ interface InstallPackageBody {
   package: string;
 }
 
+type PackageListResponse = ApiResponse<Package[]> & Record<string, unknown>;
+type PackageInstallResponse = ApiResponse<void> & Record<string, unknown>;
+
 // List packages
-const listPackages: RequestHandler<ListPackagesParams> = async (req, res) => {
+const listPackages: AuthenticatedRequestHandler<PackageParams> = async (req, res) => {
   const { hostId } = req.params;
 
   try {
@@ -49,11 +49,11 @@ const listPackages: RequestHandler<ListPackagesParams> = async (req, res) => {
     ];
 
     logger.info('Packages listed successfully', { hostId: String(hostId), count: packages.length });
-    const response: ApiResponse<Package[]> = {
+    const response: PackageListResponse = {
       success: true,
       data: packages,
     };
-    res.json(response);
+    return res.json(response);
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
@@ -66,7 +66,7 @@ const listPackages: RequestHandler<ListPackagesParams> = async (req, res) => {
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
@@ -74,7 +74,7 @@ const listPackages: RequestHandler<ListPackagesParams> = async (req, res) => {
 };
 
 // Install package
-const installPackage: RequestHandler<InstallPackageParams, unknown, InstallPackageBody> = async (
+const installPackage: AuthenticatedRequestHandler<PackageParams, unknown, InstallPackageBody> = async (
   req,
   res,
 ) => {
@@ -103,8 +103,8 @@ const installPackage: RequestHandler<InstallPackageParams, unknown, InstallPacka
     }
 
     logger.info('Package installed successfully', { hostId: String(hostId), package: packageName });
-    const response: ApiResponse<void> = { success: true };
-    res.json(response);
+    const response: PackageInstallResponse = { success: true };
+    return res.json(response);
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
@@ -118,7 +118,7 @@ const installPackage: RequestHandler<InstallPackageParams, unknown, InstallPacka
       error instanceof Error && error.message.includes('required') ? 400 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
@@ -126,7 +126,7 @@ const installPackage: RequestHandler<InstallPackageParams, unknown, InstallPacka
 };
 
 // Register routes
-router.get('/:hostId', listPackages);
-router.post('/:hostId/install', installPackage);
+router.get('/:hostId', createAuthHandler(listPackages));
+router.post('/:hostId/install', createAuthHandler(installPackage));
 
 export default router;

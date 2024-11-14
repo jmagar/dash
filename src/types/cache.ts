@@ -1,7 +1,8 @@
+import type Redis from 'ioredis';
 import type { Container, Stack } from './models-shared';
 
 export interface Cache {
-  redis: RedisClient;
+  redis: Redis;
   CACHE_KEYS: CacheKeys;
   CACHE_TTL: CacheTTL;
 
@@ -9,6 +10,10 @@ export interface Cache {
   cacheSession(token: string, sessionData: string): Promise<void>;
   getSession(token: string): Promise<string | null>;
   invalidateSession(token: string): Promise<void>;
+  deleteSession(token: string): Promise<void>;
+
+  // Connection management
+  disconnect(): Promise<void>;
 
   // Health check
   healthCheck(): Promise<{ status: string; connected: boolean; error?: string }>;
@@ -49,18 +54,19 @@ export interface CacheTTL {
   SESSION: number;
   HOST: number;
   COMMAND: number;
-  DOCKER: number;
+  DOCKER: {
+    CONTAINERS: number;
+    STACKS: number;
+  };
 }
 
-export interface RedisClient {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string, mode?: string, duration?: number): Promise<'OK' | null>;
-  del(key: string): Promise<number>;
-  lpush(key: string, ...values: string[]): Promise<number>;
-  lrange(key: string, start: number, stop: number): Promise<string[]>;
-  expire(key: string, seconds: number): Promise<number>;
-  shutdown(): Promise<void>;
-  on(event: string, listener: (...args: any[]) => void): void;
-  quit(): Promise<'OK' | null>;
-  ping(): Promise<string>;
+export interface RedisEvent {
+  connect: () => void;
+  ready: () => void;
+  error: (error: Error) => void;
+  close: () => void;
+  reconnecting: (params: { delay: number; attempt: number }) => void;
+  end: () => void;
+  warning: (warning: string) => void;
+  timeout: () => void;
 }

@@ -1,97 +1,54 @@
 import path from 'path';
-
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
-import helmet from 'helmet';
-
-import { createApiError } from '../types/error';
-import type { LogMetadata } from '../types/logger';
+import { security, corsConfig } from './middleware/security';
 import { authenticate } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { requestTracer, performanceMonitor } from './middleware/requestTracer';
 import routes from './routes';
 import { logger } from './utils/logger';
+import { config } from './config';
 
-// Validate required environment variables
-const requiredEnvVars = ['JWT_SECRET', 'POSTGRES_URL', 'REDIS_URL'];
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    logger.error(`Missing required environment variable: ${envVar}`);
-    throw new Error(`Missing required environment variable: ${envVar}`);
+// Validate required environment variables in production
+if (process.env.NODE_ENV === 'production') {
+  for (const envVar of ['JWT_SECRET', 'POSTGRES_HOST', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB', 'REDIS_HOST']) {
+    if (!process.env[envVar]) {
+      logger.error(`Missing required environment variable: ${envVar}`);
+      process.exit(1);
+    }
   }
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.server.port;
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-    },
-  },
-  crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: true,
-  crossOriginResourcePolicy: { policy: 'same-site' },
-  dnsPrefetchControl: { allow: false },
-  frameguard: { action: 'deny' },
-  hidePoweredBy: true,
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true,
-  },
-  ieNoOpen: true,
-  noSniff: true,
-  referrerPolicy: { policy: 'same-origin' },
-  xssFilter: true,
-}));
+// Apply security middleware stack
+app.use(security);
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
-    : '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  maxAge: 86400, // 24 hours
-};
-app.use(cors(corsOptions));
-
-// Compression
+// Basic middleware
 app.use(compression());
+app.use(cors(corsConfig));
+app.use(express.json({ limit: config.server.maxRequestSize }));
+app.use(express.urlencoded({ extended: true, limit: config.server.maxRequestSize }));
 
-// Body parsing
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// Request processing middleware
+app.use(requestLogger);
+app.use(requestTracer);
+app.use(performanceMonitor);
 
-// Request logging and tracing
-app.use(requestLogger);  // Add request ID first
-app.use(requestTracer);  // Then add tracing
-app.use(performanceMonitor());
-
-// Static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../build')));
-}
+// Authentication middleware for API routes
+app.use('/api', authenticate);
 
 // API routes
-app.use('/api', authenticate, routes);
+app.use('/api', routes);
 
-// Serve React app in production
+// Serve static files in production
 if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../build')));
+  
+  // Serve React app for all other routes
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../../build/index.html'));
   });
@@ -103,10 +60,7 @@ app.use(errorHandler);
 
 // Start server
 const server = app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`, {
-    port: PORT,
-    env: process.env.NODE_ENV || 'development',
-  });
+  logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
 // Graceful shutdown
@@ -126,15 +80,16 @@ process.on('SIGINT', () => {
   });
 });
 
-process.on('uncaughtException', (error) => {
+// Error handling for uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught exception:', {
-    error: error instanceof Error ? error.message : 'Unknown error',
-    stack: error instanceof Error ? error.stack : undefined,
+    error: error.message,
+    stack: error.stack,
   });
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', (reason: unknown) => {
   logger.error('Unhandled rejection:', {
     error: reason instanceof Error ? reason.message : 'Unknown error',
     stack: reason instanceof Error ? reason.stack : undefined,
@@ -142,4 +97,4 @@ process.on('unhandledRejection', (reason) => {
   process.exit(1);
 });
 
-export default server;
+export default app;

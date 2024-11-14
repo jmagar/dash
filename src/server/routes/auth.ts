@@ -1,7 +1,7 @@
-import express, { type Response, type RequestHandler } from 'express';
+import express, { type Response } from 'express';
 
 import { createApiError } from '../../types/error';
-import type { AuthenticatedRequest } from '../../types/express';
+import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { User, AuthResult } from '../../types/models-shared';
 import cache from '../cache';
@@ -10,26 +10,24 @@ import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface LoginRequest extends express.Request {
-  body: {
-    username: string;
-    password: string;
-  };
+interface LoginCredentials {
+  username: string;
+  password: string;
 }
 
-function validateLoginRequest(body: unknown): body is { username: string; password: string } {
+function validateLoginRequest(body: unknown): body is LoginCredentials {
   return typeof body === 'object' &&
     body !== null &&
-    typeof (body as { username: string }).username === 'string' &&
-    typeof (body as { password: string }).password === 'string' &&
-    (body as { username: string }).username.trim().length > 0 &&
-    (body as { password: string }).password.trim().length > 0;
+    typeof (body as LoginCredentials).username === 'string' &&
+    typeof (body as LoginCredentials).password === 'string' &&
+    (body as LoginCredentials).username.trim().length > 0 &&
+    (body as LoginCredentials).password.trim().length > 0;
 }
 
 /**
  * User login endpoint
  */
-const loginHandler: RequestHandler = async (req, res: Response) => {
+const loginHandler: RequestHandler<unknown, AuthResult, LoginCredentials> = async (req, res: Response) => {
   try {
     if (!validateLoginRequest(req.body)) {
       throw createApiError('Invalid request format', 400);
@@ -56,7 +54,7 @@ const loginHandler: RequestHandler = async (req, res: Response) => {
       token,
       data: user,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       username: req.body?.username,
@@ -69,7 +67,7 @@ const loginHandler: RequestHandler = async (req, res: Response) => {
       error instanceof Error && error.message.includes('Invalid request') ? 400 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
@@ -79,7 +77,7 @@ const loginHandler: RequestHandler = async (req, res: Response) => {
 /**
  * Check if user is authenticated
  */
-const checkAuthHandler: RequestHandler = async (req, res: Response) => {
+const checkAuthHandler: RequestHandler<unknown, AuthResult> = async (req, res: Response) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
@@ -113,7 +111,7 @@ const checkAuthHandler: RequestHandler = async (req, res: Response) => {
       success: true,
       data: user,
     };
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
       token,
@@ -128,7 +126,7 @@ const checkAuthHandler: RequestHandler = async (req, res: Response) => {
         ? 401 : 500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });

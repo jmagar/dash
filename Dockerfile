@@ -23,7 +23,7 @@ ENV DISABLE_ESLINT_PLUGIN=true
 # Copy npm and Babel configs first
 COPY .npmrc package*.json .babelrc babel.config.js ./
 
-# Install dependencies with specific versions to avoid deprecation warnings
+# Install dependencies with specific versions
 RUN npm install --no-package-lock \
     @babel/core@7.23.7 \
     @babel/runtime@7.23.7 \
@@ -37,7 +37,7 @@ RUN npm install --no-package-lock \
     rimraf@5.0.5 \
     typescript@4.9.5
 
-# Now install remaining dependencies
+# Install remaining dependencies
 RUN npm install --ignore-scripts && \
     npm install -g typescript@4.9.5 rimraf@5.0.5
 
@@ -58,31 +58,51 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install SSH client for remote execution
-RUN apk add --no-cache openssh-client
+# Install runtime dependencies
+RUN apk add --no-cache \
+    openssh-client \
+    wget \
+    curl \
+    docker-cli
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV DOCKER_BUILD=1
 ENV DISABLE_AUTH=true
 ENV REACT_APP_DISABLE_AUTH=true
+ENV SKIP_PREFLIGHT_CHECK=true
+ENV CI=true
+
+# Create required directories with proper permissions
+RUN mkdir -p /app/logs && \
+    mkdir -p /root/.ssh && \
+    chmod 700 /root/.ssh && \
+    chown -R node:node /app && \
+    chmod -R 755 /app
 
 # Copy npm config and package files
-COPY .npmrc package*.json ./
+COPY --chown=node:node .npmrc package*.json ./
 
 # Install only production dependencies
 RUN npm install --ignore-scripts --omit=dev --omit=optional
 
 # Copy built files
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/dist ./dist
+COPY --from=builder --chown=node:node /app/build ./build
+COPY --from=builder --chown=node:node /app/dist ./dist
 
-# Create SSH directory with proper permissions
-RUN mkdir -p /root/.ssh && \
-    chmod 700 /root/.ssh
+# Create script directory
+RUN mkdir -p /app/scripts && \
+    chown -R node:node /app/scripts
+
+# Switch to non-root user for most operations
+USER node
 
 # Expose port
 EXPOSE 4000
 
-# Start unified application
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget --spider http://localhost:4000/api/health || exit 1
+
+# Start application
 CMD ["npm", "start"]

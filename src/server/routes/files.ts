@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import express from 'express';
 
 import { createApiError } from '../../types/error';
@@ -10,7 +11,7 @@ import { logger } from '../utils/logger';
 const router = express.Router();
 
 // Request params interface
-interface _FileRequestParams {
+interface FileParams {
   hostId: string;
   path?: string;
 }
@@ -23,7 +24,7 @@ function normalizePath(filePath?: string): string {
 }
 
 // List files in directory
-const listFiles = async (req: express.Request, res: express.Response): Promise<void> => {
+const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
   const { hostId } = req.params;
   const normalizedPath = normalizePath(req.query.path as string);
 
@@ -57,7 +58,7 @@ const listFiles = async (req: express.Request, res: express.Response): Promise<v
       path: normalizedPath,
       count: files.length,
     });
-    res.json({
+    return res.json({
       success: true,
       data: files,
     });
@@ -74,7 +75,7 @@ const listFiles = async (req: express.Request, res: express.Response): Promise<v
       500,
       metadata,
     );
-    res.status(apiError.status || 500).json({
+    return res.status(apiError.status || 500).json({
       success: false,
       error: apiError.message,
     });
@@ -82,6 +83,6 @@ const listFiles = async (req: express.Request, res: express.Response): Promise<v
 };
 
 // Register routes
-router.get('/:hostId', listFiles);
+router.get('/:hostId', createAuthHandler(listFiles));
 
 export default router;
