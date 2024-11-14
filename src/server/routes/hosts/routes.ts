@@ -1,48 +1,26 @@
-import { Router, Request, Response, NextFunction } from 'express';
-
-import * as hostController from './controller';
-import { createAuthHandler } from '../../../types/express';
+import { Router } from 'express';
 import { checkRole } from '../../middleware/auth';
+import { validateHostId, validateCreateHostRequest, validateUpdateHostRequest } from '../../middleware/validation';
+import { createHost, deleteHost, getHost, listHosts, updateHost, testConnection } from './controller';
 
-const router: Router = Router();
+const router = Router();
 
-// List hosts
-router.get('/', createAuthHandler(hostController.listHosts));
+// List all hosts
+router.get('/', checkRole('admin'), listHosts);
 
-// Get host details
-router.get('/:id', createAuthHandler(hostController.getHost));
+// Get host by ID
+router.get('/:id', checkRole('admin'), validateHostId, getHost);
 
-// Test connection without creating host
-router.post(
-  '/test-connection',
-  createAuthHandler(hostController.testConnection),
-);
-
-// Create host
-router.post(
-  '/',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
-  createAuthHandler(hostController.createHost),
-);
+// Create new host
+router.post('/', checkRole('admin'), validateCreateHostRequest, createHost);
 
 // Update host
-router.patch(
-  '/:id',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
-  createAuthHandler(hostController.updateHost),
-);
+router.put('/:id', checkRole('admin'), validateHostId, validateUpdateHostRequest, updateHost);
 
 // Delete host
-router.delete(
-  '/:id',
-  process.env.DISABLE_AUTH !== 'true' ? checkRole(['admin']) : (_req: Request, _res: Response, next: NextFunction) => next(),
-  createAuthHandler(hostController.deleteHost),
-);
+router.delete('/:id', checkRole('admin'), validateHostId, deleteHost);
 
-// Test existing host connection
-router.post(
-  '/:id/test',
-  createAuthHandler(hostController.testHost),
-);
+// Test connection without creating host
+router.post('/test-connection', checkRole('admin'), validateCreateHostRequest, testConnection);
 
 export default router;

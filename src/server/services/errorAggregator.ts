@@ -45,7 +45,7 @@ class ErrorAggregator {
   /**
    * Track an error occurrence and group similar errors
    */
-  public trackError(error: Error, metadata: LogMetadata = {})) {
+  public trackError(error: Error, metadata: LogMetadata = {}) {
     const errorKey = this.getErrorKey(error);
     const occurrence: ErrorOccurrence = {
       timestamp: new Date(),
@@ -107,7 +107,7 @@ class ErrorAggregator {
   /**
    * Clear all error groups
    */
-  public clearErrorGroups()) {
+  public clearErrorGroups() {
     this.errorGroups.clear();
   }
 
@@ -156,7 +156,7 @@ class ErrorAggregator {
   /**
    * Remove error groups older than the flush interval
    */
-  private flushOldErrors()) {
+  private flushOldErrors() {
     const cutoff = new Date(Date.now() - this.flushInterval);
     let flushedCount = 0;
 

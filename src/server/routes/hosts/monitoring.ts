@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { Host } from '../../../types/models-shared';
 
 import { createApiError } from '../../../types/error';
 import type { LogMetadata } from '../../../types/logger';
@@ -10,7 +11,8 @@ export async function invalidateHostCache(req: Request, res: Response): Promise<
   const { hostId } = req.params;
 
   try {
-    await cache.invalidateHostCache(hostId);
+    // Invalidate host cache
+    await cache.removeHost(hostId);
     logger.info('Host cache invalidated', { hostId: String(hostId) });
     res.json({ success: true });
   } catch (error) {
@@ -34,4 +36,24 @@ export async function invalidateHostCache(req: Request, res: Response): Promise<
       error: apiError.message,
     });
   }
+}
+
+export async function startHostMonitoring(host: Host): Promise<void> {
+  logger.info('Starting host monitoring', { hostId: host.id });
+  // TODO: Implement host monitoring
+}
+
+export async function stopHostMonitoring(host: Host): Promise<void> {
+  logger.info('Stopping host monitoring', { hostId: host.id });
+  // TODO: Implement host monitoring
+}
+
+export async function getMonitoringStatus(host: Host): Promise<boolean> {
+  // TODO: Implement monitoring status check
+  return false;
+}
+
+export async function getMonitoredHosts(): Promise<Host[]> {
+  // TODO: Implement monitored hosts retrieval
+  return [];
 }

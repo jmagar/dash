@@ -2,6 +2,7 @@ import path from 'path';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
+import { createServer } from 'http';
 import { security, corsConfig } from './middleware/security';
 import { authenticate } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -58,8 +59,11 @@ if (process.env.NODE_ENV === 'production') {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Create HTTP server
+const server = createServer(app);
+
 // Start server
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
@@ -97,4 +101,4 @@ process.on('unhandledRejection', (reason: unknown) => {
   process.exit(1);
 });
 
-export default app;
+export { app, server };

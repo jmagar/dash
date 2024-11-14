@@ -53,7 +53,7 @@ const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersRespons
   }
 
   try {
-    const containers = await cache.getDockerContainers(String(hostId));
+    const containers = await cache.getContainers(String(hostId));
     return res.json({
       success: true,
       data: containers || [],
@@ -90,7 +90,7 @@ const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = asy
   }
 
   try {
-    const stacks = await cache.getDockerStacks(String(hostId));
+    const stacks = await cache.getStacks(String(hostId));
     return res.json({
       success: true,
       data: stacks || [],
@@ -134,7 +134,7 @@ const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, 
   }
 
   try {
-    await cache.cacheDockerContainers(String(hostId), req.body);
+    await cache.setContainers(String(hostId), req.body);
     return res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
@@ -175,7 +175,7 @@ const cacheStacks: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Stac
   }
 
   try {
-    await cache.cacheDockerStacks(String(hostId), req.body);
+    await cache.setStacks(String(hostId), req.body);
     return res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {

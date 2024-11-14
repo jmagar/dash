@@ -64,7 +64,8 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
       timestamp: new Date(),
     };
 
-    await cache.cacheCommand(req.user.id, String(hostId), commandData);
+    const commandId = String(hostId);
+    await cache.setCommand(commandId, JSON.stringify(commandData));
 
     logger.info('Command cached', {
       userId: req.user.id,
@@ -112,17 +113,23 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
   }
 
   try {
-    const commands = await cache.getCommands(req.user.id, String(hostId));
+    const commandId = String(hostId);
+    const commandData = await cache.getCommand(commandId);
+    if (!commandData) {
+      return res.json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const commands = JSON.parse(commandData);
     if (!Array.isArray(commands)) {
       throw new Error('Invalid command history format');
     }
 
     return res.json({
       success: true,
-      data: commands.map(cmd => ({
-        ...cmd,
-        timestamp: cmd.timestamp instanceof Date ? cmd.timestamp : new Date(cmd.timestamp),
-      })),
+      data: commands,
     });
   } catch (error) {
     const metadata: LogMetadata = {
@@ -132,14 +139,9 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
     };
     logger.error('Failed to get command history:', metadata);
 
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Failed to get command history',
-      500,
-      metadata,
-    );
-    return res.status(apiError.status || 500).json({
+    return res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to get command history',
     });
   }
 };

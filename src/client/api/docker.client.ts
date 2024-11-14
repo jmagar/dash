@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-import type { ApiResult, Container, ContainerStats, Stack } from '../../types';
-import { API_ENDPOINTS } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
+import type { Container, ContainerStats, Stack } from '../../types/models-shared';
+import { createApiError } from '../../types/error';
 import { BASE_URL } from '../config';
 import { logger } from '../utils/frontendLogger';
 
@@ -30,156 +29,162 @@ api.interceptors.response.use(
   },
 );
 
-export async function listContainers(): Promise<ApiResult<Container[]>> {
+export interface DockerResponse<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+}
+
+export async function listContainers(): Promise<DockerResponse<Container[]>> {
   try {
     logger.info('Listing containers');
-    const response = await api.get(API_ENDPOINTS.DOCKER.CONTAINERS);
+    const response = await api.get<DockerResponse<Container[]>>(`/docker/containers`);
     logger.info('Containers listed successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
-    return handleApiError<Container[]>(error, 'listContainers');
+    throw createApiError('Failed to list containers', error);
   }
 }
 
-export async function getContainerLogs(id: string): Promise<ApiResult<string>> {
+export async function getContainerLogs(id: string): Promise<DockerResponse<string>> {
   try {
     logger.info('Fetching container logs', { containerId: id });
-    const response = await api.get(API_ENDPOINTS.DOCKER.CONTAINER_LOGS(id));
+    const response = await api.get<DockerResponse<string>>(`/docker/containers/${id}/logs`);
     logger.info('Container logs fetched successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError<string>(error, 'getContainerLogs');
+    throw createApiError('Failed to get container logs', error);
   }
 }
 
-export async function startContainer(id: string): Promise<ApiResult<void>> {
+export async function startContainer(id: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Starting container', { containerId: id });
-    const response = await api.post(`${API_ENDPOINTS.DOCKER.CONTAINER(id)}/start`);
+    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/start`);
     logger.info('Container started successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'startContainer');
+    throw createApiError('Failed to start container', error);
   }
 }
 
-export async function stopContainer(id: string): Promise<ApiResult<void>> {
+export async function stopContainer(id: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Stopping container', { containerId: id });
-    const response = await api.post(`${API_ENDPOINTS.DOCKER.CONTAINER(id)}/stop`);
+    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/stop`);
     logger.info('Container stopped successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'stopContainer');
+    throw createApiError('Failed to stop container', error);
   }
 }
 
-export async function restartContainer(id: string): Promise<ApiResult<void>> {
+export async function restartContainer(id: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Restarting container', { containerId: id });
-    const response = await api.post(`${API_ENDPOINTS.DOCKER.CONTAINER(id)}/restart`);
+    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/restart`);
     logger.info('Container restarted successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'restartContainer');
+    throw createApiError('Failed to restart container', error);
   }
 }
 
-export async function removeContainer(id: string): Promise<ApiResult<void>> {
+export async function removeContainer(id: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Removing container', { containerId: id });
-    const response = await api.delete(API_ENDPOINTS.DOCKER.CONTAINER(id));
+    const response = await api.delete<DockerResponse<void>>(`/docker/containers/${id}`);
     logger.info('Container removed successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'removeContainer');
+    throw createApiError('Failed to remove container', error);
   }
 }
 
-export async function getContainerStats(id: string): Promise<ApiResult<ContainerStats>> {
+export async function getContainerStats(id: string): Promise<DockerResponse<ContainerStats>> {
   try {
     logger.info('Fetching container stats', { containerId: id });
-    const response = await api.get(API_ENDPOINTS.DOCKER.CONTAINER_STATS(id));
+    const response = await api.get<DockerResponse<ContainerStats>>(`/docker/containers/${id}/stats`);
     logger.info('Container stats fetched successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    return handleApiError<ContainerStats>(error, 'getContainerStats');
+    throw createApiError('Failed to get container stats', error);
   }
 }
 
-export async function getStacks(): Promise<ApiResult<Stack[]>> {
+export async function getStacks(): Promise<DockerResponse<Stack[]>> {
   try {
     logger.info('Fetching stacks');
-    const response = await api.get<ApiResult<Stack[]>>(API_ENDPOINTS.DOCKER.STACKS);
+    const response = await api.get<DockerResponse<Stack[]>>(`/docker/stacks`);
     logger.info('Stacks fetched successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
-    return handleApiError<Stack[]>(error, 'getStacks');
+    throw createApiError('Failed to get stacks', error);
   }
 }
 
-export async function createStack(name: string, composeFile: string): Promise<ApiResult<void>> {
+export async function createStack(name: string, composeFile: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Creating stack', { name });
-    const response = await api.post(API_ENDPOINTS.DOCKER.STACK(name), { composeFile });
+    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}`, { composeFile });
     logger.info('Stack created successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'createStack');
+    throw createApiError('Failed to create stack', error);
   }
 }
 
-export async function deleteStack(name: string): Promise<ApiResult<void>> {
+export async function deleteStack(name: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Deleting stack', { name });
-    const response = await api.delete(API_ENDPOINTS.DOCKER.STACK(name));
+    const response = await api.delete<DockerResponse<void>>(`/docker/stacks/${name}`);
     logger.info('Stack deleted successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'deleteStack');
+    throw createApiError('Failed to delete stack', error);
   }
 }
 
-export async function startStack(name: string): Promise<ApiResult<void>> {
+export async function startStack(name: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Starting stack', { name });
-    const response = await api.post(API_ENDPOINTS.DOCKER.STACK_START(name));
+    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}/start`);
     logger.info('Stack started successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'startStack');
+    throw createApiError('Failed to start stack', error);
   }
 }
 
-export async function stopStack(name: string): Promise<ApiResult<void>> {
+export async function stopStack(name: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Stopping stack', { name });
-    const response = await api.post(API_ENDPOINTS.DOCKER.STACK_STOP(name));
+    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}/stop`);
     logger.info('Stack stopped successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'stopStack');
+    throw createApiError('Failed to stop stack', error);
   }
 }
 
-export async function getStackComposeFile(name: string): Promise<ApiResult<string>> {
+export async function getStackComposeFile(name: string): Promise<DockerResponse<string>> {
   try {
     logger.info('Fetching stack compose file', { name });
-    const response = await api.get(API_ENDPOINTS.DOCKER.STACK(name));
+    const response = await api.get<DockerResponse<string>>(`/docker/stacks/${name}`);
     logger.info('Stack compose file fetched successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError<string>(error, 'getStackComposeFile');
+    throw createApiError('Failed to get stack compose file', error);
   }
 }
 
-export async function updateStackComposeFile(name: string, composeFile: string): Promise<ApiResult<void>> {
+export async function updateStackComposeFile(name: string, composeFile: string): Promise<DockerResponse<void>> {
   try {
     logger.info('Updating stack compose file', { name });
-    const response = await api.put(API_ENDPOINTS.DOCKER.STACK(name), { composeFile });
+    const response = await api.put<DockerResponse<void>>(`/docker/stacks/${name}`, { composeFile });
     logger.info('Stack compose file updated successfully', { name });
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'updateStackComposeFile');
+    throw createApiError('Failed to update stack compose file', error);
   }
 }

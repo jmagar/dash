@@ -1,67 +1,27 @@
-import { Client } from 'ssh2';
-
+import { Client } from 'pg';
 import { logger } from '../../utils/logger';
 
-interface SSHConfig {
-  host: string;
-  port: number;
-  username?: string;
-  password?: string;
-  privateKey?: string;
-  passphrase?: string;
-  readyTimeout?: number;
-  keepaliveInterval?: number;
-  keepaliveCountMax?: number;
+export const CONNECTION_TIMEOUT = 5000; // 5 seconds
+export const KEEP_ALIVE_INTERVAL = 30000; // 30 seconds
+export const KEEP_ALIVE_COUNT_MAX = 3;
+
+export async function getConnection(config: any): Promise<Client> {
+  const client = new Client(config);
+  await client.connect();
+  return client;
 }
 
-/**
- * Test SSH connection to a host
- */
-export async function testSSHConnection(config: SSHConfig): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const client = new Client();
-
-    client.on('ready', () => {
-      logger.debug('SSH connection test successful:', {
-        host: config.host,
-        port: config.port,
-      });
-      client.end();
-      resolve();
+export async function closeConnection(client: Client): Promise<void> {
+  try {
+    await client.end();
+  } catch (error) {
+    logger.error('Error closing connection:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
-
-    client.on('error', (err) => {
-      logger.error('SSH connection test failed:', {
-        host: config.host,
-        port: config.port,
-        error: err.message,
-      });
-      reject(err);
-    });
-
-    try {
-      client.connect({
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        password: config.password,
-        privateKey: config.privateKey,
-        passphrase: config.passphrase,
-        readyTimeout: config.readyTimeout,
-        keepaliveInterval: config.keepaliveInterval,
-        keepaliveCountMax: config.keepaliveCountMax,
-      });
-    } catch (error) {
-      logger.error('SSH connection setup failed:', {
-        host: config.host,
-        port: config.port,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      reject(error);
-    }
-  });
+  }
 }
 
 export default {
-  testSSHConnection,
+  getConnection,
+  closeConnection,
 };

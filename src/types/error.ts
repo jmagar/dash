@@ -10,17 +10,26 @@ interface ApiErrorResponse {
 }
 
 export class ApiError extends Error {
-  public readonly status?: number;
-  public readonly details?: unknown;
+  public readonly status: number;
+  public readonly details: unknown;
 
-  constructor(message: string, status?: number, details?: unknown) {
+  constructor(message: string, status: number, details?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.details = details;
+    this.details = details ?? null;
 
     // Ensure instanceof works correctly
     Object.setPrototypeOf(this, ApiError.prototype);
+  }
+
+  public toJSON(): Record<string, unknown> {
+    return {
+      name: this.name,
+      message: this.message,
+      status: this.status,
+      details: this.details,
+    };
   }
 }
 
@@ -96,12 +105,28 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
-export function createApiError(
-  message: string,
-  status?: number,
-  details?: unknown,
-): ApiError {
-  return new ApiError(message, status, details);
+export function createApiError(message: string, statusOrError: number | Error | unknown, details?: unknown): ApiError {
+  if (typeof statusOrError === 'number') {
+    return new ApiError(message, statusOrError, details);
+  }
+
+  if (statusOrError instanceof Error) {
+    const errorDetails = {
+      originalError: {
+        message: statusOrError.message,
+        stack: statusOrError.stack,
+      },
+      additionalDetails: details,
+    };
+    return new ApiError(message, 500, errorDetails);
+  }
+
+  // Handle unknown error types
+  const errorDetails = {
+    originalError: statusOrError,
+    additionalDetails: details,
+  };
+  return new ApiError(message, 500, errorDetails);
 }
 
 export function extractErrorMessage(error: unknown): string {
@@ -113,11 +138,7 @@ export function extractErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  return 'An unexpected error occurred';
+  return String(error);
 }
 
 export function logError(error: unknown, context: string): void {

@@ -1,160 +1,153 @@
-import express, { type Response } from 'express';
-
+import express from 'express';
+import type { Response } from 'express';
 import { createApiError } from '../../types/error';
-import { type RequestHandler } from '../../types/express';
+import type { RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import type { User, AuthResult } from '../../types/models-shared';
-import cache from '../cache';
-import { generateToken } from '../utils/jwt';
+import type { LoginRequest, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
+import { cacheService } from '../cache/CacheService';
+import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
 
-interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-function validateLoginRequest(body: unknown): body is LoginCredentials {
-  return typeof body === 'object' &&
-    body !== null &&
-    typeof (body as LoginCredentials).username === 'string' &&
-    typeof (body as LoginCredentials).password === 'string' &&
-    (body as LoginCredentials).username.trim().length > 0 &&
-    (body as LoginCredentials).password.trim().length > 0;
-}
-
-/**
- * User login endpoint
- */
-const loginHandler: RequestHandler<unknown, AuthResult, LoginCredentials> = async (req, res: Response) => {
+const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async (req, res: Response) => {
   try {
-    if (!validateLoginRequest(req.body)) {
-      throw createApiError('Invalid request format', 400);
-    }
-
     const { username, password } = req.body;
+    if (!username || !password) {
+      const metadata: LogMetadata = { body: req.body };
+      throw createApiError('Invalid request format', 400, metadata);
+    }
 
     // Validate credentials
     const user = await validateCredentials(username, password);
     if (!user) {
-      throw createApiError('Invalid credentials', 401);
+      const metadata: LogMetadata = { username };
+      throw createApiError('Invalid credentials', 401, metadata);
     }
 
-    // Generate session token
+    // Generate session token and refresh token
     const token = generateToken(user);
+    const refreshToken = generateRefreshToken(user);
 
     // Cache session
-    await cache.cacheSession(token, JSON.stringify(user));
+    await cacheService.setSession(token, user, refreshToken);
 
     logger.info('User logged in successfully', { username });
 
-    const result: AuthResult = {
+    return res.json({
       success: true,
       token,
-      data: user,
-    };
-    return res.json(result);
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    });
   } catch (error) {
     const metadata: LogMetadata = {
-      username: req.body?.username,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Login failed:', metadata);
 
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Login failed',
-      error instanceof Error && error.message.includes('Invalid request') ? 400 : 500,
-      metadata,
-    );
-    return res.status(apiError.status || 500).json({
+    if (error instanceof Error) {
+      return res.status(error instanceof ApiError ? error.status : 500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+
+    return res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'An unexpected error occurred',
     });
   }
 };
 
-/**
- * Check if user is authenticated
- */
-const checkAuthHandler: RequestHandler<unknown, AuthResult> = async (req, res: Response) => {
+const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, res: Response) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
-    const error = createApiError('No token provided', 401);
-    return res.status(error.status || 401).json({
+    const metadata: LogMetadata = {};
+    const error = createApiError('No token provided', 401, metadata);
+    return res.status(error.status).json({
       success: false,
       error: error.message,
     });
   }
 
   try {
-    const session = await cache.getSession(token);
+    const session = await cacheService.getSession(token);
     if (!session) {
-      throw createApiError('Invalid or expired session', 401);
+      const metadata: LogMetadata = { token };
+      throw createApiError('Invalid or expired session', 401, metadata);
     }
 
-    let user: User;
-    try {
-      user = JSON.parse(session);
-    } catch {
-      throw createApiError('Invalid session data', 401);
-    }
-
-    if (!user || !user.id || !user.username || !user.role || typeof user.is_active === 'undefined') {
-      throw createApiError('Invalid user data in session', 401);
-    }
-
-    logger.info('Session validated successfully', { userId: user.id });
-
-    const result: AuthResult = {
+    const user = JSON.parse(session);
+    return res.json({
       success: true,
-      data: user,
-    };
-    return res.json(result);
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    });
   } catch (error) {
     const metadata: LogMetadata = {
-      token,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Session check failed:', metadata);
+    logger.error('Token validation failed:', metadata);
 
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Session check failed',
-      error instanceof Error &&
-        (error.message.includes('Invalid') || error.message.includes('expired'))
-        ? 401 : 500,
-      metadata,
-    );
-    return res.status(apiError.status || 500).json({
+    if (error instanceof Error) {
+      return res.status(error instanceof ApiError ? error.status : 500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+
+    return res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'An unexpected error occurred',
     });
   }
 };
 
-/**
- * Validate user credentials
- */
-async function validateCredentials(username: string, password: string): Promise<User | null> {
-  // TODO: Implement proper credential validation
-  // This is just a placeholder implementation
-  if (username === 'admin' && password === 'admin') {
-    const user: User = {
+const logoutHandler: RequestHandler<unknown, LogoutResponse> = async (req, res: Response) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    return res.json({ success: true });
+  }
+
+  try {
+    await cacheService.removeSession(token);
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Logout failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // Don't expose errors during logout
+    return res.json({ success: true });
+  }
+};
+
+// Mock function for development
+async function validateCredentials(username: string, password: string) {
+  if (process.env.NODE_ENV === 'development') {
+    return {
       id: '1',
       username: 'admin',
       role: 'admin',
       is_active: true,
       email: 'admin@example.com',
-      lastLogin: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-    return user;
   }
   return null;
 }
 
-// Register routes
 router.post('/login', loginHandler);
-router.get('/check', checkAuthHandler);
+router.get('/validate', validateHandler);
+router.post('/logout', logoutHandler);
 
 export default router;

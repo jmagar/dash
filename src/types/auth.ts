@@ -1,11 +1,11 @@
-import { ParamsDictionary } from 'express-serve-static-core';
+import type { ParamsDictionary } from 'express-serve-static-core';
 
-import type { User } from './models-shared';
+import type { User as BaseUser } from './models-shared';
 
-export type { User };
+export type { BaseUser as User };
 
 export interface AuthenticatedUser {
-  id: string | number;
+  id: string;
   username: string;
   role: string;
 }
@@ -15,12 +15,10 @@ export interface LoginRequest {
   password: string;
 }
 
-export type SessionData = AuthenticatedUser;
-
 export interface LoginResponse {
   success: boolean;
   token?: string;
-  user?: SessionData;
+  user?: AuthenticatedUser;
   error?: string;
 }
 
@@ -31,15 +29,30 @@ export interface LogoutResponse {
 
 export interface ValidateResponse {
   success: boolean;
-  user?: SessionData;
+  user?: AuthenticatedUser;
   error?: string;
 }
 
-export interface AuthResult {
-  success: boolean;
-  token?: string;
-  user?: SessionData;
-  error?: string;
+export interface BaseTokenPayload {
+  [key: string]: unknown;
+  id: string;
+  username: string;
+  role: string;
+  type: 'access' | 'refresh';
+  iat?: number;
+  exp?: number;
+}
+
+export interface TokenPayload extends BaseTokenPayload {
+  type: 'access' | 'refresh';
+}
+
+export interface RefreshTokenPayload extends BaseTokenPayload {
+  type: 'refresh';
+}
+
+export interface AccessTokenPayload extends BaseTokenPayload {
+  type: 'access';
 }
 
 export type RequestParams = ParamsDictionary;

@@ -124,3 +124,33 @@ export function requireRole(roles: string[]): AuthMiddleware {
     }
   };
 }
+
+export function checkRole(role: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      const error = createApiError('Unauthorized', 401);
+      logger.warn('Role check failed: No user');
+      void res.status(401).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    if (req.user.role !== role) {
+      const error = createApiError('Forbidden', 403);
+      logger.warn('Role check failed: Invalid role', {
+        userId: req.user.id,
+        requiredRole: role,
+        actualRole: req.user.role,
+      });
+      void res.status(403).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    next();
+  };
+}

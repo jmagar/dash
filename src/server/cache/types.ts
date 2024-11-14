@@ -4,6 +4,7 @@ import type { default as Redis } from 'ioredis';
 import type { RedisMetrics } from './metrics';
 import type { Cache, CacheCommand } from '../../types/cache';
 import type { Container, Stack } from '../../types/models-shared';
+import type { User } from '../../types/auth';
 
 /**
  * Redis connection states
@@ -90,7 +91,7 @@ export type RedisResult<T> = {
  * Cache service interface
  */
 export interface ICacheService {
-  redis: Redis;
+  // Health Check and Management
   healthCheck(): Promise<{
     status: string;
     connected: boolean;
@@ -98,17 +99,31 @@ export interface ICacheService {
     error?: string;
   }>;
   disconnect(): Promise<void>;
-  cacheSession(token: string, data: string): Promise<void>;
-  getSession(token: string): Promise<string | null>;
-  deleteSession(token: string): Promise<void>;
-  cacheHostStatus(hostId: string, status: Cache.HostStatus): Promise<void>;
-  getHostStatus(hostId: string): Promise<Cache.HostStatus | null>;
-  invalidateHostCache(hostId: string): Promise<void>;
-  cacheDockerContainers(hostId: string, containers: Container[]): Promise<void>;
-  getDockerContainers(hostId: string): Promise<Container[]>;
-  cacheDockerStacks(hostId: string, stacks: Stack[]): Promise<void>;
-  getDockerStacks(hostId: string): Promise<Stack[]>;
-  cacheCommand(userId: string, hostId: string, command: CacheCommand | CacheCommand[]): Promise<void>;
-  getCommands(userId: string, hostId: string): Promise<CacheCommand[]>;
   getMetrics(): RedisMetrics;
+
+  // Session Management
+  getSession(token: string): Promise<string | null>;
+  setSession(token: string, user: User, refreshToken: string): Promise<void>;
+  removeSession(token: string): Promise<void>;
+
+  // Host Management
+  getHost(id: string): Promise<string | null>;
+  setHost(id: string, data: string): Promise<void>;
+  removeHost(id: string): Promise<void>;
+
+  // Docker Management
+  getContainers(hostId: string): Promise<Container[] | null>;
+  setContainers(hostId: string, containers: Container[]): Promise<void>;
+  removeContainers(hostId: string): Promise<void>;
+  getStacks(hostId: string): Promise<Stack[] | null>;
+  setStacks(hostId: string, stacks: Stack[]): Promise<void>;
+  removeStacks(hostId: string): Promise<void>;
+
+  // Command Management
+  getCommand(id: string): Promise<string | null>;
+  setCommand(id: string, data: string): Promise<void>;
+  removeCommand(id: string): Promise<void>;
+
+  // Cache Management
+  clear(): Promise<void>;
 }

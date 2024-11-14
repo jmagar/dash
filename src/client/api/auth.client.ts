@@ -1,36 +1,24 @@
-import axios from 'axios';
-
-import type { User, ApiResult, AuthResult, UserRegistration } from '../../types';
-import { API_ENDPOINTS } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
-import { BASE_URL } from '../config';
-import { logger } from '../utils/frontendLogger';
+import type { LoginRequest, LoginResponse, LogoutResponse, ValidateResponse, AuthenticatedUser } from '../../types/auth';
+import type { User } from '../../types/models-shared';
+import { createApiError } from '../../types/error';
+import { api } from './api';
+import { logger } from '../utils/logger';
 
 const isAuthDisabled = process.env.REACT_APP_DISABLE_AUTH === 'true';
 
 // Default dev user when auth is disabled
 const devUser: User = {
-  id: '1',
+  id: 'dev-user',
   username: 'dev',
+  email: 'dev@localhost',
   role: 'admin',
   is_active: true,
-  email: 'dev@example.com',
-  lastLogin: new Date(),
   createdAt: new Date(),
-};
-
-// Default response when auth is disabled
-const authDisabledResponse: ApiResult<AuthResult> = {
-  success: true,
-  data: {
-    success: true,
-    data: devUser,
-    token: 'dev-token',
-  },
+  updatedAt: new Date(),
 };
 
 // Configure axios
-const api = axios.create({
+const axiosApi = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
   headers: {
@@ -39,7 +27,7 @@ const api = axios.create({
 });
 
 // Add response interceptor for error handling
-api.interceptors.response.use(
+axiosApi.interceptors.response.use(
   response => response,
   error => {
     logger.error('Auth API request failed:', {
@@ -53,29 +41,60 @@ api.interceptors.response.use(
   },
 );
 
-export async function login(
-  username: string,
-  password: string,
-): Promise<ApiResult<AuthResult>> {
+export async function login(request: LoginRequest): Promise<LoginResponse> {
   if (isAuthDisabled) {
-    logger.info('Auth disabled, using default response');
-    return authDisabledResponse;
+    const user: AuthenticatedUser = {
+      id: devUser.id,
+      username: devUser.username,
+      role: devUser.role,
+    };
+    return {
+      success: true,
+      token: 'dev-token',
+      user,
+    };
   }
 
   try {
-    logger.info('Attempting login', { username });
-    const response = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
-      username,
-      password,
-    });
-    logger.info('Login successful', { username });
+    logger.info('Attempting login', { username: request.username });
+    const response = await api.post<LoginResponse>('/auth/login', request);
+    logger.info('Login successful', { username: request.username });
     return response.data;
   } catch (error) {
-    return handleApiError<AuthResult>(error, 'login');
+    if (error instanceof Error) {
+      throw createApiError('Login failed', error);
+    }
+    throw createApiError('Login failed', new Error('Unknown error'));
   }
 }
 
-export async function logout(): Promise<ApiResult<void>> {
+export async function validate(): Promise<ValidateResponse> {
+  if (isAuthDisabled) {
+    const user: AuthenticatedUser = {
+      id: devUser.id,
+      username: devUser.username,
+      role: devUser.role,
+    };
+    return {
+      success: true,
+      user,
+    };
+  }
+
+  try {
+    logger.info('Validating token');
+    const response = await api.get<ValidateResponse>('/auth/validate');
+    logger.info('Token validation successful');
+    return response.data;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw createApiError('Token validation failed', error);
+    }
+    throw createApiError('Token validation failed', new Error('Unknown error'));
+  }
+}
+
+export async function logout(): Promise<LogoutResponse> {
   if (isAuthDisabled) {
     logger.info('Auth disabled, skipping logout');
     return { success: true };
@@ -83,52 +102,68 @@ export async function logout(): Promise<ApiResult<void>> {
 
   try {
     logger.info('Attempting logout');
-    const response = await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+    const response = await api.post<LogoutResponse>('/auth/logout');
     logger.info('Logout successful');
     return response.data;
   } catch (error) {
-    return handleApiError(error, 'logout');
+    if (error instanceof Error) {
+      throw createApiError('Logout failed', error);
+    }
+    throw createApiError('Logout failed', new Error('Unknown error'));
   }
 }
 
-export async function register(data: UserRegistration): Promise<ApiResult<AuthResult>> {
+export async function register(data: Partial<User>): Promise<LoginResponse> {
   if (isAuthDisabled) {
-    logger.info('Auth disabled, using default response');
-    return authDisabledResponse;
+    const user: AuthenticatedUser = {
+      id: devUser.id,
+      username: devUser.username,
+      role: devUser.role,
+    };
+    return {
+      success: true,
+      token: 'dev-token',
+      user,
+    };
   }
 
   try {
     logger.info('Attempting registration', { username: data.username });
-    const response = await api.post(API_ENDPOINTS.AUTH.REGISTER, data);
+    const response = await axiosApi.post('/auth/register', data);
     logger.info('Registration successful', { username: data.username });
     return response.data;
   } catch (error) {
-    return handleApiError<AuthResult>(error, 'register');
+    if (error instanceof Error) {
+      throw createApiError('Registration failed', error);
+    }
+    throw createApiError('Registration failed', new Error('Unknown error'));
   }
 }
 
-export async function updateUser(data: Partial<User>): Promise<ApiResult<User>> {
+export async function updateUser(data: Partial<User>): Promise<LoginResponse> {
   if (isAuthDisabled) {
-    logger.info('Auth disabled, using default response');
+    const user: AuthenticatedUser = {
+      id: devUser.id,
+      username: devUser.username,
+      role: devUser.role,
+    };
     return {
       success: true,
-      data: {
-        ...devUser,
-        ...data,
-      },
+      token: 'dev-token',
+      user,
     };
   }
 
   try {
     logger.info('Updating user', { userId: data.id });
-    const response = await api.put(
-      API_ENDPOINTS.AUTH.UPDATE(data.id as string),
-      data,
-    );
+    const response = await axiosApi.put(`/auth/users/${data.id}`, data);
     logger.info('User update successful', { userId: data.id });
     return response.data;
   } catch (error) {
-    return handleApiError<User>(error, 'updateUser');
+    if (error instanceof Error) {
+      throw createApiError('User update failed', error);
+    }
+    throw createApiError('User update failed', new Error('Unknown error'));
   }
 }
 
@@ -143,11 +178,12 @@ export async function validateToken(): Promise<ApiResult<User>> {
 
   try {
     logger.info('Validating token');
-    const response = await api.get(API_ENDPOINTS.AUTH.VALIDATE);
+    const response = await axiosApi.get('/auth/validate');
     logger.info('Token validation successful');
     return response.data;
   } catch (error) {
-    return handleApiError<User>(error, 'validateToken');
+    const errorMessage = error instanceof Error ? error.message : 'Token validation failed';
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -162,10 +198,11 @@ export async function refreshToken(): Promise<ApiResult<{ token: string }>> {
 
   try {
     logger.info('Refreshing token');
-    const response = await api.post(API_ENDPOINTS.AUTH.REFRESH);
+    const response = await axiosApi.post('/auth/refresh');
     logger.info('Token refresh successful');
     return response.data;
   } catch (error) {
-    return handleApiError<{ token: string }>(error, 'refreshToken');
+    const errorMessage = error instanceof Error ? error.message : 'Token refresh failed';
+    return { success: false, error: errorMessage };
   }
 }

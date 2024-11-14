@@ -84,16 +84,11 @@ export const fileUploadConfig = fileUpload({
   },
   useTempFiles: true,
   tempFileDir: '/tmp/',
-  debug: process.env.NODE_ENV !== 'production',
+  debug: process.env.NODE_ENV === 'development',
   safeFileNames: true,
   preserveExtension: true,
   abortOnLimit: true,
-  limitHandler: (_req: Request, res: Response) => {
-    res.status(413).json({
-      success: false,
-      error: 'File too large',
-    });
-  },
+  uploadTimeout: 60000, // 1 minute
 });
 
 // Content type validation middleware

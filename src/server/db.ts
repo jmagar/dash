@@ -1,23 +1,23 @@
-import { Pool, QueryResult } from 'pg';
-
+import { Pool, type PoolConfig, type QueryResult } from 'pg';
+import { config } from './config';
 import { logger } from './utils/logger';
 
 // Database configuration
-const DB_CONFIG = {
-  user: process.env.POSTGRES_USER,
-  password: process.env.POSTGRES_PASSWORD,
-  host: process.env.POSTGRES_HOST,
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB,
-  max: parseInt(process.env.POSTGRES_POOL_SIZE || '20'),
-  idleTimeoutMillis: parseInt(process.env.POSTGRES_IDLE_TIMEOUT || '30000'),
-  connectionTimeoutMillis: parseInt(process.env.POSTGRES_CONNECT_TIMEOUT || '10000'),
+const poolConfig: PoolConfig = {
+  user: config.postgres.user,
+  password: config.postgres.password,
+  host: config.postgres.host,
+  port: config.postgres.port,
+  database: config.postgres.database,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 };
 
 // Validate required config
-const requiredConfig = ['user', 'password', 'host', 'database'];
+const requiredConfig = ['user', 'password', 'host', 'database'] as const;
 for (const field of requiredConfig) {
-  if (!DB_CONFIG[field]) {
+  if (!poolConfig[field]) {
     const error = `Missing required Postgres config: ${field}`;
     logger.error(error);
     throw new Error(error);
@@ -25,26 +25,26 @@ for (const field of requiredConfig) {
 }
 
 // Create connection pool
-export const pool = new Pool(DB_CONFIG);
+const pool = new Pool(poolConfig);
 
 // Log pool events
-pool.on('connect', () => {
-  logger.info('Database connected', {
-    host: DB_CONFIG.host,
-    port: DB_CONFIG.port,
-    database: DB_CONFIG.database,
-    user: DB_CONFIG.user,
+pool.on('error', (...args: unknown[]) => {
+  const error = args[0];
+  logger.error('Unexpected error on idle client', {
+    error: error instanceof Error ? error.message : 'Unknown error',
   });
 });
 
-pool.on('error', (err) => {
-  logger.error('Database error:', { 
-    error: err.message,
-    code: err.code,
-    detail: err.detail,
-    host: DB_CONFIG.host,
-    port: DB_CONFIG.port,
-  });
+pool.on('connect', () => {
+  logger.info('New client connected to database');
+});
+
+pool.on('acquire', () => {
+  logger.debug('Client checked out from pool');
+});
+
+pool.on('remove', () => {
+  logger.info('Client removed from pool');
 });
 
 /**
@@ -110,6 +110,9 @@ export const db = {
   healthCheck,
   pool,
   end,
+  totalCount: () => pool.totalCount,
+  idleCount: () => pool.idleCount,
+  waitingCount: () => pool.waitingCount,
 };
 
 export default db;

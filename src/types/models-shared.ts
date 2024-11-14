@@ -4,15 +4,10 @@ export interface Host {
   hostname: string;
   port: number;
   username: string;
-  status: 'connected' | 'disconnected' | 'error';
-  lastConnected?: Date;
-  credentials?: {
-    password?: string;
-    privateKey?: string;
-    passphrase?: string;
-  };
-  isActive?: boolean;
-  sshKeyId?: string;
+  password?: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface CreateHostRequest {
@@ -20,33 +15,28 @@ export interface CreateHostRequest {
   hostname: string;
   port: number;
   username: string;
-  credentials?: {
-    password?: string;
-    privateKey?: string;
-    passphrase?: string;
-  };
-  sshKeyId?: string;
+  password?: string;
 }
 
-export interface UpdateHostRequest extends CreateHostRequest {
-  isActive?: boolean;
-}
+export type UpdateHostRequest = CreateHostRequest
 
 export interface Container {
   id: string;
   name: string;
   image: string;
   status: string;
-  state: 'running' | 'stopped' | 'paused';
-  created: Date;
-  ports?: string[];
+  state: string;
+  createdAt: Date;
+  ports: string[];
+  labels: Record<string, string>;
 }
 
 export interface Stack {
   name: string;
-  services: number;
-  status: 'running' | 'partial' | 'stopped';
-  created: Date;
+  services: string[];
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface FileItem {
@@ -60,16 +50,12 @@ export interface FileItem {
 export interface User {
   id: string;
   username: string;
-  email?: string;
-  password?: string;
-  password_hash?: string;
+  email: string;
   role: string;
   is_active: boolean;
-  lastLogin?: Date;
-  last_login?: Date;
-  createdAt?: Date;
-  currentPassword?: string;
-  newPassword?: string;
+  password_hash?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Package {
@@ -120,6 +106,23 @@ export interface SystemStats {
   network: {
     rx: number;
     tx: number;
+  };
+}
+
+export interface ContainerStats {
+  cpu: number;
+  memory: {
+    usage: number;
+    limit: number;
+    percent: number;
+  };
+  network: {
+    rx_bytes: number;
+    tx_bytes: number;
+  };
+  blockio: {
+    read_bytes: number;
+    write_bytes: number;
   };
 }
 

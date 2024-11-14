@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger';
  */
 export async function getAllHosts(): Promise<Host[]> {
   try {
-    const result: QueryResult<Host> = await db.query('SELECT * FROM hosts ORDER BY name');
+    const result: QueryResult<Host> = await db.query<Host>('SELECT * FROM hosts ORDER BY name');
     return result.rows;
   } catch (error) {
     const metadata: LogMetadata = {
@@ -29,7 +29,7 @@ export async function getAllHosts(): Promise<Host[]> {
 export async function getHostById(id: number): Promise<Host | null> {
   try {
     // Get from database
-    const result: QueryResult<Host> = await db.query(
+    const result: QueryResult<Host> = await db.query<Host>(
       'SELECT * FROM hosts WHERE id = $1',
       [id],
     );
@@ -53,8 +53,9 @@ export async function getHostById(id: number): Promise<Host | null> {
  */
 export async function getHostStatus(id: number): Promise<SystemStats | null> {
   try {
-    const stats = await cache.getHostStatus(String(id));
-    return stats as SystemStats | null;
+    // Get host status from cache
+    const hostData = await cache.getHost(String(id));
+    return hostData as SystemStats | null;
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(id),
@@ -68,11 +69,11 @@ export async function getHostStatus(id: number): Promise<SystemStats | null> {
 /**
  * Create new host
  */
-export async function createHost(data: CreateHostRequest): Promise<Host> {
+export async function createHost(data: Omit<Host, 'id'>): Promise<Host> {
   try {
-    const result: QueryResult<Host> = await db.query(
-      'INSERT INTO hosts (name, hostname, port, username) VALUES ($1, $2, $3, $4) RETURNING *',
-      [data.name, data.hostname, data.port, data.username],
+    const result: QueryResult<Host> = await db.query<Host>(
+      'INSERT INTO hosts (name, hostname, port, username, password) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [data.name, data.hostname, data.port, data.username, data.password],
     );
 
     return result.rows[0];
@@ -89,15 +90,26 @@ export async function createHost(data: CreateHostRequest): Promise<Host> {
 /**
  * Update host
  */
-export async function updateHost(id: number, data: UpdateHostRequest): Promise<Host> {
+export async function updateHost(id: number, data: Partial<Host>): Promise<Host> {
   try {
-    const result: QueryResult<Host> = await db.query(
-      'UPDATE hosts SET name = $1, hostname = $2, port = $3, username = $4 WHERE id = $5 RETURNING *',
-      [data.name, data.hostname, data.port, data.username, id],
-    );
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
 
-    if (result.rows.length === 0) {
-      throw createApiError('Host not found', 404);
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setClauses.push(`${key} = $${paramCount}`);
+        values.push(value);
+        paramCount++;
+      }
+    });
+
+    values.push(id);
+    const query = `UPDATE hosts SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const result: QueryResult<Host> = await db.query<Host>(query, values);
+
+    if (!result.rows[0]) {
+      throw new Error('Host not found');
     }
 
     return result.rows[0];
@@ -117,17 +129,13 @@ export async function updateHost(id: number, data: UpdateHostRequest): Promise<H
  */
 export async function deleteHost(id: number): Promise<void> {
   try {
-    const result: QueryResult<Host> = await db.query(
-      'DELETE FROM hosts WHERE id = $1 RETURNING *',
-      [id],
-    );
-
-    if (result.rows.length === 0) {
-      throw createApiError('Host not found', 404);
+    const result = await db.query('DELETE FROM hosts WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      throw new Error('Host not found');
     }
 
-    // Invalidate cache
-    await cache.invalidateHostCache(String(id));
+    // Invalidate host cache
+    await cache.removeHost(String(id));
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(id),
@@ -136,4 +144,43 @@ export async function deleteHost(id: number): Promise<void> {
     logger.error('Failed to delete host:', metadata);
     throw createApiError('Failed to delete host', 500, metadata);
   }
+}
+
+/**
+ * List all hosts
+ */
+export async function listHosts(): Promise<Host[]> {
+  try {
+    const result: QueryResult<Host> = await db.query<Host>('SELECT * FROM hosts ORDER BY name');
+    return result.rows;
+  } catch (error) {
+    logger.error('Failed to list hosts:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to list hosts', error instanceof Error ? error : new Error('Unknown error'));
+  }
+}
+
+/**
+ * Get host by ID
+ */
+export async function getHost(id: number): Promise<Host | null> {
+  try {
+    const result: QueryResult<Host> = await db.query<Host>('SELECT * FROM hosts WHERE id = $1', [id]);
+    return result.rows[0] || null;
+  } catch (error) {
+    logger.error('Failed to get host:', {
+      hostId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get host', error instanceof Error ? error : new Error('Unknown error'));
+  }
+}
+
+/**
+ * Test host connection
+ */
+export async function testHost(host: Host): Promise<void> {
+  logger.info('Testing host connection', { hostId: host.id });
+  // TODO: Implement host testing
 }

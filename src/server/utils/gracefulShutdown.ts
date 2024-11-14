@@ -4,7 +4,7 @@ import { logger } from './logger';
 import cache from '../cache';
 import { db } from '../db';
 
-export function configureGracefulShutdown(server: Server)) {
+export function configureGracefulShutdown(server: Server) {
   // Handle process termination signals
   const signals = ['SIGTERM', 'SIGINT'] as const;
 
