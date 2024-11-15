@@ -1,16 +1,32 @@
-import type { ParamsDictionary } from 'express-serve-static-core';
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+  password_hash?: string;
+  createdAt?: Date;
+  lastLogin?: Date;
+}
 
-import type { User as BaseUser } from './models-shared';
+export interface AuthenticatedUser extends User {
+  token: string;
+}
 
-export type { BaseUser as User };
-
-export interface AuthenticatedUser {
+export interface DecodedToken {
   id: string;
   username: string;
   role: 'admin' | 'user';
-  email: string;
-  lastLogin?: Date;
-  createdAt: Date;
+  iat?: number;
+  exp?: number;
+}
+
+export interface AuthContextType {
+  user: User | null;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  loading: boolean;
+  error: string | null;
 }
 
 export interface LoginRequest {
@@ -19,8 +35,10 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
+  success: boolean;
   token: string;
   user: AuthenticatedUser;
+  error?: string;
 }
 
 export interface LogoutResponse {
@@ -29,30 +47,21 @@ export interface LogoutResponse {
 }
 
 export interface ValidateResponse {
+  success: boolean;
   valid: boolean;
   user: AuthenticatedUser;
+  error?: string;
 }
 
-export interface TokenPayload {
-  id: string;
+export interface RegisterRequest {
   username: string;
-  role: 'admin' | 'user';
-  iat?: number;
-  exp?: number;
+  email: string;
+  password: string;
+  confirmPassword: string;
 }
 
-export interface AuthState {
-  token: string | null;
-  user: AuthenticatedUser | null;
-  isAuthenticated: boolean;
+export interface RegisterResponse {
+  success: boolean;
+  user: AuthenticatedUser;
+  error?: string;
 }
-
-export interface AuthContextType {
-  authState: AuthState;
-  setAuthState: (state: AuthState) => void;
-  login: (request: LoginRequest) => Promise<void>;
-  logout: () => Promise<void>;
-  validateToken: () => Promise<void>;
-}
-
-export type RequestParams = ParamsDictionary;

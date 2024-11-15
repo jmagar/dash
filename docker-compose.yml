@@ -4,112 +4,61 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
-    environment:
-      # Node Environment
-      - NODE_ENV=production
-      - PORT=4000
-      # App URLs
-      - BASE_URL=http://localhost:4000
-      - APP_NAME=SSH Management Platform
-      - FRONTEND_URL=http://localhost:4000
-      - REACT_APP_API_URL=http://localhost:4000/api
-      - REACT_APP_WS_URL=ws://localhost:4000
-      # Build Settings
-      - DOCKER_BUILD=1
-      - SKIP_PREFLIGHT_CHECK=true
-      - CI=true
-      - DISABLE_AUTH=true
-      - REACT_APP_DISABLE_AUTH=true
-      - REACT_APP_WDS_SOCKET_PORT=0
-      - BABEL_ENV=production
-      - DISABLE_ESLINT_PLUGIN=true
-      # Postgres Config
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=shh
-      - POSTGRES_POOL_SIZE=20
-      - POSTGRES_IDLE_TIMEOUT=30000
-      - POSTGRES_CONNECT_TIMEOUT=10000
-      # Redis Config
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - REDIS_MAX_RETRIES=3
-      - REDIS_MEMORY_LIMIT=512mb
-      - REDIS_MAX_KEYS=10000
-      - REDIS_METRICS_INTERVAL=5000
-      # Auth Config
-      - JWT_SECRET=development-secret-key
-      - JWT_EXPIRATION=1h
-      - LOGIN_LOCKOUT_TIME=300000
-      - MAX_LOGIN_ATTEMPTS=5
-      # Metrics
-      - METRICS_INTERVAL=60000
-      # Logging
-      - LOG_LEVEL=info
+      target: app
     ports:
-      - "4000:4000"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=shh
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs:/app/logs
-      - ssh_keys:/root/.ssh
-      - ./scripts:/app/scripts:ro
+      - .:/app
+      - /app/node_modules
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:4000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
+      - postgres
+      - redis
 
-  db:
-    image: postgres:14-alpine
+  postgres:
+    build:
+      context: .
+      target: postgres
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=shh
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
-    command: >
-      redis-server
-      --appendonly yes
-      --appendfsync everysec
-      --auto-aof-rewrite-percentage 100
-      --auto-aof-rewrite-min-size 64mb
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
+    image: redis:alpine
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
 
 volumes:
   postgres_data:
   redis_data:
-  ssh_keys:
+  prometheus_data:

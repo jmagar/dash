@@ -1,68 +1,72 @@
-FROM node:18-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install build essentials
-RUN apk add --no-cache \
+# Install Python and pip
+RUN apt-get update && apt-get install -y \
     python3 \
-    make \
-    g++ \
-    openssh-client
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
-COPY package*.json ./
+# Create and activate virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install mem0ai in virtual environment
+RUN pip install mem0ai
 
 # Install dependencies
-RUN npm ci --ignore-scripts
+COPY package*.json ./
+RUN npm ci
 
-# Copy source code and configs
+# Copy source code
 COPY . .
 
-# Build
-RUN npm run build:all
+# Build client
+RUN npm run build:client
 
-# Production stage
-FROM node:18-alpine
+# Build server
+RUN npm run build:server
+
+FROM postgres:16 AS postgres
+
+# Install pgvector
+RUN apt-get update \
+    && apt-get install -y postgresql-server-dev-16 build-essential git \
+    && git clone https://github.com/pgvector/pgvector.git \
+    && cd pgvector \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf pgvector \
+    && apt-get remove -y postgresql-server-dev-16 build-essential git \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy init scripts
+COPY db/init.sql /docker-entrypoint-initdb.d/
+
+FROM node:20-slim AS app
 
 WORKDIR /app
 
-# Install production dependencies
-RUN apk add --no-cache \
-    openssh-client \
-    wget \
-    curl \
-    docker-cli
+# Copy Python virtual environment
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Create required directories
-RUN mkdir -p /app/logs && \
-    mkdir -p /root/.ssh && \
-    chmod 700 /root/.ssh && \
-    mkdir -p /app/scripts
-
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies
-RUN npm ci --ignore-scripts --omit=dev --omit=optional
-
-# Copy built files
+# Copy built assets
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
 
-# Set permissions
-RUN chown -R node:node /app && \
-    chmod -R 755 /app && \
-    chown -R node:node /app/scripts
+# Install production dependencies only
+RUN npm ci --only=production
 
-# Switch to non-root user
-USER node
+# Set environment variables
+ENV NODE_ENV=production
 
-# Expose port
-EXPOSE 4000
+EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD wget --spider http://localhost:4000/api/health || exit 1
-
-# Start command
-CMD ["npm", "start"]
+# Start the server
+CMD ["node", "dist/server/index.js"]

@@ -1,101 +1,86 @@
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
 
--- Users table
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    uuid UUID DEFAULT uuid_generate_v4() NOT NULL,
-    username VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'user',
-    preferred_language VARCHAR(10) NOT NULL DEFAULT 'en',
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    last_login TIMESTAMP WITH TIME ZONE,
-    mfa_enabled BOOLEAN NOT NULL DEFAULT false,
-    mfa_secret TEXT,
-    gdpr_compliant BOOLEAN NOT NULL DEFAULT false,
-    preferences JSONB NOT NULL DEFAULT '{
-        "theme": "system",
-        "language": "en",
-        "terminalFontFamily": "monospace",
-        "terminalFontSize": 14
-    }',
+-- Create memories table
+CREATE TABLE memories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    embedding vector(1536),  -- OpenAI's text-embedding-ada-002 uses 1536 dimensions
+    metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Hosts table
-CREATE TABLE IF NOT EXISTS hosts (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    hostname VARCHAR(255) NOT NULL,
-    port INTEGER NOT NULL DEFAULT 22,
-    username VARCHAR(255),
-    password TEXT,
-    ssh_key_id INTEGER,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Create index for vector similarity search
+CREATE INDEX memories_embedding_idx ON memories
+USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
 
--- SSH Keys table
-CREATE TABLE IF NOT EXISTS ssh_keys (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    private_key TEXT NOT NULL,
-    public_key TEXT NOT NULL,
-    passphrase TEXT,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Create index for user_id lookups
+CREATE INDEX memories_user_id_idx ON memories(user_id);
 
--- Command History table
-CREATE TABLE IF NOT EXISTS command_history (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    host_id INTEGER REFERENCES hosts(id) ON DELETE CASCADE,
-    command TEXT NOT NULL,
-    output TEXT,
-    exit_code INTEGER,
-    duration INTEGER, -- in milliseconds
-    error TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Add foreign key to hosts table after ssh_keys table is created
-ALTER TABLE hosts
-ADD CONSTRAINT fk_ssh_key
-FOREIGN KEY (ssh_key_id)
-REFERENCES ssh_keys(id)
-ON DELETE SET NULL;
-
--- Create indexes
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_hosts_name ON hosts(name);
-CREATE INDEX idx_hosts_hostname ON hosts(hostname);
-CREATE INDEX idx_hosts_username ON hosts(username);
-CREATE INDEX idx_ssh_keys_user_id ON ssh_keys(user_id);
-CREATE INDEX idx_command_history_user_id ON command_history(user_id);
-CREATE INDEX idx_command_history_host_id ON command_history(host_id);
-CREATE INDEX idx_command_history_created_at ON command_history(created_at);
-
--- Insert default admin user if auth is not disabled
-DO $$
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
 BEGIN
-    IF NOT current_setting('custom.disable_auth', true) = 'true' THEN
-        INSERT INTO users (username, email, password_hash, role, is_active, gdpr_compliant)
-        VALUES (
-            'admin',
-            'admin@localhost',
-            '$2b$10$5RoQxE1/UKqHPxqGWORz9.ex1v4j3/8ZN0IZJ5JzOVXWNdAHzuA4.',
-            'admin',
-            true,
-            true
-        ) ON CONFLICT (username) DO NOTHING;
-    END IF;
-END $$;
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Trigger to automatically update updated_at
+CREATE TRIGGER update_memories_updated_at
+    BEFORE UPDATE ON memories
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create memory_interactions table for tracking usage
+CREATE TABLE memory_interactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    memory_id UUID NOT NULL REFERENCES memories(id),
+    user_id TEXT NOT NULL,
+    interaction_type TEXT NOT NULL,  -- 'create', 'read', 'update', 'delete'
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_memory
+        FOREIGN KEY(memory_id)
+        REFERENCES memories(id)
+        ON DELETE CASCADE
+);
+
+-- Create index for memory_interactions lookups
+CREATE INDEX memory_interactions_memory_id_idx ON memory_interactions(memory_id);
+CREATE INDEX memory_interactions_user_id_idx ON memory_interactions(user_id);
+
+-- Create memory_categories table for organizing memories
+CREATE TABLE memory_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create memory_category_assignments table
+CREATE TABLE memory_category_assignments (
+    memory_id UUID NOT NULL REFERENCES memories(id),
+    category_id UUID NOT NULL REFERENCES memory_categories(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (memory_id, category_id),
+    CONSTRAINT fk_memory
+        FOREIGN KEY(memory_id)
+        REFERENCES memories(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_category
+        FOREIGN KEY(category_id)
+        REFERENCES memory_categories(id)
+        ON DELETE CASCADE
+);
+
+-- Insert default memory categories
+INSERT INTO memory_categories (name, description) VALUES
+    ('Preferences', 'User preferences and settings'),
+    ('Technical', 'Technical information and knowledge'),
+    ('Personal', 'Personal information and history'),
+    ('System', 'System-related information');

@@ -1,42 +1,45 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Send as SendIcon } from '@mui/icons-material';
 import {
   Box,
   TextField,
   Button,
   Typography,
   CircularProgress,
-  IconButton,
-  Tooltip,
-  Alert,
   useTheme,
-  Chip,
+  Alert,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import DeleteIcon from '@mui/icons-material/Delete';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SettingsIcon from '@mui/icons-material/Settings';
-import { sendMessage } from '../api/chat.client';
-import { logger } from '../utils/logger';
-import type { ChatMessage, ChatSettings } from '../../types/chat';
+import React, { useState, useRef, useEffect } from 'react';
 
-const AI_MODELS = [
-  { name: 'GPT-3.5 Turbo', value: 'openai/gpt-3.5-turbo' },
-  { name: 'GPT-4', value: 'openai/gpt-4' },
-  { name: 'Claude 2', value: 'anthropic/claude-2' },
-] as const;
+import { useAuth } from '../context/AuthContext';
+import { logger } from '../utils/frontendLogger';
 
-interface ChatBotProps {
-  onClose?: () => void;
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
-export function ChatBot({ onClose }: ChatBotProps) {
+interface Model {
+  name: string;
+  value: string;
+}
+
+const MODELS: Model[] = [
+  { name: 'GPT-4', value: 'gpt-4' },
+  { name: 'Claude-2', value: 'anthropic/claude-2' },
+  { name: 'Mixtral', value: 'mistralai/mixtral-8x7b-instruct' },
+];
+
+export function ChatBot(): JSX.Element {
   const theme = useTheme();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<typeof AI_MODELS[number]['value']>(AI_MODELS[0].value);
-  const [showSettings, setShowSettings] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(MODELS[0].value);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -47,59 +50,6 @@ export function ChatBot({ onClose }: ChatBotProps) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    };
-
-    try {
-      setLoading(true);
-      setError(null);
-      setMessages(prev => [...prev, userMessage]);
-      setInput('');
-
-      const settings: Partial<ChatSettings> = {
-        model: selectedModel,
-        maxTokens: 1000,
-        temperature: 0.7,
-      };
-
-      const response = await sendMessage(input, settings);
-
-      if (!response?.success) {
-        throw new Error(response?.error || 'Failed to get response');
-      }
-
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response.data?.message || '',
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      if (response.data?.usage) {
-        logger.info('Chat message sent successfully', {
-          model: response.data.model,
-          tokens: response.data.usage.totalTokens,
-        });
-      }
-    } catch (err) {
-      logger.error('Failed to send message:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError('Failed to send message. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -107,98 +57,102 @@ export function ChatBot({ onClose }: ChatBotProps) {
     }
   };
 
-  const getLastMessageByRole = (role: ChatMessage['role']) => {
-    return messages.findLast((m: ChatMessage) => m.role === role);
-  };
+  const handleSend = async () => {
+    if (!input.trim() || !user || loading) return;
 
-  const clearChat = () => {
-    setMessages([]);
+    const userMessage: Message = {
+      role: 'user',
+      content: input,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setLoading(true);
     setError(null);
-  };
 
-  const retryLastMessage = () => {
-    const lastUserMessage = getLastMessageByRole('user');
-    if (lastUserMessage) {
-      setInput(lastUserMessage.content);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: input,
+          userId: user.id,
+          model: selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
+
+      const data = await response.json();
+
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: data.response,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      logger.error('Failed to get chat response:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      setError('Failed to get response. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Box sx={{ 
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      fontFamily: 'Noto Sans, sans-serif',
-    }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        p: 2,
-        borderBottom: `1px solid ${theme.palette.divider}`,
-      }}>
-        <Typography variant="h6" sx={{ fontFamily: 'Noto Sans, sans-serif' }}>
-          AI Assistant
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title="AI Model Settings">
-            <IconButton
-              onClick={() => setShowSettings(!showSettings)}
-              color="primary"
-              size="small"
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        maxWidth: '800px',
+        mx: 'auto',
+        bgcolor: theme.palette.background.default,
+        borderRadius: 2,
+        boxShadow: theme.shadows[3],
+      }}
+    >
+      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        <ToggleButtonGroup
+          value={selectedModel}
+          exclusive
+          onChange={(_, value) => value && setSelectedModel(value)}
+          size="small"
+          sx={{ width: '100%', justifyContent: 'center' }}
+        >
+          {MODELS.map((model) => (
+            <ToggleButton
+              key={model.value}
+              value={model.value}
+              sx={{
+                fontFamily: 'Noto Sans, sans-serif',
+                textTransform: 'none',
+              }}
             >
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Retry last message">
-            <IconButton 
-              onClick={retryLastMessage} 
-              color="primary" 
-              size="small"
-              disabled={!messages.some(m => m.role === 'user')}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Clear chat">
-            <IconButton 
-              onClick={clearChat} 
-              color="error" 
-              size="small"
-              disabled={messages.length === 0}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+              {model.name}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
       </Box>
 
-      {showSettings && (
-        <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>AI Model</Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {AI_MODELS.map((model) => (
-              <Chip
-                key={model.value}
-                label={model.name}
-                onClick={() => setSelectedModel(model.value)}
-                color={selectedModel === model.value ? 'primary' : 'default'}
-                variant={selectedModel === model.value ? 'filled' : 'outlined'}
-              />
-            ))}
-          </Box>
-        </Box>
-      )}
-
       {error && (
-        <Alert severity="error" sx={{ mx: 2, mt: 2 }}>
+        <Alert severity="error" sx={{ mx: 2, mt: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <Box sx={{ 
-        flexGrow: 1, 
-        overflowY: 'auto', 
+      <Box sx={{
+        flexGrow: 1,
+        overflowY: 'auto',
         p: 2,
         '&::-webkit-scrollbar': {
           width: '8px',
@@ -224,29 +178,29 @@ export function ChatBot({ onClose }: ChatBotProps) {
               sx={{
                 p: 1.5,
                 maxWidth: '70%',
-                backgroundColor: message.role === 'user' 
-                  ? theme.palette.primary.main 
+                backgroundColor: message.role === 'user'
+                  ? theme.palette.primary.main
                   : theme.palette.background.paper,
-                color: message.role === 'user' 
-                  ? theme.palette.primary.contrastText 
+                color: message.role === 'user'
+                  ? theme.palette.primary.contrastText
                   : theme.palette.text.primary,
                 borderRadius: '12px',
                 fontFamily: 'Noto Sans, sans-serif',
                 boxShadow: theme.shadows[1],
               }}
             >
-              <Typography 
-                variant="body1" 
-                sx={{ 
+              <Typography
+                variant="body1"
+                sx={{
                   whiteSpace: 'pre-wrap',
                   fontFamily: 'Noto Sans, sans-serif',
                 }}
               >
                 {message.content}
               </Typography>
-              <Typography 
-                variant="caption" 
-                sx={{ 
+              <Typography
+                variant="caption"
+                sx={{
                   opacity: 0.7,
                   display: 'block',
                   mt: 0.5,
@@ -272,7 +226,7 @@ export function ChatBot({ onClose }: ChatBotProps) {
             onKeyPress={handleKeyPress}
             placeholder="Type your message..."
             disabled={loading}
-            sx={{ 
+            sx={{
               backgroundColor: theme.palette.background.paper,
               '& .MuiInputBase-root': {
                 fontFamily: 'Noto Sans, sans-serif',

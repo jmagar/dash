@@ -1,226 +1,158 @@
-import type { Request, Response } from 'express';
+import bcrypt from 'bcrypt';
+import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 
-import type { AuthenticatedUser, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
-import { createApiError } from '../../types/error';
-import type { LogMetadata } from '../../types/logger';
-import type { User as UserType } from '../../types/models-shared';
-import cache from '../cache';
+import type { LoginResponse, LogoutResponse, ValidateResponse, AuthenticatedUser, DecodedToken } from '../../types/auth';
 import { config } from '../config';
 import { db } from '../db';
-import { generateToken, verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
-import { comparePassword } from '../utils/password';
 
-// Track failed login attempts
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-
-function mapUserToAuthUser(user: UserType): AuthenticatedUser {
-  return {
-    id: user.id,
-    username: user.username,
-    role: user.role,
-    email: user.email,
-    createdAt: user.createdAt,
-  };
-}
-
-function isUserLocked(username: string): boolean {
-  const attempts = loginAttempts.get(username);
-  if (!attempts) return false;
-
-  const now = Date.now();
-  if (now - attempts.lastAttempt > config.security.loginLockoutTime) {
-    loginAttempts.delete(username);
-    return false;
-  }
-
-  return attempts.count >= config.security.maxLoginAttempts;
-}
-
-function recordLoginAttempt(username: string, success: boolean): void {
-  if (success) {
-    loginAttempts.delete(username);
-    return;
-  }
-
-  const attempts = loginAttempts.get(username) || { count: 0, lastAttempt: 0 };
-  attempts.count += 1;
-  attempts.lastAttempt = Date.now();
-  loginAttempts.set(username, attempts);
-}
-
-export async function login(
-  req: Request<unknown, LoginResponse, { username: string; password: string }>,
-  res: Response<LoginResponse | { error: string }>
-): Promise<void> {
-  const { username, password } = req.body;
-
+export async function login(req: Request, res: Response<LoginResponse | { error: string }>) {
   try {
-    logger.info('Attempting login', { username });
+    const { username, password } = req.body;
 
-    // Check if user is locked out
-    if (isUserLocked(username)) {
-      const error = createApiError('Account temporarily locked. Please try again later.', { username }, 429);
-      void res.status(429).json({ error: error.message });
-      return;
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required',
+      });
     }
 
-    const result = await db.query<UserType>(
+    const result = await db.query<AuthenticatedUser>(
       'SELECT * FROM users WHERE username = $1',
       [username]
     );
+
     const user = result.rows[0];
 
     if (!user) {
-      recordLoginAttempt(username, false);
-      const error = createApiError('Invalid username or password', { username }, 401);
-      void res.status(401).json({ error: error.message });
-      return;
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password',
+      });
     }
 
-    if (!(await comparePassword(password, user.password_hash || ''))) {
-      recordLoginAttempt(username, false);
-      const error = createApiError('Invalid username or password', { username }, 401);
-      void res.status(401).json({ error: error.message });
-      return;
+    const validPassword = await bcrypt.compare(password, user.password_hash || '');
+
+    if (!validPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password',
+      });
     }
 
-    if (!user.is_active) {
-      const error = createApiError('Account is disabled', { username, userId: user.id }, 403);
-      void res.status(403).json({ error: error.message });
-      return;
-    }
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
 
-    recordLoginAttempt(username, true);
-    const token = generateToken(user);
-    const refreshToken = generateToken(user);
-    await cache.setSession(token, user, refreshToken);
+    // Update last login
+    await db.query(
+      'UPDATE users SET last_login = NOW() WHERE id = $1',
+      [user.id]
+    );
 
-    logger.info('Login successful', { userId: user.id, username: user.username });
-    void res.json({
+    const authenticatedUser: AuthenticatedUser = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      is_active: user.is_active,
       token,
-      user: mapUserToAuthUser(user),
-    });
-    return;
-
-  } catch (error) {
-    const metadata: LogMetadata = {
-      username,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      createdAt: user.createdAt,
+      lastLogin: new Date(),
     };
-    logger.error('Login error:', metadata);
 
-    const apiError = createApiError('An error occurred during login', error, 500);
-    void res.status(500).json({ error: apiError.message });
-    return;
+    logger.info('User logged in successfully:', {
+      userId: user.id,
+      username: user.username,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: authenticatedUser,
+    });
+  } catch (error) {
+    logger.error('Login failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
   }
 }
 
-export async function validateToken(
-  req: Request,
-  res: Response<ValidateResponse | { error: string }>
-): Promise<void> {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-
-  if (!token) {
-    const error = createApiError('No token provided', null, 401);
-    logger.warn('Token validation failed: No token provided');
-    void res.status(401).json({ error: error.message });
-    return;
-  }
-
+export async function logout(req: Request, res: Response<LogoutResponse>) {
   try {
-    // First verify JWT signature and expiration
-    const payload = verifyToken(token);
-    if (!payload) {
-      const error = createApiError('Invalid token', null, 401);
-      logger.warn('Token validation failed: Invalid token');
-      void res.status(401).json({ error: error.message });
-      return;
+    // In a real implementation, you might want to invalidate the token
+    // For now, we'll just return success
+    return res.json({
+      success: true,
+    });
+  } catch (error) {
+    logger.error('Logout failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
+}
+
+export async function validate(req: Request, res: Response<ValidateResponse | { error: string }>) {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        error: 'No token provided',
+      });
     }
 
-    // Then check if session exists in cache
-    const sessionData = await cache.getSession(token);
-    if (!sessionData) {
-      const error = createApiError('Session expired', { token }, 401);
-      logger.warn('Token validation failed: Session expired');
-      void res.status(401).json({ error: error.message });
-      return;
-    }
-
-    // Parse the session data
-    let session: { user: UserType; refreshToken: string };
     try {
-      session = JSON.parse(sessionData);
-    } catch (parseError) {
-      const error = createApiError('Invalid session data', parseError, 401);
-      logger.error('Session data parse error:', { token, error: 'Invalid session data format' });
-      void res.status(401).json({ error: error.message });
-      return;
+      const decoded = jwt.verify(token, config.jwt.secret) as DecodedToken;
+      const result = await db.query<AuthenticatedUser>(
+        'SELECT * FROM users WHERE id = $1',
+        [decoded.id]
+      );
+
+      const user = result.rows[0];
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          valid: false,
+          error: 'Invalid token',
+        });
+      }
+
+      const authenticatedUser: AuthenticatedUser = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        is_active: user.is_active,
+        token,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin,
+      };
+
+      return res.json({
+        success: true,
+        valid: true,
+        user: authenticatedUser,
+      });
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        error: 'Invalid token',
+      });
     }
-
-    logger.info('Token validated successfully', {
-      userId: session.user.id,
-      username: session.user.username,
-    });
-
-    void res.json({
-      valid: true,
-      user: mapUserToAuthUser(session.user),
-    });
-    return;
-
   } catch (error) {
-    const metadata: LogMetadata = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Token validation error:', metadata);
-
-    if (error instanceof Error && error.name === 'JsonWebTokenError') {
-      void res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
-    if (error instanceof Error && error.name === 'TokenExpiredError') {
-      void res.status(401).json({ error: 'Token expired' });
-      return;
-    }
-
-    const apiError = createApiError('Token validation failed', error, 500);
-    void res.status(500).json({ error: apiError.message });
-    return;
-  }
-}
-
-export async function logout(
-  req: Request,
-  res: Response<LogoutResponse>
-): Promise<void> {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-
-  if (!token) {
-    void res.json({ success: true });
-    return;
-  }
-
-  try {
-    // Invalidate both the access token and refresh token
-    const sessionData = await cache.getSession(token);
-    if (sessionData) {
-      await cache.removeSession(token);
-    }
-
-    logger.info('Logout successful');
-    void res.json({ success: true });
-    return;
-
-  } catch (error) {
-    logger.error('Logout error:', {
+    logger.error('Token validation failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-
-    // Don't expose errors to client during logout
-    void res.json({ success: true });
-    return;
+    throw error;
   }
 }
