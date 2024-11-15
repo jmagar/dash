@@ -4,6 +4,24 @@ export { login, logout, validate } from './auth.client';
 // File Explorer API
 export { listFiles, readFile, writeFile, deleteFile } from './fileExplorer.client';
 
+// Docker API
+export {
+  listContainers,
+  getContainerLogs,
+  startContainer,
+  stopContainer,
+  restartContainer,
+  removeContainer,
+  getContainerStats,
+  getStacks,
+  createStack,
+  deleteStack,
+  startStack,
+  stopStack,
+  getStackComposeFile,
+  updateStackComposeFile,
+} from './docker.client';
+
 // Hosts API
 export {
   listHosts,
@@ -20,9 +38,11 @@ export {
 // Package Manager API
 export {
   listPackages,
+  listInstalledPackages,
   installPackage,
   uninstallPackage,
   updatePackage,
+  searchPackages,
 } from './packageManager.client';
 
 // Remote Execution API

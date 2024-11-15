@@ -1,6 +1,7 @@
 import { api } from './api';
 import { createApiError } from '../../types/error';
 import type { Package } from '../../types/models-shared';
+import type { ApiResponse } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
 
 const PKG_ENDPOINTS = {
@@ -12,10 +13,10 @@ const PKG_ENDPOINTS = {
   INFO: (hostId: number, packageName: string) => `/packages/${hostId}/${packageName}`,
 } as const;
 
-export async function listPackages(hostId: number): Promise<Package[]> {
+export async function listPackages(hostId: number): Promise<ApiResponse<Package[]>> {
   try {
-    const response = await api.get<{ data: Package[] }>(PKG_ENDPOINTS.LIST(hostId));
-    return response.data.data;
+    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.LIST(hostId));
+    return response.data;
   } catch (error) {
     logger.error('Failed to list packages:', {
       hostId,
@@ -25,12 +26,12 @@ export async function listPackages(hostId: number): Promise<Package[]> {
   }
 }
 
-export async function searchPackages(hostId: number, query: string): Promise<Package[]> {
+export async function searchPackages(hostId: number, query: string): Promise<ApiResponse<Package[]>> {
   try {
-    const response = await api.get<{ data: Package[] }>(PKG_ENDPOINTS.SEARCH(hostId), {
+    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.SEARCH(hostId), {
       params: { query },
     });
-    return response.data.data;
+    return response.data;
   } catch (error) {
     logger.error('Failed to search packages:', {
       hostId,
@@ -41,9 +42,10 @@ export async function searchPackages(hostId: number, query: string): Promise<Pac
   }
 }
 
-export async function installPackage(hostId: number, pkg: string, version?: string): Promise<void> {
+export async function installPackage(hostId: number, pkg: string, version?: string): Promise<ApiResponse<void>> {
   try {
-    await api.post(PKG_ENDPOINTS.INSTALL(hostId), { package: pkg, version });
+    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.INSTALL(hostId), { package: pkg, version });
+    return response.data;
   } catch (error) {
     logger.error('Failed to install package:', {
       hostId,
@@ -55,9 +57,10 @@ export async function installPackage(hostId: number, pkg: string, version?: stri
   }
 }
 
-export async function uninstallPackage(hostId: number, pkg: string): Promise<void> {
+export async function uninstallPackage(hostId: number, pkg: string): Promise<ApiResponse<void>> {
   try {
-    await api.post(PKG_ENDPOINTS.UNINSTALL(hostId), { package: pkg });
+    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.UNINSTALL(hostId), { package: pkg });
+    return response.data;
   } catch (error) {
     logger.error('Failed to uninstall package:', {
       hostId,
@@ -68,9 +71,10 @@ export async function uninstallPackage(hostId: number, pkg: string): Promise<voi
   }
 }
 
-export async function updatePackage(hostId: number, pkg: string): Promise<void> {
+export async function updatePackage(hostId: number, pkg: string): Promise<ApiResponse<void>> {
   try {
-    await api.post(PKG_ENDPOINTS.UPDATE(hostId), { package: pkg });
+    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.UPDATE(hostId), { package: pkg });
+    return response.data;
   } catch (error) {
     logger.error('Failed to update package:', {
       hostId,
@@ -81,15 +85,15 @@ export async function updatePackage(hostId: number, pkg: string): Promise<void> 
   }
 }
 
-export async function listInstalledPackages(hostId: number): Promise<Package[]> {
+export async function listInstalledPackages(hostId: number): Promise<ApiResponse<Package[]>> {
   try {
     logger.info('Listing installed packages', { hostId: String(hostId) });
-    const response = await api.get<{ data: Package[] }>(PKG_ENDPOINTS.LIST(hostId));
+    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.LIST(hostId));
     logger.info('Installed packages listed successfully', {
       hostId: String(hostId),
-      count: response.data.data.length
+      count: response.data.data?.length ?? 0
     });
-    return response.data.data;
+    return response.data;
   } catch (error) {
     logger.error('Failed to list installed packages:', {
       hostId,
@@ -99,15 +103,15 @@ export async function listInstalledPackages(hostId: number): Promise<Package[]> 
   }
 }
 
-export async function getPackageInfo(hostId: number, packageName: string): Promise<Package> {
+export async function getPackageInfo(hostId: number, packageName: string): Promise<ApiResponse<Package>> {
   try {
     logger.info('Getting package info', { hostId: String(hostId), packageName });
-    const response = await api.get<{ data: Package }>(PKG_ENDPOINTS.INFO(hostId, packageName));
+    const response = await api.get<ApiResponse<Package>>(PKG_ENDPOINTS.INFO(hostId, packageName));
     logger.info('Package info retrieved successfully', {
       hostId: String(hostId),
       packageName
     });
-    return response.data.data;
+    return response.data;
   } catch (error) {
     logger.error('Failed to get package info:', {
       hostId,

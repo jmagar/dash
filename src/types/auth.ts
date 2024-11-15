@@ -9,16 +9,16 @@ export interface User {
   lastLogin?: Date;
 }
 
-export interface AuthenticatedUser extends User {
-  token: string;
-}
-
-export interface DecodedToken {
+// Token payload contains only the necessary authentication info
+export interface TokenPayload {
   id: string;
   username: string;
   role: 'admin' | 'user';
-  iat?: number;
-  exp?: number;
+}
+
+// Full user data with token for client-side use
+export interface AuthenticatedUser extends User {
+  token: string;
 }
 
 export interface AuthContextType {

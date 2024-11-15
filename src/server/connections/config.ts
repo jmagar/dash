@@ -1,4 +1,4 @@
-import { createApiError } from '../../types/error';
+import { ApiError, createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
@@ -30,7 +30,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 1000,
     };
     logger.warn('Invalid connection timeout:', metadata);
-    throw createApiError('Connection timeout must be at least 1000ms', 400, metadata);
+    throw new ApiError('Connection timeout must be at least 1000ms', undefined, 400, metadata);
   }
 
   // Validate keep alive interval
@@ -40,7 +40,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 1000,
     };
     logger.warn('Invalid keep alive interval:', metadata);
-    throw createApiError('Keep alive interval must be at least 1000ms', 400, metadata);
+    throw new ApiError('Keep alive interval must be at least 1000ms', undefined, 400, metadata);
   }
 
   // Validate keep alive count max
@@ -50,7 +50,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 1,
     };
     logger.warn('Invalid keep alive count max:', metadata);
-    throw createApiError('Keep alive count max must be at least 1', 400, metadata);
+    throw new ApiError('Keep alive count max must be at least 1', undefined, 400, metadata);
   }
 
   // Validate max retries
@@ -60,7 +60,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 0,
     };
     logger.warn('Invalid max retries:', metadata);
-    throw createApiError('Max retries cannot be negative', 400, metadata);
+    throw new ApiError('Max retries cannot be negative', undefined, 400, metadata);
   }
 
   // Validate retry delay
@@ -70,7 +70,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 100,
     };
     logger.warn('Invalid retry delay:', metadata);
-    throw createApiError('Retry delay must be at least 100ms', 400, metadata);
+    throw new ApiError('Retry delay must be at least 100ms', undefined, 400, metadata);
   }
 
   // Validate max connections
@@ -80,7 +80,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 1,
     };
     logger.warn('Invalid max connections:', metadata);
-    throw createApiError('Max connections must be at least 1', 400, metadata);
+    throw new ApiError('Max connections must be at least 1', undefined, 400, metadata);
   }
 
   // Validate idle timeout
@@ -90,7 +90,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       minimumRequired: 1000,
     };
     logger.warn('Invalid idle timeout:', metadata);
-    throw createApiError('Idle timeout must be at least 1000ms', 400, metadata);
+    throw new ApiError('Idle timeout must be at least 1000ms', undefined, 400, metadata);
   }
 
   // Log successful validation

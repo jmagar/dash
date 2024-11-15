@@ -1,111 +1,12 @@
-import {
-  ThemeProvider as MuiThemeProvider,
-  createTheme,
-  useMediaQuery,
-} from '@mui/material';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { ThemeProvider as MuiThemeProvider, createTheme, Theme } from '@mui/material';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface ThemeContextType {
-  isDarkMode: boolean;
+  theme: Theme;
   toggleTheme: () => void;
-  accentColor: string;
-  setAccentColor: (color: string) => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({
-  isDarkMode: false,
-  toggleTheme: () => undefined,
-  accentColor: '#2196f3',
-  setAccentColor: () => undefined,
-});
-
-export const ACCENT_COLORS = {
-  blue: '#2196f3',
-  purple: '#9c27b0',
-  pink: '#e91e63',
-  teal: '#009688',
-  green: '#4caf50',
-  amber: '#ffc107',
-  orange: '#ff9800',
-  deepOrange: '#ff5722',
-  indigo: '#3f51b5',
-  cyan: '#00bcd4',
-};
-
-export function ThemeProvider({ children }: { children: React.ReactNode }): JSX.Element {
-  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : prefersDarkMode;
-  });
-
-  const [accentColor, setAccentColor] = useState<string>(() => {
-    const saved = localStorage.getItem('accentColor');
-    return saved || ACCENT_COLORS.blue;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-  }, [isDarkMode]);
-
-  useEffect(() => {
-    localStorage.setItem('accentColor', accentColor);
-  }, [accentColor]);
-
-  const toggleTheme = (): void => {
-    setIsDarkMode((prev: boolean) => !prev);
-  };
-
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: isDarkMode ? 'dark' : 'light',
-          primary: {
-            main: accentColor,
-          },
-          background: {
-            default: isDarkMode ? '#121212' : '#f5f5f5',
-            paper: isDarkMode ? '#1e1e1e' : '#ffffff',
-          },
-        },
-        components: {
-          MuiAppBar: {
-            styleOverrides: {
-              root: {
-                backgroundColor: isDarkMode ? '#1e1e1e' : accentColor,
-              },
-            },
-          },
-          MuiDrawer: {
-            styleOverrides: {
-              paper: {
-                backgroundColor: isDarkMode ? '#121212' : '#ffffff',
-                borderRight: `1px solid ${isDarkMode ? '#333' : '#e0e0e0'}`,
-              },
-            },
-          },
-        },
-      }),
-    [isDarkMode, accentColor],
-  );
-
-  const value = useMemo(
-    () => ({
-      isDarkMode,
-      toggleTheme,
-      accentColor,
-      setAccentColor,
-    }),
-    [isDarkMode, accentColor],
-  );
-
-  return (
-    <ThemeContext.Provider value={value}>
-      <MuiThemeProvider theme={theme}>{children}</MuiThemeProvider>
-    </ThemeContext.Provider>
-  );
-}
+const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function useTheme(): ThemeContextType {
   const context = useContext(ThemeContext);
@@ -113,4 +14,91 @@ export function useTheme(): ThemeContextType {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
+}
+
+interface ThemeProviderProps {
+  children: React.ReactNode;
+}
+
+export function ThemeProvider({ children }: ThemeProviderProps): JSX.Element {
+  const [mode, setMode] = useState<'light' | 'dark'>(() => {
+    const savedMode = localStorage.getItem('themeMode');
+    return (savedMode === 'dark' ? 'dark' : 'light');
+  });
+
+  const theme = React.useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode,
+          primary: {
+            main: mode === 'light' ? '#1976d2' : '#90caf9',
+          },
+          secondary: {
+            main: mode === 'light' ? '#dc004e' : '#f48fb1',
+          },
+          background: {
+            default: mode === 'light' ? '#f5f5f5' : '#121212',
+            paper: mode === 'light' ? '#ffffff' : '#1e1e1e',
+          },
+        },
+        typography: {
+          fontFamily: '"Noto Sans", "Roboto", "Helvetica", "Arial", sans-serif',
+        },
+        components: {
+          MuiButton: {
+            styleOverrides: {
+              root: {
+                textTransform: 'none',
+              },
+            },
+          },
+          MuiTextField: {
+            defaultProps: {
+              variant: 'outlined',
+            },
+          },
+          MuiPaper: {
+            styleOverrides: {
+              root: {
+                backgroundImage: 'none',
+              },
+            },
+          },
+        },
+      }),
+    [mode]
+  );
+
+  const toggleTheme = (): void => {
+    setMode((prevMode) => {
+      const newMode = prevMode === 'light' ? 'dark' : 'light';
+      localStorage.setItem('themeMode', newMode);
+      return newMode;
+    });
+  };
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = (e: MediaQueryListEvent): void => {
+      setMode(e.matches ? 'dark' : 'light');
+    };
+
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+  }, []);
+
+  const value = React.useMemo(
+    () => ({
+      theme,
+      toggleTheme,
+    }),
+    [theme]
+  );
+
+  return (
+    <ThemeContext.Provider value={value}>
+      <MuiThemeProvider theme={theme}>{children}</MuiThemeProvider>
+    </ThemeContext.Provider>
+  );
 }

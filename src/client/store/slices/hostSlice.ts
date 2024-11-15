@@ -1,190 +1,160 @@
-import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 
-import type { HostState, HostConnectionUpdate } from './types/host';
-import type { LogMetadata } from '../../../types/logger';
-import type { Host } from '../../../types/models-shared';
-import { listHosts, connectHost, disconnectHost } from '../../api/hosts.client';
-import { logger } from '../../utils/frontendLogger';
-import type { RootState } from '../storeTypes';
+import type { Host } from '../../../types/api';
+import { RootState } from '../index';
 
 interface HostState {
-  hosts: Host[];
-  selectedHost: Host | null;
-  connections: Record<number, ConnectionState>;
+  hosts: Record<string, Host>;
   loading: boolean;
   error: string | null;
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 const initialState: HostState = {
-  hosts: [],
-  selectedHost: null,
-  connections: {},
+  hosts: {},
   loading: false,
   error: null,
 };
 
-// Async thunks
-export const fetchHosts = createAsyncThunk<
-  Host[],
-  void,
-  {
-    rejectValue: string;
-  }
->('hosts/fetchHosts', async (_, { rejectWithValue }) => {
-  try {
-    const response = await listHosts();
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Failed to fetch hosts');
-    }
-    return response.data;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'HostSlice',
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to fetch hosts:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch hosts');
-  }
-});
+export const fetchHosts = createAsyncThunk<Host[], void, { rejectValue: string }>(
+  'hosts/fetchHosts',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch('/api/hosts');
+      const result = (await response.json()) as ApiResponse<Host[]>;
 
-export const connectToHost = createAsyncThunk<
-  number,
-  number,
-  {
-    rejectValue: string;
-    state: RootState;
-  }
->('hosts/connect', async (hostId, { rejectWithValue }) => {
-  try {
-    const response = await connectHost(hostId);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to connect to host');
-    }
-    return hostId;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'HostSlice',
-      hostId,
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to connect to host:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to connect to host');
-  }
-});
+      if (!result.success) {
+        return rejectWithValue(result.error || 'Failed to fetch hosts');
+      }
 
-export const disconnectFromHost = createAsyncThunk<
-  number,
-  number,
-  {
-    rejectValue: string;
-  }
->('hosts/disconnect', async (hostId, { rejectWithValue }) => {
-  try {
-    const response = await disconnectHost(hostId);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to disconnect from host');
+      return result.data || [];
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch hosts');
     }
-    return hostId;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'HostSlice',
-      hostId,
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to disconnect from host:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to disconnect from host');
   }
-});
+);
+
+export const addHost = createAsyncThunk<Host, Host, { rejectValue: string }>(
+  'hosts/addHost',
+  async (host, { rejectWithValue }) => {
+    try {
+      const response = await fetch('/api/hosts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(host),
+      });
+
+      const result = (await response.json()) as ApiResponse<Host>;
+
+      if (!result.success) {
+        return rejectWithValue(result.error || 'Failed to add host');
+      }
+
+      return result.data as Host;
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to add host');
+    }
+  }
+);
+
+export const removeHost = createAsyncThunk<string, string, { rejectValue: string }>(
+  'hosts/removeHost',
+  async (hostId, { rejectWithValue }) => {
+    try {
+      const response = await fetch(`/api/hosts/${hostId}`, {
+        method: 'DELETE',
+      });
+
+      const result = (await response.json()) as ApiResponse<void>;
+
+      if (!result.success) {
+        return rejectWithValue(result.error || 'Failed to remove host');
+      }
+
+      return hostId;
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to remove host');
+    }
+  }
+);
 
 const hostSlice = createSlice({
   name: 'hosts',
   initialState,
   reducers: {
-    selectHost: (state, action: PayloadAction<number | null>) => {
-      const hostId = action.payload;
-      state.selectedHost = hostId ? state.hosts.find((host) => host.id === hostId) || null : null;
-    },
-    updateConnectionState: (state, action: PayloadAction<HostConnectionUpdate>) => {
-      const { hostId, connectionState } = action.payload;
-      state.connections[hostId] = connectionState;
-    },
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.loading = action.payload;
-    },
-    setError: (state, action: PayloadAction<string | null>) => {
-      state.error = action.payload;
-      state.loading = false;
+    updateHostStatus: (state, action: PayloadAction<{ id: string; status: string }>) => {
+      const { id, status } = action.payload;
+      if (state.hosts[id]) {
+        state.hosts[id].status = status;
+      }
     },
   },
   extraReducers: (builder) => {
     builder
-      // Fetch hosts
       .addCase(fetchHosts.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
       .addCase(fetchHosts.fulfilled, (state, action) => {
-        state.hosts = action.payload;
         state.loading = false;
         state.error = null;
+        state.hosts = action.payload.reduce<Record<string, Host>>((acc, host) => {
+          acc[host.id] = host;
+          return acc;
+        }, {});
       })
       .addCase(fetchHosts.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || 'Failed to fetch hosts';
       })
-      // Connect to host
-      .addCase(connectToHost.pending, (state, action) => {
-        const hostId = action.meta.arg;
-        state.connections[hostId] = {
-          status: 'connecting',
-          lastConnected: undefined,
-        };
+      .addCase(addHost.pending, (state) => {
+        state.loading = true;
+        state.error = null;
       })
-      .addCase(connectToHost.fulfilled, (state, action) => {
-        const hostId = action.payload;
-        state.connections[hostId] = {
-          status: 'connected',
-          lastConnected: new Date(),
-        };
+      .addCase(addHost.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+        state.hosts[action.payload.id] = action.payload;
       })
-      .addCase(connectToHost.rejected, (state, action) => {
-        const hostId = action.meta.arg;
-        state.connections[hostId] = {
-          status: 'error',
-          lastConnected: undefined,
-          error: action.payload || 'Connection failed',
-        };
+      .addCase(addHost.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to add host';
       })
-      // Disconnect from host
-      .addCase(disconnectFromHost.fulfilled, (state, action) => {
-        const hostId = action.payload;
-        state.connections[hostId] = {
-          status: 'disconnected',
-          lastConnected: undefined,
-        };
-        if (state.selectedHost?.id === hostId) {
-          state.selectedHost = null;
-        }
+      .addCase(removeHost.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(removeHost.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+        delete state.hosts[action.payload];
+      })
+      .addCase(removeHost.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to remove host';
       });
   },
 });
 
-// Export actions and reducer
-export const { selectHost, updateConnectionState, setLoading, setError } = hostSlice.actions;
-export default hostSlice.reducer;
+export const { updateHostStatus } = hostSlice.actions;
 
-// Selectors
-export const selectAllHosts = (state: RootState): Host[] =>
-  state.hosts.hosts;
+export const selectHosts = (state: RootState): Host[] =>
+  Object.values(state.hosts.hosts);
 
-export const selectSelectedHost = (state: RootState): Host | null =>
-  state.hosts.selectedHost;
+export const selectHostById = (state: RootState, id: string): Host | undefined =>
+  state.hosts.hosts[id];
 
-export const selectConnectionState = (state: RootState, hostId: number): ConnectionState | undefined =>
-  state.hosts.connections[hostId];
-
-export const selectIsLoading = (state: RootState): boolean =>
+export const selectHostsLoading = (state: RootState): boolean =>
   state.hosts.loading;
 
-export const selectError = (state: RootState): string | null =>
+export const selectHostsError = (state: RootState): string | null =>
   state.hosts.error;
+
+export default hostSlice.reducer;

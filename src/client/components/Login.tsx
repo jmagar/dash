@@ -1,117 +1,117 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login } from '../api/auth.client';
-import { useAuth } from '../context/AuthContext';
-import { logger } from '../utils/logger';
-
 import {
   Box,
-  Button,
-  Card,
-  CardContent,
   TextField,
+  Button,
   Typography,
+  Paper,
   Alert,
   CircularProgress,
 } from '@mui/material';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { useAuth } from '../context/AuthContext';
+import { logger } from '../utils/frontendLogger';
 
 export function Login(): JSX.Element {
   const navigate = useNavigate();
-  const { setAuthState } = useAuth();
+  const { login, error: authError } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
+    setError(null);
+    setLoading(true);
+
     try {
-      setError(null);
-      setLoading(true);
-
-      const response = await login({ username, password });
-
-      // Store token
-      localStorage.setItem('token', response.token);
-
-      // Update auth state
-      setAuthState({
-        token: response.token,
-        user: response.user,
-        isAuthenticated: true,
-      });
-
-      // Clear form
-      setUsername('');
-      setPassword('');
-
-      // Redirect to home page
+      await login(username, password);
       navigate('/');
     } catch (err) {
       logger.error('Login failed:', {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
-      setError('Invalid username or password');
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent): void => {
+    void handleSubmit(e);
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setUsername(e.target.value);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setPassword(e.target.value);
   };
 
   return (
     <Box
       sx={{
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
+        alignItems: 'center',
         minHeight: '100vh',
-        bgcolor: 'background.default',
+        p: 2,
       }}
     >
-      <Card sx={{ width: '100%', maxWidth: 400 }}>
-        <CardContent>
-          <Typography variant="h5" component="h1" gutterBottom align="center">
-            Login
-          </Typography>
+      <Paper
+        elevation={3}
+        sx={{
+          p: 4,
+          maxWidth: 400,
+          width: '100%',
+        }}
+      >
+        <Typography variant="h5" component="h1" gutterBottom>
+          Login
+        </Typography>
 
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label="Username"
-              value={username}
-              onChange={(e): void => setUsername(e.target.value)}
-              margin="normal"
-              required
-              disabled={loading}
-            />
-            <TextField
-              fullWidth
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e): void => setPassword(e.target.value)}
-              margin="normal"
-              required
-              disabled={loading}
-            />
+        {(error || authError) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error || authError}
+          </Alert>
+        )}
 
-            {error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
-              </Alert>
-            )}
+        <form onSubmit={handleFormSubmit}>
+          <TextField
+            fullWidth
+            label="Username"
+            value={username}
+            onChange={handleUsernameChange}
+            margin="normal"
+            required
+            disabled={loading}
+          />
 
-            <Button
-              fullWidth
-              variant="contained"
-              type="submit"
-              disabled={loading}
-              sx={{ mt: 3 }}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Login'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <TextField
+            fullWidth
+            type="password"
+            label="Password"
+            value={password}
+            onChange={handlePasswordChange}
+            margin="normal"
+            required
+            disabled={loading}
+          />
+
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            sx={{ mt: 3 }}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Login'}
+          </Button>
+        </form>
+      </Paper>
     </Box>
   );
 }

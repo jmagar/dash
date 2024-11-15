@@ -27,13 +27,26 @@ export type {
 
 // Export shared model types
 export type {
-  User,
   Host,
+  CreateHostRequest,
+  UpdateHostRequest,
+  Container,
+  DockerContainer,
+  DockerNetwork,
+  DockerVolume,
+  Stack,
+  FileItem,
+  User,
+  Package,
+  CommandRequest,
   Command,
   CommandResult,
+  AuthResult,
+  UserRegistration,
+  SSHConfig,
   SystemStats,
-  FileItem,
-  Package,
+  ContainerStats,
+  ApiResponse,
 } from './models-shared';
 
 // Re-export logging configuration types

@@ -1,14 +1,14 @@
 import { Send as SendIcon } from '@mui/icons-material';
 import {
-  Box,
-  TextField,
-  Button,
-  Typography,
-  CircularProgress,
-  useTheme,
   Alert,
+  Box,
+  Button,
+  CircularProgress,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Typography,
+  useTheme,
 } from '@mui/material';
 import React, { useState, useRef, useEffect } from 'react';
 
@@ -26,6 +26,10 @@ interface Model {
   value: string;
 }
 
+interface ChatResponse {
+  response: string;
+}
+
 const MODELS: Model[] = [
   { name: 'GPT-4', value: 'gpt-4' },
   { name: 'Claude-2', value: 'anthropic/claude-2' },
@@ -34,7 +38,7 @@ const MODELS: Model[] = [
 
 export function ChatBot(): JSX.Element {
   const theme = useTheme();
-  const { user } = useAuth();
+  const auth = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,7 +46,7 @@ export function ChatBot(): JSX.Element {
   const [selectedModel, setSelectedModel] = useState(MODELS[0].value);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -50,15 +54,22 @@ export function ChatBot(): JSX.Element {
     scrollToBottom();
   }, [messages]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || !user || loading) return;
+  const handleInputChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ): void => {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    setInput(target.value);
+  };
+
+  const handleSend = async (): Promise<void> => {
+    if (!input.trim() || !auth.user || loading) return;
 
     const userMessage: Message = {
       role: 'user',
@@ -79,7 +90,7 @@ export function ChatBot(): JSX.Element {
         },
         body: JSON.stringify({
           message: input,
-          userId: user.id,
+          userId: auth.user.id,
           model: selectedModel,
         }),
       });
@@ -88,7 +99,7 @@ export function ChatBot(): JSX.Element {
         throw new Error('Failed to get response');
       }
 
-      const data = await response.json();
+      const data = await response.json() as ChatResponse;
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -108,6 +119,14 @@ export function ChatBot(): JSX.Element {
     }
   };
 
+  if (!auth.user) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography>Please log in to use the chat.</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -125,7 +144,7 @@ export function ChatBot(): JSX.Element {
         <ToggleButtonGroup
           value={selectedModel}
           exclusive
-          onChange={(_, value) => value && setSelectedModel(value)}
+          onChange={(_, value): void => value && setSelectedModel(value)}
           size="small"
           sx={{ width: '100%', justifyContent: 'center' }}
         >
@@ -145,7 +164,7 @@ export function ChatBot(): JSX.Element {
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mx: 2, mt: 2 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mx: 2, mt: 2 }} onClose={(): void => setError(null)}>
           {error}
         </Alert>
       )}
@@ -222,7 +241,7 @@ export function ChatBot(): JSX.Element {
             multiline
             maxRows={4}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyPress={handleKeyPress}
             placeholder="Type your message..."
             disabled={loading}
@@ -236,7 +255,7 @@ export function ChatBot(): JSX.Element {
           />
           <Button
             variant="contained"
-            onClick={() => void handleSend()}
+            onClick={(): void => void handleSend()}
             disabled={!input.trim() || loading}
             endIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
             sx={{

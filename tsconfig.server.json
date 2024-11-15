@@ -1,44 +1,25 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "target": "ES2020",
     "module": "commonjs",
-    "lib": ["es2020"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
+    "target": "es2019",
+    "lib": ["es2019"],
+    "outDir": "build/server",
+    "rootDir": "src",
     "noEmit": false,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": "./src",
-    "paths": {
-      "@types/*": ["types/*"]
-    },
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
-    "types": ["node"]
+    "jsx": "react"
   },
   "include": [
-    "src/server/**/*.ts",
-    "src/types/**/*.ts",
-    "src/types/**/*.d.ts",
-    "src/utils/serverLogger.ts"
+    "src/server/**/*",
+    "src/types/**/*",
+    "src/utils/**/*"
   ],
   "exclude": [
     "node_modules",
     "build",
-    "dist",
     "scripts",
-    "test",
+    "src/client",
     "**/*.test.ts",
-    "src/client/**/*"
+    "**/*.test.tsx"
   ]
 }

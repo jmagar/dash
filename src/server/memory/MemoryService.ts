@@ -3,11 +3,6 @@ import { spawn, ChildProcess } from 'child_process';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
-interface PythonMessage {
-  type: 'stdout' | 'stderr';
-  data: string;
-}
-
 interface Memory {
   id: string;
   content: string;
@@ -48,14 +43,24 @@ export class MemoryService {
         });
       }
 
-      this.pythonProcess.on('close', (code: number) => {
-        if (code !== 0) {
-          logger.error('Python process exited with code:', { code });
-          this.isInitialized = false;
+      await new Promise<void>((resolve, reject) => {
+        if (!this.pythonProcess) {
+          reject(new Error('Python process not initialized'));
+          return;
         }
-      });
 
-      this.isInitialized = true;
+        this.pythonProcess.on('error', reject);
+        this.pythonProcess.on('close', (code: number) => {
+          if (code !== 0) {
+            logger.error('Python process exited with code:', { code });
+            this.isInitialized = false;
+            reject(new Error(`Python process exited with code ${code}`));
+          } else {
+            this.isInitialized = true;
+            resolve();
+          }
+        });
+      });
     } catch (error) {
       logger.error('Failed to initialize Python process:', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -153,7 +158,19 @@ export class MemoryService {
 
   async cleanup(): Promise<void> {
     if (this.pythonProcess) {
-      this.pythonProcess.kill();
+      await new Promise<void>((resolve) => {
+        if (!this.pythonProcess) {
+          resolve();
+          return;
+        }
+
+        this.pythonProcess.on('close', () => {
+          resolve();
+        });
+
+        this.pythonProcess.kill();
+      });
+
       this.pythonProcess = null;
       this.isInitialized = false;
     }

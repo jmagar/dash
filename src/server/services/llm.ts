@@ -10,20 +10,30 @@ export const openai = new OpenAI({
   organization: config.openai.organization,
 });
 
-// OpenRouter API interface
+interface OpenRouterMessage {
+  role: string;
+  content: string;
+}
+
+interface OpenRouterChoice {
+  message: OpenRouterMessage;
+}
+
 interface OpenRouterResponse {
-  choices: Array<{
-    message: {
-      content: string;
-      role: string;
-    };
-  }>;
+  choices: OpenRouterChoice[];
 }
 
 interface ErrorMetadata extends LogMetadata {
   error: string;
   provider?: string;
   model?: string;
+}
+
+interface OpenRouterRequestBody {
+  model: string;
+  messages: OpenRouterMessage[];
+  max_tokens?: number;
+  temperature?: number;
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
@@ -48,6 +58,13 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export async function generateCompletion(prompt: string, useOpenRouter = false): Promise<string> {
   try {
     if (useOpenRouter) {
+      const requestBody: OpenRouterRequestBody = {
+        model: config.openrouter.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: config.openrouter.maxTokens,
+        temperature: config.openrouter.temperature,
+      };
+
       const response = await fetch(config.openrouter.baseUrl, {
         method: 'POST',
         headers: {
@@ -55,19 +72,14 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
           'Content-Type': 'application/json',
           'HTTP-Referer': config.host,
         },
-        body: JSON.stringify({
-          model: config.openrouter.model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: config.openrouter.maxTokens,
-          temperature: config.openrouter.temperature,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         throw new Error(`OpenRouter API error: ${response.statusText}`);
       }
 
-      const data: OpenRouterResponse = await response.json();
+      const data = await response.json() as OpenRouterResponse;
       const content = data.choices[0]?.message?.content;
 
       if (!content) {
@@ -75,22 +87,22 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
       }
 
       return content;
-    } else {
-      const completion = await openai.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: config.openai.model,
-        max_tokens: config.openai.maxTokens,
-        temperature: config.openai.temperature,
-      });
-
-      const response = completion.choices[0]?.message?.content;
-
-      if (!response) {
-        throw new Error('No response generated from OpenAI');
-      }
-
-      return response;
     }
+
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: config.openai.model,
+      max_tokens: config.openai.maxTokens,
+      temperature: config.openai.temperature,
+    });
+
+    const response = completion.choices[0]?.message?.content;
+
+    if (!response) {
+      throw new Error('No response generated from OpenAI');
+    }
+
+    return response;
   } catch (error) {
     const metadata: ErrorMetadata = {
       error: error instanceof Error ? error.message : 'Unknown error',

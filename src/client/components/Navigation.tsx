@@ -1,56 +1,79 @@
+import {
+  Brightness4 as DarkIcon,
+  Brightness7 as LightIcon,
+  Menu as MenuIcon,
+} from '@mui/icons-material';
+import {
+  AppBar,
+  Box,
+  Button,
+  IconButton,
+  Toolbar,
+  Typography,
+} from '@mui/material';
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useHost } from '../context/HostContext';
+import { Link } from 'react-router-dom';
+
 import { useAuth } from '../context/AuthContext';
-import { logout } from '../api/auth.client';
-import { logger } from '../utils/logger';
+import { useTheme } from '../context/ThemeContext';
 
-export function Navigation() {
-  const navigate = useNavigate();
-  const { authState, setAuthState } = useAuth();
-  const { selectedHost, setSelectedHost } = useHost();
+export function Navigation(): JSX.Element {
+  const { theme, toggleTheme } = useTheme();
+  const auth = useAuth();
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     try {
-      await logout();
-      localStorage.removeItem('token');
-      setAuthState({
-        token: null,
-        user: null,
-        isAuthenticated: false,
-      });
-      setSelectedHost(null);
-      navigate('/login');
-    } catch (err) {
-      logger.error('Failed to logout:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
+      await auth.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
     }
   };
 
   return (
-    <nav className="navigation">
-      <div className="nav-left">
-        <button onClick={() => navigate('/')}>Dashboard</button>
-        <button onClick={() => navigate('/execute')}>Execute</button>
-        <button onClick={() => navigate('/files')}>Files</button>
-      </div>
-      <div className="nav-right">
-        {selectedHost && (
-          <span className="host-info">
-            Connected to: {selectedHost.name}
-          </span>
-        )}
-        {authState.user && (
-          <>
-            <span className="user-info">
-              {authState.user.username} ({authState.user.role})
-            </span>
-            <button onClick={() => navigate('/profile')}>Profile</button>
-          </>
-        )}
-        <button onClick={handleLogout}>Logout</button>
-      </div>
-    </nav>
+    <AppBar position="static">
+      <Toolbar>
+        <IconButton
+          size="large"
+          edge="start"
+          color="inherit"
+          aria-label="menu"
+          sx={{ mr: 2 }}
+        >
+          <MenuIcon />
+        </IconButton>
+        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          SSH Manager
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <IconButton
+            sx={{ ml: 1 }}
+            onClick={toggleTheme}
+            color="inherit"
+            aria-label="toggle theme"
+          >
+            {theme.palette.mode === 'dark' ? <LightIcon /> : <DarkIcon />}
+          </IconButton>
+          {auth.user ? (
+            <>
+              <Button color="inherit" component={Link} to="/dashboard">
+                Dashboard
+              </Button>
+              <Button
+                color="inherit"
+                onClick={(): void => {
+                  void handleLogout();
+                }}
+              >
+                Logout
+              </Button>
+            </>
+          ) : (
+            <Button color="inherit" component={Link} to="/login">
+              Login
+            </Button>
+          )}
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
 }

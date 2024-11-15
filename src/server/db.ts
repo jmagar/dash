@@ -4,11 +4,11 @@ import { logger } from './utils/logger';
 
 // Database configuration
 const poolConfig: PoolConfig = {
-  user: config.postgres.user,
-  password: config.postgres.password,
-  host: config.postgres.host,
-  port: config.postgres.port,
-  database: config.postgres.database,
+  user: config.db.user,
+  password: config.db.password,
+  host: config.db.host,
+  port: config.db.port,
+  database: config.db.database,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -108,7 +108,6 @@ export async function end(): Promise<void> {
 export const db = {
   query,
   healthCheck,
-  pool,
   end,
   totalCount: () => pool.totalCount,
   idleCount: () => pool.idleCount,

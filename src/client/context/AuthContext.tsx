@@ -1,80 +1,126 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { AuthenticatedUser } from '../../types/auth';
-import { validate } from '../api/auth.client';
-import { logger } from '../utils/logger';
 
-interface AuthState {
-  token: string | null;
-  user: AuthenticatedUser | null;
-  isAuthenticated: boolean;
+import type { User, AuthContextType } from '../../types/auth';
+import { logger } from '../utils/frontendLogger';
+
+interface AuthResponse {
+  success: boolean;
+  valid?: boolean;
+  token?: string;
+  user?: User;
+  error?: string;
 }
 
-interface AuthContextType {
-  authState: AuthState;
-  setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
+function throwNotInitialized(): never {
+  throw new Error('AuthContext not initialized');
 }
 
-const initialState: AuthState = {
-  token: null,
+const AuthContext = createContext<AuthContextType>({
   user: null,
-  isAuthenticated: false,
-};
+  login: () => throwNotInitialized(),
+  logout: () => throwNotInitialized(),
+  loading: true,
+  error: null,
+});
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export function useAuth(): AuthContextType {
+  return useContext(AuthContext);
+}
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [authState, setAuthState] = useState<AuthState>(initialState);
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const validateToken = async () => {
+    const validateToken = async (): Promise<void> => {
       try {
-        const response = await validate();
-        if (response.valid && response.user) {
-          setAuthState({
-            token: localStorage.getItem('token'),
-            user: response.user,
-            isAuthenticated: true,
-          });
-        } else {
-          // Clear invalid token
-          localStorage.removeItem('token');
-          setAuthState(initialState);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoading(false);
+          return;
         }
-      } catch (err) {
+
+        const response = await fetch('/api/auth/validate', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json() as AuthResponse;
+
+        if (data.success && data.valid && data.user) {
+          setUser(data.user);
+        } else {
+          localStorage.removeItem('token');
+        }
+      } catch (error) {
         logger.error('Token validation failed:', {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
         localStorage.removeItem('token');
-        setAuthState(initialState);
       } finally {
         setLoading(false);
       }
     };
 
-    const token = localStorage.getItem('token');
-    if (token) {
-      validateToken();
-    } else {
-      setLoading(false);
-    }
+    void validateToken();
   }, []);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const login = async (username: string, password: string): Promise<void> => {
+    try {
+      setError(null);
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json() as AuthResponse;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      if (data.token && data.user) {
+        localStorage.setItem('token', data.token);
+        setUser(data.user);
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (error) {
+      logger.error('Login failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      setError(error instanceof Error ? error.message : 'Login failed');
+      throw error;
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+    } catch (error) {
+      logger.error('Logout failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ authState, setAuthState }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, error }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }

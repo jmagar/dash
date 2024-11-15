@@ -1,24 +1,60 @@
-import bcrypt from 'bcrypt';
+import { compare } from 'bcrypt';
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { sign, verify } from 'jsonwebtoken';
 
-import type { LoginResponse, LogoutResponse, ValidateResponse, AuthenticatedUser, DecodedToken } from '../../types/auth';
+import type { LoginResponse, LogoutResponse, ValidateResponse, AuthenticatedUser } from '../../types/auth';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../utils/logger';
 
-export async function login(req: Request, res: Response<LoginResponse | { error: string }>) {
+interface UserRecord {
+  id: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+  password_hash: string;
+  created_at: Date;
+  last_login: Date;
+}
+
+interface JwtPayload {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  iat?: number;
+  exp?: number;
+}
+
+function isJwtPayload(payload: unknown): payload is JwtPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'id' in payload &&
+    'username' in payload &&
+    'role' in payload &&
+    typeof (payload as JwtPayload).id === 'string' &&
+    typeof (payload as JwtPayload).username === 'string' &&
+    ((payload as JwtPayload).role === 'admin' || (payload as JwtPayload).role === 'user')
+  );
+}
+
+export async function login(
+  req: Request<unknown, LoginResponse | { error: string }, { username: string; password: string }>,
+  res: Response<LoginResponse | { error: string }>
+): Promise<void> {
   try {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Username and password are required',
       });
+      return;
     }
 
-    const result = await db.query<AuthenticatedUser>(
+    const result = await db.query<UserRecord>(
       'SELECT * FROM users WHERE username = $1',
       [username]
     );
@@ -26,22 +62,24 @@ export async function login(req: Request, res: Response<LoginResponse | { error:
     const user = result.rows[0];
 
     if (!user) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid username or password',
       });
+      return;
     }
 
-    const validPassword = await bcrypt.compare(password, user.password_hash || '');
+    const validPassword = await compare(password, user.password_hash);
 
     if (!validPassword) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid username or password',
       });
+      return;
     }
 
-    const token = jwt.sign(
+    const token = sign(
       { id: user.id, username: user.username, role: user.role },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn }
@@ -60,7 +98,7 @@ export async function login(req: Request, res: Response<LoginResponse | { error:
       role: user.role,
       is_active: user.is_active,
       token,
-      createdAt: user.createdAt,
+      createdAt: user.created_at,
       lastLogin: new Date(),
     };
 
@@ -69,7 +107,7 @@ export async function login(req: Request, res: Response<LoginResponse | { error:
       username: user.username,
     });
 
-    return res.json({
+    res.json({
       success: true,
       token,
       user: authenticatedUser,
@@ -78,40 +116,64 @@ export async function login(req: Request, res: Response<LoginResponse | { error:
     logger.error('Login failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw error;
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
   }
 }
 
-export async function logout(req: Request, res: Response<LogoutResponse>) {
+export async function logout(
+  req: Request,
+  res: Response<LogoutResponse>
+): Promise<void> {
   try {
     // In a real implementation, you might want to invalidate the token
-    // For now, we'll just return success
-    return res.json({
+    // For now, we'll just simulate an async operation
+    await Promise.resolve();
+    res.json({
       success: true,
     });
   } catch (error) {
     logger.error('Logout failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw error;
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
   }
 }
 
-export async function validate(req: Request, res: Response<ValidateResponse | { error: string }>) {
+export async function validate(
+  req: Request,
+  res: Response<ValidateResponse | { error: string }>
+): Promise<void> {
   try {
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         valid: false,
         error: 'No token provided',
       });
+      return;
     }
 
     try {
-      const decoded = jwt.verify(token, config.jwt.secret) as DecodedToken;
-      const result = await db.query<AuthenticatedUser>(
+      const decoded = verify(token, config.jwt.secret);
+
+      if (!isJwtPayload(decoded)) {
+        res.status(401).json({
+          success: false,
+          valid: false,
+          error: 'Invalid token format',
+        });
+        return;
+      }
+
+      const result = await db.query<UserRecord>(
         'SELECT * FROM users WHERE id = $1',
         [decoded.id]
       );
@@ -119,11 +181,12 @@ export async function validate(req: Request, res: Response<ValidateResponse | { 
       const user = result.rows[0];
 
       if (!user) {
-        return res.status(401).json({
+        res.status(401).json({
           success: false,
           valid: false,
           error: 'Invalid token',
         });
+        return;
       }
 
       const authenticatedUser: AuthenticatedUser = {
@@ -133,17 +196,17 @@ export async function validate(req: Request, res: Response<ValidateResponse | { 
         role: user.role,
         is_active: user.is_active,
         token,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin,
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
       };
 
-      return res.json({
+      res.json({
         success: true,
         valid: true,
         user: authenticatedUser,
       });
     } catch (error) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         valid: false,
         error: 'Invalid token',
@@ -153,6 +216,10 @@ export async function validate(req: Request, res: Response<ValidateResponse | { 
     logger.error('Token validation failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw error;
+    res.status(500).json({
+      success: false,
+      valid: false,
+      error: 'Internal server error',
+    });
   }
 }

@@ -1,18 +1,45 @@
 import { Request, Response } from 'express';
 
-import { createApiError } from '../../types/error';
 import { MemoryService } from '../memory/MemoryService';
 import { generateCompletion, shouldUseOpenRouter } from '../services/llm';
 import { logger } from '../utils/logger';
 
+interface ChatRequest {
+  message: string;
+  userId: string;
+  model?: string;
+}
+
+interface ChatResponse {
+  response: string;
+}
+
+interface GetMemoriesResponse {
+  memories: unknown[];
+}
+
 const memoryService = new MemoryService();
 
-export async function generateChatResponse(req: Request, res: Response) {
+export async function generateChatResponse(
+  req: Request<unknown, ChatResponse | { error: string }, ChatRequest>,
+  res: Response<ChatResponse | { error: string }>
+): Promise<void> {
   try {
-    const { message, userId } = req.body;
+    const { message, userId, model } = req.body;
+
+    // Verify user has access to this userId
+    if (req.user?.id !== userId && req.user?.role !== 'admin') {
+      res.status(403).json({
+        error: 'Unauthorized access',
+      });
+      return;
+    }
 
     if (!message || !userId) {
-      throw createApiError('Message and userId are required', null, 400);
+      res.status(400).json({
+        error: 'Message and userId are required',
+      });
+      return;
     }
 
     // Get relevant memories
@@ -46,23 +73,40 @@ Instructions:
       responseLength: response.length,
       memoriesUsed: memories.length,
       provider: useOpenRouter ? 'OpenRouter' : 'OpenAI',
+      model,
     });
 
-    return res.json({ response });
+    res.json({ response });
   } catch (error) {
     logger.error('Failed to generate chat response:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw error;
+    res.status(500).json({
+      error: 'Failed to generate response',
+    });
   }
 }
 
-export async function getUserMemories(req: Request, res: Response) {
+export async function getUserMemories(
+  req: Request<{ userId: string }>,
+  res: Response<GetMemoriesResponse | { error: string }>
+): Promise<void> {
   try {
     const { userId } = req.params;
 
+    // Verify user has access to this userId
+    if (req.user?.id !== userId && req.user?.role !== 'admin') {
+      res.status(403).json({
+        error: 'Unauthorized access',
+      });
+      return;
+    }
+
     if (!userId) {
-      throw createApiError('UserId is required', null, 400);
+      res.status(400).json({
+        error: 'UserId is required',
+      });
+      return;
     }
 
     const memories = await memoryService.getAllMemories(userId);
@@ -72,11 +116,13 @@ export async function getUserMemories(req: Request, res: Response) {
       memoriesCount: memories.length,
     });
 
-    return res.json({ memories });
+    res.json({ memories });
   } catch (error) {
     logger.error('Failed to get user memories:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw error;
+    res.status(500).json({
+      error: 'Failed to get memories',
+    });
   }
 }

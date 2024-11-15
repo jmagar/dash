@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { createApiError } from '../../types/error';
+import { ApiError, createApiError } from '../../types/error';
 import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { Package, ApiResponse } from '../../types/models-shared';
@@ -35,7 +35,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams> = async (req, res
         hostId: String(hostId),
       };
       logger.error('Database connection failed:', metadata);
-      throw createApiError('Failed to connect to database', 500, metadata);
+      throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
     const packages: Package[] = [
@@ -61,8 +61,9 @@ const listPackages: AuthenticatedRequestHandler<PackageParams> = async (req, res
     };
     logger.error('Failed to list packages:', metadata);
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to list packages',
+      undefined,
       500,
       metadata,
     );
@@ -85,7 +86,7 @@ const installPackage: AuthenticatedRequestHandler<PackageParams, unknown, Instal
     if (!packageName) {
       const metadata: LogMetadata = { hostId: String(hostId) };
       logger.warn('Package installation failed: No package name provided', metadata);
-      throw createApiError('Package name is required', 400, metadata);
+      throw new ApiError('Package name is required', undefined, 400, metadata);
     }
 
     logger.info('Installing package', { hostId: String(hostId), package: packageName });
@@ -99,23 +100,26 @@ const installPackage: AuthenticatedRequestHandler<PackageParams, unknown, Instal
         package: packageName,
       };
       logger.error('Database connection failed:', metadata);
-      throw createApiError('Failed to connect to database', 500, metadata);
+      throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
     logger.info('Package installed successfully', { hostId: String(hostId), package: packageName });
-    const response: PackageInstallResponse = { success: true };
+    const response: PackageInstallResponse = {
+      success: true,
+    };
     return res.json(response);
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
-      package: packageName,
+      package: String(req.body.package),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to install package:', metadata);
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to install package',
-      error instanceof Error && error.message.includes('required') ? 400 : 500,
+      undefined,
+      500,
       metadata,
     );
     return res.status(apiError.status || 500).json({

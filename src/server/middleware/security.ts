@@ -20,23 +20,16 @@ export const securityHeaders = helmet({
       frameSrc: ["'none'"],
     },
   },
-  crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: true,
-  crossOriginResourcePolicy: { policy: 'same-site' },
-  dnsPrefetchControl: true,
-  frameguard: { action: 'deny' },
-  hidePoweredBy: true,
   hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
-  ieNoOpen: true,
+  frameguard: { action: 'deny' },
   noSniff: true,
-  originAgentCluster: true,
-  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
-  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   xssFilter: true,
+  hidePoweredBy: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 });
 
 // CORS configuration
@@ -48,11 +41,11 @@ export const corsConfig = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Content-Length', 'X-Request-Id'],
-  credentials: true,
-  maxAge: 600, // 10 minutes
+  methods: config.security.allowedMethods,
+  allowedHeaders: config.security.allowedHeaders,
+  exposedHeaders: config.security.exposedHeaders,
+  credentials: config.security.credentials,
+  maxAge: config.security.maxAge,
 };
 
 // Rate limiting middleware
@@ -125,7 +118,7 @@ export function validateRequestSize(req: Request, res: Response, next: NextFunct
 export const security = [
   securityHeaders,
   rateLimiter,
+  fileUploadConfig,
   validateContentType,
   validateRequestSize,
-  fileUploadConfig,
 ];

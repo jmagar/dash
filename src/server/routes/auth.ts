@@ -15,14 +15,14 @@ const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async
     const { username, password } = req.body;
     if (!username || !password) {
       const metadata: LogMetadata = { body: req.body };
-      throw createApiError('Invalid request format', 400, metadata);
+      throw new ApiError('Invalid request format', undefined, 400, metadata);
     }
 
     // Validate credentials
     const user = await validateCredentials(username, password);
     if (!user) {
       const metadata: LogMetadata = { username };
-      throw createApiError('Invalid credentials', 401, metadata);
+      throw new ApiError('Invalid credentials', undefined, 401, metadata);
     }
 
     // Generate session token and refresh token
@@ -67,7 +67,7 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
 
   if (!token) {
     const metadata: LogMetadata = {};
-    const error = createApiError('No token provided', 401, metadata);
+    const error = new ApiError('No token provided', undefined, 401, metadata);
     return res.status(error.status).json({
       success: false,
       error: error.message,
@@ -78,7 +78,7 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
     const session = await cacheService.getSession(token);
     if (!session) {
       const metadata: LogMetadata = { token };
-      throw createApiError('Invalid or expired session', 401, metadata);
+      throw new ApiError('Invalid or expired session', undefined, 401, metadata);
     }
 
     const user = JSON.parse(session);
@@ -113,7 +113,12 @@ const logoutHandler: RequestHandler<unknown, LogoutResponse> = async (req, res: 
   const token = req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
-    return res.json({ success: true });
+    const metadata: LogMetadata = {};
+    const error = new ApiError('No token provided', undefined, 401, metadata);
+    return res.status(error.status).json({
+      success: false,
+      error: error.message,
+    });
   }
 
   try {

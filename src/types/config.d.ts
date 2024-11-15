@@ -43,4 +43,16 @@ export interface Config {
   prometheus: {
     port: number;
   };
+  security: {
+    allowedOrigins: string[];
+    allowedHeaders: string[];
+    allowedMethods: string[];
+    exposedHeaders: string[];
+    maxAge: number;
+    credentials: boolean;
+  };
+  rateLimit: {
+    windowMs: number;
+    max: number;
+  };
 }
