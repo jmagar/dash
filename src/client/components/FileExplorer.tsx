@@ -1,11 +1,8 @@
 import {
-  Add as AddIcon,
-  Search as SearchIcon,
-  ArrowUpward as ArrowUpIcon,
-} from '@mui/icons-material';
-import {
   Box,
   Button,
+  IconButton,
+  InputBase,
   Paper,
   Table,
   TableBody,
@@ -13,203 +10,227 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Typography,
-  Alert,
   TextField,
+  Typography,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   InputAdornment,
 } from '@mui/material';
-import React, { useState } from 'react';
+import {
+  Search as SearchIcon,
+  CreateNewFolder as CreateNewFolderIcon,
+  ArrowBack as ArrowBackIcon,
+  Computer as ComputerIcon,
+} from '@mui/icons-material';
+import React, { useState, useEffect, useCallback } from 'react';
 
-import type { FileItem, Host } from '../../types';
-import { listFiles, deleteFile, createDirectory } from '../api';
+import type { FileItem } from '../../types/models-shared';
+import { listFiles, deleteFile, createDirectory, searchFiles } from '../api/fileExplorer.client';
 import { useHost } from '../context/HostContext';
-import { useAsync, useDebounce, useKeyPress } from '../hooks';
+import { useDebounce, useKeyPress } from '../hooks';
 import FileListItem from './FileListItem';
 import HostSelector from './HostSelector';
 import LoadingScreen from './LoadingScreen';
-import { logger } from '../utils/frontendLogger';
+import { logger } from '../utils/logger';
 
-export default function FileExplorer(): JSX.Element {
-  const [currentPath, setCurrentPath] = useState<string>('/');
-  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
-  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
+export default function FileExplorer() {
+  const { selectedHost } = useHost();
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [currentPath, setCurrentPath] = useState('/');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const debouncedSearch = useDebounce(searchTerm, 300);
-  const { hosts } = useHost();
+  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const loadFilesList = async (): Promise<FileItem[]> => {
-    if (!selectedHost) return [];
-    const response = await listFiles(selectedHost.id, currentPath);
-    if (!response.success || !response.data) {
-      logger.error('Failed to load files:', { error: response.error });
-      throw new Error(response.error || 'Failed to load files');
-    }
-    return response.data;
-  };
-
-  const {
-    data: files,
-    loading,
-    error: loadError,
-    execute: loadFiles,
-  } = useAsync(loadFilesList, {
-    deps: [selectedHost?.id, currentPath],
-    immediate: !!selectedHost,
-  });
-
-  const filteredFiles = (files ?? []).filter(file =>
-    file.name.toLowerCase().includes(debouncedSearch.toLowerCase()),
-  );
-
-  const handleHostSelect = (selectedHosts: Host[]): void => {
-    if (selectedHosts.length > 0) {
-      setSelectedHost(selectedHosts[0]);
-      logger.info('Host selected for file explorer', { hostId: String(selectedHosts[0].id) });
-    }
-    setHostSelectorOpen(false);
-  };
-
-  const handleNavigate = (path: string): void => {
-    setCurrentPath(path);
-    logger.info('Navigated to path', { path });
-  };
-
-  const handleNavigateUp = (): void => {
-    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
-    setCurrentPath(parentPath);
-    logger.info('Navigated up to path', { path: parentPath });
-  };
-
-  const handleCreateFolder = async (): Promise<void> => {
-    if (!selectedHost || !newFolderName.trim()) return;
-
-    try {
-      const newPath = `${currentPath}/${newFolderName}`.replace(/\/+/g, '/');
-      const result = await createDirectory(selectedHost.id, newPath);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create folder');
-      }
-      logger.info('Created new folder', { path: newPath });
-      setCreateFolderDialogOpen(false);
-      setNewFolderName('');
-      void loadFiles();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create folder';
-      logger.error('Error creating folder:', { error: errorMessage });
-      setError(errorMessage);
-    }
-  };
-
-  const handleDeleteFile = async (path: string): Promise<void> => {
+  const loadFiles = useCallback(async (path: string) => {
     if (!selectedHost) return;
 
     try {
-      const result = await deleteFile(selectedHost.id, path);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete file');
-      }
-      logger.info('Deleted file', { path });
-      void loadFiles();
+      setLoading(true);
+      setError(null);
+      const fileList = await listFiles(selectedHost.id, path);
+      setFiles(fileList);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to delete file';
-      logger.error('Error deleting file:', { error: errorMessage });
-      setError(errorMessage);
+      logger.error('Failed to load files:', {
+        hostId: selectedHost.id,
+        path,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to load files');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedHost]);
+
+  useEffect(() => {
+    if (selectedHost) {
+      void loadFiles(currentPath);
+    }
+  }, [selectedHost, currentPath, loadFiles]);
+
+  useEffect(() => {
+    if (debouncedSearch) {
+      void handleSearch();
+    } else if (selectedHost) {
+      void loadFiles(currentPath);
+    }
+  }, [debouncedSearch, selectedHost, currentPath, loadFiles]);
+
+  const handleSearch = async () => {
+    if (!selectedHost || !searchQuery.trim()) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      const results = await searchFiles(selectedHost.id, currentPath, searchQuery);
+      setFiles(results);
+    } catch (err) {
+      logger.error('Failed to search files:', {
+        hostId: selectedHost.id,
+        path: currentPath,
+        query: searchQuery,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to search files');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleNewFolderKeyPress = (e: KeyboardEvent): void => {
-    if (e.ctrlKey && e.key === 'n') {
-      e.preventDefault();
-      setCreateFolderDialogOpen(true);
+  const handleNavigate = (path: string) => {
+    setCurrentPath(path);
+    setSearchQuery('');
+  };
+
+  const handleCreateDirectory = async () => {
+    if (!selectedHost || !newFolderName.trim()) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      const newPath = `${currentPath}/${newFolderName}`.replace(/\/+/g, '/');
+      await createDirectory(selectedHost.id, newPath);
+      setCreateFolderDialogOpen(false);
+      setNewFolderName('');
+      await loadFiles(currentPath);
+    } catch (err) {
+      logger.error('Failed to create directory:', {
+        hostId: selectedHost.id,
+        path: currentPath,
+        folderName: newFolderName,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to create directory');
+    } finally {
+      setLoading(false);
     }
   };
 
-  useKeyPress('n', handleNewFolderKeyPress);
+  const handleDeleteFile = async (path: string) => {
+    if (!selectedHost) return;
+
+    try {
+      setError(null);
+      await deleteFile(selectedHost.id, path);
+      await loadFiles(currentPath);
+    } catch (err) {
+      logger.error('Failed to delete file:', {
+        hostId: selectedHost.id,
+        path,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to delete file');
+    }
+  };
+
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      if (createFolderDialogOpen && newFolderName) {
+        void handleCreateDirectory();
+      } else if (searchQuery) {
+        void handleSearch();
+      }
+    }
+  };
+
+  const breadcrumbs = currentPath.split('/').filter(Boolean);
+  const filteredFiles = files.sort((a, b) => {
+    if (a.type === 'directory' && b.type !== 'directory') return -1;
+    if (a.type !== 'directory' && b.type === 'directory') return 1;
+    return a.name.localeCompare(b.name);
+  });
 
   if (!selectedHost) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Button variant="contained" onClick={(): void => setHostSelectorOpen(true)}>
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Button
+          variant="outlined"
+          startIcon={<ComputerIcon />}
+          onClick={() => setHostSelectorOpen(true)}
+        >
           Select Host
         </Button>
         <HostSelector
-          hosts={hosts}
           open={hostSelectorOpen}
-          onClose={(): void => setHostSelectorOpen(false)}
-          onSelect={handleHostSelect}
+          onClose={() => setHostSelectorOpen(false)}
         />
-      </Box>
-    );
-  }
-
-  if (loading) {
-    return <LoadingScreen fullscreen={false} message="Loading files..." />;
-  }
-
-  if (loadError) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{loadError}</Typography>
-        <Button variant="contained" onClick={(): void => void loadFiles()}>
-          Retry
-        </Button>
       </Box>
     );
   }
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="h5">File Explorer</Typography>
-        <Typography variant="subtitle1" color="textSecondary">
-          {selectedHost.name} - {currentPath}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowUpIcon />}
-            onClick={handleNavigateUp}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <IconButton
             disabled={currentPath === '/'}
+            onClick={() => handleNavigate(currentPath.split('/').slice(0, -1).join('/') || '/')}
           >
-            Up
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="subtitle1" sx={{ ml: 1 }}>
+            {breadcrumbs.length === 0 ? '/' : breadcrumbs.join(' / ')}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Paper
+            sx={{
+              p: '2px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              flex: 1,
+            }}
+          >
+            <InputBase
+              sx={{ ml: 1, flex: 1 }}
+              placeholder="Search files..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={handleKeyPress}
+            />
+            <IconButton onClick={() => void handleSearch()}>
+              <SearchIcon />
+            </IconButton>
+          </Paper>
+          <Button
+            variant="contained"
+            startIcon={<CreateNewFolderIcon />}
+            onClick={() => setCreateFolderDialogOpen(true)}
+          >
+            New Folder
           </Button>
         </Box>
-        <Box sx={{ flexGrow: 1 }}>
-          <TextField
-            size="small"
-            placeholder="Search files..."
-            value={searchTerm}
-            onChange={(e): void => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-            fullWidth
-          />
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={(): void => setCreateFolderDialogOpen(true)}
-        >
-          New Folder
-        </Button>
-      </Box>
+      </Paper>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={(): void => setError(null)}>
+        <Typography color="error" sx={{ mb: 2 }}>
           {error}
-        </Alert>
+        </Typography>
       )}
 
       <TableContainer component={Paper}>
@@ -218,16 +239,21 @@ export default function FileExplorer(): JSX.Element {
             <TableRow>
               <TableCell>Name</TableCell>
               <TableCell>Size</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell>Modified</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredFiles.length === 0 ? (
+            {loading ? (
               <TableRow>
-                <TableCell colSpan={3} align="center">
-                  <Typography color="textSecondary">
-                    {searchTerm ? 'No matching files found' : 'No files in this directory'}
-                  </Typography>
+                <TableCell colSpan={4}>
+                  <LoadingScreen />
+                </TableCell>
+              </TableRow>
+            ) : filteredFiles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  No files found
                 </TableCell>
               </TableRow>
             ) : (
@@ -235,7 +261,6 @@ export default function FileExplorer(): JSX.Element {
                 <FileListItem
                   key={item.path}
                   item={item}
-                  hostId={selectedHost.id}
                   onNavigate={handleNavigate}
                   onDelete={handleDeleteFile}
                 />
@@ -247,7 +272,7 @@ export default function FileExplorer(): JSX.Element {
 
       <Dialog
         open={createFolderDialogOpen}
-        onClose={(): void => setCreateFolderDialogOpen(false)}
+        onClose={() => setCreateFolderDialogOpen(false)}
       >
         <DialogTitle>Create New Folder</DialogTitle>
         <DialogContent>
@@ -257,14 +282,23 @@ export default function FileExplorer(): JSX.Element {
             label="Folder Name"
             fullWidth
             value={newFolderName}
-            onChange={(e): void => setNewFolderName(e.target.value)}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyPress={handleKeyPress}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CreateNewFolderIcon />
+                </InputAdornment>
+              ),
+            }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={(): void => setCreateFolderDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={(): void => void handleCreateFolder()} disabled={!newFolderName.trim()}>
+          <Button onClick={() => setCreateFolderDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => void handleCreateDirectory()}
+            disabled={!newFolderName.trim()}
+          >
             Create
           </Button>
         </DialogActions>

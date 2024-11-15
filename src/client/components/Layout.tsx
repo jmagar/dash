@@ -16,8 +16,9 @@ import {
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import Navigation from './Navigation';
+import { Navigation } from './Navigation';
 import ThemeControls from './ThemeControls';
+import { FloatingChatButton } from './FloatingChatButton';
 
 const DRAWER_WIDTH = 240;
 
@@ -68,7 +69,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
   const location = useLocation();
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <CssBaseline />
       <AppBar
         position="fixed"
@@ -159,6 +160,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
         <Toolbar />
         {children}
       </Box>
+      <FloatingChatButton />
     </Box>
   );
 }

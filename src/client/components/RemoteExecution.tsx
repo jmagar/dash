@@ -1,158 +1,109 @@
-import {
-  Box,
-  Button,
-  Paper,
-  TextField,
-  Typography,
-  Alert,
-} from '@mui/material';
 import React, { useState } from 'react';
 
-import type { Command, CommandResult } from '../../types';
-import { executeCommand } from '../api';
-import { useAsync } from '../hooks';
-import LoadingScreen from './LoadingScreen';
-import { logger } from '../utils/frontendLogger';
+import type { CommandRequest, CommandResult } from '../../types/models-shared';
+import { executeCommand } from '../api/remoteExecution.client';
+import { useHost } from '../context/HostContext';
+import { logger } from '../utils/logger';
 
-interface Props {
-  hostId: number;
-}
-
-export default function RemoteExecution({ hostId }: Props): JSX.Element {
+export function RemoteExecution() {
+  const { selectedHost } = useHost();
   const [command, setCommand] = useState('');
-  const [workingDirectory, setWorkingDirectory] = useState('');
+  const [workingDir, setWorkingDir] = useState('');
+  const [result, setResult] = useState<CommandResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const executeCommandAsync = async (): Promise<CommandResult> => {
-    const cmd: Command = {
-      command,
-      workingDirectory: workingDirectory || undefined,
-    };
-
-    logger.info('Executing command', { command: cmd.command, workingDirectory: cmd.workingDirectory });
-    const result = await executeCommand(hostId, cmd);
-    if (!result.success || !result.data) {
-      const errorMessage = result.error || 'Failed to execute command';
-      logger.error('Command execution failed:', { error: errorMessage });
-      throw new Error(errorMessage);
-    }
-
-    logger.info('Command executed successfully', {
-      exitCode: result.data.exitCode,
-      hasStdout: !!result.data.stdout,
-      hasStderr: !!result.data.stderr,
-    });
-    return result.data;
-  };
-
-  const {
-    execute,
-    data: result,
-    loading,
-    error: asyncError,
-  } = useAsync<CommandResult>(executeCommandAsync);
-
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (!selectedHost) return;
 
-    if (!command.trim()) {
-      const errorMessage = 'Please enter a command';
-      logger.warn('Command submission failed:', { error: errorMessage });
-      setError(errorMessage);
-      return;
-    }
+    setError(null);
+    setResult(null);
+    setLoading(true);
 
     try {
-      await execute();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-      logger.error('Command execution error:', { error: errorMessage });
-      setError(errorMessage);
+      const cmd: CommandRequest = {
+        command,
+        args: [],
+        cwd: workingDir || undefined,
+      };
+
+      const response = await executeCommand(selectedHost.id, cmd);
+      setResult(response);
+
+      if (response.status === 'failed') {
+        setError('Command execution failed');
+      }
+    } catch (error) {
+      logger.error('Command execution failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      setError('Failed to execute command');
+    } finally {
+      setLoading(false);
     }
   };
 
+  if (!selectedHost) {
+    return <div>Please select a host first</div>;
+  }
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        Remote Command Execution
-      </Typography>
-
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <form onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="Working Directory"
-            value={workingDirectory}
-            onChange={(e): void => setWorkingDirectory(e.target.value)}
-            margin="normal"
-            placeholder="/path/to/directory"
-          />
-          <TextField
-            fullWidth
-            label="Command"
+    <div className="remote-execution">
+      <form onSubmit={handleSubmit}>
+        <h2>Remote Command Execution</h2>
+        {error && <div className="error">{error}</div>}
+        <div>
+          <label htmlFor="command">Command</label>
+          <input
+            type="text"
+            id="command"
             value={command}
-            onChange={(e): void => setCommand(e.target.value)}
-            margin="normal"
+            onChange={(e) => setCommand(e.target.value)}
+            disabled={loading}
             required
-            placeholder="Enter command to execute"
           />
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={loading || !command.trim()}
-            sx={{ mt: 2 }}
-          >
-            Execute
-          </Button>
-        </form>
-      </Paper>
-
-      {loading && <LoadingScreen fullscreen={false} message="Executing command..." />}
-
-      {(error || asyncError) && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error || asyncError}
-        </Alert>
-      )}
+        </div>
+        <div>
+          <label htmlFor="workingDir">Working Directory</label>
+          <input
+            type="text"
+            id="workingDir"
+            value={workingDir}
+            onChange={(e) => setWorkingDir(e.target.value)}
+            disabled={loading}
+          />
+        </div>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Executing...' : 'Execute'}
+        </button>
+      </form>
 
       {result && (
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Result
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              p: 2,
-              bgcolor: 'background.default',
-              borderRadius: 1,
-              overflow: 'auto',
-              maxHeight: 400,
-            }}
-          >
-            {result.stdout && (
-              <>
-                <Typography variant="subtitle2" color="success.main">
-                  Standard Output:
-                </Typography>
-                {result.stdout}
-              </>
-            )}
-            {result.stderr && (
-              <>
-                <Typography variant="subtitle2" color="error" sx={{ mt: 2 }}>
-                  Standard Error:
-                </Typography>
-                {result.stderr}
-              </>
-            )}
-            <Typography variant="subtitle2" sx={{ mt: 2 }}>
-              Exit Code: {result.exitCode}
-            </Typography>
-          </Box>
-        </Paper>
+        <div className="result">
+          <h3>Result</h3>
+          <div className="status">
+            Status: {result.status}
+          </div>
+          {result.stdout && (
+            <div className="stdout">
+              <h4>Output</h4>
+              <pre>{result.stdout}</pre>
+            </div>
+          )}
+          {result.stderr && (
+            <div className="stderr">
+              <h4>Error Output</h4>
+              <pre>{result.stderr}</pre>
+            </div>
+          )}
+          {result.completedAt && result.startedAt && (
+            <div className="duration">
+              Duration: {Math.round((result.completedAt.getTime() - result.startedAt.getTime()) / 1000)}s
+            </div>
+          )}
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

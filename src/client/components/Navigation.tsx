@@ -1,94 +1,55 @@
-import React, { useCallback, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-
-import HostSelector from './HostSelector';
-import type { Host } from '../../types';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useHost } from '../context/HostContext';
-import { logger } from '../utils/frontendLogger';
+import { useAuth } from '../context/AuthContext';
+import { logout } from '../api/auth.client';
+import { logger } from '../utils/logger';
 
-export default function Navigation(): JSX.Element {
-  const location = useLocation();
-  const { hosts, selectedHost, selectHost } = useHost();
+export function Navigation() {
+  const navigate = useNavigate();
+  const { authState, setAuthState } = useAuth();
+  const { selectedHost, setSelectedHost } = useHost();
 
-  const handleSelect = useCallback((selectedHosts: Host[]): void => {
+  const handleLogout = async () => {
     try {
-      if (selectedHosts.length > 0) {
-        selectHost(selectedHosts[0]);
-        logger.info('Host selected in navigation', { hostId: String(selectedHosts[0].id) });
-      }
+      await logout();
+      localStorage.removeItem('token');
+      setAuthState({
+        token: null,
+        user: null,
+        isAuthenticated: false,
+      });
+      setSelectedHost(null);
+      navigate('/login');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to select host';
-      logger.error('Error selecting host:', { error: errorMessage });
+      logger.error('Failed to logout:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
     }
-  }, [selectHost]);
-
-  const handleDeselect = useCallback((): void => {
-    try {
-      selectHost(null);
-      logger.info('Host deselected in navigation');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to deselect host';
-      logger.error('Error deselecting host:', { error: errorMessage });
-    }
-  }, [selectHost]);
-
-  // Auto-select first host if none selected
-  useEffect(() => {
-    if (!selectedHost && hosts.length > 0) {
-      try {
-        logger.info('Auto-selecting first host', { hostId: String(hosts[0].id) });
-        selectHost(hosts[0]);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to auto-select host';
-        logger.error('Error auto-selecting host:', { error: errorMessage });
-      }
-    }
-  }, [hosts, selectedHost, selectHost]);
+  };
 
   return (
     <nav className="navigation">
-      <div className="nav-header">
-        <Link to="/" className="logo">
-          SSH Dashboard
-        </Link>
-        <HostSelector
-          hosts={hosts}
-          open={true}
-          onClose={handleDeselect}
-          onSelect={handleSelect}
-        />
+      <div className="nav-left">
+        <button onClick={() => navigate('/')}>Dashboard</button>
+        <button onClick={() => navigate('/execute')}>Execute</button>
+        <button onClick={() => navigate('/files')}>Files</button>
       </div>
-      <div className="nav-links">
-        <Link
-          to="/"
-          className={location.pathname === '/' ? 'active' : ''}
-        >
-          Dashboard
-        </Link>
-        <Link
-          to="/files"
-          className={location.pathname === '/files' ? 'active' : ''}
-        >
-          Files
-        </Link>
-        <Link
-          to="/docker"
-          className={location.pathname === '/docker' ? 'active' : ''}
-        >
-          Docker
-        </Link>
-        <Link
-          to="/packages"
-          className={location.pathname === '/packages' ? 'active' : ''}
-        >
-          Packages
-        </Link>
-        <Link
-          to="/terminal"
-          className={location.pathname === '/terminal' ? 'active' : ''}
-        >
-          Terminal
-        </Link>
+      <div className="nav-right">
+        {selectedHost && (
+          <span className="host-info">
+            Connected to: {selectedHost.name}
+          </span>
+        )}
+        {authState.user && (
+          <>
+            <span className="user-info">
+              {authState.user.username} ({authState.user.role})
+            </span>
+            <button onClick={() => navigate('/profile')}>Profile</button>
+          </>
+        )}
+        <button onClick={handleLogout}>Logout</button>
       </div>
     </nav>
   );

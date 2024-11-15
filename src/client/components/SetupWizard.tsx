@@ -1,344 +1,209 @@
-import CloseIcon from '@mui/icons-material/Close';
 import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
   Alert,
   Box,
-  Button,
-  CircularProgress,
-  Drawer,
-  IconButton,
-  TextField,
-  Typography,
+  Paper,
 } from '@mui/material';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Host } from '../../types';
-import { addHost, testConnection } from '../api/hosts.client';
-import { useHost } from '../context/HostContext';
-import { logger } from '../utils/frontendLogger';
+import type { Host } from '../../types/models-shared';
+import { createHost, testHost } from '../api/hosts.client';
+import { logger } from '../utils/logger';
 
 interface SetupWizardProps {
-  open: boolean;
-  onClose: () => void;
+  open?: boolean;
+  onClose?: () => void;
 }
 
-interface ValidationErrors {
-  name?: string;
-  hostname?: string;
-  port?: string;
-  username?: string;
-}
-
-type HostStatus = 'connected' | 'disconnected' | 'error';
-
-interface HostData {
+interface HostForm {
   name: string;
   hostname: string;
   port: number;
   username: string;
   password: string;
-  status: HostStatus;
 }
 
-const validateForm = (data: HostData): ValidationErrors => {
-  const errors: ValidationErrors = {};
-
-  if (!data.name?.trim()) {
-    errors.name = 'Display name is required';
-  }
-
-  if (!data.hostname?.trim()) {
-    errors.hostname = 'Hostname is required';
-  }
-
-  if (!data.username?.trim()) {
-    errors.username = 'Username is required';
-  }
-
-  if (data.port < 1 || data.port > 65535) {
-    errors.port = 'Port must be between 1 and 65535';
-  }
-
-  return errors;
-};
-
-const initialHostData: HostData = {
+const initialForm: HostForm = {
   name: '',
   hostname: '',
   port: 22,
   username: '',
   password: '',
-  status: 'disconnected',
 };
 
-export default function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
-  const [loading, setLoading] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
+export function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
+  const navigate = useNavigate();
+  const [form, setForm] = useState<HostForm>(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-  const [connectionTested, setConnectionTested] = useState(false);
-  const { selectHost, refreshHosts } = useHost();
+  const [loading, setLoading] = useState(false);
+  const [testPassed, setTestPassed] = useState(false);
 
-  const [hostData, setHostData] = useState<HostData>(initialHostData);
-
-  const resetForm = useCallback((): void => {
-    setHostData(initialHostData);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
     setSuccess(null);
-    setLoading(false);
-    setTestingConnection(false);
-    setConnectionTested(false);
-    setValidationErrors({});
-  }, []);
-
-  const handleClose = useCallback((): void => {
-    resetForm();
-    onClose();
-  }, [onClose, resetForm]);
-
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(handleClose, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [success, handleClose]);
-
-  // Cleanup when drawer closes
-  useEffect(() => {
-    if (!open) {
-      resetForm();
-    }
-  }, [open, resetForm]);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
-    setHostData(prev => ({
-      ...prev,
-      [name]: name === 'port' ? parseInt(value) || 22 : value,
-    }));
-    // Clear messages and validation errors for the changed field
-    setError(null);
-    setSuccess(null);
-    setConnectionTested(false);
-    setValidationErrors(prev => ({ ...prev, [name]: undefined }));
-  }, []);
-
-  const validateAndProceed = useCallback((): boolean => {
-    const errors = validateForm(hostData);
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [hostData]);
-
-  const handleSave = useCallback(async (event: React.FormEvent): Promise<void> => {
-    event.preventDefault();
+    setLoading(true);
 
     try {
-      setLoading(true);
-      setError(null);
-
-      const hostToAdd: Partial<Host> = {
-        name: hostData.name,
-        hostname: hostData.hostname,
-        port: hostData.port,
-        username: hostData.username,
-        credentials: {
-          password: hostData.password,
-        },
+      const host: Partial<Host> = {
+        name: form.name,
+        hostname: form.hostname,
+        port: form.port,
+        username: form.username,
+        password: form.password,
       };
 
-      const result = await addHost(hostToAdd);
+      // Test connection first
+      await testHost(host);
+      setTestPassed(true);
+      setSuccess('Connection test successful');
 
-      if (result.success && result.data) {
-        await refreshHosts();
-        selectHost(result.data);
-        setSuccess('Host created successfully');
+      // Create host
+      const createdHost = await createHost(host);
+      setSuccess(`Host "${createdHost.name}" created successfully`);
+      setForm(initialForm);
+
+      if (onClose) {
+        onClose();
       } else {
-        throw new Error(result.error || 'Failed to create host');
+        navigate('/');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create host');
+    } catch (error) {
+      logger.error('Setup failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      setError('Failed to set up host connection');
+      setTestPassed(false);
     } finally {
       setLoading(false);
     }
-  }, [hostData, refreshHosts, selectHost]);
+  };
 
-  const handleTestConnection = useCallback(async (event: React.MouseEvent): Promise<void> => {
-    event.preventDefault();
-
-    if (!validateAndProceed()) {
-      logger.warn('Connection test blocked: validation failed');
-      return;
-    }
-
-    if (testingConnection) {
-      logger.warn('Connection test blocked: already testing');
-      return;
-    }
+  const handleTestConnection = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
 
     try {
-      setTestingConnection(true);
-      setError(null);
-      setSuccess(null);
-      setConnectionTested(false);
-
-      const hostToTest: Partial<Host> = {
-        hostname: hostData.hostname,
-        port: hostData.port,
-        username: hostData.username,
-        credentials: {
-          password: hostData.password,
-        },
+      const host: Partial<Host> = {
+        hostname: form.hostname,
+        port: form.port,
+        username: form.username,
+        password: form.password,
       };
 
-      logger.info('Testing connection', { hostname: hostData.hostname });
-      const result = await testConnection(hostToTest);
-
-      if (result.success) {
-        logger.info('Connection test successful', { hostname: hostData.hostname });
-        setSuccess('Connection test successful!');
-        setHostData(prev => ({ ...prev, status: 'connected' }));
-        setConnectionTested(true);
-      } else {
-        throw new Error(result.error || 'Connection test failed');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Connection test failed';
-      logger.error('Connection test error:', {
-        error: errorMessage,
-        stack: err instanceof Error ? err.stack : undefined,
-        hostData: { ...hostData, password: '[REDACTED]' },
+      await testHost(host);
+      setTestPassed(true);
+      setSuccess('Connection test successful');
+    } catch (error) {
+      logger.error('Connection test failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
-      setError(errorMessage);
-      setHostData(prev => ({ ...prev, status: 'error' }));
-      setConnectionTested(false);
+      setError('Failed to test connection');
+      setTestPassed(false);
     } finally {
-      setTestingConnection(false);
+      setLoading(false);
     }
-  }, [validateAndProceed, testingConnection, hostData]);
+  };
+
+  const content = (
+    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+
+      <TextField
+        fullWidth
+        label="Name"
+        value={form.name}
+        onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+        disabled={loading}
+        required
+        margin="normal"
+      />
+
+      <TextField
+        fullWidth
+        label="Hostname"
+        value={form.hostname}
+        onChange={(e) => setForm((prev) => ({ ...prev, hostname: e.target.value }))}
+        disabled={loading}
+        required
+        margin="normal"
+      />
+
+      <TextField
+        fullWidth
+        type="number"
+        label="Port"
+        value={form.port}
+        onChange={(e) => setForm((prev) => ({ ...prev, port: Number(e.target.value) }))}
+        disabled={loading}
+        required
+        margin="normal"
+      />
+
+      <TextField
+        fullWidth
+        label="Username"
+        value={form.username}
+        onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+        disabled={loading}
+        required
+        margin="normal"
+      />
+
+      <TextField
+        fullWidth
+        type="password"
+        label="Password"
+        value={form.password}
+        onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+        disabled={loading}
+        required
+        margin="normal"
+      />
+
+      <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+        {onClose && (
+          <Button onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+        )}
+        <Button onClick={handleTestConnection} disabled={loading} color="info">
+          {loading ? 'Testing...' : 'Test Connection'}
+        </Button>
+        <Button type="submit" disabled={loading || !testPassed} color="primary" variant="contained">
+          {loading ? 'Saving...' : 'Save Host'}
+        </Button>
+      </Box>
+    </Box>
+  );
+
+  if (open !== undefined && onClose !== undefined) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Add New Host</DialogTitle>
+        <DialogContent>
+          {content}
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={handleClose}
-      sx={{
-        '& .MuiDrawer-paper': {
-          width: '400px',
-          boxSizing: 'border-box',
-        },
-      }}
-    >
-      <Box sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Add New Host</Typography>
-          <IconButton onClick={handleClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Box
-          component="form"
-          noValidate
-          onSubmit={handleSave}
-        >
-          <TextField
-            fullWidth
-            label="Display Name"
-            name="name"
-            value={hostData.name}
-            onChange={handleInputChange}
-            margin="normal"
-            required
-            error={!!validationErrors.name}
-            helperText={validationErrors.name || 'A friendly name to identify this host'}
-            disabled={loading || testingConnection}
-          />
-          <TextField
-            fullWidth
-            label="Hostname or IP Address"
-            name="hostname"
-            value={hostData.hostname}
-            onChange={handleInputChange}
-            margin="normal"
-            required
-            error={!!validationErrors.hostname}
-            helperText={validationErrors.hostname || 'e.g., server.example.com or 192.168.1.100'}
-            disabled={loading || testingConnection}
-          />
-          <TextField
-            fullWidth
-            label="Port"
-            name="port"
-            type="number"
-            value={hostData.port}
-            onChange={handleInputChange}
-            margin="normal"
-            required
-            error={!!validationErrors.port}
-            helperText={validationErrors.port || 'SSH port (default: 22)'}
-            disabled={loading || testingConnection}
-          />
-          <TextField
-            fullWidth
-            label="Username"
-            name="username"
-            value={hostData.username}
-            onChange={handleInputChange}
-            margin="normal"
-            required
-            error={!!validationErrors.username}
-            helperText={validationErrors.username || 'SSH username'}
-            disabled={loading || testingConnection}
-          />
-          <TextField
-            fullWidth
-            label="Password"
-            name="password"
-            type="password"
-            value={hostData.password}
-            onChange={handleInputChange}
-            margin="normal"
-            helperText="SSH password (optional if using key-based auth)"
-            disabled={loading || testingConnection}
-          />
-
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {success && (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              {success}
-            </Alert>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
-            <Button
-              variant="outlined"
-              type="button"
-              onClick={handleTestConnection}
-              disabled={loading || testingConnection}
-              startIcon={testingConnection ? <CircularProgress size={20} /> : null}
-              fullWidth
-            >
-              {testingConnection ? 'Testing...' : 'Test Connection'}
-            </Button>
-            {connectionTested && (
-              <Button
-                variant="contained"
-                type="submit"
-                disabled={loading || testingConnection}
-                startIcon={loading ? <CircularProgress size={20} /> : null}
-                fullWidth
-              >
-                {loading ? 'Saving...' : 'Save Host'}
-              </Button>
-            )}
-          </Box>
-        </Box>
-      </Box>
-    </Drawer>
+    <Box sx={{ p: 3 }}>
+      <Paper sx={{ p: 3 }}>
+        <h2>Add New Host</h2>
+        {content}
+      </Paper>
+    </Box>
   );
 }

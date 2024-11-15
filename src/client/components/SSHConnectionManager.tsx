@@ -1,155 +1,139 @@
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Typography,
-  CircularProgress,
-} from '@mui/material';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-import type { Host, SystemStats } from '../../types';
-import { getHostStatus, connectHost, disconnectHost } from '../api';
-import { useAsync } from '../hooks';
-import { logger } from '../utils/frontendLogger';
+import type { SystemStats } from '../../types/models-shared';
+import { connectHost, disconnectHost, getHostStats } from '../api/hosts.client';
+import { logger } from '../utils/logger';
 
-interface Props {
-  host: Host;
-  onStatusChange?: (connected: boolean) => void;
+interface SSHConnectionManagerProps {
+  hostId: number;
 }
 
-interface ConnectionStatus {
-  stats: SystemStats;
-  lastChecked: Date;
-}
-
-export default function SSHConnectionManager({ host, onStatusChange }: Props): JSX.Element {
+export function SSHConnectionManager({ hostId }: SSHConnectionManagerProps) {
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
 
-  const checkStatus = async (): Promise<ConnectionStatus> => {
-    logger.info('Checking connection status', { hostId: String(host.id) });
-    const result = await getHostStatus(host.id);
-    if (!result.success || !result.data) {
-      const errorMessage = result.error || 'Failed to check connection status';
-      logger.error('Status check failed:', { error: errorMessage });
-      throw new Error(errorMessage);
-    }
-
-    const status: ConnectionStatus = {
-      stats: result.data,
-      lastChecked: new Date(),
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await getHostStats(hostId);
+        setStats(data);
+        setConnected(true);
+        setError(null);
+      } catch (err) {
+        logger.error('Failed to fetch host stats:', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        setError('Failed to fetch host statistics');
+        setStats(null);
+        setConnected(false);
+      }
     };
 
-    logger.info('Connection status checked', {
-      hostId: String(host.id),
-      stats: {
-        cpu: status.stats.cpu,
-        memory: status.stats.memory,
-      },
-    });
-    return status;
-  };
+    if (connected) {
+      fetchStats();
+      const interval = setInterval(fetchStats, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [hostId, connected]);
 
-  const {
-    data: status,
-    loading: statusLoading,
-    error: statusError,
-    execute: refreshStatus,
-  } = useAsync<ConnectionStatus>(checkStatus, { immediate: true });
-
-  const handleConnect = async (): Promise<void> => {
-    setError(null);
+  const handleConnect = async () => {
     try {
-      logger.info('Connecting to host', { hostId: String(host.id) });
-      const result = await connectHost(host.id);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to connect');
-      }
-
-      logger.info('Connected successfully', { hostId: String(host.id) });
-      void refreshStatus();
-      onStatusChange?.(true);
+      setError(null);
+      setLoading(true);
+      await connectHost(hostId);
+      setConnected(true);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to connect';
-      logger.error('Connection failed:', { error: errorMessage });
-      setError(errorMessage);
+      logger.error('Failed to connect:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to connect to host');
+      setConnected(false);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDisconnect = async (): Promise<void> => {
-    setError(null);
+  const handleDisconnect = async () => {
     try {
-      logger.info('Disconnecting from host', { hostId: String(host.id) });
-      const result = await disconnectHost(host.id);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to disconnect');
-      }
-
-      logger.info('Disconnected successfully', { hostId: String(host.id) });
-      void refreshStatus();
-      onStatusChange?.(false);
+      setError(null);
+      setLoading(true);
+      await disconnectHost(hostId);
+      setConnected(false);
+      setStats(null);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to disconnect';
-      logger.error('Disconnection failed:', { error: errorMessage });
-      setError(errorMessage);
+      logger.error('Failed to disconnect:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to disconnect from host');
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Consider a host connected if we can get its stats
-  const isConnected = !!status?.stats;
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {host.name}
-        </Typography>
-        <Typography color="textSecondary" gutterBottom>
-          {host.hostname}:{host.port}
-        </Typography>
+    <div className="ssh-connection-manager">
+      <h2>SSH Connection Manager</h2>
+      {error && <div className="error">{error}</div>}
 
-        {statusLoading ? (
-          <CircularProgress size={24} />
+      <div className="connection-controls">
+        {connected ? (
+          <button onClick={handleDisconnect} disabled={loading}>
+            {loading ? 'Disconnecting...' : 'Disconnect'}
+          </button>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <Typography
-                color={isConnected ? 'success.main' : 'error.main'}
-                sx={{ fontWeight: 'bold' }}
-              >
-                {isConnected ? 'Connected' : 'Disconnected'}
-              </Typography>
-              <Button
-                variant="contained"
-                color={isConnected ? 'error' : 'primary'}
-                onClick={isConnected ? handleDisconnect : handleConnect}
-              >
-                {isConnected ? 'Disconnect' : 'Connect'}
-              </Button>
-            </Box>
-
-            {status?.stats && (
-              <Box sx={{ mt: 1 }}>
-                <Typography variant="body2" color="textSecondary">
-                  CPU: {Math.round(status.stats.cpu * 100)}% | Memory:{' '}
-                  {Math.round((status.stats.memory.used / status.stats.memory.total) * 100)}%
-                </Typography>
-                {status.lastChecked && (
-                  <Typography variant="caption" color="textSecondary">
-                    Last checked: {status.lastChecked.toLocaleTimeString()}
-                  </Typography>
-                )}
-              </Box>
-            )}
-          </Box>
+          <button onClick={handleConnect} disabled={loading}>
+            {loading ? 'Connecting...' : 'Connect'}
+          </button>
         )}
+      </div>
 
-        {(error || statusError) && (
-          <Typography color="error" sx={{ mt: 2 }}>
-            {error || statusError}
-          </Typography>
-        )}
-      </CardContent>
-    </Card>
+      {stats && (
+        <div className="connection-stats">
+          <div>
+            CPU Usage: {stats.cpu.usage.toFixed(1)}% ({stats.cpu.cores} cores)
+          </div>
+          <div>
+            Memory: {formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)}
+          </div>
+          <div>
+            Disk: {formatBytes(stats.disk.used)} / {formatBytes(stats.disk.total)}
+          </div>
+          <div>
+            Uptime: {formatUptime(stats.uptime)}
+          </div>
+          <div>
+            Load Average: {stats.loadAvg.map((l: number) => l.toFixed(2)).join(', ')}
+          </div>
+        </div>
+      )}
+    </div>
   );
+}
+
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+
+  return parts.join(' ') || '0m';
 }

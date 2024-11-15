@@ -1,68 +1,36 @@
 // Auth API
-export {
-  login,
-  logout,
-  register,
-  updateUser,
-  validateToken,
-  refreshToken,
-} from './auth.client';
-
-// Docker API
-export {
-  listContainers,
-  getContainerLogs,
-  startContainer,
-  stopContainer,
-  restartContainer,
-  removeContainer,
-  getContainerStats,
-  getStacks,
-  createStack,
-  deleteStack,
-  startStack,
-  stopStack,
-  getStackComposeFile,
-  updateStackComposeFile,
-} from './docker.client';
+export { login, logout, validate } from './auth.client';
 
 // File Explorer API
-export {
-  listFiles,
-  readFile,
-  writeFile,
-  deleteFile,
-  createDirectory,
-} from './fileExplorer.client';
+export { listFiles, readFile, writeFile, deleteFile } from './fileExplorer.client';
 
 // Hosts API
 export {
   listHosts,
-  addHost,
+  getHost,
+  createHost,
   updateHost,
   deleteHost,
-  testConnection,
-  getHostStatus,
+  testHost,
+  getHostStats,
   connectHost,
   disconnectHost,
 } from './hosts.client';
 
 // Package Manager API
 export {
-  searchPackages,
+  listPackages,
   installPackage,
   uninstallPackage,
   updatePackage,
-  getPackageInfo,
-  listInstalledPackages,
 } from './packageManager.client';
 
 // Remote Execution API
 export {
   executeCommand,
-  executeScript,
-  getCommandHistory,
-  getSavedCommands,
-  saveCommand,
-  deleteSavedCommand,
+  getCommandStatus,
+  cancelCommand,
 } from './remoteExecution.client';
+
+// Export the API client
+export { api } from './api';

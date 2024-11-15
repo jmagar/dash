@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
-import App from './client/App';
+import { App } from './client/App';
 import { ThemeProvider } from './client/context/ThemeContext';
 import { UserProvider } from './client/context/UserContext';
 import './client/styles/global.css';

@@ -1,113 +1,115 @@
-import axios from 'axios';
-
-import type { FileItem, ApiResult } from '../../types';
-import { API_ENDPOINTS } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
-import { BASE_URL } from '../config';
+import { api } from './api';
+import { createApiError } from '../../types/error';
+import type { FileItem } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
 
-// Configure axios
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const FILE_ENDPOINTS = {
+  LIST: (hostId: number) => `/files/${hostId}/list`,
+  READ: (hostId: number) => `/files/${hostId}/read`,
+  WRITE: (hostId: number) => `/files/${hostId}/write`,
+  DELETE: (hostId: number) => `/files/${hostId}/delete`,
+  RENAME: (hostId: number) => `/files/${hostId}/rename`,
+  MKDIR: (hostId: number) => `/files/${hostId}/mkdir`,
+  SEARCH: (hostId: number) => `/files/${hostId}/search`,
+} as const;
 
-// Add response interceptor for error handling
-api.interceptors.response.use(
-  response => response,
-  error => {
-    logger.error('File Explorer API request failed:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      error: error.message,
-      response: error.response?.data,
-    });
-    return Promise.reject(error);
-  },
-);
-
-export async function listFiles(hostId: number, path?: string): Promise<ApiResult<FileItem[]>> {
+export async function listFiles(hostId: number, path: string): Promise<FileItem[]> {
   try {
-    logger.info('Listing files', { hostId: String(hostId), path });
-    const response = await api.get(API_ENDPOINTS.FILES.LIST(hostId), {
+    const response = await api.get<{ data: FileItem[] }>(FILE_ENDPOINTS.LIST(hostId), {
       params: { path },
     });
-    logger.info('Files listed successfully', {
-      hostId: String(hostId),
+    return response.data.data;
+  } catch (error) {
+    logger.error('Failed to list files:', {
+      hostId,
       path,
-      count: response.data?.data?.length,
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
-    return response.data;
-  } catch (error) {
-    return handleApiError<FileItem[]>(error, 'listFiles');
+    throw createApiError('Failed to list files', error, 404);
   }
 }
 
-export async function readFile(hostId: number, path: string): Promise<ApiResult<string>> {
+export async function readFile(hostId: number, path: string): Promise<string> {
   try {
-    logger.info('Reading file', { hostId: String(hostId), path });
-    const response = await api.get(API_ENDPOINTS.FILES.DOWNLOAD(hostId), {
-      params: { path },
-      responseType: 'text',
-    });
-    logger.info('File read successfully', { hostId: String(hostId), path });
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error) {
-    return handleApiError<string>(error, 'readFile');
-  }
-}
-
-export async function writeFile(
-  hostId: number,
-  path: string,
-  content: string,
-): Promise<ApiResult<void>> {
-  try {
-    logger.info('Writing file', { hostId: String(hostId), path });
-    const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
-      path,
-      content,
-    });
-    logger.info('File written successfully', { hostId: String(hostId), path });
-    return response.data;
-  } catch (error) {
-    return handleApiError(error, 'writeFile');
-  }
-}
-
-export async function deleteFile(hostId: number, path: string): Promise<ApiResult<void>> {
-  try {
-    logger.info('Deleting file', { hostId: String(hostId), path });
-    const response = await api.delete(API_ENDPOINTS.FILES.DELETE(hostId), {
+    const response = await api.get<{ data: string }>(FILE_ENDPOINTS.READ(hostId), {
       params: { path },
     });
-    logger.info('File deleted successfully', { hostId: String(hostId), path });
-    return response.data;
+    return response.data.data;
   } catch (error) {
-    return handleApiError(error, 'deleteFile');
+    logger.error('Failed to read file:', {
+      hostId,
+      path,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to read file', error, 404);
   }
 }
 
-export async function createDirectory(
-  hostId: number,
-  path: string,
-): Promise<ApiResult<void>> {
+export async function writeFile(hostId: number, path: string, content: string): Promise<void> {
   try {
-    logger.info('Creating directory', { hostId: String(hostId), path });
-    const response = await api.post(API_ENDPOINTS.FILES.UPLOAD(hostId), {
-      path,
-      isDirectory: true,
-    });
-    logger.info('Directory created successfully', { hostId: String(hostId), path });
-    return response.data;
+    await api.post(FILE_ENDPOINTS.WRITE(hostId), { path, content });
   } catch (error) {
-    return handleApiError(error, 'createDirectory');
+    logger.error('Failed to write file:', {
+      hostId,
+      path,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to write file', error, 400);
+  }
+}
+
+export async function deleteFile(hostId: number, path: string): Promise<void> {
+  try {
+    await api.delete(FILE_ENDPOINTS.DELETE(hostId), { data: { path } });
+  } catch (error) {
+    logger.error('Failed to delete file:', {
+      hostId,
+      path,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to delete file', error, 404);
+  }
+}
+
+export async function renameFile(hostId: number, oldPath: string, newPath: string): Promise<void> {
+  try {
+    await api.post(FILE_ENDPOINTS.RENAME(hostId), { oldPath, newPath });
+  } catch (error) {
+    logger.error('Failed to rename file:', {
+      hostId,
+      oldPath,
+      newPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to rename file', error, 400);
+  }
+}
+
+export async function createDirectory(hostId: number, path: string): Promise<void> {
+  try {
+    await api.post(FILE_ENDPOINTS.MKDIR(hostId), { path });
+  } catch (error) {
+    logger.error('Failed to create directory:', {
+      hostId,
+      path,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to create directory', error, 400);
+  }
+}
+
+export async function searchFiles(hostId: number, query: string): Promise<FileItem[]> {
+  try {
+    const response = await api.get<{ data: FileItem[] }>(FILE_ENDPOINTS.SEARCH(hostId), {
+      params: { query },
+    });
+    return response.data.data;
+  } catch (error) {
+    logger.error('Failed to search files:', {
+      hostId,
+      query,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to search files', error, 400);
   }
 }

@@ -1,144 +1,109 @@
 import React, { useEffect, useState } from 'react';
 
-import type { SystemStats } from '../../types';
-import { getHostStatus, testConnection } from '../api';
+import type { SystemStats } from '../../types/models-shared';
+import { getHostStats } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
-import { logger } from '../utils/frontendLogger';
+import { logger } from '../utils/logger';
 
-interface DashboardProps {
-  hostId?: number;
-}
-
-export default function Dashboard({ hostId }: DashboardProps): JSX.Element {
+export function Dashboard() {
   const { selectedHost } = useHost();
   const [stats, setStats] = useState<SystemStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const effectiveHostId = hostId || selectedHost?.id;
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!effectiveHostId) return;
+    if (!selectedHost) return;
 
-    const fetchStats = async (): Promise<void> => {
+    const fetchStats = async () => {
       try {
+        const data = await getHostStats(selectedHost.id);
+        setStats(data);
         setError(null);
-        const result = await getHostStatus(effectiveHostId);
-        if (result.success && result.data) {
-          setStats(result.data);
-        } else {
-          setError(result.error || 'Failed to fetch host status');
-          logger.error('Failed to fetch host status:', { error: result.error });
-        }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-        logger.error('Error fetching host status:', { error: errorMessage });
-        setError(errorMessage);
+        logger.error('Failed to fetch host stats:', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        setError('Failed to fetch host statistics');
+        setStats(null);
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchStats();
-    const timer = setInterval(() => void fetchStats(), 5000);
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000);
+    return () => clearInterval(interval);
+  }, [selectedHost]);
 
-    return () => {
-      clearInterval(timer);
-    };
-  }, [effectiveHostId]);
-
-  const handleTestConnection = async (): Promise<void> => {
-    if (!effectiveHostId) return;
-
-    try {
-      setError(null);
-      const result = await testConnection(effectiveHostId);
-      if (!result.success) {
-        setError(result.error || 'Connection test failed');
-        logger.error('Connection test failed:', { error: result.error });
-      } else {
-        logger.info('Connection test successful');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-      logger.error('Error testing connection:', { error: errorMessage });
-      setError(errorMessage);
-    }
-  };
-
-  if (!effectiveHostId) {
-    return (
-      <div className="dashboard">
-        <h2>Dashboard</h2>
-        <p>Please select a host to view its status.</p>
-      </div>
-    );
+  if (!selectedHost) {
+    return <div>Please select a host first</div>;
   }
 
   if (loading) {
-    return (
-      <div className="dashboard">
-        <h2>Dashboard</h2>
-        <p>Loading host status...</p>
-      </div>
-    );
+    return <div>Loading...</div>;
   }
 
   if (error) {
-    return (
-      <div className="dashboard">
-        <h2>Dashboard</h2>
-        <div className="error-message">
-          <p>{error}</p>
-          <button onClick={handleTestConnection}>Test Connection</button>
-        </div>
-      </div>
-    );
+    return <div className="error">{error}</div>;
   }
 
   if (!stats) {
-    return (
-      <div className="dashboard">
-        <h2>Dashboard</h2>
-        <p>No stats available.</p>
-      </div>
-    );
+    return <div>No stats available</div>;
   }
 
   return (
     <div className="dashboard">
-      <h2>Dashboard</h2>
-      <div className="host-info">
-        <h3>{selectedHost?.name}</h3>
-        <p>{selectedHost?.hostname}</p>
-      </div>
-      <div className="stats">
-        <div className="stat">
-          <h4>CPU Usage</h4>
-          <p>{stats.cpu.toFixed(1)}%</p>
+      <h2>System Statistics</h2>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>CPU</h3>
+          <div>Usage: {stats.cpu.usage.toFixed(1)}%</div>
+          <div>Cores: {stats.cpu.cores}</div>
         </div>
-        <div className="stat">
-          <h4>Memory Usage</h4>
-          <p>
-            {(stats.memory.used / 1024 / 1024 / 1024).toFixed(1)} GB /{' '}
-            {(stats.memory.total / 1024 / 1024 / 1024).toFixed(1)} GB
-          </p>
+        <div className="stat-card">
+          <h3>Memory</h3>
+          <div>Total: {formatBytes(stats.memory.total)}</div>
+          <div>Used: {formatBytes(stats.memory.used)}</div>
+          <div>Free: {formatBytes(stats.memory.free)}</div>
         </div>
-        <div className="stat">
-          <h4>Disk Usage</h4>
-          <p>
-            {(stats.disk.used / 1024 / 1024 / 1024).toFixed(1)} GB /{' '}
-            {(stats.disk.total / 1024 / 1024 / 1024).toFixed(1)} GB
-          </p>
+        <div className="stat-card">
+          <h3>Disk</h3>
+          <div>Total: {formatBytes(stats.disk.total)}</div>
+          <div>Used: {formatBytes(stats.disk.used)}</div>
+          <div>Free: {formatBytes(stats.disk.free)}</div>
         </div>
-        <div className="stat">
-          <h4>Network</h4>
-          <p>
-            ↓ {(stats.network.rx / 1024 / 1024).toFixed(1)} MB/s | ↑{' '}
-            {(stats.network.tx / 1024 / 1024).toFixed(1)} MB/s
-          </p>
+        <div className="stat-card">
+          <h3>System</h3>
+          <div>Uptime: {formatUptime(stats.uptime)}</div>
+          <div>Load Average: {stats.loadAvg.map((l: number) => l.toFixed(2)).join(', ')}</div>
         </div>
       </div>
     </div>
   );
+}
+
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+
+  return parts.join(' ') || '0m';
 }

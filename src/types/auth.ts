@@ -7,7 +7,10 @@ export type { BaseUser as User };
 export interface AuthenticatedUser {
   id: string;
   username: string;
-  role: string;
+  role: 'admin' | 'user';
+  email: string;
+  lastLogin?: Date;
+  createdAt: Date;
 }
 
 export interface LoginRequest {
@@ -16,10 +19,8 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  success: boolean;
-  token?: string;
-  user?: AuthenticatedUser;
-  error?: string;
+  token: string;
+  user: AuthenticatedUser;
 }
 
 export interface LogoutResponse {
@@ -28,31 +29,30 @@ export interface LogoutResponse {
 }
 
 export interface ValidateResponse {
-  success: boolean;
-  user?: AuthenticatedUser;
-  error?: string;
+  valid: boolean;
+  user: AuthenticatedUser;
 }
 
-export interface BaseTokenPayload {
-  [key: string]: unknown;
+export interface TokenPayload {
   id: string;
   username: string;
-  role: string;
-  type: 'access' | 'refresh';
+  role: 'admin' | 'user';
   iat?: number;
   exp?: number;
 }
 
-export interface TokenPayload extends BaseTokenPayload {
-  type: 'access' | 'refresh';
+export interface AuthState {
+  token: string | null;
+  user: AuthenticatedUser | null;
+  isAuthenticated: boolean;
 }
 
-export interface RefreshTokenPayload extends BaseTokenPayload {
-  type: 'refresh';
-}
-
-export interface AccessTokenPayload extends BaseTokenPayload {
-  type: 'access';
+export interface AuthContextType {
+  authState: AuthState;
+  setAuthState: (state: AuthState) => void;
+  login: (request: LoginRequest) => Promise<void>;
+  logout: () => Promise<void>;
+  validateToken: () => Promise<void>;
 }
 
 export type RequestParams = ParamsDictionary;

@@ -1,71 +1,29 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-import type { User } from '../../types';
-import { validateToken } from '../api';
-import { logger } from '../utils/frontendLogger';
+import React, { createContext, useContext, useState } from 'react';
+import type { AuthenticatedUser } from '../../types/auth';
+import { validate } from '../api/auth.client';
+import { logger } from '../utils/logger';
 
 interface UserContextType {
-  user: User | null | undefined;
-  setUser: React.Dispatch<React.SetStateAction<User | null | undefined>>;
+  user: AuthenticatedUser | null;
+  setUser: React.Dispatch<React.SetStateAction<AuthenticatedUser | null>>;
 }
 
-const defaultSetUser: React.Dispatch<React.SetStateAction<User | null | undefined>> = () => {
-  logger.warn('UserContext not initialized');
-};
+const UserContext = createContext<UserContextType | undefined>(undefined);
 
-const UserContext = createContext<UserContextType>({
-  user: undefined,
-  setUser: defaultSetUser,
-});
-
-const devUser: User = {
-  id: 'dev',
-  username: 'dev',
-  role: 'admin',
-  is_active: true,
-  email: 'dev@example.com',
-  lastLogin: new Date(),
-  createdAt: new Date(),
-};
-
-export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null | undefined>(undefined);
-
-  useEffect(() => {
-    const checkAuth = async (): Promise<void> => {
-      // If auth is disabled, set dev user immediately without any API calls
-      if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
-        logger.info('Auth disabled, using dev user');
-        setUser(devUser);
-        return;
-      }
-
-      try {
-        logger.info('Validating auth token');
-        const result = await validateToken();
-        if (result.success && result.data) {
-          logger.info('Token validation successful');
-          setUser(result.data);
-        } else {
-          logger.warn('Token validation failed', { error: result.error });
-          setUser(null);
-        }
-      } catch (error) {
-        logger.error('Auth check failed:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        setUser(null);
-      }
-    };
-
-    void checkAuth();
-  }, []);
+export function UserProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
 
   return (
     <UserContext.Provider value={{ user, setUser }}>
       {children}
     </UserContext.Provider>
   );
-};
+}
 
-export const useUserContext = (): UserContextType => useContext(UserContext);
+export function useUser() {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser must be used within a UserProvider');
+  }
+  return context;
+}

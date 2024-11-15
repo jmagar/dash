@@ -1,44 +1,17 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-
-import LoadingScreen from './LoadingScreen';
-import { useUserContext } from '../context/UserContext';
+import { useAuth } from '../context/AuthContext';
 
 interface PrivateRouteProps {
-  children: React.ReactElement;
-  requiredRole?: 'admin' | 'user' | 'viewer';
+  children: React.ReactNode;
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, requiredRole }) => {
-  const { user } = useUserContext();
+export function PrivateRoute({ children }: PrivateRouteProps) {
+  const { authState } = useAuth();
 
-  // If auth is disabled, render children directly
-  if (process.env.REACT_APP_DISABLE_AUTH === 'true') {
-    return children;
-  }
-
-  // Show loading screen while checking authentication
-  if (user === undefined) {
-    return <LoadingScreen fullscreen message="Checking authentication..." />;
-  }
-
-  // Redirect to login if not authenticated
-  if (!user) {
+  if (!authState.isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Check role if required
-  if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
-    return (
-      <Navigate
-        to="/"
-        replace
-        state={{ error: `Access denied. ${requiredRole} role required.` }}
-      />
-    );
-  }
-
-  return children;
-};
-
-export default PrivateRoute;
+  return <>{children}</>;
+}

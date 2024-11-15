@@ -14,11 +14,13 @@ import { comparePassword } from '../utils/password';
 // Track failed login attempts
 const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
 
-function mapUserToAuthUser(user: User): AuthenticatedUser {
+function mapUserToAuthUser(user: UserType): AuthenticatedUser {
   return {
     id: user.id,
     username: user.username,
     role: user.role,
+    email: user.email,
+    createdAt: user.createdAt,
   };
 }
 
@@ -49,67 +51,57 @@ function recordLoginAttempt(username: string, success: boolean): void {
 
 export async function login(
   req: Request<unknown, LoginResponse, { username: string; password: string }>,
-  res: Response<LoginResponse>
+  res: Response<LoginResponse | { error: string }>
 ): Promise<void> {
+  const { username, password } = req.body;
+
   try {
-    const { username, password } = req.body;
+    logger.info('Attempting login', { username });
 
     // Check if user is locked out
     if (isUserLocked(username)) {
       const metadata: LogMetadata = { username };
-      const error = createApiError('Account temporarily locked. Please try again later.', 429, metadata);
-      void res.status(429).json({
-        success: false,
-        error: error.message,
-      });
+      const error = createApiError('Account temporarily locked. Please try again later.', metadata, 429);
+      void res.status(429).json({ error: error.message });
       return;
     }
 
-    // Check if user exists
-    const result = await db.query<UserType>('SELECT * FROM users WHERE username = $1', [username]);
+    const result = await db.query<UserType>(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
     const user = result.rows[0];
-    if (!user || !user.password_hash) {
+
+    if (!user) {
       recordLoginAttempt(username, false);
       const metadata: LogMetadata = { username };
-      const error = createApiError('Invalid username or password', 401, metadata);
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
+      const error = createApiError('Invalid username or password', metadata, 401);
+      void res.status(401).json({ error: error.message });
       return;
     }
 
-    // Verify password
-    const isValidPassword = await comparePassword(password, user.password_hash);
-    if (!isValidPassword) {
+    if (!(await comparePassword(password, user.password_hash || ''))) {
       recordLoginAttempt(username, false);
       const metadata: LogMetadata = { username };
-      const error = createApiError('Invalid username or password', 401, metadata);
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
+      const error = createApiError('Invalid username or password', metadata, 401);
+      void res.status(401).json({ error: error.message });
       return;
     }
 
     if (!user.is_active) {
       const metadata: LogMetadata = { username, userId: user.id };
-      const error = createApiError('Account is disabled', 403, metadata);
-      void res.status(403).json({
-        success: false,
-        error: error.message,
-      });
+      const error = createApiError('Account is disabled', metadata, 403);
+      void res.status(403).json({ error: error.message });
       return;
     }
 
     recordLoginAttempt(username, true);
     const token = generateToken(user);
-    const refreshToken = generateToken(user); // Generate refresh token
+    const refreshToken = generateToken(user);
     await cache.setSession(token, user, refreshToken);
 
     logger.info('Login successful', { userId: user.id, username: user.username });
     void res.json({
-      success: true,
       token,
       user: mapUserToAuthUser(user),
     });
@@ -117,87 +109,72 @@ export async function login(
 
   } catch (error) {
     const metadata: LogMetadata = {
-      username: req.body.username,
+      username,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Login failed:', metadata);
+    logger.error('Login error:', metadata);
 
-    void res.status(500).json({
-      success: false,
-      error: 'An error occurred during login',
-    });
+    const apiError = createApiError('An error occurred during login', metadata, 500);
+    void res.status(500).json({ error: apiError.message });
     return;
   }
 }
 
 export async function validateToken(
   req: Request,
-  res: Response<ValidateResponse>
+  res: Response<ValidateResponse | { error: string }>
 ): Promise<void> {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    const metadata: LogMetadata = {};
+    const error = createApiError('No token provided', metadata, 401);
+    logger.warn('Token validation failed: No token provided');
+    void res.status(401).json({ error: error.message });
+    return;
+  }
+
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      const metadata: LogMetadata = {};
-      const error = createApiError('No token provided', 401, metadata);
-      logger.warn('Token validation failed: No token provided');
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
-      return;
-    }
-
-    // Verify token
+    // First verify JWT signature and expiration
     const payload = verifyToken(token);
     if (!payload) {
       const metadata: LogMetadata = {};
-      const error = createApiError('Invalid token', 401, metadata);
+      const error = createApiError('Invalid token', metadata, 401);
       logger.warn('Token validation failed: Invalid token');
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
+      void res.status(401).json({ error: error.message });
       return;
     }
 
-    // Get user from cache
+    // Then check if session exists in cache
     const sessionData = await cache.getSession(token);
     if (!sessionData) {
       const metadata: LogMetadata = { token };
-      const error = createApiError('Session expired', 401, metadata);
+      const error = createApiError('Session expired', metadata, 401);
       logger.warn('Token validation failed: Session expired');
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
+      void res.status(401).json({ error: error.message });
       return;
     }
 
     // Parse the session data
-    let sessionUser: User;
+    let session: { user: UserType; refreshToken: string };
     try {
-      const session = JSON.parse(sessionData);
-      sessionUser = session.user;
-    } catch (error) {
+      session = JSON.parse(sessionData);
+    } catch (parseError) {
       const metadata: LogMetadata = { token, error: 'Invalid session data format' };
-      const error = createApiError('Invalid session data', 401, metadata);
+      const error = createApiError('Invalid session data', metadata, 401);
       logger.error('Session data parse error:', metadata);
-      void res.status(401).json({
-        success: false,
-        error: error.message,
-      });
+      void res.status(401).json({ error: error.message });
       return;
     }
 
     logger.info('Token validated successfully', {
-      userId: sessionUser.id,
-      username: sessionUser.username,
+      userId: session.user.id,
+      username: session.user.username,
     });
 
     void res.json({
-      success: true,
-      user: mapUserToAuthUser(sessionUser),
+      valid: true,
+      user: mapUserToAuthUser(session.user),
     });
     return;
 
@@ -208,25 +185,17 @@ export async function validateToken(
     logger.error('Token validation error:', metadata);
 
     if (error instanceof Error && error.name === 'JsonWebTokenError') {
-      void res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-      });
+      void res.status(401).json({ error: 'Invalid token' });
       return;
     }
 
     if (error instanceof Error && error.name === 'TokenExpiredError') {
-      void res.status(401).json({
-        success: false,
-        error: 'Token expired',
-      });
+      void res.status(401).json({ error: 'Token expired' });
       return;
     }
 
-    void res.status(500).json({
-      success: false,
-      error: 'An error occurred during token validation',
-    });
+    const apiError = createApiError('Token validation failed', metadata, 500);
+    void res.status(500).json({ error: apiError.message });
     return;
   }
 }
@@ -254,10 +223,9 @@ export async function logout(
     return;
 
   } catch (error) {
-    const metadata: LogMetadata = {
+    logger.error('Logout error:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Logout error:', metadata);
+    });
 
     // Don't expose errors to client during logout
     void res.json({ success: true });

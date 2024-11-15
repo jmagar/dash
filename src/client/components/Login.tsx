@@ -1,3 +1,9 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { login } from '../api/auth.client';
+import { useAuth } from '../context/AuthContext';
+import { logger } from '../utils/logger';
+
 import {
   Box,
   Button,
@@ -8,15 +14,10 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
-import { login } from '../api';
-import { useUserContext } from '../context/UserContext';
-
-export default function Login(): JSX.Element {
+export function Login(): JSX.Element {
   const navigate = useNavigate();
-  const { setUser } = useUserContext();
+  const { setAuthState } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,25 +25,33 @@ export default function Login(): JSX.Element {
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
-
     try {
-      const result = await login(username, password);
-      if (result.success && result.data) {
-        const { token, data: user } = result.data;
-        if (token && user) {
-          localStorage.setItem('token', token);
-          setUser(user);
-          navigate('/');
-        } else {
-          setError('Invalid response from server');
-        }
-      } else {
-        setError(result.error || 'Login failed');
-      }
+      setError(null);
+      setLoading(true);
+
+      const response = await login({ username, password });
+
+      // Store token
+      localStorage.setItem('token', response.token);
+
+      // Update auth state
+      setAuthState({
+        token: response.token,
+        user: response.user,
+        isAuthenticated: true,
+      });
+
+      // Clear form
+      setUsername('');
+      setPassword('');
+
+      // Redirect to home page
+      navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      logger.error('Login failed:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Invalid username or password');
     } finally {
       setLoading(false);
     }

@@ -1,14 +1,22 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 
-import type { HostState, ConnectionState, HostConnectionUpdate } from './types/host';
+import type { HostState, HostConnectionUpdate } from './types/host';
 import type { LogMetadata } from '../../../types/logger';
 import type { Host } from '../../../types/models-shared';
 import { listHosts, connectHost, disconnectHost } from '../../api/hosts.client';
 import { logger } from '../../utils/frontendLogger';
 import type { RootState } from '../storeTypes';
 
+interface HostState {
+  hosts: Host[];
+  selectedHost: Host | null;
+  connections: Record<number, ConnectionState>;
+  loading: boolean;
+  error: string | null;
+}
+
 const initialState: HostState = {
-  hosts: {},
+  hosts: [],
   selectedHost: null,
   connections: {},
   loading: false,
@@ -94,14 +102,18 @@ const hostSlice = createSlice({
   reducers: {
     selectHost: (state, action: PayloadAction<number | null>) => {
       const hostId = action.payload;
-      state.selectedHost = hostId ? state.hosts[hostId] || null : null;
+      state.selectedHost = hostId ? state.hosts.find((host) => host.id === hostId) || null : null;
     },
     updateConnectionState: (state, action: PayloadAction<HostConnectionUpdate>) => {
       const { hostId, connectionState } = action.payload;
       state.connections[hostId] = connectionState;
     },
-    clearError: (state) => {
-      state.error = null;
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.loading = action.payload;
+    },
+    setError: (state, action: PayloadAction<string | null>) => {
+      state.error = action.payload;
+      state.loading = false;
     },
   },
   extraReducers: (builder) => {
@@ -112,11 +124,9 @@ const hostSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchHosts.fulfilled, (state, action) => {
+        state.hosts = action.payload;
         state.loading = false;
-        state.hosts = action.payload.reduce<Record<number, Host>>((acc, host) => {
-          acc[host.id] = host;
-          return acc;
-        }, {});
+        state.error = null;
       })
       .addCase(fetchHosts.rejected, (state, action) => {
         state.loading = false;
@@ -160,12 +170,12 @@ const hostSlice = createSlice({
 });
 
 // Export actions and reducer
-export const { selectHost, updateConnectionState, clearError } = hostSlice.actions;
+export const { selectHost, updateConnectionState, setLoading, setError } = hostSlice.actions;
 export default hostSlice.reducer;
 
 // Selectors
 export const selectAllHosts = (state: RootState): Host[] =>
-  Object.values(state.hosts.hosts);
+  state.hosts.hosts;
 
 export const selectSelectedHost = (state: RootState): Host | null =>
   state.hosts.selectedHost;

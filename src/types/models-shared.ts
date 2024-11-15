@@ -31,6 +31,60 @@ export interface Container {
   labels: Record<string, string>;
 }
 
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  createdAt: Date;
+  labels: Record<string, string>;
+  compose?: {
+    project: string;
+    service: string;
+    configFile: string;
+  };
+  ports: Array<{
+    ip: string;
+    external: number;
+    internal: number;
+    protocol: string;
+  }>;
+  networks: Array<{
+    name: string;
+    ipAddress: string;
+  }>;
+  volumes: Array<{
+    source: string;
+    destination: string;
+  }>;
+}
+
+export interface DockerNetwork {
+  id: string;
+  name: string;
+  driver: string;
+  subnet: string;
+  gateway: string;
+  containers: Array<{
+    id: string;
+    name: string;
+    ipAddress: string;
+  }>;
+}
+
+export interface DockerVolume {
+  id: string;
+  name: string;
+  driver: string;
+  source: string;
+  destination: string;
+  containers: Array<{
+    id: string;
+    name: string;
+  }>;
+}
+
 export interface Stack {
   name: string;
   services: string[];
@@ -51,7 +105,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  role: string;
+  role: 'admin' | 'user';
   is_active: boolean;
   password_hash?: string;
   createdAt: Date;
@@ -64,6 +118,35 @@ export interface Package {
   description?: string;
   installed: boolean;
   updateAvailable?: boolean;
+}
+
+export interface CommandRequest {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface Command extends CommandRequest {
+  id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  exitCode?: number;
+  stdout: string;
+  stderr: string;
+  startedAt: Date;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CommandResult {
+  command: Command;
+  status: 'running' | 'completed' | 'failed';
+  exitCode?: number;
+  stdout: string;
+  stderr: string;
+  startedAt: Date;
+  completedAt?: Date;
 }
 
 export interface AuthResult {
@@ -94,19 +177,22 @@ export interface SSHConfig {
 }
 
 export interface SystemStats {
-  cpu: number;
+  cpu: {
+    usage: number;
+    cores: number;
+  };
   memory: {
-    used: number;
     total: number;
+    used: number;
+    free: number;
   };
   disk: {
-    used: number;
     total: number;
+    used: number;
+    free: number;
   };
-  network: {
-    rx: number;
-    tx: number;
-  };
+  uptime: number;
+  loadAvg: [number, number, number];
 }
 
 export interface ContainerStats {

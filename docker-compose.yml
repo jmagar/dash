@@ -5,31 +5,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - NODE_ENV=production
-        - DOCKER_BUILD=1
-        - SKIP_PREFLIGHT_CHECK=true
-        - CI=true
-        - DISABLE_AUTH=true
-        - REACT_APP_DISABLE_AUTH=true
-        - REACT_APP_WDS_SOCKET_PORT=0
-        - BABEL_ENV=production
-    ports:
-      - "4000:4000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs:/app/logs
-      - ssh_keys:/root/.ssh
-      - ./scripts:/app/scripts:ro
     environment:
+      # Node Environment
       - NODE_ENV=production
-      - DOCKER_BUILD=1
       - PORT=4000
+      # App URLs
+      - BASE_URL=http://localhost:4000
+      - APP_NAME=SSH Management Platform
       - FRONTEND_URL=http://localhost:4000
       - REACT_APP_API_URL=http://localhost:4000/api
       - REACT_APP_WS_URL=ws://localhost:4000
+      # Build Settings
+      - DOCKER_BUILD=1
+      - SKIP_PREFLIGHT_CHECK=true
+      - CI=true
       - DISABLE_AUTH=true
       - REACT_APP_DISABLE_AUTH=true
+      - REACT_APP_WDS_SOCKET_PORT=0
+      - BABEL_ENV=production
+      - DISABLE_ESLINT_PLUGIN=true
       # Postgres Config
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
@@ -50,11 +44,19 @@ services:
       # Auth Config
       - JWT_SECRET=development-secret-key
       - JWT_EXPIRATION=1h
+      - LOGIN_LOCKOUT_TIME=300000
+      - MAX_LOGIN_ATTEMPTS=5
+      # Metrics
+      - METRICS_INTERVAL=60000
       # Logging
       - LOG_LEVEL=info
-      # Development Settings
-      - SKIP_PREFLIGHT_CHECK=true
-      - CI=true
+    ports:
+      - "4000:4000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+      - ssh_keys:/root/.ssh
+      - ./scripts:/app/scripts:ro
     depends_on:
       db:
         condition: service_healthy
@@ -88,10 +90,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
     command: >
       redis-server
       --appendonly yes
@@ -100,11 +98,10 @@ services:
       --auto-aof-rewrite-min-size 64mb
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
-      --save 60 10000
-      --tcp-keepalive 300
-      --databases 16
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

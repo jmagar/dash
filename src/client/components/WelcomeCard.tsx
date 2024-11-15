@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import React, { useState, useCallback } from 'react';
 
-import SetupWizard from './SetupWizard';
+import { SetupWizard } from './SetupWizard';
 import { logger } from '../utils/frontendLogger';
 
 export default function WelcomeCard(): JSX.Element {

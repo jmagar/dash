@@ -1,18 +1,40 @@
-// Re-export all shared types
-export * from './api';
-export * from './auth';
-export * from './cache';
-export * from './config';
-export * from './error';
-export * from './logger';
-export * from './models-shared';
-
-// Re-export logger types with explicit names to avoid conflicts
+// Export auth types
 export type {
-  Logger as BaseLogger,
+  LoginRequest,
+  LoginResponse,
+  ValidateResponse,
+  LogoutResponse,
+  AuthenticatedUser,
+} from './auth';
+
+// Export error types
+export type {
+  ApiError,
+  ApiResult,
+} from './error';
+
+// Export express types
+export type {
+  RequestHandler,
+  RequestParams,
+} from './express';
+
+// Export logger types
+export type {
   LogLevel,
   LogMetadata,
 } from './logger';
+
+// Export shared model types
+export type {
+  User,
+  Host,
+  Command,
+  CommandResult,
+  SystemStats,
+  FileItem,
+  Package,
+} from './models-shared';
 
 // Re-export logging configuration types
 export type {
@@ -21,6 +43,3 @@ export type {
   LogTransport,
   LoggerOptions,
 } from './logging';
-
-// Note: xterm-addons.d.ts is a declaration file and doesn't need to be exported
-// as its types are automatically available to TypeScript

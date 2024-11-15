@@ -1,3 +1,8 @@
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { updateUser } from '../api/auth.client';
+import { logger } from '../utils/logger';
+
 import {
   Box,
   Button,
@@ -5,56 +10,45 @@ import {
   CardContent,
   TextField,
   Typography,
-  CircularProgress,
 } from '@mui/material';
-import React, { useState } from 'react';
 
-import type { User } from '../../types';
-import { updateUser } from '../api';
-import { useUserContext } from '../context/UserContext';
+interface PasswordChangeForm {
+  currentPassword?: string;
+  newPassword?: string;
+}
 
-export default function UserProfile(): JSX.Element {
-  const { user, setUser } = useUserContext();
-  const [email, setEmail] = useState(user?.email || '');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+export function UserProfile(): JSX.Element {
+  const { authState, setAuthState } = useAuth();
+  const [email, setEmail] = useState(authState.user?.email || '');
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  if (!authState.user) {
+    return <div>Please log in to view your profile.</div>;
+  }
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    if (newPassword && newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const result = await updateUser({
+      setError(null);
+      setSuccess(null);
+
+      const updatedUser = await updateUser({
+        ...authState.user,
         email,
-        currentPassword: currentPassword || undefined,
-        newPassword: newPassword || undefined,
       });
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update profile');
-      }
+      setAuthState({
+        ...authState,
+        user: updatedUser,
+      });
 
-      setUser(result.data as User);
-      setSuccess(true);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      setSuccess('Profile updated successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
+      logger.error('Failed to update profile:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Failed to update profile');
     }
   };
 
@@ -65,7 +59,25 @@ export default function UserProfile(): JSX.Element {
           <Typography variant="h5" gutterBottom>
             User Profile
           </Typography>
+          {error && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {error}
+            </Typography>
+          )}
+          {success && (
+            <Typography color="success.main" sx={{ mt: 2 }}>
+              {success}
+            </Typography>
+          )}
           <form onSubmit={handleSubmit}>
+            <div className="field">
+              <label>Username</label>
+              <div>{authState.user.username}</div>
+            </div>
+            <div className="field">
+              <label>Role</label>
+              <div>{authState.user.role}</div>
+            </div>
             <TextField
               fullWidth
               label="Email"
@@ -73,57 +85,14 @@ export default function UserProfile(): JSX.Element {
               onChange={(e): void => setEmail(e.target.value)}
               margin="normal"
               type="email"
-              disabled={loading}
             />
-            <TextField
-              fullWidth
-              label="Current Password"
-              value={currentPassword}
-              onChange={(e): void => setCurrentPassword(e.target.value)}
-              margin="normal"
-              type="password"
-              disabled={loading}
-            />
-            <TextField
-              fullWidth
-              label="New Password"
-              value={newPassword}
-              onChange={(e): void => setNewPassword(e.target.value)}
-              margin="normal"
-              type="password"
-              disabled={loading}
-            />
-            <TextField
-              fullWidth
-              label="Confirm New Password"
-              value={confirmPassword}
-              onChange={(e): void => setConfirmPassword(e.target.value)}
-              margin="normal"
-              type="password"
-              disabled={loading}
-              error={newPassword !== confirmPassword}
-              helperText={
-                newPassword !== confirmPassword ? 'Passwords do not match' : ''
-              }
-            />
-            {error && (
-              <Typography color="error" sx={{ mt: 2 }}>
-                {error}
-              </Typography>
-            )}
-            {success && (
-              <Typography color="success.main" sx={{ mt: 2 }}>
-                Profile updated successfully
-              </Typography>
-            )}
             <Button
               fullWidth
               variant="contained"
               type="submit"
-              disabled={loading}
               sx={{ mt: 3 }}
             >
-              {loading ? <CircularProgress size={24} /> : 'Update Profile'}
+              Update Profile
             </Button>
           </form>
         </CardContent>

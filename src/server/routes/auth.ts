@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Response } from 'express';
-import { createApiError } from '../../types/error';
+import { ApiError, createApiError } from '../../types/error';
 import type { RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { LoginRequest, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
@@ -44,13 +44,12 @@ const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async
       },
     });
   } catch (error) {
-    const metadata: LogMetadata = {
+    logger.error('Login failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Login failed:', metadata);
+    });
 
-    if (error instanceof Error) {
-      return res.status(error instanceof ApiError ? error.status : 500).json({
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
         success: false,
         error: error.message,
       });
@@ -92,13 +91,12 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
       },
     });
   } catch (error) {
-    const metadata: LogMetadata = {
+    logger.error('Token validation failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Token validation failed:', metadata);
+    });
 
-    if (error instanceof Error) {
-      return res.status(error instanceof ApiError ? error.status : 500).json({
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
         success: false,
         error: error.message,
       });

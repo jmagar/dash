@@ -1,205 +1,141 @@
-import axios from 'axios';
+import { api } from './api';
+import { createApiError } from '../../types/error';
+import type { Host, SystemStats } from '../../types/models-shared';
+import { logger } from '../utils/logger';
 
-import type { ApiResult, Host, SystemStats } from '../../types';
-import { API_ENDPOINTS } from '../../types/api-shared';
-import { handleApiError } from '../../types/error';
-import { BASE_URL } from '../config';
-import { logger } from '../utils/frontendLogger';
+const HOST_ENDPOINTS = {
+  LIST: '/hosts',
+  GET: (id: number) => `/hosts/${id}`,
+  CREATE: '/hosts',
+  UPDATE: (id: number) => `/hosts/${id}`,
+  DELETE: (id: number) => `/hosts/${id}`,
+  TEST: (id: number) => `/hosts/${id}/test`,
+  TEST_CONFIG: '/hosts/test',
+  STATS: (id: number) => `/hosts/${id}/stats`,
+  CONNECT: (id: number) => `/hosts/${id}/connect`,
+  DISCONNECT: (id: number) => `/hosts/${id}/disconnect`,
+} as const;
 
-// Configure axios
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add response interceptor for error handling
-api.interceptors.response.use(
-  response => response,
-  error => {
-    logger.error('Host API request failed:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      error: error.message,
-      response: error.response?.data,
+export async function listHosts(): Promise<Host[]> {
+  try {
+    const response = await api.get<{ data: Host[] }>(HOST_ENDPOINTS.LIST);
+    return response.data.data;
+  } catch (error) {
+    logger.error('Failed to list hosts:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
-    return Promise.reject(error);
-  },
-);
-
-export async function listHosts(): Promise<ApiResult<Host[]>> {
-  try {
-    logger.info('Listing hosts');
-    const response = await api.get(API_ENDPOINTS.HOSTS.LIST);
-    logger.info('Hosts listed successfully', { count: response.data?.data?.length });
-    return response.data;
-  } catch (error) {
-    return handleApiError<Host[]>(error, 'listHosts');
+    throw createApiError('Failed to list hosts', error, 500);
   }
 }
 
-export async function addHost(host: Partial<Host>): Promise<ApiResult<Host>> {
+export async function getHost(id: number): Promise<Host> {
   try {
-    // Validate required fields
-    const validationError = validateHost(host);
-    if (validationError) {
-      logger.warn('Host validation failed:', {
-        host: {
-          ...host,
-          credentials: host.credentials ? {
-            ...host.credentials,
-            password: '[REDACTED]',
-            privateKey: '[REDACTED]',
-          } : undefined,
-        },
-        error: validationError,
-      });
-      return {
-        success: false,
-        error: validationError,
-      };
-    }
-
-    logger.info('Adding host', {
-      host: {
-        ...host,
-        credentials: host.credentials ? {
-          ...host.credentials,
-          password: '[REDACTED]',
-          privateKey: '[REDACTED]',
-        } : undefined,
-      },
+    const response = await api.get<{ data: Host }>(HOST_ENDPOINTS.GET(id));
+    return response.data.data;
+  } catch (error) {
+    logger.error('Failed to get host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const response = await api.post<ApiResult<Host>>(API_ENDPOINTS.HOSTS.ADD, host);
-    logger.info('Host added successfully', { hostId: String(response.data?.data?.id) });
-    return response.data;
-  } catch (error) {
-    return handleApiError<Host>(error, 'addHost');
+    throw createApiError('Failed to get host', error, 404);
   }
 }
 
-export async function updateHost(host: Partial<Host>): Promise<ApiResult<Host>> {
+export async function createHost(host: Partial<Host>): Promise<Host> {
   try {
-    // Validate required fields
-    const validationError = validateHost(host);
-    if (validationError) {
-      logger.warn('Host validation failed:', {
-        host: {
-          ...host,
-          credentials: host.credentials ? {
-            ...host.credentials,
-            password: '[REDACTED]',
-            privateKey: '[REDACTED]',
-          } : undefined,
-        },
-        error: validationError,
-      });
-      return {
-        success: false,
-        error: validationError,
-      };
-    }
-
-    logger.info('Updating host', { hostId: String(host.id) });
-    const response = await api.put<ApiResult<Host>>(
-      API_ENDPOINTS.HOSTS.REMOVE(host.id as number),
-      host,
-    );
-    logger.info('Host updated successfully', { hostId: String(host.id) });
-    return response.data;
+    const response = await api.post<{ data: Host }>(HOST_ENDPOINTS.CREATE, host);
+    return response.data.data;
   } catch (error) {
-    return handleApiError<Host>(error, 'updateHost');
+    logger.error('Failed to create host:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to create host', error, 400);
   }
 }
 
-export async function deleteHost(id: number): Promise<ApiResult<void>> {
+export async function updateHost(id: number, host: Partial<Host>): Promise<Host> {
   try {
-    logger.info('Deleting host', { hostId: String(id) });
-    const response = await api.delete(API_ENDPOINTS.HOSTS.REMOVE(id));
-    logger.info('Host deleted successfully', { hostId: String(id) });
-    return response.data;
+    const response = await api.put<{ data: Host }>(HOST_ENDPOINTS.UPDATE(id), host);
+    return response.data.data;
   } catch (error) {
-    return handleApiError(error, 'deleteHost');
+    logger.error('Failed to update host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to update host', error, 400);
   }
 }
 
-export async function testConnection(hostData: number | Partial<Host>): Promise<ApiResult<void>> {
+export async function deleteHost(id: number): Promise<void> {
   try {
-    if (typeof hostData === 'number') {
-      // Testing existing host
-      logger.info('Testing existing host connection', { hostId: String(hostData) });
-      const response = await api.post(API_ENDPOINTS.HOSTS.TEST);
-      logger.info('Host connection test successful', { hostId: String(hostData) });
-      return response.data;
-    } else {
-      // Testing new host configuration
-      logger.info('Testing new host connection', {
-        host: {
-          ...hostData,
-          credentials: hostData.credentials ? {
-            ...hostData.credentials,
-            password: '[REDACTED]',
-            privateKey: '[REDACTED]',
-          } : undefined,
-        },
-      });
-      const response = await api.post(API_ENDPOINTS.HOSTS.TEST_CONNECTION, hostData);
-      logger.info('New host connection test successful');
-      return response.data;
-    }
+    await api.delete(HOST_ENDPOINTS.DELETE(id));
   } catch (error) {
-    return handleApiError(error, 'testConnection');
+    logger.error('Failed to delete host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to delete host', error, 404);
   }
 }
 
-export async function getHostStatus(id: number): Promise<ApiResult<SystemStats>> {
+export async function testHost(config: Partial<Host>): Promise<boolean> {
   try {
-    logger.info('Getting host status', { hostId: String(id) });
-    const response = await api.get(API_ENDPOINTS.HOSTS.STATS(id));
-    logger.info('Host status retrieved successfully', { hostId: String(id) });
-    return response.data;
+    const response = await api.post<{ data: { success: boolean } }>(HOST_ENDPOINTS.TEST_CONFIG, config);
+    return response.data.data.success;
   } catch (error) {
-    return handleApiError<SystemStats>(error, 'getHostStatus');
+    logger.error('Failed to test host:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to test host', error, 400);
   }
 }
 
-export async function connectHost(id: number): Promise<ApiResult<void>> {
+export async function testExistingHost(id: number): Promise<boolean> {
   try {
-    logger.info('Connecting to host', { hostId: String(id) });
-    const response = await api.post(API_ENDPOINTS.HOSTS.CONNECT(id));
-    logger.info('Host connection successful', { hostId: String(id) });
-    return response.data;
+    const response = await api.post<{ data: { success: boolean } }>(HOST_ENDPOINTS.TEST(id));
+    return response.data.data.success;
   } catch (error) {
-    return handleApiError(error, 'connectHost');
+    logger.error('Failed to test host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to test host', error, 400);
   }
 }
 
-export async function disconnectHost(id: number): Promise<ApiResult<void>> {
+export async function getHostStats(id: number): Promise<SystemStats> {
   try {
-    logger.info('Disconnecting from host', { hostId: String(id) });
-    const response = await api.post(API_ENDPOINTS.HOSTS.DISCONNECT(id));
-    logger.info('Host disconnection successful', { hostId: String(id) });
-    return response.data;
+    const response = await api.get<{ data: SystemStats }>(HOST_ENDPOINTS.STATS(id));
+    return response.data.data;
   } catch (error) {
-    return handleApiError(error, 'disconnectHost');
+    logger.error('Failed to get host stats:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get host stats', error, 404);
   }
 }
 
-function validateHost(host: Partial<Host>): string | null {
-  if (!host.name) {
-    return 'Host name is required';
+export async function connectHost(id: number): Promise<void> {
+  try {
+    await api.post(HOST_ENDPOINTS.CONNECT(id));
+  } catch (error) {
+    logger.error('Failed to connect host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to connect host', error, 400);
   }
-  if (!host.hostname) {
-    return 'Hostname is required';
+}
+
+export async function disconnectHost(id: number): Promise<void> {
+  try {
+    await api.post(HOST_ENDPOINTS.DISCONNECT(id));
+  } catch (error) {
+    logger.error('Failed to disconnect host:', {
+      id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to disconnect host', error, 400);
   }
-  if (!host.username) {
-    return 'Username is required';
-  }
-  if (!host.id && !host.credentials?.password && !host.credentials?.privateKey) {
-    return 'Either password or SSH key is required';
-  }
-  return null;
 }
