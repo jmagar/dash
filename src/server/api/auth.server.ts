@@ -23,7 +23,7 @@ interface UserRecord {
   is_active: boolean;
   password_hash: string;
   created_at: Date;
-  last_login: Date;
+  updated_at: Date;
 }
 
 function isJwtPayload(payload: unknown): payload is TokenPayload {
@@ -104,7 +104,7 @@ export async function login(
 
     // Update last login
     await db.query(
-      'UPDATE users SET last_login = NOW() WHERE id = $1',
+      'UPDATE users SET updated_at = NOW() WHERE id = $1',
       [user.id]
     );
 
@@ -117,7 +117,7 @@ export async function login(
       token,
       refreshToken,
       createdAt: user.created_at,
-      lastLogin: new Date(),
+      updatedAt: user.updated_at,
     };
 
     res.json({
@@ -235,7 +235,7 @@ export async function validate(
         token,
         refreshToken: newRefreshToken,
         createdAt: user.created_at,
-        lastLogin: user.last_login,
+        updatedAt: user.updated_at,
       };
 
       res.json({

@@ -1,7 +1,6 @@
 import { sign, verify } from 'jsonwebtoken';
 
-import type { TokenPayload, AccessTokenPayload, RefreshTokenPayload } from '../../types/auth';
-import type { User } from '../../types/models-shared';
+import type { TokenPayload, AccessTokenPayload, RefreshTokenPayload, User } from '../../types/auth';
 import { config } from '../config';
 import { logger } from './logger';
 

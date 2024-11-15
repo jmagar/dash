@@ -11,6 +11,7 @@ import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   User,
+  AuthenticatedUser,
 } from '../../types/auth';
 import { cacheService } from '../cache/CacheService';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
@@ -42,20 +43,17 @@ const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async
 
     logger.info('User logged in successfully', { username });
 
+    const authenticatedUser: AuthenticatedUser = {
+      ...user,
+      token,
+      refreshToken,
+    };
+
     return res.json({
       success: true,
       token,
       refreshToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        is_active: user.is_active,
-        email: user.email,
-        createdAt: user.createdAt,
-        token,
-        refreshToken,
-      },
+      user: authenticatedUser,
     });
   } catch (error) {
     logger.error('Login failed:', {
@@ -96,19 +94,17 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
     }
 
     const { user, refreshToken } = JSON.parse(session);
+
+    const authenticatedUser: AuthenticatedUser = {
+      ...user,
+      token,
+      refreshToken,
+    };
+
     return res.json({
       success: true,
       valid: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        is_active: user.is_active,
-        email: user.email,
-        createdAt: user.createdAt,
-        token,
-        refreshToken,
-      },
+      user: authenticatedUser,
     });
   } catch (error) {
     logger.error('Token validation failed:', {

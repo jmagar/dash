@@ -112,7 +112,10 @@ export function UserProfile(): JSX.Element {
           <Typography variant="subtitle1">Email: {user.email}</Typography>
           <Typography variant="subtitle1">Role: {user.role}</Typography>
           <Typography variant="subtitle1">
-            Last Login: {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
+            Created: {new Date(user.createdAt).toLocaleString()}
+          </Typography>
+          <Typography variant="subtitle1">
+            Last Updated: {new Date(user.updatedAt).toLocaleString()}
           </Typography>
         </Box>
 

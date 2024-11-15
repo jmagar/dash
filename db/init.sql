@@ -1,10 +1,28 @@
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Create users table
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create trigger for users updated_at
+CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Create memories table
 CREATE TABLE memories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id),
     content TEXT NOT NULL,
     embedding vector(1536),  -- OpenAI's text-embedding-ada-002 uses 1536 dimensions
     metadata JSONB,
@@ -39,7 +57,7 @@ CREATE TRIGGER update_memories_updated_at
 CREATE TABLE memory_interactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     memory_id UUID NOT NULL REFERENCES memories(id),
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id),
     interaction_type TEXT NOT NULL,  -- 'create', 'read', 'update', 'delete'
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -78,9 +96,19 @@ CREATE TABLE memory_category_assignments (
         ON DELETE CASCADE
 );
 
+-- Create trigger for memory_categories updated_at
+CREATE TRIGGER update_memory_categories_updated_at
+    BEFORE UPDATE ON memory_categories
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Insert default memory categories
 INSERT INTO memory_categories (name, description) VALUES
     ('Preferences', 'User preferences and settings'),
     ('Technical', 'Technical information and knowledge'),
     ('Personal', 'Personal information and history'),
     ('System', 'System-related information');
+
+-- Insert default admin user
+INSERT INTO users (username, email, role, password_hash) VALUES
+    ('admin', 'admin@example.com', 'admin', '$2b$10$rQEL5.5qF9p4WaFQF9qX8O5X5Z9Z9Z9Z9Z9Z9Z9Z9Z9Z9Z9Z9Z');

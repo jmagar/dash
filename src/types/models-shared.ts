@@ -101,17 +101,6 @@ export interface FileItem {
   modified: Date;
 }
 
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: 'admin' | 'user';
-  is_active: boolean;
-  password_hash?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface Package {
   name: string;
   version: string;
@@ -151,7 +140,7 @@ export interface CommandResult {
 
 export interface AuthResult {
   success: boolean;
-  data?: User;
+  data?: import('./auth').User;
   token?: string;
   mfaRequired?: boolean;
   error?: string;
