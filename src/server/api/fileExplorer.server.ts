@@ -27,7 +27,7 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
 
   try {
     if (!validatePath(rawPath)) {
-      const error = createApiError('Valid path is required', 400);
+      const error = createApiError('Valid path is required', null, 400);
       return res.status(400).json({
         success: false,
         error: error.message,
@@ -40,11 +40,19 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
     try {
       const stats = await fs.stat(dirPath);
       if (!stats.isDirectory()) {
-        throw createApiError('Path is not a directory', 400);
+        const error = createApiError('Path is not a directory', null, 400);
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
       }
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        throw createApiError('Directory not found', 404);
+        const error = createApiError('Directory not found', err, 404);
+        return res.status(404).json({
+          success: false,
+          error: error.message,
+        });
       }
       throw err;
     }
@@ -79,8 +87,8 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to list files',
+      error,
       error instanceof Error && error.message.includes('not found') ? 404 : 500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -94,7 +102,7 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
 
   try {
     if (!validatePath(rawPath)) {
-      const error = createApiError('Valid path is required', 400);
+      const error = createApiError('Valid path is required', null, 400);
       return res.status(400).json({
         success: false,
         error: error.message,
@@ -107,11 +115,19 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
     try {
       const stats = await fs.stat(filePath);
       if (stats.isDirectory()) {
-        throw createApiError('Path is a directory', 400);
+        const error = createApiError('Path is a directory', null, 400);
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
       }
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        throw createApiError('File not found', 404);
+        const error = createApiError('File not found', err, 404);
+        return res.status(404).json({
+          success: false,
+          error: error.message,
+        });
       }
       throw err;
     }
@@ -133,8 +149,8 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to read file',
+      error,
       error instanceof Error && error.message.includes('not found') ? 404 : 500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -148,11 +164,19 @@ export async function writeFile(req: Request, res: Response): Promise<Response> 
 
   try {
     if (!validatePath(rawPath)) {
-      throw createApiError('Valid path is required', 400);
+      const error = createApiError('Valid path is required', null, 400);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
     }
 
     if (!validateFileContent(content)) {
-      throw createApiError('Valid content is required', 400);
+      const error = createApiError('Valid content is required', null, 400);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
     }
 
     const filePath = sanitizePath(rawPath);
@@ -178,8 +202,8 @@ export async function writeFile(req: Request, res: Response): Promise<Response> 
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to write file',
+      error,
       error instanceof Error && error.message.includes('required') ? 400 : 500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -193,7 +217,11 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
 
   try {
     if (!validatePath(rawPath)) {
-      throw createApiError('Valid path is required', 400);
+      const error = createApiError('Valid path is required', null, 400);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
     }
 
     const filePath = sanitizePath(rawPath);
@@ -210,7 +238,11 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
       }
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        throw createApiError('File or directory not found', 404);
+        const error = createApiError('File or directory not found', err, 404);
+        return res.status(404).json({
+          success: false,
+          error: error.message,
+        });
       }
       throw err;
     }
@@ -228,11 +260,11 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to delete file/directory',
+      error,
       error instanceof Error &&
         (error.message.includes('not found') || error.message.includes('required'))
         ? error.message.includes('required') ? 400 : 404
         : 500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -246,7 +278,11 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
 
   try {
     if (!validatePath(rawPath)) {
-      throw createApiError('Valid path is required', 400);
+      const error = createApiError('Valid path is required', null, 400);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
     }
 
     const dirPath = sanitizePath(rawPath);
@@ -257,7 +293,11 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
       logger.info('Directory created successfully', { path: dirPath });
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'EEXIST') {
-        throw createApiError('Directory already exists', 409);
+        const error = createApiError('Directory already exists', err, 409);
+        return res.status(409).json({
+          success: false,
+          error: error.message,
+        });
       }
       throw err;
     }
@@ -275,11 +315,11 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to create directory',
+      error,
       error instanceof Error &&
         (error.message.includes('exists') || error.message.includes('required'))
         ? error.message.includes('required') ? 400 : 409
         : 500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,

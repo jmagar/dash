@@ -1,3 +1,4 @@
+import type { LogMetadata } from './logger';
 import { logger } from '../server/utils/logger';
 
 export class ApiError extends Error {
@@ -5,7 +6,7 @@ export class ApiError extends Error {
     message: string,
     public readonly cause?: unknown,
     public readonly status: number = 500,
-    public readonly details?: unknown
+    public readonly metadata?: LogMetadata
   ) {
     super(message);
     this.name = 'ApiError';
@@ -19,21 +20,34 @@ export class ApiError extends Error {
       name: this.name,
       message: this.message,
       status: this.status,
-      details: this.details,
+      metadata: this.metadata,
       cause: this.cause,
     };
   }
 }
 
-export type LogMetadata = Record<string, string | number | boolean | null | undefined>;
+export function createApiError(message: string, error: unknown, status = 500): ApiError {
+  let cause: unknown;
+  let metadata: LogMetadata = {};
 
-export interface ApiResult<T> {
-  data: T;
-  error?: string;
-}
+  if (error instanceof Error) {
+    cause = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+    metadata = {
+      errorName: error.name,
+      errorMessage: error.message,
+    };
+  } else {
+    cause = error;
+    metadata = {
+      error: String(error),
+    };
+  }
 
-export function createApiError(message: string, cause: unknown, status = 500): ApiError {
-  return new ApiError(message, cause, status);
+  return new ApiError(message, cause, status, metadata);
 }
 
 export function isApiError(error: unknown): error is ApiError {
@@ -57,7 +71,7 @@ export function logError(error: unknown, context: string): void {
     logger.error(`${context}:`, {
       message: error.message,
       status: error.status,
-      details: error.details,
+      metadata: error.metadata,
       cause: error.cause,
       stack: error.stack,
     });

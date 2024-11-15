@@ -20,7 +20,7 @@ export async function listHosts(req: Request, res: Response): Promise<void> {
     logger.error('Failed to list hosts:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to list hosts', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to list hosts', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -33,7 +33,7 @@ export async function getHost(req: Request, res: Response): Promise<void> {
   try {
     const host = await hostService.getHost(id);
     if (!host) {
-      const apiError = createApiError('Host not found', 404);
+      const apiError = createApiError('Host not found', null, 404);
       res.status(404).json({
         success: false,
         error: apiError.message,
@@ -49,7 +49,7 @@ export async function getHost(req: Request, res: Response): Promise<void> {
       hostId: id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to get host', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to get host', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -74,7 +74,7 @@ export async function createHost(req: Request, res: Response): Promise<void> {
       data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to create host', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to create host', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -99,7 +99,7 @@ export async function updateHost(req: Request, res: Response): Promise<void> {
       data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to update host', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to update host', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -120,7 +120,7 @@ export async function deleteHost(req: Request, res: Response): Promise<void> {
       hostId: id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to delete host', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to delete host', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -145,7 +145,7 @@ export async function testConnection(req: Request, res: Response): Promise<void>
       data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    const apiError = createApiError('Failed to test host connection', error instanceof Error ? error : new Error('Unknown error'));
+    const apiError = createApiError('Failed to test host connection', error, 500);
     res.status(apiError.status).json({
       success: false,
       error: apiError.message,
@@ -177,8 +177,8 @@ export async function testHost(req: Request, res: Response): Promise<void> {
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to test host connection',
+      error,
       error instanceof Error && error.message.includes('not found') ? 404 : 500,
-      metadata,
     );
     res.status(apiError.status || 500).json({
       success: false,

@@ -1,84 +1,149 @@
-import React, { useEffect, useState } from 'react';
+import { Box, Grid, Paper, Typography, CircularProgress } from '@mui/material';
+import React, { useState, useEffect } from 'react';
 
 import type { SystemStats } from '../../types/models-shared';
 import { getHostStats } from '../api/hosts.client';
 import { useHost } from '../context/HostContext';
 import { logger } from '../utils/logger';
 
-export function Dashboard() {
+export function Dashboard(): JSX.Element {
   const { selectedHost } = useHost();
   const [stats, setStats] = useState<SystemStats | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!selectedHost) return;
+    async function loadStats() {
+      if (!selectedHost) return;
 
-    const fetchStats = async () => {
       try {
-        const data = await getHostStats(selectedHost.id);
-        setStats(data);
+        setLoading(true);
         setError(null);
+        const hostStats = await getHostStats(selectedHost.id);
+        setStats(hostStats);
       } catch (err) {
-        logger.error('Failed to fetch host stats:', {
+        logger.error('Failed to load host stats:', {
+          hostId: selectedHost.id,
           error: err instanceof Error ? err.message : 'Unknown error',
         });
-        setError('Failed to fetch host statistics');
-        setStats(null);
+        setError('Failed to load host stats');
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchStats();
-    const interval = setInterval(fetchStats, 5000);
+    const interval = setInterval(() => {
+      void loadStats();
+    }, 5000);
+
+    void loadStats();
+
     return () => clearInterval(interval);
   }, [selectedHost]);
 
   if (!selectedHost) {
-    return <div>Please select a host first</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>Please select a host to view dashboard</Typography>
+      </Box>
+    );
   }
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading && !stats) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (error) {
-    return <div className="error">{error}</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
   }
 
   if (!stats) {
-    return <div>No stats available</div>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>No stats available</Typography>
+      </Box>
+    );
   }
 
   return (
-    <div className="dashboard">
-      <h2>System Statistics</h2>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <h3>CPU</h3>
-          <div>Usage: {stats.cpu.usage.toFixed(1)}%</div>
-          <div>Cores: {stats.cpu.cores}</div>
-        </div>
-        <div className="stat-card">
-          <h3>Memory</h3>
-          <div>Total: {formatBytes(stats.memory.total)}</div>
-          <div>Used: {formatBytes(stats.memory.used)}</div>
-          <div>Free: {formatBytes(stats.memory.free)}</div>
-        </div>
-        <div className="stat-card">
-          <h3>Disk</h3>
-          <div>Total: {formatBytes(stats.disk.total)}</div>
-          <div>Used: {formatBytes(stats.disk.used)}</div>
-          <div>Free: {formatBytes(stats.disk.free)}</div>
-        </div>
-        <div className="stat-card">
-          <h3>System</h3>
-          <div>Uptime: {formatUptime(stats.uptime)}</div>
-          <div>Load Average: {stats.loadAvg.map((l: number) => l.toFixed(2)).join(', ')}</div>
-        </div>
-      </div>
-    </div>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        System Dashboard
+      </Typography>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6} lg={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">CPU</Typography>
+            <Typography variant="h4">
+              {stats.cpu.usage.toFixed(1)}%
+            </Typography>
+            <Typography color="textSecondary">
+              {stats.cpu.cores} cores
+            </Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6} lg={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">Memory</Typography>
+            <Typography variant="h4">
+              {((stats.memory.used / stats.memory.total) * 100).toFixed(1)}%
+            </Typography>
+            <Typography color="textSecondary">
+              {formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)}
+            </Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6} lg={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">Disk</Typography>
+            <Typography variant="h4">
+              {((stats.disk.used / stats.disk.total) * 100).toFixed(1)}%
+            </Typography>
+            <Typography color="textSecondary">
+              {formatBytes(stats.disk.used)} / {formatBytes(stats.disk.total)}
+            </Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6} lg={3}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">Load Average</Typography>
+            <Typography variant="h4">
+              {stats.loadAvg[0].toFixed(2)}
+            </Typography>
+            <Typography color="textSecondary">
+              {stats.loadAvg[1].toFixed(2)} / {stats.loadAvg[2].toFixed(2)}
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      <Box sx={{ mt: 3 }}>
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6">System Information</Typography>
+          <Typography>
+            Host: {selectedHost.name} ({selectedHost.hostname}:{selectedHost.port})
+          </Typography>
+          <Typography>
+            Status: {selectedHost.status}
+          </Typography>
+          <Typography>
+            Uptime: {formatUptime(stats.uptime)}
+          </Typography>
+        </Paper>
+      </Box>
+    </Box>
   );
 }
 
@@ -105,5 +170,5 @@ function formatUptime(seconds: number): string {
   if (hours > 0) parts.push(`${hours}h`);
   if (minutes > 0) parts.push(`${minutes}m`);
 
-  return parts.join(' ') || '0m';
+  return parts.join(' ') || '< 1m';
 }

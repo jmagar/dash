@@ -27,7 +27,7 @@ export async function executeCommand(hostId: number, command: CommandRequest): P
       command,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to execute command', error, 400);
+    throw createApiError('Failed to execute command', error);
   }
 }
 
@@ -47,7 +47,7 @@ export async function executeScript(
       script,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to execute script', error, 400);
+    throw createApiError('Failed to execute script', error);
   }
 }
 
@@ -60,7 +60,7 @@ export async function getCommandHistory(hostId: number): Promise<string[]> {
       hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get command history', error, 400);
+    throw createApiError('Failed to get command history', error);
   }
 }
 
@@ -73,7 +73,7 @@ export async function getSavedCommands(hostId: number): Promise<CommandRequest[]
       hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get saved commands', error, 400);
+    throw createApiError('Failed to get saved commands', error);
   }
 }
 
@@ -89,7 +89,7 @@ export async function saveCommand(
       command: command.command,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to save command', error, 400);
+    throw createApiError('Failed to save command', error);
   }
 }
 
@@ -105,7 +105,7 @@ export async function deleteSavedCommand(
       commandId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to delete saved command', error, 400);
+    throw createApiError('Failed to delete saved command', error);
   }
 }
 
@@ -118,7 +118,7 @@ export async function cancelCommand(hostId: number, commandId: string): Promise<
       commandId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to cancel command', error, 400);
+    throw createApiError('Failed to cancel command', error);
   }
 }
 
@@ -134,6 +134,6 @@ export async function getCommandStatus(hostId: number, commandId: string): Promi
       commandId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get command status', error, 404);
+    throw createApiError('Failed to get command status', error);
   }
 }

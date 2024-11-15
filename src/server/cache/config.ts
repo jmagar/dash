@@ -39,7 +39,7 @@ const DEFAULT_CONFIG: CacheConfig = {
 export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfig {
   // Validate host
   if (!config.connection.host) {
-    const error = createApiError('Redis host is required', 400);
+    const error = createApiError('Redis host is required', null, 400);
     logger.error('Redis host validation failed:', { error: error.message });
     throw error;
   }
@@ -47,7 +47,7 @@ export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfi
   // Validate port
   if (config.connection.port < 1 || config.connection.port > 65535) {
     const metadata: LogMetadata = { port: config.connection.port };
-    const error = createApiError('Redis port must be between 1 and 65535', 400, metadata);
+    const error = createApiError('Redis port must be between 1 and 65535', metadata, 400);
     logger.error('Redis port validation failed:', { error: error.message, ...metadata });
     throw error;
   }
@@ -60,28 +60,28 @@ export function validateConfig(config: CacheConfig = DEFAULT_CONFIG): CacheConfi
       format: 'Expected format: <number>mb or <number>gb',
     };
     logger.error('Redis memory limit validation failed:', { error: 'Invalid format', ...metadata });
-    throw createApiError('Cache memory limit must be specified in MB or GB', 400, metadata);
+    throw createApiError('Cache memory limit must be specified in MB or GB', metadata, 400);
   }
 
   const memoryValue = parseInt(memoryMatch[1], 10);
   if (memoryValue < 1) {
     const metadata: LogMetadata = { limit: config.memory.limit };
     logger.error('Redis memory limit validation failed:', { error: 'Value too small', ...metadata });
-    throw createApiError('Cache memory limit must be at least 1MB/GB', 400, metadata);
+    throw createApiError('Cache memory limit must be at least 1MB/GB', metadata, 400);
   }
 
   // Validate max keys
   if (config.memory.maxKeys < 1) {
     const metadata: LogMetadata = { maxKeys: config.memory.maxKeys };
     logger.error('Redis max keys validation failed:', { error: 'Value too small', ...metadata });
-    throw createApiError('Cache max keys must be at least 1', 400, metadata);
+    throw createApiError('Cache max keys must be at least 1', metadata, 400);
   }
 
   // Validate metrics interval
   if (config.metrics.interval < 1000) {
     const metadata: LogMetadata = { interval: config.metrics.interval };
     logger.error('Redis metrics interval validation failed:', { error: 'Value too small', ...metadata });
-    throw createApiError('Cache metrics interval must be at least 1000ms', 400, metadata);
+    throw createApiError('Cache metrics interval must be at least 1000ms', metadata, 400);
   }
 
   return config;

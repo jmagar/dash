@@ -19,29 +19,32 @@ interface FileListItemProps {
   onDelete: (path: string) => void;
 }
 
-export default function FileListItem({ item, onNavigate, onDelete }: FileListItemProps) {
+export default function FileListItem({ item, onNavigate, onDelete }: FileListItemProps): JSX.Element {
   const handleClick = () => {
     if (item.type === 'directory') {
       onNavigate(item.path);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onDelete(item.path);
   };
 
   return (
-    <TableRow hover>
-      <TableCell
-        onClick={handleClick}
-        style={{ cursor: item.type === 'directory' ? 'pointer' : 'default' }}
-      >
-        {item.type === 'directory' ? <FolderIcon /> : <FileIcon />}
-        {item.name}
+    <TableRow
+      hover
+      onClick={handleClick}
+      sx={{ cursor: item.type === 'directory' ? 'pointer' : 'default' }}
+    >
+      <TableCell>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {item.type === 'directory' ? <FolderIcon color="primary" /> : <FileIcon />}
+          {item.name}
+        </div>
       </TableCell>
       <TableCell>{item.type === 'file' ? formatSize(item.size) : '--'}</TableCell>
-      <TableCell>{new Date(item.modifiedAt).toLocaleString()}</TableCell>
-      <TableCell align="right">
+      <TableCell>
         <Tooltip title="Delete">
           <IconButton
             size="small"
@@ -56,8 +59,6 @@ export default function FileListItem({ item, onNavigate, onDelete }: FileListIte
 }
 
 function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let unitIndex = 0;

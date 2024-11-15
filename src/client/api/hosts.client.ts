@@ -1,7 +1,7 @@
 import { api } from './api';
 import { createApiError } from '../../types/error';
-import type { Host, SystemStats } from '../../types/models-shared';
-import { logger } from '../utils/logger';
+import type { Host, SystemStats, CreateHostRequest } from '../../types/models-shared';
+import { logger } from '../utils/frontendLogger';
 
 const HOST_ENDPOINTS = {
   LIST: '/hosts',
@@ -9,8 +9,7 @@ const HOST_ENDPOINTS = {
   CREATE: '/hosts',
   UPDATE: (id: number) => `/hosts/${id}`,
   DELETE: (id: number) => `/hosts/${id}`,
-  TEST: (id: number) => `/hosts/${id}/test`,
-  TEST_CONFIG: '/hosts/test',
+  TEST: '/hosts/test',
   STATS: (id: number) => `/hosts/${id}/stats`,
   CONNECT: (id: number) => `/hosts/${id}/connect`,
   DISCONNECT: (id: number) => `/hosts/${id}/disconnect`,
@@ -24,7 +23,7 @@ export async function listHosts(): Promise<Host[]> {
     logger.error('Failed to list hosts:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to list hosts', error, 500);
+    throw createApiError('Failed to list hosts', error);
   }
 }
 
@@ -37,11 +36,11 @@ export async function getHost(id: number): Promise<Host> {
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get host', error, 404);
+    throw createApiError('Failed to get host', error);
   }
 }
 
-export async function createHost(host: Partial<Host>): Promise<Host> {
+export async function createHost(host: CreateHostRequest): Promise<Host> {
   try {
     const response = await api.post<{ data: Host }>(HOST_ENDPOINTS.CREATE, host);
     return response.data.data;
@@ -49,7 +48,7 @@ export async function createHost(host: Partial<Host>): Promise<Host> {
     logger.error('Failed to create host:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to create host', error, 400);
+    throw createApiError('Failed to create host', error);
   }
 }
 
@@ -62,7 +61,7 @@ export async function updateHost(id: number, host: Partial<Host>): Promise<Host>
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to update host', error, 400);
+    throw createApiError('Failed to update host', error);
   }
 }
 
@@ -74,32 +73,19 @@ export async function deleteHost(id: number): Promise<void> {
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to delete host', error, 404);
+    throw createApiError('Failed to delete host', error);
   }
 }
 
-export async function testHost(config: Partial<Host>): Promise<boolean> {
+export async function testHost(host: CreateHostRequest): Promise<boolean> {
   try {
-    const response = await api.post<{ data: { success: boolean } }>(HOST_ENDPOINTS.TEST_CONFIG, config);
+    const response = await api.post<{ data: { success: boolean } }>(HOST_ENDPOINTS.TEST, host);
     return response.data.data.success;
   } catch (error) {
     logger.error('Failed to test host:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to test host', error, 400);
-  }
-}
-
-export async function testExistingHost(id: number): Promise<boolean> {
-  try {
-    const response = await api.post<{ data: { success: boolean } }>(HOST_ENDPOINTS.TEST(id));
-    return response.data.data.success;
-  } catch (error) {
-    logger.error('Failed to test host:', {
-      id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to test host', error, 400);
+    throw createApiError('Failed to test host', error);
   }
 }
 
@@ -112,7 +98,7 @@ export async function getHostStats(id: number): Promise<SystemStats> {
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get host stats', error, 404);
+    throw createApiError('Failed to get host stats', error);
   }
 }
 
@@ -124,7 +110,7 @@ export async function connectHost(id: number): Promise<void> {
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to connect host', error, 400);
+    throw createApiError('Failed to connect host', error);
   }
 }
 
@@ -136,6 +122,6 @@ export async function disconnectHost(id: number): Promise<void> {
       id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to disconnect host', error, 400);
+    throw createApiError('Failed to disconnect host', error);
   }
 }

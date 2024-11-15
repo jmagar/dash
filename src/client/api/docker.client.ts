@@ -42,7 +42,10 @@ export async function listContainers(): Promise<DockerResponse<Container[]>> {
     logger.info('Containers listed successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to list containers', error);
+    logger.error('Failed to list containers:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to list containers', error, 404);
   }
 }
 
@@ -53,7 +56,11 @@ export async function getContainerLogs(id: string): Promise<DockerResponse<strin
     logger.info('Container logs fetched successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to get container logs', error);
+    logger.error('Failed to get container logs:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get container logs', error, 404);
   }
 }
 
@@ -64,7 +71,11 @@ export async function startContainer(id: string): Promise<DockerResponse<void>> 
     logger.info('Container started successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to start container', error);
+    logger.error('Failed to start container:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to start container', error, 400);
   }
 }
 
@@ -75,7 +86,11 @@ export async function stopContainer(id: string): Promise<DockerResponse<void>> {
     logger.info('Container stopped successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to stop container', error);
+    logger.error('Failed to stop container:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to stop container', error, 400);
   }
 }
 
@@ -86,7 +101,11 @@ export async function restartContainer(id: string): Promise<DockerResponse<void>
     logger.info('Container restarted successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to restart container', error);
+    logger.error('Failed to restart container:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to restart container', error, 400);
   }
 }
 
@@ -97,7 +116,11 @@ export async function removeContainer(id: string): Promise<DockerResponse<void>>
     logger.info('Container removed successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to remove container', error);
+    logger.error('Failed to remove container:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to remove container', error, 400);
   }
 }
 
@@ -108,7 +131,11 @@ export async function getContainerStats(id: string): Promise<DockerResponse<Cont
     logger.info('Container stats fetched successfully', { containerId: id });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to get container stats', error);
+    logger.error('Failed to get container stats:', {
+      containerId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get container stats', error, 404);
   }
 }
 
@@ -119,7 +146,10 @@ export async function getStacks(): Promise<DockerResponse<Stack[]>> {
     logger.info('Stacks fetched successfully', { count: response.data?.data?.length });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to get stacks', error);
+    logger.error('Failed to get stacks:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get stacks', error, 404);
   }
 }
 
@@ -130,7 +160,11 @@ export async function createStack(name: string, composeFile: string): Promise<Do
     logger.info('Stack created successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to create stack', error);
+    logger.error('Failed to create stack:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to create stack', error, 400);
   }
 }
 
@@ -141,7 +175,11 @@ export async function deleteStack(name: string): Promise<DockerResponse<void>> {
     logger.info('Stack deleted successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to delete stack', error);
+    logger.error('Failed to delete stack:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to delete stack', error, 400);
   }
 }
 
@@ -152,7 +190,11 @@ export async function startStack(name: string): Promise<DockerResponse<void>> {
     logger.info('Stack started successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to start stack', error);
+    logger.error('Failed to start stack:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to start stack', error, 400);
   }
 }
 
@@ -163,7 +205,11 @@ export async function stopStack(name: string): Promise<DockerResponse<void>> {
     logger.info('Stack stopped successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to stop stack', error);
+    logger.error('Failed to stop stack:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to stop stack', error, 400);
   }
 }
 
@@ -174,7 +220,11 @@ export async function getStackComposeFile(name: string): Promise<DockerResponse<
     logger.info('Stack compose file fetched successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to get stack compose file', error);
+    logger.error('Failed to get stack compose file:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get stack compose file', error, 404);
   }
 }
 
@@ -185,6 +235,10 @@ export async function updateStackComposeFile(name: string, composeFile: string):
     logger.info('Stack compose file updated successfully', { name });
     return response.data;
   } catch (error) {
-    throw createApiError('Failed to update stack compose file', error);
+    logger.error('Failed to update stack compose file:', {
+      name,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to update stack compose file', error, 400);
   }
 }

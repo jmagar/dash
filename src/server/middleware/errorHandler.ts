@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from 'express';
-
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
@@ -22,7 +21,7 @@ export function errorHandler(error: Error, req: Request, res: Response, next: Ne
 
   logger.error('Unhandled error:', metadata);
 
-  const apiError = createApiError(error.message, 500, metadata);
+  const apiError = createApiError(error.message, error, 500);
   res.status(apiError.status || 500).json({
     success: false,
     error: apiError.message,
@@ -42,9 +41,9 @@ export function notFoundHandler(req: Request, res: Response) {
 
   logger.warn('Route not found:', metadata);
 
-  const error = createApiError('Route not found', 404, metadata);
+  const apiError = createApiError('Route not found', null, 404);
   res.status(404).json({
     success: false,
-    error: error.message,
+    error: apiError.message,
   });
 }

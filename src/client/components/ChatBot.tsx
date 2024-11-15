@@ -17,7 +17,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { sendMessage } from '../api/chat.client';
 import { logger } from '../utils/logger';
-import type { ChatMessage } from '../../types/chat';
+import type { ChatMessage, ChatSettings } from '../../types/chat';
 
 const AI_MODELS = [
   { name: 'GPT-3.5 Turbo', value: 'openai/gpt-3.5-turbo' },
@@ -35,7 +35,7 @@ export function ChatBot({ onClose }: ChatBotProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].value);
+  const [selectedModel, setSelectedModel] = useState<typeof AI_MODELS[number]['value']>(AI_MODELS[0].value);
   const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +51,7 @@ export function ChatBot({ onClose }: ChatBotProps) {
     if (!input.trim() || loading) return;
 
     const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
       role: 'user',
       content: input,
       timestamp: new Date(),
@@ -62,27 +63,33 @@ export function ChatBot({ onClose }: ChatBotProps) {
       setMessages(prev => [...prev, userMessage]);
       setInput('');
 
-      const response = await sendMessage(input, {
+      const settings: Partial<ChatSettings> = {
         model: selectedModel,
-        max_tokens: 1000,
+        maxTokens: 1000,
         temperature: 0.7,
-      });
+      };
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to get response');
+      const response = await sendMessage(input, settings);
+
+      if (!response?.success) {
+        throw new Error(response?.error || 'Failed to get response');
       }
 
       const assistantMessage: ChatMessage = {
+        id: crypto.randomUUID(),
         role: 'assistant',
-        content: response.data.message,
+        content: response.data?.message || '',
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      logger.info('Chat message sent successfully', {
-        model: response.data.model,
-        tokens: response.data.usage.total_tokens,
-      });
+      
+      if (response.data?.usage) {
+        logger.info('Chat message sent successfully', {
+          model: response.data.model,
+          tokens: response.data.usage.totalTokens,
+        });
+      }
     } catch (err) {
       logger.error('Failed to send message:', {
         error: err instanceof Error ? err.message : 'Unknown error',
@@ -100,13 +107,17 @@ export function ChatBot({ onClose }: ChatBotProps) {
     }
   };
 
+  const getLastMessageByRole = (role: ChatMessage['role']) => {
+    return messages.findLast((m: ChatMessage) => m.role === role);
+  };
+
   const clearChat = () => {
     setMessages([]);
     setError(null);
   };
 
   const retryLastMessage = () => {
-    const lastUserMessage = messages.findLast(m => m.role === 'user');
+    const lastUserMessage = getLastMessageByRole('user');
     if (lastUserMessage) {
       setInput(lastUserMessage.content);
     }

@@ -46,9 +46,10 @@ function validateStacks(stacks: unknown): stacks is Stack[] {
 const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersResponse> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
+    const error = createApiError('Invalid host ID', null, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid host ID',
+      error: error.message,
     });
   }
 
@@ -67,8 +68,8 @@ const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersRespons
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to get Docker containers',
+      error,
       500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -83,9 +84,10 @@ const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersRespons
 const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
+    const error = createApiError('Invalid host ID', null, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid host ID',
+      error: error.message,
     });
   }
 
@@ -104,8 +106,8 @@ const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = asy
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to get Docker stacks',
+      error,
       500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -120,16 +122,18 @@ const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = asy
 const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Container[]> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
+    const error = createApiError('Invalid host ID', null, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid host ID',
+      error: error.message,
     });
   }
 
   if (!validateContainers(req.body)) {
+    const error = createApiError('Invalid container data', req.body, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid container data',
+      error: error.message,
     });
   }
 
@@ -145,8 +149,8 @@ const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, 
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to cache Docker containers',
+      error,
       500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,
@@ -161,16 +165,18 @@ const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, 
 const cacheStacks: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Stack[]> = async (req, res) => {
   const hostId = parseInt(req.params.hostId, 10);
   if (isNaN(hostId)) {
+    const error = createApiError('Invalid host ID', null, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid host ID',
+      error: error.message,
     });
   }
 
   if (!validateStacks(req.body)) {
+    const error = createApiError('Invalid stack data', req.body, 400);
     return res.status(400).json({
       success: false,
-      error: 'Invalid stack data',
+      error: error.message,
     });
   }
 
@@ -186,8 +192,8 @@ const cacheStacks: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Stac
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to cache Docker stacks',
+      error,
       500,
-      metadata,
     );
     return res.status(apiError.status || 500).json({
       success: false,

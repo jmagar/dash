@@ -1,7 +1,6 @@
 import { api } from './api';
 import {
   DEFAULT_CHAT_SETTINGS,
-  type ChatRequest,
   type ChatResponse,
   type ChatSessionResponse,
   type ChatSessionsResponse,
@@ -60,7 +59,7 @@ export async function sendMessage(
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to send chat message:', errorMetadata);
-    throw createApiError('Failed to send chat message', error, 500);
+    throw createApiError('Failed to send chat message', error);
   }
 }
 
@@ -88,7 +87,7 @@ export async function getSessions(): Promise<ChatSessionsResponse> {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to fetch chat sessions:', metadata);
-    throw createApiError('Failed to fetch chat sessions', error, 500);
+    throw createApiError('Failed to fetch chat sessions', error);
   }
 }
 
@@ -120,7 +119,7 @@ export async function getSession(id: string): Promise<ChatSessionResponse> {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to fetch chat session:', errorMetadata);
-    throw createApiError('Failed to fetch chat session', error, 404);
+    throw createApiError('Failed to fetch chat session', error);
   }
 }
 
@@ -135,6 +134,6 @@ export async function updateSettings(settings: Partial<ChatSettings>): Promise<v
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to update chat settings:', metadata);
-    throw createApiError('Failed to update chat settings', error, 500);
+    throw createApiError('Failed to update chat settings', error);
   }
 }

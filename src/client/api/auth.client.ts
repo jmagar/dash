@@ -18,7 +18,7 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
     logger.error('Failed to login:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to login', error, 401);
+    throw createApiError('Failed to login', error);
   }
 }
 
@@ -29,7 +29,7 @@ export async function logout(): Promise<void> {
     logger.error('Failed to logout:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to logout', error, 500);
+    throw createApiError('Failed to logout', error);
   }
 }
 
@@ -41,7 +41,7 @@ export async function validate(): Promise<ValidateResponse> {
     logger.error('Failed to validate token:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to validate token', error, 401);
+    throw createApiError('Failed to validate token', error);
   }
 }
 
@@ -53,6 +53,6 @@ export async function updateUser(user: Partial<AuthenticatedUser>): Promise<Auth
     logger.error('Failed to update user:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to update user', error, 500);
+    throw createApiError('Failed to update user', error);
   }
 }

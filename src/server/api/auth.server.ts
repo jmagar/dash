@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import type { User, AuthenticatedUser, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
+import type { AuthenticatedUser, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import type { User as UserType } from '../../types/models-shared';
@@ -60,8 +60,7 @@ export async function login(
 
     // Check if user is locked out
     if (isUserLocked(username)) {
-      const metadata: LogMetadata = { username };
-      const error = createApiError('Account temporarily locked. Please try again later.', metadata, 429);
+      const error = createApiError('Account temporarily locked. Please try again later.', { username }, 429);
       void res.status(429).json({ error: error.message });
       return;
     }
@@ -74,23 +73,20 @@ export async function login(
 
     if (!user) {
       recordLoginAttempt(username, false);
-      const metadata: LogMetadata = { username };
-      const error = createApiError('Invalid username or password', metadata, 401);
+      const error = createApiError('Invalid username or password', { username }, 401);
       void res.status(401).json({ error: error.message });
       return;
     }
 
     if (!(await comparePassword(password, user.password_hash || ''))) {
       recordLoginAttempt(username, false);
-      const metadata: LogMetadata = { username };
-      const error = createApiError('Invalid username or password', metadata, 401);
+      const error = createApiError('Invalid username or password', { username }, 401);
       void res.status(401).json({ error: error.message });
       return;
     }
 
     if (!user.is_active) {
-      const metadata: LogMetadata = { username, userId: user.id };
-      const error = createApiError('Account is disabled', metadata, 403);
+      const error = createApiError('Account is disabled', { username, userId: user.id }, 403);
       void res.status(403).json({ error: error.message });
       return;
     }
@@ -114,7 +110,7 @@ export async function login(
     };
     logger.error('Login error:', metadata);
 
-    const apiError = createApiError('An error occurred during login', metadata, 500);
+    const apiError = createApiError('An error occurred during login', error, 500);
     void res.status(500).json({ error: apiError.message });
     return;
   }
@@ -127,8 +123,7 @@ export async function validateToken(
   const token = req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
-    const metadata: LogMetadata = {};
-    const error = createApiError('No token provided', metadata, 401);
+    const error = createApiError('No token provided', null, 401);
     logger.warn('Token validation failed: No token provided');
     void res.status(401).json({ error: error.message });
     return;
@@ -138,8 +133,7 @@ export async function validateToken(
     // First verify JWT signature and expiration
     const payload = verifyToken(token);
     if (!payload) {
-      const metadata: LogMetadata = {};
-      const error = createApiError('Invalid token', metadata, 401);
+      const error = createApiError('Invalid token', null, 401);
       logger.warn('Token validation failed: Invalid token');
       void res.status(401).json({ error: error.message });
       return;
@@ -148,8 +142,7 @@ export async function validateToken(
     // Then check if session exists in cache
     const sessionData = await cache.getSession(token);
     if (!sessionData) {
-      const metadata: LogMetadata = { token };
-      const error = createApiError('Session expired', metadata, 401);
+      const error = createApiError('Session expired', { token }, 401);
       logger.warn('Token validation failed: Session expired');
       void res.status(401).json({ error: error.message });
       return;
@@ -160,9 +153,8 @@ export async function validateToken(
     try {
       session = JSON.parse(sessionData);
     } catch (parseError) {
-      const metadata: LogMetadata = { token, error: 'Invalid session data format' };
-      const error = createApiError('Invalid session data', metadata, 401);
-      logger.error('Session data parse error:', metadata);
+      const error = createApiError('Invalid session data', parseError, 401);
+      logger.error('Session data parse error:', { token, error: 'Invalid session data format' });
       void res.status(401).json({ error: error.message });
       return;
     }
@@ -194,7 +186,7 @@ export async function validateToken(
       return;
     }
 
-    const apiError = createApiError('Token validation failed', metadata, 500);
+    const apiError = createApiError('Token validation failed', error, 500);
     void res.status(500).json({ error: apiError.message });
     return;
   }

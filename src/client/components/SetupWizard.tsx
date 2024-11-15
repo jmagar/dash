@@ -2,17 +2,15 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   Button,
   TextField,
   Alert,
   Box,
-  Paper,
 } from '@mui/material';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import type { Host } from '../../types/models-shared';
+import type { CreateHostRequest } from '../../types/models-shared';
 import { createHost, testHost } from '../api/hosts.client';
 import { logger } from '../utils/logger';
 
@@ -21,15 +19,7 @@ interface SetupWizardProps {
   onClose?: () => void;
 }
 
-interface HostForm {
-  name: string;
-  hostname: string;
-  port: number;
-  username: string;
-  password: string;
-}
-
-const initialForm: HostForm = {
+const initialForm: CreateHostRequest = {
   name: '',
   hostname: '',
   port: 22,
@@ -39,7 +29,7 @@ const initialForm: HostForm = {
 
 export function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
   const navigate = useNavigate();
-  const [form, setForm] = useState<HostForm>(initialForm);
+  const [form, setForm] = useState<CreateHostRequest>(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,21 +42,13 @@ export function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
     setLoading(true);
 
     try {
-      const host: Partial<Host> = {
-        name: form.name,
-        hostname: form.hostname,
-        port: form.port,
-        username: form.username,
-        password: form.password,
-      };
-
       // Test connection first
-      await testHost(host);
+      await testHost(form);
       setTestPassed(true);
       setSuccess('Connection test successful');
 
       // Create host
-      const createdHost = await createHost(host);
+      const createdHost = await createHost(form);
       setSuccess(`Host "${createdHost.name}" created successfully`);
       setForm(initialForm);
 
@@ -93,14 +75,7 @@ export function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
     setLoading(true);
 
     try {
-      const host: Partial<Host> = {
-        hostname: form.hostname,
-        port: form.port,
-        username: form.username,
-        password: form.password,
-      };
-
-      await testHost(host);
+      await testHost(form);
       setTestPassed(true);
       setSuccess('Connection test successful');
     } catch (error) {
@@ -200,10 +175,10 @@ export function SetupWizard({ open, onClose }: SetupWizardProps): JSX.Element {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Paper sx={{ p: 3 }}>
+      <Box sx={{ maxWidth: 600, mx: 'auto' }}>
         <h2>Add New Host</h2>
         {content}
-      </Paper>
+      </Box>
     </Box>
   );
 }

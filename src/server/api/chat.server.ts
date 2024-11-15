@@ -8,7 +8,6 @@ import {
   type ChatSession,
   type ChatSessionResponse,
   type ChatSessionsResponse,
-  type ChatSettings,
   type ChatResponseData,
   type ChatError,
 } from '../../types/chat';
@@ -163,13 +162,15 @@ function formatAppContext(context: AppContext): string {
 
       // Compose projects
       composeGroups.forEach((containers, project) => {
-        const compose = containers[0].compose!;
-        output += `  🐳 Compose Project: ${project}\n`;
-        output += `    Config: ${compose.configFile}\n`;
-        output += `    Services:\n`;
-        containers.forEach(container => {
-          output += formatContainer(container, '      ');
-        });
+        const compose = containers[0].compose;
+        if (compose) {
+          output += `  🐳 Compose Project: ${project}\n`;
+          output += `    Config: ${compose.configFile}\n`;
+          output += `    Services:\n`;
+          containers.forEach(container => {
+            output += formatContainer(container, '      ');
+          });
+        }
       });
 
       // Standalone containers
@@ -245,15 +246,15 @@ function formatContainer(container: DockerContainer, indent = ''): string {
 
 function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = bytes;
+  let value = bytes;
   let unitIndex = 0;
 
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
     unitIndex++;
   }
 
-  return `${size.toFixed(1)} ${units[unitIndex]}`;
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function formatUptime(seconds: number): string {

@@ -1,114 +1,133 @@
-import React, { useEffect, useState } from 'react';
+import { Box, Button, Typography, CircularProgress } from '@mui/material';
+import React, { useState, useEffect } from 'react';
 
 import type { SystemStats } from '../../types/models-shared';
-import { connectHost, disconnectHost, getHostStats } from '../api/hosts.client';
+import { getHost, getHostStats } from '../api/hosts.client';
+import { useHost } from '../context/HostContext';
 import { logger } from '../utils/logger';
 
 interface SSHConnectionManagerProps {
   hostId: number;
 }
 
-export function SSHConnectionManager({ hostId }: SSHConnectionManagerProps) {
+export function SSHConnectionManager({ hostId }: SSHConnectionManagerProps): JSX.Element {
+  const { selectedHost, setSelectedHost } = useHost();
   const [stats, setStats] = useState<SystemStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    async function loadHost() {
       try {
-        const data = await getHostStats(hostId);
-        setStats(data);
-        setConnected(true);
+        setLoading(true);
         setError(null);
+        const host = await getHost(hostId);
+        setSelectedHost(host);
       } catch (err) {
-        logger.error('Failed to fetch host stats:', {
+        logger.error('Failed to load host:', {
+          hostId,
           error: err instanceof Error ? err.message : 'Unknown error',
         });
-        setError('Failed to fetch host statistics');
-        setStats(null);
-        setConnected(false);
+        setError('Failed to load host');
+      } finally {
+        setLoading(false);
       }
-    };
-
-    if (connected) {
-      fetchStats();
-      const interval = setInterval(fetchStats, 5000);
-      return () => clearInterval(interval);
     }
-  }, [hostId, connected]);
 
-  const handleConnect = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      await connectHost(hostId);
-      setConnected(true);
-    } catch (err) {
-      logger.error('Failed to connect:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError('Failed to connect to host');
-      setConnected(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+    void loadHost();
+  }, [hostId, setSelectedHost]);
 
-  const handleDisconnect = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      await disconnectHost(hostId);
-      setConnected(false);
-      setStats(null);
-    } catch (err) {
-      logger.error('Failed to disconnect:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError('Failed to disconnect from host');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    async function loadStats() {
+      if (!selectedHost) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+        const hostStats = await getHostStats(selectedHost.id);
+        setStats(hostStats);
+      } catch (err) {
+        logger.error('Failed to load host stats:', {
+          hostId: selectedHost.id,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+        setError('Failed to load host stats');
+      } finally {
+        setLoading(false);
+      }
     }
-  };
+
+    const interval = setInterval(() => {
+      void loadStats();
+    }, 5000);
+
+    void loadStats();
+
+    return () => clearInterval(interval);
+  }, [selectedHost]);
+
+  if (loading && !selectedHost) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
+  if (!selectedHost) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>No host selected</Typography>
+      </Box>
+    );
+  }
 
   return (
-    <div className="ssh-connection-manager">
-      <h2>SSH Connection Manager</h2>
-      {error && <div className="error">{error}</div>}
-
-      <div className="connection-controls">
-        {connected ? (
-          <button onClick={handleDisconnect} disabled={loading}>
-            {loading ? 'Disconnecting...' : 'Disconnect'}
-          </button>
-        ) : (
-          <button onClick={handleConnect} disabled={loading}>
-            {loading ? 'Connecting...' : 'Connect'}
-          </button>
-        )}
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h6">{selectedHost.name}</Typography>
+      <Typography color="textSecondary">
+        {selectedHost.hostname}:{selectedHost.port}
+      </Typography>
 
       {stats && (
-        <div className="connection-stats">
-          <div>
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle1">System Stats</Typography>
+          <Typography>
             CPU Usage: {stats.cpu.usage.toFixed(1)}% ({stats.cpu.cores} cores)
-          </div>
-          <div>
-            Memory: {formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)}
-          </div>
-          <div>
-            Disk: {formatBytes(stats.disk.used)} / {formatBytes(stats.disk.total)}
-          </div>
-          <div>
-            Uptime: {formatUptime(stats.uptime)}
-          </div>
-          <div>
-            Load Average: {stats.loadAvg.map((l: number) => l.toFixed(2)).join(', ')}
-          </div>
-        </div>
+          </Typography>
+          <Typography>
+            Memory: {formatBytes(stats.memory.used)}/{formatBytes(stats.memory.total)} (
+            {((stats.memory.used / stats.memory.total) * 100).toFixed(1)}%)
+          </Typography>
+          <Typography>
+            Disk: {formatBytes(stats.disk.used)}/{formatBytes(stats.disk.total)} (
+            {((stats.disk.used / stats.disk.total) * 100).toFixed(1)}%)
+          </Typography>
+          <Typography>Uptime: {formatUptime(stats.uptime)}</Typography>
+          <Typography>Load Average: {stats.loadAvg.join(', ')}</Typography>
+        </Box>
       )}
-    </div>
+
+      <Box sx={{ mt: 2 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={(): void => {
+            // Handle connect/disconnect
+          }}
+        >
+          {selectedHost.status === 'connected' ? 'Disconnect' : 'Connect'}
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
@@ -135,5 +154,5 @@ function formatUptime(seconds: number): string {
   if (hours > 0) parts.push(`${hours}h`);
   if (minutes > 0) parts.push(`${minutes}m`);
 
-  return parts.join(' ') || '0m';
+  return parts.join(' ') || '< 1m';
 }

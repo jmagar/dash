@@ -18,7 +18,7 @@ export interface CreateHostRequest {
   password?: string;
 }
 
-export type UpdateHostRequest = CreateHostRequest
+export type UpdateHostRequest = Partial<CreateHostRequest>
 
 export interface Container {
   id: string;

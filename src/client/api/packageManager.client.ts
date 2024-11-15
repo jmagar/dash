@@ -1,10 +1,6 @@
-import axios from 'axios';
-
 import { api } from './api';
-import type { ApiResult } from '../../types';
 import { createApiError } from '../../types/error';
 import type { Package } from '../../types/models-shared';
-import { BASE_URL } from '../config';
 import { logger } from '../utils/frontendLogger';
 
 const PKG_ENDPOINTS = {
@@ -25,7 +21,7 @@ export async function listPackages(hostId: number): Promise<Package[]> {
       hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to list packages', error, 404);
+    throw createApiError('Failed to list packages', error);
   }
 }
 
@@ -41,7 +37,7 @@ export async function searchPackages(hostId: number, query: string): Promise<Pac
       query,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to search packages', error, 400);
+    throw createApiError('Failed to search packages', error);
   }
 }
 
@@ -55,7 +51,7 @@ export async function installPackage(hostId: number, pkg: string, version?: stri
       version,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to install package', error, 400);
+    throw createApiError('Failed to install package', error);
   }
 }
 
@@ -68,7 +64,7 @@ export async function uninstallPackage(hostId: number, pkg: string): Promise<voi
       package: pkg,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to uninstall package', error, 400);
+    throw createApiError('Failed to uninstall package', error);
   }
 }
 
@@ -81,7 +77,7 @@ export async function updatePackage(hostId: number, pkg: string): Promise<void> 
       package: pkg,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to update package', error, 400);
+    throw createApiError('Failed to update package', error);
   }
 }
 
@@ -99,7 +95,7 @@ export async function listInstalledPackages(hostId: number): Promise<Package[]> 
       hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to list installed packages', error, 404);
+    throw createApiError('Failed to list installed packages', error);
   }
 }
 
@@ -118,6 +114,6 @@ export async function getPackageInfo(hostId: number, packageName: string): Promi
       packageName,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to get package info', error, 404);
+    throw createApiError('Failed to get package info', error);
   }
 }

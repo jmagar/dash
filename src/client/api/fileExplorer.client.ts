@@ -25,7 +25,7 @@ export async function listFiles(hostId: number, path: string): Promise<FileItem[
       path,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to list files', error, 404);
+    throw createApiError('Failed to list files', error);
   }
 }
 
@@ -41,7 +41,7 @@ export async function readFile(hostId: number, path: string): Promise<string> {
       path,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to read file', error, 404);
+    throw createApiError('Failed to read file', error);
   }
 }
 
@@ -54,7 +54,7 @@ export async function writeFile(hostId: number, path: string, content: string): 
       path,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to write file', error, 400);
+    throw createApiError('Failed to write file', error);
   }
 }
 
@@ -67,7 +67,7 @@ export async function deleteFile(hostId: number, path: string): Promise<void> {
       path,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to delete file', error, 404);
+    throw createApiError('Failed to delete file', error);
   }
 }
 
@@ -81,7 +81,7 @@ export async function renameFile(hostId: number, oldPath: string, newPath: strin
       newPath,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to rename file', error, 400);
+    throw createApiError('Failed to rename file', error);
   }
 }
 
@@ -94,7 +94,7 @@ export async function createDirectory(hostId: number, path: string): Promise<voi
       path,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to create directory', error, 400);
+    throw createApiError('Failed to create directory', error);
   }
 }
 
@@ -110,6 +110,6 @@ export async function searchFiles(hostId: number, query: string): Promise<FileIt
       query,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    throw createApiError('Failed to search files', error, 400);
+    throw createApiError('Failed to search files', error);
   }
 }

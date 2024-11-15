@@ -25,7 +25,7 @@ export const authenticate: AuthMiddleware = (req: Request, res: Response, next: 
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (!validateToken(token)) {
-    const error = createApiError('No valid token provided', 401);
+    const error = createApiError('No valid token provided', null, 401);
     logger.warn('Authentication failed: No valid token provided');
     const response: ApiResponse<void> = {
       success: false,
@@ -56,8 +56,8 @@ export const authenticate: AuthMiddleware = (req: Request, res: Response, next: 
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Invalid token',
+      error,
       401,
-      metadata,
     );
     const response: ApiResponse<void> = {
       success: false,
@@ -72,7 +72,7 @@ export function requireRole(roles: string[]): AuthMiddleware {
     const authReq = req as AuthenticatedRequest;
     try {
       if (!authReq.user) {
-        const error = createApiError('Authentication required', 401);
+        const error = createApiError('Authentication required', null, 401);
         logger.warn('Role check failed: No user in request');
         const response: ApiResponse<void> = {
           success: false,
@@ -87,7 +87,7 @@ export function requireRole(roles: string[]): AuthMiddleware {
           userRole: authReq.user.role,
           userId: authReq.user.id,
         };
-        const error = createApiError('Insufficient permissions', 403, metadata);
+        const error = createApiError('Insufficient permissions', metadata, 403);
         logger.warn('Role check failed: Insufficient permissions', metadata);
         const response: ApiResponse<void> = {
           success: false,
@@ -113,8 +113,8 @@ export function requireRole(roles: string[]): AuthMiddleware {
 
       const apiError = createApiError(
         error instanceof Error ? error.message : 'Role check failed',
+        error,
         500,
-        metadata,
       );
       const response: ApiResponse<void> = {
         success: false,
@@ -128,7 +128,7 @@ export function requireRole(roles: string[]): AuthMiddleware {
 export function checkRole(role: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      const error = createApiError('Unauthorized', 401);
+      const error = createApiError('Unauthorized', null, 401);
       logger.warn('Role check failed: No user');
       void res.status(401).json({
         success: false,
@@ -138,7 +138,7 @@ export function checkRole(role: string) {
     }
 
     if (req.user.role !== role) {
-      const error = createApiError('Forbidden', 403);
+      const error = createApiError('Forbidden', null, 403);
       logger.warn('Role check failed: Invalid role', {
         userId: req.user.id,
         requiredRole: role,
