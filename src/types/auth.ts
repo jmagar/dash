@@ -5,26 +5,40 @@ export interface User {
   role: 'admin' | 'user';
   is_active: boolean;
   password_hash?: string;
-  createdAt?: Date;
-  lastLogin?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// Token payload contains only the necessary authentication info
+// Base token payload contains common fields
 export interface TokenPayload {
   id: string;
   username: string;
   role: 'admin' | 'user';
+  is_active: boolean;
+  type: 'access' | 'refresh';
 }
 
-// Full user data with token for client-side use
+// Access token payload
+export interface AccessTokenPayload extends TokenPayload {
+  type: 'access';
+}
+
+// Refresh token payload
+export interface RefreshTokenPayload extends TokenPayload {
+  type: 'refresh';
+}
+
+// Full user data with tokens for client-side use
 export interface AuthenticatedUser extends User {
   token: string;
+  refreshToken: string;
 }
 
 export interface AuthContextType {
-  user: User | null;
+  user: AuthenticatedUser | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
   loading: boolean;
   error: string | null;
 }
@@ -37,6 +51,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   success: boolean;
   token: string;
+  refreshToken: string;
   user: AuthenticatedUser;
   error?: string;
 }
@@ -63,5 +78,16 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   success: boolean;
   user: AuthenticatedUser;
+  error?: string;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface RefreshTokenResponse {
+  success: boolean;
+  token: string;
+  refreshToken: string;
   error?: string;
 }

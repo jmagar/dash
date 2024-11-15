@@ -10,11 +10,12 @@ export function generateToken(user: User): string {
     id: user.id,
     username: user.username,
     role: user.role,
+    is_active: user.is_active,
     type: 'access',
   };
 
-  return sign(payload, config.security.jwt.secret, {
-    expiresIn: config.security.jwt.expiresIn,
+  return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
+    expiresIn: config.jwt.expiresIn,
   });
 }
 
@@ -23,17 +24,18 @@ export function generateRefreshToken(user: User): string {
     id: user.id,
     username: user.username,
     role: user.role,
+    is_active: user.is_active,
     type: 'refresh',
   };
 
-  return sign(payload, config.security.jwt.secret, {
-    expiresIn: config.security.jwt.refreshExpiresIn,
+  return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
+    expiresIn: config.jwt.refreshExpiresIn,
   });
 }
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    const decoded = verify(token, config.security.jwt.secret) as unknown;
+    const decoded = verify(token, config.jwt.secret) as unknown;
 
     // Type guard to verify the decoded token has the required properties
     if (
@@ -42,8 +44,13 @@ export function verifyToken(token: string): TokenPayload | null {
       'id' in decoded &&
       'username' in decoded &&
       'role' in decoded &&
+      'is_active' in decoded &&
       'type' in decoded &&
-      (decoded.type === 'access' || decoded.type === 'refresh')
+      (decoded.type === 'access' || decoded.type === 'refresh') &&
+      typeof decoded.id === 'string' &&
+      typeof decoded.username === 'string' &&
+      (decoded.role === 'admin' || decoded.role === 'user') &&
+      typeof decoded.is_active === 'boolean'
     ) {
       return decoded as TokenPayload;
     }

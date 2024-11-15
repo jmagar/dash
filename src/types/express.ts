@@ -2,7 +2,7 @@ import type { Request as BaseRequest, Response, NextFunction, RequestHandler as 
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 
-import type { AuthenticatedUser } from './jwt';
+import type { TokenPayload } from './auth';
 
 // Re-export FileArray type from express-fileupload
 declare module 'express-fileupload' {
@@ -35,7 +35,7 @@ export interface Request<
   ReqQuery = ParsedQs,
 > extends BaseRequest<P, ResBody, ReqBody, ReqQuery> {
   requestId?: string;
-  user?: AuthenticatedUser;
+  user?: TokenPayload;
   files?: import('express-fileupload').FileArray | null;
 }
 
@@ -100,7 +100,7 @@ export function createAuthHandler<P, ResBody, ReqBody, ReqQuery>(
 declare module 'express' {
   interface Request {
     requestId?: string;
-    user?: AuthenticatedUser;
+    user?: TokenPayload;
     files?: import('express-fileupload').FileArray | null;
   }
 }
@@ -108,7 +108,7 @@ declare module 'express' {
 declare module 'express-serve-static-core' {
   interface Request {
     requestId?: string;
-    user?: AuthenticatedUser;
+    user?: TokenPayload;
     files?: import('express-fileupload').FileArray | null;
   }
 }

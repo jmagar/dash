@@ -12,6 +12,7 @@ export interface Config {
   jwt: {
     secret: string;
     expiresIn: string;
+    refreshExpiresIn: string;
   };
   openai: {
     apiKey: string;

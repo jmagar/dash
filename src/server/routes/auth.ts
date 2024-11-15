@@ -1,11 +1,19 @@
 import express from 'express';
 import type { Response } from 'express';
-import { ApiError, createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import type { RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import type { LoginRequest, LoginResponse, ValidateResponse, LogoutResponse } from '../../types/auth';
+import type {
+  LoginRequest,
+  LoginResponse,
+  ValidateResponse,
+  LogoutResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  User,
+} from '../../types/auth';
 import { cacheService } from '../cache/CacheService';
-import { generateToken, generateRefreshToken } from '../utils/jwt';
+import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
@@ -37,10 +45,16 @@ const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async
     return res.json({
       success: true,
       token,
+      refreshToken,
       user: {
         id: user.id,
         username: user.username,
         role: user.role,
+        is_active: user.is_active,
+        email: user.email,
+        createdAt: user.createdAt,
+        token,
+        refreshToken,
       },
     });
   } catch (error) {
@@ -81,13 +95,19 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
       throw new ApiError('Invalid or expired session', undefined, 401, metadata);
     }
 
-    const user = JSON.parse(session);
+    const { user, refreshToken } = JSON.parse(session);
     return res.json({
       success: true,
+      valid: true,
       user: {
         id: user.id,
         username: user.username,
         role: user.role,
+        is_active: user.is_active,
+        email: user.email,
+        createdAt: user.createdAt,
+        token,
+        refreshToken,
       },
     });
   } catch (error) {
@@ -110,19 +130,11 @@ const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, r
 };
 
 const logoutHandler: RequestHandler<unknown, LogoutResponse> = async (req, res: Response) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-
-  if (!token) {
-    const metadata: LogMetadata = {};
-    const error = new ApiError('No token provided', undefined, 401, metadata);
-    return res.status(error.status).json({
-      success: false,
-      error: error.message,
-    });
-  }
-
   try {
-    await cacheService.removeSession(token);
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      await cacheService.removeSession(token);
+    }
     return res.json({ success: true });
   } catch (error) {
     logger.error('Logout failed:', {
@@ -133,18 +145,70 @@ const logoutHandler: RequestHandler<unknown, LogoutResponse> = async (req, res: 
   }
 };
 
+const refreshHandler: RequestHandler<unknown, RefreshTokenResponse, RefreshTokenRequest> = async (req, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      throw new ApiError('No refresh token provided', undefined, 400);
+    }
+
+    const decoded = verifyToken(refreshToken);
+    if (!decoded || decoded.type !== 'refresh') {
+      throw new ApiError('Invalid refresh token', undefined, 401);
+    }
+
+    const session = await cacheService.getSession(refreshToken);
+    if (!session) {
+      throw new ApiError('Invalid or expired session', undefined, 401);
+    }
+
+    const { user } = JSON.parse(session);
+
+    // Generate new tokens
+    const newToken = generateToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    // Update session
+    await cacheService.setSession(newToken, user, newRefreshToken);
+    await cacheService.removeSession(refreshToken);
+
+    return res.json({
+      success: true,
+      token: newToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    logger.error('Token refresh failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        success: false,
+        error: error.message,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: 'An unexpected error occurred',
+    });
+  }
+};
+
 // Mock function for development
-async function validateCredentials(username: string, password: string) {
+async function validateCredentials(username: string, password: string): Promise<User | null> {
   if (process.env.NODE_ENV === 'development') {
-    return {
+    const user: User = {
       id: '1',
       username: 'admin',
-      role: 'admin',
+      role: 'admin' as const,
       is_active: true,
       email: 'admin@example.com',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    return user;
   }
   return null;
 }
@@ -152,5 +216,6 @@ async function validateCredentials(username: string, password: string) {
 router.post('/login', loginHandler);
 router.get('/validate', validateHandler);
 router.post('/logout', logoutHandler);
+router.post('/refresh', refreshHandler);
 
 export default router;

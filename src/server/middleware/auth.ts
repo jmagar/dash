@@ -16,7 +16,6 @@ interface RequestBody {
 interface JwtPayload extends TokenPayload {
   iat?: number;
   exp?: number;
-  is_active: boolean;
 }
 
 function isJwtPayload(payload: unknown): payload is JwtPayload {
@@ -27,10 +26,12 @@ function isJwtPayload(payload: unknown): payload is JwtPayload {
     'username' in payload &&
     'role' in payload &&
     'is_active' in payload &&
+    'type' in payload &&
     typeof (payload as JwtPayload).id === 'string' &&
     typeof (payload as JwtPayload).username === 'string' &&
     typeof (payload as JwtPayload).is_active === 'boolean' &&
-    ((payload as JwtPayload).role === 'admin' || (payload as JwtPayload).role === 'user')
+    ((payload as JwtPayload).role === 'admin' || (payload as JwtPayload).role === 'user') &&
+    ((payload as JwtPayload).type === 'access' || (payload as JwtPayload).type === 'refresh')
   );
 }
 
@@ -53,11 +54,20 @@ export function requireAuth(
     const decoded = verify(token, config.jwt.secret);
 
     if (isJwtPayload(decoded)) {
-      const tokenPayload: TokenPayload & { is_active: boolean } = {
+      if (decoded.type !== 'access') {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token type',
+        });
+        return;
+      }
+
+      const tokenPayload: TokenPayload = {
         id: decoded.id,
         username: decoded.username,
         role: decoded.role,
         is_active: decoded.is_active,
+        type: decoded.type,
       };
       req.user = tokenPayload;
       next();

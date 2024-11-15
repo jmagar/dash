@@ -2,7 +2,15 @@ import { compare } from 'bcrypt';
 import { Request, Response } from 'express';
 import { sign, verify } from 'jsonwebtoken';
 
-import type { LoginResponse, LogoutResponse, ValidateResponse, AuthenticatedUser } from '../../types/auth';
+import type {
+  LoginResponse,
+  LogoutResponse,
+  ValidateResponse,
+  AuthenticatedUser,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  TokenPayload,
+} from '../../types/auth';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../utils/logger';
@@ -18,24 +26,20 @@ interface UserRecord {
   last_login: Date;
 }
 
-interface JwtPayload {
-  id: string;
-  username: string;
-  role: 'admin' | 'user';
-  iat?: number;
-  exp?: number;
-}
-
-function isJwtPayload(payload: unknown): payload is JwtPayload {
+function isJwtPayload(payload: unknown): payload is TokenPayload {
   return (
     typeof payload === 'object' &&
     payload !== null &&
     'id' in payload &&
     'username' in payload &&
     'role' in payload &&
-    typeof (payload as JwtPayload).id === 'string' &&
-    typeof (payload as JwtPayload).username === 'string' &&
-    ((payload as JwtPayload).role === 'admin' || (payload as JwtPayload).role === 'user')
+    'is_active' in payload &&
+    'type' in payload &&
+    typeof payload.id === 'string' &&
+    typeof payload.username === 'string' &&
+    (payload.role === 'admin' || payload.role === 'user') &&
+    typeof payload.is_active === 'boolean' &&
+    (payload.type === 'access' || payload.type === 'refresh')
   );
 }
 
@@ -79,10 +83,23 @@ export async function login(
       return;
     }
 
+    const userData = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+    };
+
     const token = sign(
-      { id: user.id, username: user.username, role: user.role },
+      { ...userData, type: 'access' as const },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn }
+    );
+
+    const refreshToken = sign(
+      { ...userData, type: 'refresh' as const },
+      config.jwt.secret,
+      { expiresIn: config.jwt.refreshExpiresIn }
     );
 
     // Update last login
@@ -98,18 +115,15 @@ export async function login(
       role: user.role,
       is_active: user.is_active,
       token,
+      refreshToken,
       createdAt: user.created_at,
       lastLogin: new Date(),
     };
 
-    logger.info('User logged in successfully:', {
-      userId: user.id,
-      username: user.username,
-    });
-
     res.json({
       success: true,
       token,
+      refreshToken,
       user: authenticatedUser,
     });
   } catch (error) {
@@ -173,6 +187,15 @@ export async function validate(
         return;
       }
 
+      if (decoded.type !== 'access') {
+        res.status(401).json({
+          success: false,
+          valid: false,
+          error: 'Invalid token type',
+        });
+        return;
+      }
+
       const result = await db.query<UserRecord>(
         'SELECT * FROM users WHERE id = $1',
         [decoded.id]
@@ -189,6 +212,20 @@ export async function validate(
         return;
       }
 
+      const userData = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        is_active: user.is_active,
+      };
+
+      // Generate a new refresh token during validation
+      const newRefreshToken = sign(
+        { ...userData, type: 'refresh' as const },
+        config.jwt.secret,
+        { expiresIn: config.jwt.refreshExpiresIn }
+      );
+
       const authenticatedUser: AuthenticatedUser = {
         id: user.id,
         username: user.username,
@@ -196,6 +233,7 @@ export async function validate(
         role: user.role,
         is_active: user.is_active,
         token,
+        refreshToken: newRefreshToken,
         createdAt: user.created_at,
         lastLogin: user.last_login,
       };
@@ -219,6 +257,96 @@ export async function validate(
     res.status(500).json({
       success: false,
       valid: false,
+      error: 'Internal server error',
+    });
+  }
+}
+
+export async function refresh(
+  req: Request<unknown, RefreshTokenResponse | { error: string }, RefreshTokenRequest>,
+  res: Response<RefreshTokenResponse | { error: string }>
+): Promise<void> {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      res.status(400).json({
+        success: false,
+        error: 'No refresh token provided',
+      });
+      return;
+    }
+
+    try {
+      const decoded = verify(refreshToken, config.jwt.secret);
+
+      if (!isJwtPayload(decoded)) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token format',
+        });
+        return;
+      }
+
+      if (decoded.type !== 'refresh') {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token type',
+        });
+        return;
+      }
+
+      const result = await db.query<UserRecord>(
+        'SELECT * FROM users WHERE id = $1',
+        [decoded.id]
+      );
+
+      const user = result.rows[0];
+
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid token',
+        });
+        return;
+      }
+
+      const userData = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        is_active: user.is_active,
+      };
+
+      const newToken = sign(
+        { ...userData, type: 'access' as const },
+        config.jwt.secret,
+        { expiresIn: config.jwt.expiresIn }
+      );
+
+      const newRefreshToken = sign(
+        { ...userData, type: 'refresh' as const },
+        config.jwt.secret,
+        { expiresIn: config.jwt.refreshExpiresIn }
+      );
+
+      res.json({
+        success: true,
+        token: newToken,
+        refreshToken: newRefreshToken,
+      });
+    } catch (error) {
+      res.status(401).json({
+        success: false,
+        error: 'Invalid token',
+      });
+    }
+  } catch (error) {
+    logger.error('Token refresh failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
       error: 'Internal server error',
     });
   }

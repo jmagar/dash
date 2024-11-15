@@ -43,7 +43,8 @@ export const config: Config = {
 
   jwt: {
     secret: getRequiredEnv('JWT_SECRET'),
-    expiresIn: getOptionalEnv('JWT_EXPIRES_IN', '24h'),
+    expiresIn: getOptionalEnv('JWT_EXPIRES_IN', '1h'),
+    refreshExpiresIn: getOptionalEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
   },
 
   openai: {
