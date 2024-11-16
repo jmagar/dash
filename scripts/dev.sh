@@ -3,55 +3,53 @@
 # Exit on error
 set -e
 
-# Function to log messages
-log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+# Load utilities
+source "$(dirname "$0")/utils.sh"
+
+# Parse command line arguments
+parse_args "$@"
+
+# Main development flow
+main() {
+    print_status "Starting SSH Host Hub (shh) development environment..."
+    
+    check_system_requirements
+    create_directories
+    setup_env
+    setup_db_permissions
+
+    # Start required services
+    print_status "Starting development services..."
+    docker compose up -d db redis
+
+    # Check service health
+    check_health 60 "db redis" || exit 1
+
+    # Start development servers
+    print_status "Starting development servers..."
+    if [ "${FRONTEND_ONLY:-}" = true ]; then
+        if [ "${WATCH_MODE:-}" = true ]; then
+            print_status "Starting frontend in watch mode..."
+            npm run dev:client:watch
+        else
+            npm run dev:client
+        fi
+    elif [ "${BACKEND_ONLY:-}" = true ]; then
+        if [ "${WATCH_MODE:-}" = true ]; then
+            print_status "Starting backend in watch mode..."
+            npm run dev:server:watch
+        else
+            npm run dev:server
+        fi
+    else
+        if [ "${WATCH_MODE:-}" = true ]; then
+            print_status "Starting all services in watch mode..."
+            npm run dev:watch
+        else
+            npm run dev
+        fi
+    fi
 }
 
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    log "Error: Docker is not running"
-    exit 1
-fi
-
-# Create required directories
-log "Creating required directories..."
-mkdir -p logs
-chmod 755 logs
-
-# Set proper permissions for init.sql
-log "Setting proper permissions for database init script..."
-chmod 644 db/init.sql
-
-# Start only the required services for development
-log "Starting development services..."
-docker compose up -d db redis
-
-# Wait for services to be healthy
-log "Waiting for services to be healthy..."
-timeout=60
-elapsed=0
-while [ $elapsed -lt $timeout ]; do
-    if docker compose ps | grep "db" | grep -q "healthy" && \
-       docker compose ps | grep "redis" | grep -q "healthy"; then
-        log "All development services are healthy!"
-        break
-    fi
-    sleep 5
-    elapsed=$((elapsed + 5))
-    if [ $elapsed -eq $timeout ]; then
-        log "Error: Services failed to become healthy within timeout"
-        docker compose logs db redis
-        exit 1
-    fi
-done
-
-# Start development servers
-log "Starting development servers..."
-if [ -n "$1" ] && [ "$1" = "--frontend-only" ]; then
-    npm run dev:client
-elif [ -n "$1" ] && [ "$1" = "--backend-only" ]; then
-    npm run dev:server
-else
-    npm run dev
-fi
+# Run development setup
+main

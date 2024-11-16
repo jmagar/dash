@@ -1,117 +1,208 @@
+import React, { useState } from 'react';
 import {
   Box,
-  TextField,
   Button,
+  Card,
+  CardContent,
+  TextField,
   Typography,
-  Paper,
   Alert,
+  IconButton,
+  InputAdornment,
+  Paper,
+  useTheme,
+  Fade,
   CircularProgress,
 } from '@mui/material';
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-
-import { useAuth } from '../context/AuthContext';
-import { logger } from '../utils/frontendLogger';
+import {
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  LockOutlined as LockIcon,
+} from '@mui/icons-material';
+import { useAuth } from '../hooks/useAuth';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export function Login(): JSX.Element {
+  const theme = useTheme();
   const navigate = useNavigate();
-  const { login, error: authError } = useAuth();
+  const location = useLocation();
+  const { login } = useAuth();
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
+  const from = location.state?.from?.pathname || '/';
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
       await login(username, password);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err) {
-      logger.error('Login failed:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
+      setError(err instanceof Error ? err.message : 'Failed to login');
       setLoading(false);
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent): void => {
-    void handleSubmit(e);
-  };
-
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setUsername(e.target.value);
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setPassword(e.target.value);
+  const handleTogglePassword = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
     <Box
       sx={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
         minHeight: '100vh',
-        p: 2,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'background.default',
+        p: 3,
       }}
     >
-      <Paper
-        elevation={3}
-        sx={{
-          p: 4,
-          maxWidth: 400,
-          width: '100%',
-        }}
-      >
-        <Typography variant="h5" component="h1" gutterBottom>
-          Login
-        </Typography>
-
-        {(error || authError) && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error || authError}
-          </Alert>
-        )}
-
-        <form onSubmit={handleFormSubmit}>
-          <TextField
-            fullWidth
-            label="Username"
-            value={username}
-            onChange={handleUsernameChange}
-            margin="normal"
-            required
-            disabled={loading}
-          />
-
-          <TextField
-            fullWidth
-            type="password"
-            label="Password"
-            value={password}
-            onChange={handlePasswordChange}
-            margin="normal"
-            required
-            disabled={loading}
-          />
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3 }}
-            disabled={loading}
+      <Fade in timeout={800}>
+        <Card
+          elevation={4}
+          sx={{
+            maxWidth: 400,
+            width: '100%',
+            borderRadius: 2,
+            overflow: 'visible',
+            position: 'relative',
+          }}
+        >
+          <Paper
+            elevation={6}
+            sx={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              bgcolor: 'primary.main',
+              position: 'absolute',
+              top: -40,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            {loading ? <CircularProgress size={24} /> : 'Login'}
-          </Button>
-        </form>
-      </Paper>
+            <LockIcon sx={{ fontSize: 40, color: 'primary.contrastText' }} />
+          </Paper>
+
+          <CardContent sx={{ pt: 6 }}>
+            <Typography
+              variant="h4"
+              align="center"
+              gutterBottom
+              sx={{
+                fontWeight: 'bold',
+                color: 'primary.main',
+                mt: 2,
+                mb: 4,
+              }}
+            >
+              Welcome Back
+            </Typography>
+
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <TextField
+                fullWidth
+                label="Username"
+                variant="outlined"
+                margin="normal"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                  },
+                }}
+              />
+
+              <TextField
+                fullWidth
+                label="Password"
+                variant="outlined"
+                margin="normal"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label="toggle password visibility"
+                        onClick={handleTogglePassword}
+                        edge="end"
+                      >
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                  },
+                }}
+              />
+
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                type="submit"
+                disabled={loading}
+                sx={{
+                  mt: 3,
+                  mb: 2,
+                  py: 1.5,
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontSize: '1.1rem',
+                  fontWeight: 'medium',
+                  position: 'relative',
+                }}
+              >
+                {loading ? (
+                  <CircularProgress
+                    size={24}
+                    sx={{
+                      color: theme.palette.primary.contrastText,
+                      position: 'absolute',
+                    }}
+                  />
+                ) : (
+                  'Sign In'
+                )}
+              </Button>
+            </form>
+
+            <Typography
+              variant="body2"
+              color="textSecondary"
+              align="center"
+              sx={{ mt: 2 }}
+            >
+              By signing in, you agree to our Terms of Service and Privacy Policy
+            </Typography>
+          </CardContent>
+        </Card>
+      </Fade>
     </Box>
   );
 }

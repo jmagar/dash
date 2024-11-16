@@ -48,6 +48,7 @@ export interface Logger {
   info(message: string, metadata?: LogMetadata): void;
   debug(message: string, metadata?: LogMetadata): void;
   withContext(context: LogContext): Logger;
+  critical(message: string, metadata?: LogMetadata & { notify?: boolean }): void;
 }
 
 /**

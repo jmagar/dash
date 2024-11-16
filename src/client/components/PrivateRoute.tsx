@@ -1,30 +1,31 @@
-import { CircularProgress, Box } from '@mui/material';
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-
-import { useAuth } from '../context/AuthContext';
+import { Box, CircularProgress, Fade } from '@mui/material';
+import { useAuth } from '../hooks/useAuth';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'user';
+  requireAdmin?: boolean;
 }
 
-export function PrivateRoute({ children, requiredRole }: PrivateRouteProps): JSX.Element {
+export function PrivateRoute({ children, requireAdmin = false }: PrivateRouteProps): JSX.Element {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <Fade in timeout={800}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '100vh',
+          }}
+        >
+          <CircularProgress size={40} thickness={4} />
+        </Box>
+      </Fade>
     );
   }
 
@@ -32,8 +33,8 @@ export function PrivateRoute({ children, requiredRole }: PrivateRouteProps): JSX
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
-    return <Navigate to="/" replace />;
+  if (requireAdmin && !user.isAdmin) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <>{children}</>;

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shh-agent
+    restart: unless-stopped
+    volumes:
+      - ./config:/etc/shh-agent
+      - ./data:/var/lib/shh-agent
+      - ./logs:/var/log/shh-agent
+    environment:
+      - TZ=UTC
+    cap_add:
+      - NET_ADMIN  # Required for network monitoring
+      - NET_RAW    # Required for packet capture
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - shh-network
+
+networks:
+  shh-network:
+    name: shh-network
+    external: true

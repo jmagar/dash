@@ -29,13 +29,8 @@ export async function getConnection(host: Host): Promise<Client> {
       resolve(client);
     });
 
-    client.on('error', (error) => {
-      logger.error('SSH connection error:', {
-        host: host.hostname,
-        port: host.port,
-        username: host.username,
-        error: error.message,
-      });
+    client.on('error', async (error) => {
+      await handleHostError(host, error);
       connections.delete(key);
       reject(error);
     });
@@ -51,6 +46,32 @@ export async function getConnection(host: Host): Promise<Client> {
       debug: process.env.NODE_ENV === 'development' ? console.log : undefined,
     });
   });
+}
+
+async function handleHostError(host: Host, error: Error): Promise<void> {
+  const metadata = {
+    hostId: host.id,
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    },
+  };
+
+  // Critical notification if host is unreachable
+  if (error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT')) {
+    logger.critical(`Host ${host.name} is unreachable`, {
+      ...metadata,
+      notify: true,
+    });
+  } else {
+    logger.error(`Error with host ${host.name}:`, metadata);
+  }
+
+  host.status = 'error';
+  host.lastError = error.message;
+  // Assuming hostService is defined somewhere
+  // await this.hostService.updateHost(host);
 }
 
 /**

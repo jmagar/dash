@@ -1,215 +1,355 @@
-# SSH Remote Management Dashboard
+# 🚀 SSH Host Hub (shh)
 
-A comprehensive web-based SSH management system that provides secure remote server access with features for terminal sessions, file management, Docker containers, and system package management.
+A modern, secure SSH host management system with real-time monitoring and AI-powered assistance.
 
-## Core Architecture
+## ✨ Features
 
-### Backend Infrastructure
-- **Server**: Node.js/Express with TypeScript
-- **Database**: PostgreSQL for persistent storage
-  - User management with roles and MFA support
-  - Host configurations and SSH key management
-  - Command history tracking
-- **Caching**: Redis for session management and real-time data
-- **WebSocket**: Real-time terminal sessions and updates
-- **SSH Management**: Connection pooling with automatic reconnection
-- **Security**: JWT authentication with role-based access control
+### 🔐 SSH Connection Management
+- Secure connection pooling with automatic recovery
+- Key-based and password authentication
+- Session persistence and automatic reconnection
+- Real-time connection health monitoring
+- Connection pooling with configurable limits
 
-### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **UI Components**: Material-UI v5
-- **State Management**: Context-based with dedicated providers
-  - HostContext: Manages SSH host connections
-  - UserContext: Handles authentication state
-  - ThemeContext: Controls UI theme preferences
-- **Custom Hooks**:
-  - useAsync: Manages async operations with loading/error states
-  - Various utility hooks for UI interactions
+### 🖥️ Terminal Emulation
+- Full terminal emulation via xterm.js
+- Real-time command execution and output
+- Command history with search
+- Split terminal support
+- Custom terminal themes
+- Session recording and playback
 
-## Key Features
+### 📂 File Management
+- SFTP file operations (upload/download)
+- Directory browsing with permissions
+- File search capabilities
+- Drag-and-drop support
+- Progress tracking for transfers
+- Bulk operations support
 
-### SSH Connection Management
-- **Connection Pooling**:
-  - Persistent SSH connections with automatic recovery
-  - Connection health monitoring
-  - Configurable keepalive settings
-- **Authentication**:
-  - Password and key-based authentication
-  - MFA support
-  - Role-based access control
+### 🐳 Docker Integration
+- Container management (start/stop/restart)
+- Container logs with real-time streaming
+- Resource usage monitoring
+- Docker Compose support
+- Image management
+- Network configuration
 
-### Terminal Emulation
-- **Interactive Terminal**:
-  - Full terminal emulation via xterm.js
-  - Real-time command execution
-  - Command history with Redis caching
-  - Session persistence
-- **WebSocket Integration**:
-  - Real-time data streaming
-  - Automatic reconnection
-  - Terminal resize support
+### 📦 Package Management
+- System package installation/removal
+- Version management
+- Package search functionality
+- Multi-platform support (apt, yum, etc.)
+- Update notifications
+- Dependency resolution
 
-### File Management (SFTP)
-- **Operations**:
-  - Directory listing with permissions
-  - File upload/download
-  - File/directory deletion
-- **Security**:
-  - Path traversal prevention
-  - Permission validation
-  - Secure file transfers
+### 🤖 AI Assistant
+- Command suggestions based on context
+- Error explanation and resolution
+- Security best practices
+- Performance optimization tips
+- Custom command generation
+- Learning from user interactions
 
-### Docker Integration
-- **Container Management**:
-  - List/start/stop/remove containers
-  - Container logs and stats
-  - Real-time status updates
-- **Stack Management**:
-  - Docker Compose support
-  - Stack deployment
-  - Configuration management
+### 📊 Monitoring
+- Real-time resource metrics
+- Custom alert thresholds
+- Historical data tracking
+- Performance analytics
+- Health check monitoring
+- Metric visualization
 
-### Package Management
-- **System Packages**:
-  - Package installation/removal
-  - Version updates
-  - Package search
-- **Multi-Platform**:
-  - APT/YUM support
-  - Package manager detection
+### 🔔 Notifications
+- Gotify integration for critical alerts
+- Customizable notification rules
+- Multi-channel support
+- Alert aggregation
+- Priority-based routing
+- Notification history
 
-### Security Features
-- **Authentication**:
-  - JWT-based session management
-  - MFA support
-  - Role-based access control
-- **Data Protection**:
-  - Password hashing with bcrypt
-  - SSH key encryption
-  - HTTPS enforcement
-- **Access Control**:
-  - Rate limiting
-  - IP filtering
-  - Session management
+### 🔒 Security
+- Role-based access control (RBAC)
+- Two-factor authentication (2FA)
+- Session management
+- Audit logging
+- IP-based access control
+- Security policy enforcement
 
-## Technical Implementation
+## 🛠️ Tech Stack
 
-### Database Schema
-\`\`\`sql
--- Core tables
-users (id, username, email, password_hash, role, mfa_enabled)
-hosts (id, name, hostname, port, username, ssh_key_id)
-ssh_keys (id, name, private_key, public_key, user_id)
-command_history (id, user_id, host_id, command, output, exit_code)
-\`\`\`
+- 🖥️ **Frontend**: React 18, Material-UI
+- 🔧 **Backend**: Node.js 20, Express
+- 📝 **Language**: TypeScript 4.9
+- 🗄️ **Database**: PostgreSQL 16
+- 💾 **Cache**: Redis
+- 🐳 **Containerization**: Docker
+- 📡 **Real-time**: Socket.IO
+- 🧠 **AI**: OpenAI GPT-4/OpenRouter
 
-### API Structure
-\`\`\`typescript
-// Core endpoints
-/api/auth     # Authentication & user management
-/api/hosts    # SSH host management
-/api/files    # SFTP operations
-/api/docker   # Container management
-/api/packages # System package management
-/api/execute  # Remote command execution
-\`\`\`
+## 🌍 Environment Variables
 
-### Connection Management
-\`\`\`typescript
-// SSH connection pool
-const connectionPool = new Map<string, Client>();
-
-// Connection configuration
-const CONNECTION_TIMEOUT = 5000;
-const KEEP_ALIVE_INTERVAL = 10000;
-const KEEP_ALIVE_COUNT_MAX = 3;
-\`\`\`
-
-## Setup & Development
-
-### Prerequisites
-- Node.js >= 16.0.0
-- PostgreSQL
-- Redis
-- Docker (optional)
-
-### Local Development
-
-1. Clone and install dependencies:
-\`\`\`bash
-git clone https://github.com/yourusername/shh.git
-cd shh
-npm install
-\`\`\`
-
-2. Configure environment:
-\`\`\`bash
-cp .env.example .env
-# Edit .env with your settings
-\`\`\`
-
-3. Initialize database:
-\`\`\`bash
-npm run migrate
-\`\`\`
-
-4. Start development servers:
-\`\`\`bash
-# All services
-npm run dev
-
-# Or individually
-npm run dev:client  # Frontend only
-npm run dev:server  # Backend only
-\`\`\`
-
-### Docker Deployment
-\`\`\`bash
-docker compose up
-\`\`\`
-
-## Configuration
-
-### Environment Variables
-\`\`\`bash
-# Application
-PORT=4000
-NODE_ENV=development
+### 🔑 Required Variables
+```env
+# Server
+NODE_ENV=development                 # Application environment (development/production/test)
+PORT=3000                           # Server port
+HOST=localhost                      # Server host
+MAX_REQUEST_SIZE=10485760          # Maximum request size (10MB)
 
 # Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=shh
+DB_HOST=localhost                   # PostgreSQL host
+DB_PORT=5432                       # PostgreSQL port
+DB_USER=postgres                   # Database user
+DB_PASSWORD=postgres               # Database password
+DB_NAME=shh                        # Database name
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+# JWT
+JWT_SECRET=your-secret-key         # JWT signing secret
+JWT_EXPIRY=1h                      # JWT expiration time
+JWT_REFRESH_EXPIRY=7d             # JWT refresh token expiration
+```
 
-# Security
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION=30m
-\`\`\`
+### 🔄 Optional Variables
+```env
+# Redis Configuration
+REDIS_HOST=localhost               # Redis host
+REDIS_PORT=6379                   # Redis port
+REDIS_PASSWORD=                   # Redis password (optional)
 
-## Project Structure
-\`\`\`
-src/
-├── client/
-│   ├── api/          # API clients
-│   ├── components/   # React components
-│   ├── context/      # State management
-│   ├── hooks/        # Custom hooks
-│   └── utils/        # Frontend utilities
-├── server/
-│   ├── api/          # API implementations
-│   ├── middleware/   # Express middleware
-│   ├── routes/       # API routes
-│   └── utils/        # Backend utilities
-└── types/            # Shared TypeScript types
-\`\`\`
+# CORS Settings
+CORS_ORIGIN=http://localhost:3000 # Allowed CORS origin
+CORS_METHODS=GET,POST,PUT,DELETE  # Allowed HTTP methods
+CORS_CREDENTIALS=true             # Allow credentials
 
-## Contributing
+# Rate Limiting
+RATE_LIMIT_WINDOW=900000         # Rate limit window (15 minutes)
+RATE_LIMIT_MAX=100              # Maximum requests per window
+
+# File Upload
+MAX_FILE_SIZE=52428800         # Maximum file upload size (50MB)
+
+# Logging
+LOG_LEVEL=info                # Log level (debug/info/warn/error)
+LOG_FILE=logs/app.log        # Log file path
+
+# Monitoring
+PROMETHEUS_PORT=9090         # Prometheus metrics port
+
+# AI Integration (Optional)
+OPENAI_API_KEY=             # OpenAI API key
+OPENAI_MODEL=gpt-4         # OpenAI model to use
+OPENAI_ORG=                # OpenAI organization ID
+OPENAI_MAX_TOKENS=2000    # Maximum tokens per request
+OPENAI_TEMPERATURE=0.7    # Model temperature
+
+# OpenRouter Integration (Optional)
+OPENROUTER_API_KEY=       # OpenRouter API key
+OPENROUTER_MODEL=anthropic/claude-2  # OpenRouter model
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+OPENROUTER_MAX_TOKENS=2000
+OPENROUTER_TEMPERATURE=0.7
+
+# Notifications (Optional)
+GOTIFY_URL=               # Gotify server URL
+GOTIFY_TOKEN=            # Gotify application token
+```
+
+### 🐳 Docker Specific Variables
+```env
+# These are automatically set in docker-compose.yml
+POSTGRES_USER=postgres   # PostgreSQL user for Docker
+POSTGRES_PASSWORD=postgres  # PostgreSQL password for Docker
+POSTGRES_DB=shh           # PostgreSQL database for Docker
+```
+
+### 🔐 Security Recommendations
+- Always use strong, unique values for secrets
+- Keep production environment variables secure
+- Rotate secrets regularly
+- Use different values for development and production
+- Never commit environment files to version control
+
+## 🚀 Installation
+
+### Prerequisites
+
+- 🐳 Docker and Docker Compose
+- 📦 Node.js 20.x (for development)
+- 🐘 PostgreSQL 16 (handled by Docker)
+- ⚡ Redis (handled by Docker)
+
+### 🛠️ Available Scripts
+
+#### `deploy.sh` - Production Deployment
+```bash
+./scripts/deploy.sh [--no-cache] [--force-recreate]
+```
+Handles complete production deployment:
+- ✅ Verifies Docker installation
+- 📁 Creates required directories (logs, data)
+- 🔑 Sets correct permissions
+- 🏗️ Builds Docker images
+- 🚀 Starts all services
+- 🏥 Monitors service health
+- 📝 Displays service status and logs
+
+Options:
+- `--no-cache`: Force rebuild without using cache
+- `--force-recreate`: Recreate containers even if config unchanged
+
+#### `dev.sh` - Development Environment
+```bash
+./scripts/dev.sh [--frontend-only | --backend-only] [--watch]
+```
+Sets up development environment:
+- 🔧 Starts required services (PostgreSQL, Redis)
+- 🏥 Verifies service health
+- 🚀 Launches development servers
+- 📝 Enables hot-reloading
+
+Options:
+- `--frontend-only`: Start only frontend development server
+- `--backend-only`: Start only backend development server
+- `--watch`: Enable watch mode for automatic rebuilds
+
+#### `cleanup.sh` - Environment Cleanup
+```bash
+./scripts/cleanup.sh [--volumes] [--images]
+```
+Cleans up Docker resources:
+- 🧹 Stops all containers
+- 🗑️ Removes containers
+- 💽 Optionally removes volumes
+- 🖼️ Optionally removes images
+
+Options:
+- `--volumes`: Also remove Docker volumes
+- `--images`: Also remove Docker images
+
+#### `migrate.ts` - Database Management
+```bash
+npm run migrate [up|down|create] [migration-name]
+```
+Handles database migrations:
+- ⬆️ `up`: Apply pending migrations
+- ⬇️ `down`: Revert last migration
+- ✨ `create`: Create new migration
+
+Example:
+```bash
+# Apply migrations
+npm run migrate up
+
+# Create new migration
+npm run migrate create add-user-table
+```
+
+#### `update-imports.sh` - Import Management
+```bash
+./scripts/update-imports.sh [directory]
+```
+Updates TypeScript imports:
+- 🔄 Fixes import paths
+- 🔍 Updates import statements
+- ✅ Verifies import validity
+
+### 🐳 Quick Start (Production)
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/shh.git
+   cd shh
+   ```
+
+2. Deploy with production script:
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+3. Access at http://localhost:3000 🎉
+
+### 👩‍💻 Development Setup
+
+1. Clone and prepare:
+   ```bash
+   git clone https://github.com/yourusername/shh.git
+   cd shh
+   ```
+
+2. Start development environment:
+   ```bash
+   ./scripts/dev.sh
+   ```
+
+3. Access development server at http://localhost:3000
+
+### 🧪 Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run specific tests
+npm test -- --grep "pattern"
+
+# Watch mode
+npm test -- --watch
+```
+
+### 🔄 Common Workflows
+
+#### Fresh Development Setup
+```bash
+git clone https://github.com/yourusername/shh.git
+cd shh
+./scripts/cleanup.sh --volumes  # Clean existing setup
+./scripts/dev.sh               # Start development
+```
+
+#### Update and Rebuild
+```bash
+git pull                       # Get latest changes
+./scripts/cleanup.sh          # Clean containers
+./scripts/deploy.sh --no-cache # Rebuild and deploy
+```
+
+#### Database Reset
+```bash
+./scripts/cleanup.sh --volumes # Remove volumes
+./scripts/dev.sh              # Start fresh
+npm run migrate up            # Apply migrations
+```
+
+## 🔔 Notifications
+
+The system uses Gotify for critical notifications:
+
+- ⚠️ Server errors (500-level)
+- 🔌 Host connection issues
+- 💽 Disk space alerts (>90% usage)
+- 🧠 Memory alerts (>95% usage)
+- 🌡️ CPU load alerts
+- 🏗️ System overload warnings
+
+## 🔒 Security Features
+
+- 🔑 JWT authentication
+- 🔐 SSH key management
+- 🛡️ Rate limiting
+- 🧬 Input validation
+- 🔍 Activity logging
+- 🚫 CORS protection
+- 🛠️ Security headers (Helmet)
+
+## 📦 Docker Support
+
+The application uses multi-stage Docker builds:
+
+- 🏗️ Development: Hot-reloading, debugging
+- 🚀 Production: Optimized, minimal image
+- 🧪 Test: Isolated testing environment
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create your feature branch
@@ -217,6 +357,12 @@ src/
 4. Push to the branch
 5. Create a Pull Request
 
-## License
+## 📄 License
 
-MIT License - see LICENSE for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- OpenAI for GPT integration
+- Material-UI for components
+- The Node.js community

@@ -69,6 +69,10 @@ services:
       - LOG_LEVEL=info
       - LOG_FILE=/var/log/shh/app.log
 
+      # Gotify (optional)
+      - GOTIFY_URL=${GOTIFY_URL:-}
+      - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
+
       # Prometheus
       - PROMETHEUS_PORT=9090
     volumes:
@@ -79,30 +83,68 @@ services:
       - ./tsconfig.server.json:/app/tsconfig.server.json
       - ./craco.config.js:/app/craco.config.js
       - node_modules:/app/node_modules
-      - logs:/var/log/shh
+      - /mnt/user/appdata/shh/logs:/var/log/shh
     depends_on:
       - postgres
       - redis
 
-  postgres:
+  server:
     build:
       context: .
-      target: postgres
+      dockerfile: Dockerfile
+    container_name: shh-server
     ports:
-      - "5432:5432"
+      - "3000:3000"
+      - "1514:1514"
+    volumes:
+      - /mnt/user/appdata/shh/logs:/var/log/shh
+      - /mnt/user/appdata/shh/data:/var/lib/shh
+      - /mnt/user/appdata/shh/config:/etc/shh
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_DIR=/var/log/shh/server
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: shh-agent
+    privileged: true
+    network_mode: host
+    volumes:
+      - /mnt/user/appdata/shh/logs:/var/log/shh
+      - /mnt/user/appdata/shh/data:/var/lib/shh
+      - /mnt/user/appdata/shh/config:/etc/shh
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+    environment:
+      - SYSLOG_SERVER=localhost:1514
+      - SYSLOG_PROTOCOL=tcp
+      - SYSLOG_FACILITY=local0
+      - LOG_DIR=/var/log/shh/agent
+    restart: unless-stopped
+    depends_on:
+      - server
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: shh-postgres
+    environment:
+      - POSTGRES_USER=shh
+      - POSTGRES_PASSWORD=shh
       - POSTGRES_DB=shh
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /mnt/user/appdata/shh/data/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
 
   redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
+    image: redis:7-alpine
+    container_name: shh-redis
     volumes:
-      - redis_data:/data
+      - /mnt/user/appdata/shh/data/redis:/data
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus

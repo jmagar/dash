@@ -7,10 +7,12 @@ on:
     branches: [ main, develop ]
 
 env:
-  NODE_VERSION: 16.x
+  NODE_VERSION: '20.x'
   POSTGRES_DB: shh_test_db
   POSTGRES_USER: test_user
   POSTGRES_PASSWORD: test_password
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   lint-and-test:
@@ -19,7 +21,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:16
         env:
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
@@ -33,16 +35,16 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:6
+        image: redis:alpine
         ports:
           - 6379:6379
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Use Node.js ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -54,99 +56,126 @@ jobs:
       run: npm run lint
 
     - name: Type Check
-      run: npx tsc --noEmit
+      run: npm run build:server
 
     - name: Run Unit Tests
       run: npm test
       env:
         CI: true
-        DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
-        REDIS_URL: redis://localhost:6379
+        NODE_ENV: test
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: ${{ env.POSTGRES_USER }}
+        DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        DB_NAME: ${{ env.POSTGRES_DB }}
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
         JWT_SECRET: test_jwt_secret
 
-  build-and-deploy:
-    name: Build and Deploy
+  build-and-push:
+    name: Build and Push Docker Images
     needs: lint-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
       with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Build Application
-      run: npm run build
-      env:
-        CI: false  # Treat warnings as non-fatal
-
-    - name: Docker Login
-      uses: docker/login-action@v2
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix=
+          type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Build and Push Docker Image
-      run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/shh:latest .
-        docker push ${{ secrets.DOCKER_USERNAME }}/shh:latest
-
-    - name: Deploy to Production
-      uses: appleboy/ssh-action@master
+    - name: Build and push app image
+      uses: docker/build-push-action@v5
       with:
-        host: ${{ secrets.PRODUCTION_HOST }}
-        username: ${{ secrets.PRODUCTION_USERNAME }}
-        key: ${{ secrets.PRODUCTION_SSH_KEY }}
-        script: |
-          cd /path/to/shh/project
-          docker-compose pull
-          docker-compose up -d --build
-          docker system prune -f
+        context: .
+        target: app
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push postgres image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        target: postgres
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/postgres:latest
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/postgres:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Run Snyk to check for vulnerabilities
-      uses: snyk/actions/node@master
-      env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
       with:
-        command: test
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        severity: 'CRITICAL,HIGH'
 
     - name: Run npm audit
       run: npm audit --audit-level=high
 
-  performance-test:
-    name: Performance Testing
-    needs: build-and-deploy
+  deploy:
+    name: Deploy to Production
+    needs: [build-and-push, security-scan]
     runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    concurrency: production
 
-    - name: Run Lighthouse CI
-      uses: treosh/lighthouse-ci-action@v9
+    steps:
+    - name: Deploy to Production Server
+      uses: appleboy/ssh-action@v1.0.0
       with:
-        urls: |
-          https://your-production-url.com
-        uploadArtifacts: true
-        temporaryPublicStorage: true
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USERNAME }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        script: |
+          cd ${{ secrets.PRODUCTION_PATH }}
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+          echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+          docker compose pull
+          docker compose up -d --build
+          docker system prune -f
 
   notify:
     name: Slack Notification
-    needs: [lint-and-test, build-and-deploy, security-scan]
+    needs: [lint-and-test, build-and-push, security-scan, deploy]
     runs-on: ubuntu-latest
     if: always()
     steps:

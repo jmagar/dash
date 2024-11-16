@@ -19,7 +19,15 @@ export function errorHandler(error: Error, req: Request, res: Response, _next: N
     userId: req.user?.id,
   };
 
-  logger.error('Server error:', metadata);
+  // Log critical errors (500s) with notification
+  if (statusCode >= 500) {
+    logger.critical('Server error encountered', {
+      ...metadata,
+      notify: true,
+    });
+  } else {
+    logger.error('Request error:', metadata);
+  }
 
   res.status(statusCode).json({
     success: false,

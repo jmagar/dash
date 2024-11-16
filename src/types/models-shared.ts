@@ -1,13 +1,19 @@
 export interface Host {
   id: string;
+  user_id: string;
   name: string;
   hostname: string;
   port: number;
   username: string;
   password?: string;
   status: string;
-  createdAt: Date;
-  updatedAt: Date;
+  agent_status: string;
+  agent_version?: string;
+  agent_last_seen?: Date;
+  environment?: string;
+  metadata?: Record<string, any>;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface CreateHostRequest {
@@ -16,29 +22,98 @@ export interface CreateHostRequest {
   port: number;
   username: string;
   password?: string;
+  environment?: string;
+  install_agent?: boolean;
 }
 
 export type UpdateHostRequest = Partial<CreateHostRequest>;
 
-export interface Container {
+export interface Command {
+  id: string;
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  exitCode?: number;
+  stdout: string;
+  stderr: string;
+  startedAt: Date;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CommandRequest {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface CommandResult {
+  command: Command;
+  status: 'running' | 'completed' | 'failed';
+  exitCode?: number;
+  stdout: string;
+  stderr: string;
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+export interface AgentMetrics {
+  cpu_usage: number;
+  memory_usage: number;
+  disk_usage: number;
+  load_average: number[];
+  process_count: number;
+  active_jobs: number;
+  error_count: number;
+  uptime_seconds: number;
+  timestamp: Date;
+}
+
+export interface FileItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  modified: Date;
+}
+
+export interface Package {
+  name: string;
+  version: string;
+  description?: string;
+  installed: boolean;
+  updateAvailable?: boolean;
+}
+
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Base container interface with common properties
+interface BaseContainer {
   id: string;
   name: string;
   image: string;
   status: string;
   state: string;
   createdAt: Date;
-  ports: string[];
   labels: Record<string, string>;
 }
 
-export interface DockerContainer {
-  id: string;
-  name: string;
-  image: string;
-  status: string;
-  state: string;
-  createdAt: Date;
-  labels: Record<string, string>;
+// Simple container interface for basic usage
+export interface Container extends BaseContainer {
+  ports: string[];
+}
+
+// Extended container interface for Docker-specific features
+export interface DockerContainer extends BaseContainer {
   compose?: {
     project: string;
     service: string;
@@ -93,70 +168,6 @@ export interface Stack {
   updatedAt: Date;
 }
 
-export interface FileItem {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  size: number;
-  modified: Date;
-}
-
-export interface Package {
-  name: string;
-  version: string;
-  description?: string;
-  installed: boolean;
-  updateAvailable?: boolean;
-}
-
-export interface CommandRequest {
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-}
-
-export interface Command extends CommandRequest {
-  id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  exitCode?: number;
-  stdout: string;
-  stderr: string;
-  startedAt: Date;
-  completedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface CommandResult {
-  command: Command;
-  status: 'running' | 'completed' | 'failed';
-  exitCode?: number;
-  stdout: string;
-  stderr: string;
-  startedAt: Date;
-  completedAt?: Date;
-}
-
-export interface UserRegistration {
-  username: string;
-  email: string;
-  password: string;
-  confirmPassword?: string;
-}
-
-export interface SSHConfig {
-  host: string;
-  port: number;
-  username?: string;
-  password?: string;
-  privateKey?: string;
-  passphrase?: string;
-  readyTimeout?: number;
-  keepaliveInterval?: number;
-  keepaliveCountMax?: number;
-}
-
 export interface SystemStats {
   cpu: {
     usage: number;
@@ -191,10 +202,4 @@ export interface ContainerStats {
     read_bytes: number;
     write_bytes: number;
   };
-}
-
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
 }

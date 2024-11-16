@@ -1,9 +1,39 @@
 import React, { useState } from 'react';
-
-import type { CommandRequest, CommandResult } from '../../types/models-shared';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  TextField,
+  Typography,
+  Alert,
+  CircularProgress,
+  Divider,
+  IconButton,
+  InputAdornment,
+  Paper,
+  Tooltip,
+  Collapse,
+  LinearProgress,
+  Fade,
+  Breadcrumbs,
+  Link,
+  Chip,
+} from '@mui/material';
+import {
+  Send,
+  Folder,
+  Clear,
+  History,
+  Code,
+  Terminal,
+  ContentCopy,
+  NavigateNext,
+} from '@mui/icons-material';
+import { useHost } from '../hooks/useHost';
 import { executeCommand } from '../api/remoteExecution.client';
-import { useHost } from '../context/HostContext';
 import { logger } from '../utils/logger';
+import type { CommandRequest, CommandResult } from '../../types/models-shared';
 
 export function RemoteExecution() {
   const { selectedHost } = useHost();
@@ -12,6 +42,7 @@ export function RemoteExecution() {
   const [result, setResult] = useState<CommandResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,66 +75,229 @@ export function RemoteExecution() {
     }
   };
 
+  const handleClear = () => {
+    setCommand('');
+    setWorkingDir('');
+    setResult(null);
+    setError(null);
+  };
+
+  const handleCopyOutput = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
   if (!selectedHost) {
-    return <div>Please select a host first</div>;
+    return (
+      <Box p={3}>
+        <Typography>Please select a host first</Typography>
+      </Box>
+    );
   }
 
   return (
-    <div className="remote-execution">
-      <form onSubmit={handleSubmit}>
-        <h2>Remote Command Execution</h2>
-        {error && <div className="error">{error}</div>}
-        <div>
-          <label htmlFor="command">Command</label>
-          <input
-            type="text"
-            id="command"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            disabled={loading}
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="workingDir">Working Directory</label>
-          <input
-            type="text"
-            id="workingDir"
-            value={workingDir}
-            onChange={(e) => setWorkingDir(e.target.value)}
-            disabled={loading}
-          />
-        </div>
-        <button type="submit" disabled={loading}>
-          {loading ? 'Executing...' : 'Execute'}
-        </button>
-      </form>
+    <Box p={3}>
+      <Breadcrumbs
+        separator={<NavigateNext fontSize="small" />}
+        sx={{ mb: 3 }}
+      >
+        <Link color="inherit" href="#" onClick={() => {}}>
+          Hosts
+        </Link>
+        <Link color="inherit" href="#" onClick={() => {}}>
+          {selectedHost.name}
+        </Link>
+        <Typography color="text.primary">Execute Command</Typography>
+      </Breadcrumbs>
 
-      {result && (
-        <div className="result">
-          <h3>Result</h3>
-          <div className="status">
-            Status: {result.status}
-          </div>
-          {result.stdout && (
-            <div className="stdout">
-              <h4>Output</h4>
-              <pre>{result.stdout}</pre>
-            </div>
+      <Card>
+        <CardContent>
+          <Box display="flex" alignItems="center" mb={2}>
+            <Typography variant="h5" sx={{ flexGrow: 1 }}>
+              Remote Command Execution
+            </Typography>
+            <Tooltip title="Command History">
+              <IconButton
+                onClick={() => setShowHistory(!showHistory)}
+                color={showHistory ? 'primary' : 'default'}
+              >
+                <History />
+              </IconButton>
+            </Tooltip>
+          </Box>
+
+          <Box display="flex" alignItems="center" mb={2}>
+            <Terminal color="action" sx={{ mr: 1 }} />
+            <Typography color="textSecondary">
+              Execute commands via agent on {selectedHost.name}
+            </Typography>
+          </Box>
+
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+          <form onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Command"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              disabled={loading}
+              required
+              margin="normal"
+              placeholder="Enter command to execute"
+              variant="outlined"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Code />
+                  </InputAdornment>
+                ),
+                endAdornment: command && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => setCommand('')}
+                      edge="end"
+                    >
+                      <Clear />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <TextField
+              fullWidth
+              label="Working Directory"
+              value={workingDir}
+              onChange={(e) => setWorkingDir(e.target.value)}
+              disabled={loading}
+              margin="normal"
+              placeholder="Optional: Specify working directory"
+              variant="outlined"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Folder />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <Box display="flex" gap={1} mt={2}>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={loading || !command}
+                startIcon={loading ? <CircularProgress size={20} /> : <Send />}
+              >
+                {loading ? 'Executing...' : 'Execute'}
+              </Button>
+
+              <Button
+                variant="outlined"
+                onClick={handleClear}
+                disabled={loading || (!command && !workingDir && !result)}
+              >
+                Clear
+              </Button>
+            </Box>
+          </form>
+
+          {loading && (
+            <Box sx={{ mt: 2 }}>
+              <LinearProgress />
+            </Box>
           )}
-          {result.stderr && (
-            <div className="stderr">
-              <h4>Error Output</h4>
-              <pre>{result.stderr}</pre>
-            </div>
-          )}
-          {result.completedAt && result.startedAt && (
-            <div className="duration">
-              Duration: {Math.round((result.completedAt.getTime() - result.startedAt.getTime()) / 1000)}s
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+
+          <Collapse in={showHistory}>
+            <Box mt={3}>
+              <Typography variant="h6" gutterBottom>
+                Command History
+              </Typography>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography color="textSecondary">
+                  Command history will be displayed here
+                </Typography>
+              </Paper>
+            </Box>
+          </Collapse>
+
+          <Fade in={Boolean(result)}>
+            <Box mt={4}>
+              {result && (
+                <>
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                      Result
+                    </Typography>
+                    <Chip
+                      label={result.status}
+                      color={result.status === 'completed' ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+
+                  {result.stdout && (
+                    <Box mt={2}>
+                      <Box display="flex" alignItems="center" mb={1}>
+                        <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                          Output
+                        </Typography>
+                        <Tooltip title="Copy Output">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCopyOutput(result.stdout)}
+                          >
+                            <ContentCopy fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                      <Paper variant="outlined">
+                        <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                          <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                            {result.stdout}
+                          </pre>
+                        </Box>
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {result.stderr && (
+                    <Box mt={2}>
+                      <Box display="flex" alignItems="center" mb={1}>
+                        <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                          Error Output
+                        </Typography>
+                        <Tooltip title="Copy Error Output">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCopyOutput(result.stderr)}
+                          >
+                            <ContentCopy fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                      <Paper variant="outlined">
+                        <Box sx={{ p: 2, backgroundColor: 'error.light' }}>
+                          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'error.contrastText' }}>
+                            {result.stderr}
+                          </pre>
+                        </Box>
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {result.completedAt && result.startedAt && (
+                    <Typography color="textSecondary" sx={{ mt: 2 }}>
+                      Duration: {Math.round((result.completedAt.getTime() - result.startedAt.getTime()) / 1000)}s
+                    </Typography>
+                  )}
+                </>
+              )}
+            </Box>
+          </Fade>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

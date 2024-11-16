@@ -1,0 +1,28 @@
+{
+  "server": {
+    "url": "wss://localhost:4000/agent",
+    "heartbeat_interval": "30s",
+    "reconnect_delay": "5s"
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "file": "/var/log/shh-agent/agent.log",
+    "max_size": 10,
+    "max_files": 5,
+    "compress": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "interval": "1m",
+    "retention": "7d"
+  },
+  "security": {
+    "tls_verify": true,
+    "min_tls_version": "1.2"
+  },
+  "process": {
+    "max_jobs": 10,
+    "job_timeout": "1h"
+  }
+}

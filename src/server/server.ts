@@ -21,11 +21,8 @@ import { securityHeaders } from './middleware/security';
 const app = express();
 const server = http.createServer(app);
 
-// Export server for use in bootstrap.ts
-export { server };
-
 // Configure Socket.IO
-const io = new Server(server, {
+export const io = new Server(server, {
   cors: {
     origin: config.cors.origin,
     methods: config.cors.methods,
@@ -101,3 +98,6 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+
+// Export server for use in bootstrap.ts
+export { server };
