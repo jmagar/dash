@@ -1,94 +1,57 @@
-import { useEffect, useState, useCallback } from 'react';
-
-import type { Container } from '../../types';
-import { listContainers } from '../api';
+import { useState, useEffect, useCallback } from 'react';
+import type { Container } from '../../types/models-shared';
+import { listContainers } from '../api/docker.client';
 import { logger } from '../utils/frontendLogger';
 
 export interface UseDockerUpdatesOptions {
   interval?: number;
-  enabled?: boolean;
-  maxRetries?: number;
-  retryDelay?: number;
+  hostId: string;
 }
 
-export function useDockerUpdates(options: UseDockerUpdatesOptions = {}): {
+export interface UseDockerUpdatesResult {
   containers: Container[];
   loading: boolean;
   error: string | null;
-} {
-  const {
-    interval = 5000,
-    enabled = true,
-    maxRetries = 3,
-    retryDelay = 1000,
-  } = options;
+  refresh: () => Promise<void>;
+}
 
+export function useDockerUpdates({ interval = 5000, hostId }: UseDockerUpdatesOptions): UseDockerUpdatesResult {
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
 
-  const fetchContainers = useCallback(async (): Promise<void> => {
+  const fetchContainers = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      logger.info('Fetching container list');
-
-      const result = await listContainers();
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Failed to fetch containers');
-      }
-
-      const prevCount = containers.length;
-      setContainers(result.data);
-      logger.info('Containers updated', {
-        count: result.data.length,
-        changed: prevCount !== result.data.length,
+      const data = await listContainers(hostId);
+      setContainers(data);
+    } catch (error) {
+      logger.error('Failed to fetch containers:', {
+        error: error instanceof Error ? error.message : String(error),
       });
-      setRetryCount(0); // Reset retry count on success
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-      logger.error('Error fetching containers:', {
-        error: errorMessage,
-        retryCount,
-        maxRetries,
-      });
-
-      if (retryCount < maxRetries) {
-        logger.info('Retrying container fetch', {
-          attempt: retryCount + 1,
-          maxRetries,
-        });
-        setRetryCount(prev => prev + 1);
-        setTimeout(() => void fetchContainers(), retryDelay);
-      } else {
-        setError(`Failed to fetch containers after ${maxRetries} attempts: ${errorMessage}`);
-        setRetryCount(0); // Reset for next interval
-      }
+      setError('Failed to fetch containers');
     } finally {
       setLoading(false);
     }
-  }, [containers.length, maxRetries, retryCount, retryDelay]);
+  }, [hostId]);
 
   useEffect(() => {
-    if (!enabled) {
-      logger.info('Docker updates disabled');
-      return;
-    }
-
-    logger.info('Starting Docker container updates', {
-      interval,
-      maxRetries,
-      retryDelay,
-    });
-
     void fetchContainers();
-    const timer = setInterval(() => void fetchContainers(), interval);
 
-    return () => {
-      logger.info('Cleaning up Docker container updates');
-      clearInterval(timer);
-    };
-  }, [enabled, fetchContainers, interval, maxRetries, retryDelay]);
+    if (interval > 0) {
+      const timer = setInterval(() => {
+        void fetchContainers();
+      }, interval);
 
-  return { containers, loading, error };
+      return () => clearInterval(timer);
+    }
+  }, [fetchContainers, interval]);
+
+  return {
+    containers,
+    loading,
+    error,
+    refresh: fetchContainers,
+  };
 }

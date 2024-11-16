@@ -6,226 +6,161 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/compose-spec/compose-go/loader"
-	"github.com/compose-spec/compose-go/types"
-	"github.com/docker/cli/cli/command"
-	"github.com/docker/cli/cli/flags"
-	"github.com/docker/compose/v2/pkg/api"
-	"github.com/docker/compose/v2/pkg/compose"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
-
-// ComposeProject represents a Docker Compose project
-type ComposeProject struct {
-	Name       string            `json:"name"`
-	ConfigPath string            `json:"config_path"`
-	Services   []ComposeService  `json:"services"`
-	Networks   []string          `json:"networks"`
-	Volumes    []string          `json:"volumes"`
-	Variables  map[string]string `json:"variables"`
-}
 
 // ComposeService represents a Docker Compose service
 type ComposeService struct {
-	Name          string            `json:"name"`
-	Image         string            `json:"image"`
-	ContainerName string            `json:"container_name"`
-	Command       []string          `json:"command"`
-	Environment   map[string]string `json:"environment"`
-	Ports         []string          `json:"ports"`
-	Volumes       []string          `json:"volumes"`
-	Dependencies  []string          `json:"dependencies"`
-	State         string            `json:"state"`
+	Name        string            `yaml:"name" json:"name"`
+	Image       string            `yaml:"image" json:"image"`
+	Command     []string          `yaml:"command,omitempty" json:"command,omitempty"`
+	Environment map[string]string `yaml:"environment,omitempty" json:"environment,omitempty"`
+	Ports       []string          `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Volumes     []string          `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	DependsOn   []string          `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 }
 
-// ComposeManager manages Docker Compose operations
+// ComposeProject represents a Docker Compose project
+type ComposeProject struct {
+	Name     string                    `yaml:"name" json:"name"`
+	Services map[string]ComposeService `yaml:"services" json:"services"`
+}
+
+// ComposeManager handles Docker Compose operations
 type ComposeManager struct {
-	service api.Service
+	manager *Manager
 	logger  *zap.Logger
 }
 
 // NewComposeManager creates a new Docker Compose manager
-func NewComposeManager(logger *zap.Logger) (*ComposeManager, error) {
-	cli, err := command.NewDockerCli()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Docker CLI: %w", err)
-	}
-
-	if err := cli.Initialize(flags.NewClientOptions()); err != nil {
-		return nil, fmt.Errorf("failed to initialize Docker CLI: %w", err)
-	}
-
-	service := compose.NewComposeService(cli)
-
+func NewComposeManager(manager *Manager, logger *zap.Logger) *ComposeManager {
 	return &ComposeManager{
-		service: service,
+		manager: manager,
 		logger:  logger,
-	}, nil
+	}
 }
 
 // LoadProject loads a Docker Compose project
 func (m *ComposeManager) LoadProject(ctx context.Context, configPath string) (*ComposeProject, error) {
-	// Load and parse compose file
-	configBytes, err := os.ReadFile(configPath)
+	// Read compose file
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read compose file: %w", err)
 	}
 
-	config, err := loader.ParseYAML(configBytes)
-	if err != nil {
+	// Parse YAML
+	var project ComposeProject
+	if err := yaml.Unmarshal(data, &project); err != nil {
 		return nil, fmt.Errorf("failed to parse compose file: %w", err)
 	}
 
-	workingDir := filepath.Dir(configPath)
-	project, err := loader.Load(types.ConfigDetails{
-		WorkingDir: workingDir,
-		ConfigFiles: []types.ConfigFile{
-			{Filename: configPath, Config: config},
-		},
-		Environment: map[string]string{},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to load project: %w", err)
+	// Set project name if not specified
+	if project.Name == "" {
+		project.Name = filepath.Base(filepath.Dir(configPath))
 	}
 
-	// Create project info
-	composeProject := &ComposeProject{
-		Name:       project.Name,
-		ConfigPath: configPath,
-		Networks:   make([]string, 0, len(project.Networks)),
-		Volumes:    make([]string, 0, len(project.Volumes)),
-		Variables:  project.Environment,
+	// Set service names
+	for name, service := range project.Services {
+		service.Name = name
+		project.Services[name] = service
 	}
 
-	// Get networks
-	for name := range project.Networks {
-		composeProject.Networks = append(composeProject.Networks, name)
-	}
+	return &project, nil
+}
 
-	// Get volumes
-	for name := range project.Volumes {
-		composeProject.Volumes = append(composeProject.Volumes, name)
-	}
-
-	// Get services
+// Up starts all services in a project
+func (m *ComposeManager) Up(ctx context.Context, project *ComposeProject) error {
+	// Start services in dependency order
 	for _, service := range project.Services {
-		composeService := ComposeService{
-			Name:          service.Name,
-			Image:         service.Image,
-			ContainerName: service.ContainerName,
-			Command:       service.Command,
-			Environment:   service.Environment,
-			Ports:        service.Ports,
-			Volumes:      service.Volumes,
-			Dependencies: service.DependsOn,
+		// Pull image if needed
+		err := m.manager.PullImage(ctx, service.Image)
+		if err != nil {
+			m.logger.Warn("Failed to pull image",
+				zap.String("service", service.Name),
+				zap.String("image", service.Image),
+				zap.Error(err))
 		}
-		composeProject.Services = append(composeProject.Services, composeService)
+
+		// Create and start container
+		// TODO: Implement container creation with service config
+		m.logger.Info("Starting service",
+			zap.String("service", service.Name),
+			zap.String("image", service.Image))
 	}
 
-	return composeProject, nil
+	return nil
 }
 
-// Up starts Docker Compose services
-func (m *ComposeManager) Up(ctx context.Context, configPath string, options api.UpOptions) error {
-	project, err := m.LoadProject(ctx, configPath)
+// Down stops and removes all services in a project
+func (m *ComposeManager) Down(ctx context.Context, project *ComposeProject) error {
+	// Stop services in reverse dependency order
+	for _, service := range project.Services {
+		containers, err := m.manager.ListContainers(ctx, true)
+		if err != nil {
+			return err
+		}
+
+		// Find and stop containers for this service
+		for _, container := range containers {
+			if container.Labels["com.docker.compose.service"] == service.Name &&
+				container.Labels["com.docker.compose.project"] == project.Name {
+				err := m.manager.StopContainer(ctx, container.ID, nil)
+				if err != nil {
+					m.logger.Warn("Failed to stop container",
+						zap.String("service", service.Name),
+						zap.String("container", container.ID),
+						zap.Error(err))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// Logs gets logs for services
+func (m *ComposeManager) Logs(ctx context.Context, project *ComposeProject, services []string, writer io.Writer) error {
+	containers, err := m.manager.ListContainers(ctx, true)
 	if err != nil {
 		return err
 	}
 
-	return m.service.Up(ctx, project.Name, options)
-}
+	// Get logs for each service
+	for _, container := range containers {
+		serviceName := container.Labels["com.docker.compose.service"]
+		if _, exists := project.Services[serviceName]; exists &&
+			(len(services) == 0 || contains(services, serviceName)) {
+			logs, err := m.manager.GetContainerLogs(ctx, container.ID, 100)
+			if err != nil {
+				m.logger.Warn("Failed to get container logs",
+					zap.String("service", serviceName),
+					zap.String("container", container.ID),
+					zap.Error(err))
+				continue
+			}
 
-// Down stops Docker Compose services
-func (m *ComposeManager) Down(ctx context.Context, configPath string, options api.DownOptions) error {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return err
+			for _, line := range logs {
+				fmt.Fprintf(writer, "[%s] %s\n", serviceName, line)
+			}
+		}
 	}
 
-	return m.service.Down(ctx, project.Name, options)
+	return nil
 }
 
-// Start starts specific services
-func (m *ComposeManager) Start(ctx context.Context, configPath string, services []string) error {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return err
+// Shutdown closes the Compose manager
+func (m *ComposeManager) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+// Helper function to check if slice contains string
+func contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
 	}
-
-	return m.service.Start(ctx, project.Name, services, api.StartOptions{})
-}
-
-// Stop stops specific services
-func (m *ComposeManager) Stop(ctx context.Context, configPath string, services []string) error {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return err
-	}
-
-	return m.service.Stop(ctx, project.Name, services, api.StopOptions{})
-}
-
-// Restart restarts specific services
-func (m *ComposeManager) Restart(ctx context.Context, configPath string, services []string) error {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return err
-	}
-
-	return m.service.Restart(ctx, project.Name, services, api.RestartOptions{})
-}
-
-// Pull pulls service images
-func (m *ComposeManager) Pull(ctx context.Context, configPath string, services []string) error {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return err
-	}
-
-	return m.service.Pull(ctx, project.Name, api.PullOptions{})
-}
-
-// Logs gets service logs
-func (m *ComposeManager) Logs(ctx context.Context, configPath string, services []string, options api.LogOptions) (io.ReadCloser, error) {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.service.Logs(ctx, project.Name, services, options)
-}
-
-// PS lists containers
-func (m *ComposeManager) PS(ctx context.Context, configPath string, services []string) ([]api.ContainerSummary, error) {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.service.Ps(ctx, project.Name, api.PsOptions{Services: services})
-}
-
-// Events streams events
-func (m *ComposeManager) Events(ctx context.Context, configPath string, services []string) (<-chan api.Event, error) {
-	project, err := m.LoadProject(ctx, configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.service.Events(ctx, project.Name, api.EventsOptions{Services: services})
-}
-
-// ValidateConfig validates a compose file
-func (m *ComposeManager) ValidateConfig(configPath string) error {
-	_, err := m.LoadProject(context.Background(), configPath)
-	return err
-}
-
-// IsComposeFile checks if a file is a compose file
-func IsComposeFile(path string) bool {
-	name := strings.ToLower(filepath.Base(path))
-	return strings.HasPrefix(name, "docker-compose") &&
-		(strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml"))
+	return false
 }

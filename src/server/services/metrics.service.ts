@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
 import { logger } from '../utils/logger';
-import type { SystemMetrics, ProcessMetrics } from '../../types/process-metrics';
+import type { SystemMetrics, ProcessMetrics } from '../../types/metrics';
 
 class MetricsService extends EventEmitter {
   private collectionIntervals: Map<string, NodeJS.Timeout> = new Map();
@@ -188,64 +188,7 @@ class MetricsService extends EventEmitter {
       [hostId, start, end]
     );
 
-    return result.rows.map(row => ({
-      timestamp: row.timestamp,
-      cpu: {
-        user: row.cpu_user,
-        system: row.cpu_system,
-        idle: row.cpu_idle,
-        iowait: row.cpu_iowait,
-        steal: row.cpu_steal,
-        total: row.cpu_total,
-        cores: row.cpu_cores,
-        threads: row.cpu_threads,
-      },
-      memory: {
-        total: row.memory_total,
-        used: row.memory_used,
-        free: row.memory_free,
-        shared: row.memory_shared,
-        buffers: row.memory_buffers,
-        cached: row.memory_cached,
-        available: row.memory_available,
-        swapTotal: row.memory_swap_total,
-        swapUsed: row.memory_swap_used,
-        swapFree: row.memory_swap_free,
-        usage: row.memory_usage,
-      },
-      storage: {
-        total: row.storage_total,
-        used: row.storage_used,
-        free: row.storage_free,
-        usage: row.storage_usage,
-        ioStats: row.io_read_count ? {
-          readCount: row.io_read_count,
-          writeCount: row.io_write_count,
-          readBytes: row.io_read_bytes,
-          writeBytes: row.io_write_bytes,
-          ioTime: row.io_time,
-        } : undefined,
-      },
-      network: {
-        bytesSent: row.net_bytes_sent,
-        bytesRecv: row.net_bytes_recv,
-        packetsSent: row.net_packets_sent,
-        packetsRecv: row.net_packets_recv,
-        errorsIn: row.net_errors_in,
-        errorsOut: row.net_errors_out,
-        dropsIn: row.net_drops_in,
-        dropsOut: row.net_drops_out,
-        connections: row.net_connections,
-        tcpConns: row.net_tcp_conns,
-        udpConns: row.net_udp_conns,
-        listenPorts: row.net_listen_ports,
-        interfaces: row.net_interfaces,
-        totalSpeed: row.net_total_speed,
-        averageSpeed: row.net_average_speed,
-      },
-      uptimeSeconds: row.uptime_seconds,
-      loadAverage: [row.load_average_1, row.load_average_5, row.load_average_15],
-    }));
+    return getSystemMetrics(result.rows);
   }
 
   async getProcessMetrics(hostId: string, start: Date, end: Date): Promise<ProcessMetrics[]> {
@@ -257,30 +200,95 @@ class MetricsService extends EventEmitter {
       [hostId, start, end]
     );
 
-    return result.rows.map(row => ({
-      pid: row.pid,
-      timestamp: row.timestamp,
-      name: row.name,
-      command: row.command,
-      username: row.username,
-      cpuUsage: row.cpu_usage,
-      memoryUsage: row.memory_usage,
-      memoryRss: row.memory_rss,
-      memoryVms: row.memory_vms,
-      threads: row.threads,
-      fds: row.fds,
-      ioStats: row.io_read_count ? {
-        readCount: row.io_read_count,
-        writeCount: row.io_write_count,
-        readBytes: row.io_read_bytes,
-        writeBytes: row.io_write_bytes,
-      } : undefined,
-    }));
+    return getProcessMetrics(result.rows);
   }
 
   async cleanup(): Promise<void> {
     await db.query('SELECT cleanup_old_metrics()');
   }
+}
+
+async function getSystemMetrics(rows: unknown[]): Promise<SystemMetrics[]> {
+  return rows.map((row: any) => ({
+    timestamp: new Date(row.timestamp),
+    cpu: {
+      user: row.cpu_user,
+      system: row.cpu_system,
+      idle: row.cpu_idle,
+      iowait: row.cpu_iowait,
+      steal: row.cpu_steal,
+      total: row.cpu_total,
+      cores: row.cpu_cores,
+      threads: row.cpu_threads,
+    },
+    memory: {
+      total: row.memory_total,
+      used: row.memory_used,
+      free: row.memory_free,
+      shared: row.memory_shared,
+      buffers: row.memory_buffers,
+      cached: row.memory_cached,
+      available: row.memory_available,
+      swapTotal: row.memory_swap_total,
+      swapUsed: row.memory_swap_used,
+      swapFree: row.memory_swap_free,
+      usage: row.memory_usage,
+    },
+    storage: {
+      total: row.storage_total,
+      used: row.storage_used,
+      free: row.storage_free,
+      usage: row.storage_usage,
+      ioStats: row.io_read_count ? {
+        readCount: row.io_read_count,
+        writeCount: row.io_write_count,
+        readBytes: row.io_read_bytes,
+        writeBytes: row.io_write_bytes,
+        ioTime: row.io_time,
+      } : undefined,
+    },
+    network: {
+      bytesSent: row.net_bytes_sent,
+      bytesRecv: row.net_bytes_recv,
+      packetsSent: row.net_packets_sent,
+      packetsRecv: row.net_packets_recv,
+      errorsIn: row.net_errors_in,
+      errorsOut: row.net_errors_out,
+      dropsIn: row.net_drops_in,
+      dropsOut: row.net_drops_out,
+      connections: row.net_connections,
+      tcpConns: row.net_tcp_conns,
+      udpConns: row.net_udp_conns,
+      listenPorts: row.net_listen_ports,
+      interfaces: row.net_interfaces,
+      totalSpeed: row.net_total_speed,
+      averageSpeed: row.net_average_speed,
+    },
+    uptimeSeconds: row.uptime_seconds,
+    loadAverage: [row.load_average_1, row.load_average_5, row.load_average_15],
+  }));
+}
+
+async function getProcessMetrics(rows: unknown[]): Promise<ProcessMetrics[]> {
+  return rows.map((row: any) => ({
+    pid: row.pid,
+    timestamp: new Date(row.timestamp),
+    name: row.name,
+    command: row.command,
+    username: row.username,
+    cpuUsage: row.cpu_usage,
+    memoryUsage: row.memory_usage,
+    memoryRss: row.memory_rss,
+    memoryVms: row.memory_vms,
+    threads: row.threads,
+    fds: row.fds,
+    ioStats: row.io_read_count ? {
+      readCount: row.io_read_count,
+      writeCount: row.io_write_count,
+      readBytes: row.io_read_bytes,
+      writeBytes: row.io_write_bytes,
+    } : undefined,
+  }));
 }
 
 export const metricsService = new MetricsService();

@@ -1,56 +1,75 @@
-import type { ApiResponse } from './models-shared';
-import type { LogMetadata } from './logger';
-
 export interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
-  metadata?: LogMetadata;
-}
-
-export interface ChatRequest {
-  message: string;
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-  systemPrompt?: string;
-  metadata?: LogMetadata;
+  code?: string;
+  language?: string;
+  command?: string;
 }
 
 export interface ChatResponseData {
-  message: string;
-  model: string;
-  usage: {
+  content: string;
+  code?: string;
+  language?: string;
+  command?: string;
+  usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
-  metadata?: LogMetadata;
 }
 
-export type ChatResponse = ApiResponse<ChatResponseData>;
+export interface ChatResponse {
+  success: boolean;
+  data?: ChatResponseData;
+  error?: string;
+}
+
+export interface ChatState {
+  messages: ChatMessage[];
+  loading: boolean;
+  error: string | null;
+}
+
+export interface ChatCommand {
+  type: 'execute' | 'install' | 'update' | 'remove';
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface ChatContext {
+  currentDirectory?: string;
+  selectedFiles?: string[];
+  selectedHost?: string;
+  environmentVariables?: Record<string, string>;
+  lastCommand?: ChatCommand;
+  lastResult?: {
+    success: boolean;
+    output?: string;
+    error?: string;
+  };
+}
 
 export interface ChatSettings {
   model: string;
-  maxTokens: number;
   temperature: number;
-  systemPrompt?: string;
+  maxTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+  stop?: string[];
+  stream?: boolean;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
-  model: 'openai/gpt-3.5-turbo',
-  maxTokens: 1000,
+  model: 'gpt-4',
   temperature: 0.7,
+  maxTokens: 2000,
+  topP: 1,
+  frequencyPenalty: 0,
+  presencePenalty: 0,
+  stream: false,
 };
-
-export const AVAILABLE_MODELS = [
-  { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo', maxTokens: 4000 },
-  { id: 'openai/gpt-4', name: 'GPT-4', maxTokens: 8000 },
-  { id: 'anthropic/claude-2', name: 'Claude 2', maxTokens: 100000 },
-] as const;
-
-export interface ChatError {
-  code: string;
-  message: string;
-  details?: unknown;
-}

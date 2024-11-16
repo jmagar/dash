@@ -80,10 +80,28 @@ export interface AgentHeartbeat {
   uptimeSeconds: number;
 }
 
+export interface LogEntry {
+  timestamp: string;
+  hostname: string;
+  program: string;
+  message: string;
+  level: 'info' | 'warn' | 'error';
+  facility: string;
+}
+
+export interface LogFilter {
+  level?: string[];
+  program?: string[];
+  since?: string;
+  until?: string;
+}
+
 // Socket.IO message types
 export interface ServerToAgentEvents {
   command: (cmd: AgentCommand, callback: (response: { status: string }) => void) => void;
   ping: () => void;
+  'logs:subscribe': (filter?: LogFilter) => void;
+  'logs:unsubscribe': () => void;
 }
 
 export interface AgentToServerEvents {
@@ -92,6 +110,7 @@ export interface AgentToServerEvents {
   commandResult: (result: AgentCommandResult) => void;
   heartbeat: (heartbeat: AgentHeartbeat) => void;
   error: (error: { code: string; message: string; details?: unknown }) => void;
+  logs: (logs: LogEntry[]) => void;
 }
 
 // Declare global io instance

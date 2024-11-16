@@ -1,222 +1,208 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Box,
-  Card,
-  CardContent,
-  Grid,
+  Paper,
   Typography,
-  LinearProgress,
+  Grid,
+  CircularProgress,
+  Alert,
   useTheme,
+  alpha,
 } from '@mui/material';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import { formatBytes, formatPercent, formatNumber } from '../utils/formatters';
-import { SystemMetrics } from '../../types/process-metrics';
-import { useSocket } from '../hooks/useSocket';
+  Memory as MemoryIcon,
+  Storage as StorageIcon,
+  Speed as SpeedIcon,
+  NetworkCheck as NetworkIcon,
+} from '@mui/icons-material';
+import { useHost } from '../hooks/useHost';
+import { useHostMetrics } from '../hooks/useHostMetrics';
+import { formatBytes, formatPercent } from '../utils/formatters';
 
-const MetricCard: React.FC<{
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  progress?: number;
-}> = ({ title, value, subtitle, progress }) => (
-  <Card>
-    <CardContent>
-      <Typography variant="h6" gutterBottom>
-        {title}
-      </Typography>
-      <Typography variant="h4">
-        {value}
-      </Typography>
-      {subtitle && (
-        <Typography variant="body2" color="textSecondary">
-          {subtitle}
-        </Typography>
-      )}
-      {progress !== undefined && (
-        <Box mt={2}>
-          <LinearProgress variant="determinate" value={progress} />
-        </Box>
-      )}
-    </CardContent>
-  </Card>
-);
+interface HostManagerProps {
+  hostId: string;
+}
 
-const HostManager: React.FC = () => {
+export function HostManager({ hostId }: HostManagerProps) {
   const theme = useTheme();
-  const [metrics, setMetrics] = useState<SystemMetrics[]>([]);
-  const socket = useSocket();
+  const { host, loading: hostLoading } = useHost({ hostId });
+  const { metrics, loading: metricsLoading } = useHostMetrics({
+    hostId,
+    enabled: true,
+  });
 
-  useEffect(() => {
-    if (!socket) return;
+  if (hostLoading || metricsLoading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 400,
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-    socket.on('metrics', (newMetrics: SystemMetrics) => {
-      setMetrics(prev => [...prev.slice(-30), newMetrics]);
-    });
+  if (!host) {
+    return (
+      <Alert severity="error" sx={{ m: 2 }}>
+        Host not found
+      </Alert>
+    );
+  }
 
-    return () => {
-      socket.off('metrics');
-    };
-  }, [socket]);
-
-  const latestMetrics = metrics[metrics.length - 1];
-
-  if (!latestMetrics) {
-    return <Typography>Loading metrics...</Typography>;
+  if (!metrics) {
+    return (
+      <Alert severity="warning" sx={{ m: 2 }}>
+        No metrics available
+      </Alert>
+    );
   }
 
   return (
-    <Box p={3}>
+    <Box sx={{ p: 3 }}>
       <Grid container spacing={3}>
-        {/* CPU Metrics */}
+        {/* CPU Usage */}
         <Grid item xs={12} md={6} lg={3}>
-          <MetricCard
-            title="CPU Usage"
-            value={formatPercent(latestMetrics.cpu.total)}
-            subtitle={`${latestMetrics.cpu.cores} cores, ${latestMetrics.cpu.threads} threads`}
-            progress={latestMetrics.cpu.total}
-          />
+          <Paper
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <SpeedIcon color="primary" />
+              <Typography variant="h6">CPU Usage</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Total</Typography>
+                <Typography>{formatPercent(metrics.cpu.total)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">User</Typography>
+                <Typography>{formatPercent(metrics.cpu.user)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">System</Typography>
+                <Typography>{formatPercent(metrics.cpu.system)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Cores</Typography>
+                <Typography>{metrics.cpu.cores}</Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
 
-        {/* Memory Metrics */}
+        {/* Memory Usage */}
         <Grid item xs={12} md={6} lg={3}>
-          <MetricCard
-            title="Memory Usage"
-            value={formatPercent(latestMetrics.memory.usage)}
-            subtitle={`${formatBytes(latestMetrics.memory.used)} / ${formatBytes(latestMetrics.memory.total)}`}
-            progress={latestMetrics.memory.usage}
-          />
+          <Paper
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <MemoryIcon color="primary" />
+              <Typography variant="h6">Memory Usage</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Total</Typography>
+                <Typography>{formatBytes(metrics.memory.total)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Used</Typography>
+                <Typography>{formatBytes(metrics.memory.used)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Free</Typography>
+                <Typography>{formatBytes(metrics.memory.free)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Usage</Typography>
+                <Typography>{formatPercent(metrics.memory.usage)}</Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
 
-        {/* Storage Metrics */}
+        {/* Storage Usage */}
         <Grid item xs={12} md={6} lg={3}>
-          <MetricCard
-            title="Storage Usage"
-            value={formatPercent(latestMetrics.storage.usage)}
-            subtitle={`${formatBytes(latestMetrics.storage.used)} / ${formatBytes(latestMetrics.storage.total)}`}
-            progress={latestMetrics.storage.usage}
-          />
+          <Paper
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <StorageIcon color="primary" />
+              <Typography variant="h6">Storage Usage</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Total</Typography>
+                <Typography>{formatBytes(metrics.storage.total)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Used</Typography>
+                <Typography>{formatBytes(metrics.storage.used)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Free</Typography>
+                <Typography>{formatBytes(metrics.storage.free)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Usage</Typography>
+                <Typography>{formatPercent(metrics.storage.usage)}</Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
 
-        {/* Network Metrics */}
+        {/* Network Usage */}
         <Grid item xs={12} md={6} lg={3}>
-          <MetricCard
-            title="Network"
-            value={`${formatNumber(latestMetrics.network.connections)} connections`}
-            subtitle={`${latestMetrics.network.tcp_conns} TCP, ${latestMetrics.network.udp_conns} UDP`}
-          />
-        </Grid>
-
-        {/* CPU Chart */}
-        <Grid item xs={12} lg={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                CPU History
-              </Typography>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="timestamp"
-                    tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                  />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip
-                    labelFormatter={(label) => new Date(label).toLocaleString()}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cpu.total"
-                    stroke={theme.palette.primary.main}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Memory Chart */}
-        <Grid item xs={12} lg={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Memory History
-              </Typography>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="timestamp"
-                    tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                  />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip
-                    labelFormatter={(label) => new Date(label).toLocaleString()}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="memory.usage"
-                    stroke={theme.palette.secondary.main}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Network Chart */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Network Traffic
-              </Typography>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="timestamp"
-                    tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                  />
-                  <YAxis />
-                  <Tooltip
-                    labelFormatter={(label) => new Date(label).toLocaleString()}
-                    formatter={(value: number) => [formatBytes(value)]}
-                  />
-                  <Line
-                    type="monotone"
-                    name="Sent"
-                    dataKey="network.bytes_sent"
-                    stroke={theme.palette.success.main}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    name="Received"
-                    dataKey="network.bytes_recv"
-                    stroke={theme.palette.error.main}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <Paper
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <NetworkIcon color="primary" />
+              <Typography variant="h6">Network Usage</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Received</Typography>
+                <Typography>{formatBytes(metrics.network.bytesRecv)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Sent</Typography>
+                <Typography>{formatBytes(metrics.network.bytesSent)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Connections</Typography>
+                <Typography>
+                  TCP: {metrics.network.tcpConns}, UDP: {metrics.network.udpConns}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">Speed</Typography>
+                <Typography>{formatBytes(metrics.network.averageSpeed)}/s</Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
       </Grid>
     </Box>
   );
-};
-
-export default HostManager;
+}

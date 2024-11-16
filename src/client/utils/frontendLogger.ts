@@ -106,6 +106,11 @@ class FrontendLogger implements Logger {
     const formattedMeta = this.formatMeta(metadata);
     console.debug(this.formatMessage('DEBUG', message), formattedMeta);
   }
+
+  critical(message: string, metadata?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(metadata);
+    console.error(this.formatMessage('CRITICAL', message), formattedMeta);
+  }
 }
 
 // Export singleton instance

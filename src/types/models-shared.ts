@@ -1,19 +1,44 @@
-export interface Host {
+import type { DockerContainer, DockerNetwork, DockerVolume, DockerStats, DockerPort } from './docker';
+
+export { DockerContainer, DockerNetwork, DockerVolume, DockerStats };
+
+// Previous interfaces remain the same until Command...
+
+export interface CommandRequest {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  timeout?: number;
+  shell?: boolean;
+  sudo?: boolean;
+}
+
+export interface CommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  duration: number;
+  error?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface Command {
   id: string;
-  user_id: string;
-  name: string;
-  hostname: string;
-  port: number;
-  username: string;
-  password?: string;
-  status: string;
-  agent_status: string;
-  agent_version?: string;
-  agent_last_seen?: Date;
-  environment?: string;
-  metadata?: Record<string, any>;
-  created_at: Date;
-  updated_at: Date;
+  hostId: string;
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  request: CommandRequest;
+  result?: CommandResult;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  updatedAt: Date;
 }
 
 export interface CreateHostRequest {
@@ -22,63 +47,82 @@ export interface CreateHostRequest {
   port: number;
   username: string;
   password?: string;
-  environment?: string;
   install_agent?: boolean;
+  environment?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
-export type UpdateHostRequest = Partial<CreateHostRequest>;
+export type UpdateHostRequest = Partial<CreateHostRequest>
 
-export interface Command {
+export interface Host {
   id: string;
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  exitCode?: number;
-  stdout: string;
-  stderr: string;
-  startedAt: Date;
-  completedAt?: Date;
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+  environment?: string;
+  tags?: string[];
+  status: 'online' | 'offline' | 'error';
+  lastSeen?: Date;
+  agentStatus?: 'installed' | 'error' | null;
+  agentVersion?: string;
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface CommandRequest {
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-}
-
-export interface CommandResult {
-  command: Command;
-  status: 'running' | 'completed' | 'failed';
-  exitCode?: number;
-  stdout: string;
-  stderr: string;
-  startedAt: Date;
-  completedAt?: Date;
-}
-
-export interface AgentMetrics {
-  cpu_usage: number;
-  memory_usage: number;
-  disk_usage: number;
-  load_average: number[];
-  process_count: number;
-  active_jobs: number;
-  error_count: number;
-  uptime_seconds: number;
-  timestamp: Date;
-}
-
-export interface FileItem {
+export interface HostGroup {
+  id: string;
   name: string;
-  path: string;
-  type: 'file' | 'directory';
-  size: number;
-  modified: Date;
+  description?: string;
+  hosts: Host[];
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HostStats {
+  total: number;
+  online: number;
+  offline: number;
+  error: number;
+  byOs: {
+    [key: string]: number;
+  };
+  byStatus: {
+    [key: string]: number;
+  };
+  byFeature: {
+    [key: string]: number;
+  };
+}
+
+export interface HostFilter {
+  search?: string;
+  status?: Host['status'][];
+  os?: string[];
+  features?: string[];
+  tags?: string[];
+  groupId?: string;
+}
+
+export interface HostSort {
+  field: keyof Host;
+  direction: 'asc' | 'desc';
+}
+
+export interface HostUpdate {
+  name?: string;
+  hostname?: string;
+  port?: number;
+  username?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface Package {
@@ -86,7 +130,27 @@ export interface Package {
   version: string;
   description?: string;
   installed: boolean;
-  updateAvailable?: boolean;
+  updateAvailable: boolean;
+  latestVersion?: string;
+  size?: number;
+  dependencies?: string[];
+  repository?: string;
+  license?: string;
+  homepage?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface FileItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory' | 'symlink';
+  size?: number;
+  permissions?: string;
+  owner?: string;
+  group?: string;
+  modifiedTime?: Date;
+  isHidden?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ApiResponse<T = unknown> {
@@ -94,112 +158,103 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   message?: string;
-}
-
-// Base container interface with common properties
-interface BaseContainer {
-  id: string;
-  name: string;
-  image: string;
-  status: string;
-  state: string;
-  createdAt: Date;
-  labels: Record<string, string>;
-}
-
-// Simple container interface for basic usage
-export interface Container extends BaseContainer {
-  ports: string[];
-}
-
-// Extended container interface for Docker-specific features
-export interface DockerContainer extends BaseContainer {
-  compose?: {
-    project: string;
-    service: string;
-    configFile: string;
+  meta?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    [key: string]: unknown;
   };
-  ports: Array<{
-    ip: string;
-    external: number;
-    internal: number;
-    protocol: string;
-  }>;
-  networks: Array<{
-    name: string;
-    ipAddress: string;
-  }>;
-  volumes: Array<{
-    source: string;
-    destination: string;
-  }>;
 }
 
-export interface DockerNetwork {
-  id: string;
-  name: string;
-  driver: string;
-  subnet: string;
-  gateway: string;
-  containers: Array<{
-    id: string;
-    name: string;
-    ipAddress: string;
-  }>;
+export interface SSHConfig {
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
 }
 
-export interface DockerVolume {
-  id: string;
-  name: string;
-  driver: string;
-  source: string;
-  destination: string;
-  containers: Array<{
-    id: string;
-    name: string;
-  }>;
+export interface Container extends DockerContainer {
+  hostId: string;
+  stackId?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Stack {
+  id: string;
   name: string;
-  services: string[];
-  status: string;
+  hostId: string;
+  status: 'running' | 'stopped' | 'error';
+  config: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface SystemStats {
-  cpu: {
-    usage: number;
-    cores: number;
+  id: string;
+  hostId: string;
+  cpuUsage: number;
+  memoryUsage: number;
+  diskUsage: number;
+  networkUsage: {
+    bytesRecv: number;
+    bytesSent: number;
+    packetsRecv: number;
+    packetsSent: number;
+    errorsIn: number;
+    errorsOut: number;
+    dropsIn: number;
+    dropsOut: number;
+    connections: number;
+    tcpConns: number;
+    udpConns: number;
+    listenPorts: number;
+    interfaces: string[];
+    totalSpeed: number;
+    averageSpeed: number;
   };
-  memory: {
-    total: number;
-    used: number;
-    free: number;
-  };
-  disk: {
-    total: number;
-    used: number;
-    free: number;
-  };
-  uptime: number;
-  loadAvg: [number, number, number];
+  timestamp: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface ContainerStats {
-  cpu: number;
-  memory: {
-    usage: number;
-    limit: number;
-    percent: number;
-  };
-  network: {
-    rx_bytes: number;
-    tx_bytes: number;
-  };
-  blockio: {
-    read_bytes: number;
-    write_bytes: number;
-  };
+export interface DockerComposeConfig {
+  name: string;
+  content: string;
+  version: string;
+  services: Record<string, {
+    image: string;
+    ports?: string[];
+    environment?: Record<string, string>;
+    volumes?: string[];
+    depends_on?: string[];
+  }>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserRegistration {
+  username: string;
+  email: string;
+  password: string;
+  role: 'admin' | 'user';
+}
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'user';
+  permissions: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CommandResult {
+  code: number;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
 }

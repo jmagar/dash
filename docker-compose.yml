@@ -93,6 +93,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: shh-server
+    privileged: true
+    network_mode: host
     ports:
       - "3000:3000"
       - "1514:1514"
@@ -100,33 +102,17 @@ services:
       - /mnt/user/appdata/shh/logs:/var/log/shh
       - /mnt/user/appdata/shh/data:/var/lib/shh
       - /mnt/user/appdata/shh/config:/etc/shh
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
       - LOG_DIR=/var/log/shh/server
-    restart: unless-stopped
-
-  agent:
-    build:
-      context: ./agent
-      dockerfile: Dockerfile
-    container_name: shh-agent
-    privileged: true
-    network_mode: host
-    volumes:
-      - /mnt/user/appdata/shh/logs:/var/log/shh
-      - /mnt/user/appdata/shh/data:/var/lib/shh
-      - /mnt/user/appdata/shh/config:/etc/shh
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /:/host:ro
-    environment:
+      # Agent configuration
       - SYSLOG_SERVER=localhost:1514
       - SYSLOG_PROTOCOL=tcp
       - SYSLOG_FACILITY=local0
-      - LOG_DIR=/var/log/shh/agent
     restart: unless-stopped
-    depends_on:
-      - server
 
   postgres:
     image: postgres:14-alpine

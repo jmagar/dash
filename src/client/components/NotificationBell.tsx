@@ -1,6 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import {
+  Badge,
+  IconButton,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Typography,
+  Button,
+  Box,
+  CircularProgress,
+  Alert,
+  Divider,
+  useTheme,
+  alpha,
+} from '@mui/material';
+import {
+  Notifications as NotificationsIcon,
+  NotificationsActive as NotificationsActiveIcon,
+  CheckCircle as CheckCircleIcon,
+  Info as InfoIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  Done as DoneIcon,
+} from '@mui/icons-material';
 import { useNotifications } from '../hooks/useNotifications';
 import { useDesktopNotifications } from '../hooks/useDesktopNotifications';
 import type { Notification, NotificationType } from '../../types/notifications';
@@ -10,12 +36,12 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ userId }: NotificationBellProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const theme = useTheme();
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const {
     notifications,
-    counts,
+    unreadCount,
     loading,
     error,
     markAsRead,
@@ -23,11 +49,9 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   } = useNotifications({
     userId,
     limit: 10,
-    autoRefresh: true,
   });
   const { requestPermission } = useDesktopNotifications();
 
-  // Check if we should show the permission prompt
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       setShowPermissionPrompt(true);
@@ -41,14 +65,20 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     }
   };
 
-  const getNotificationIcon = (type: NotificationType): string => {
+  const getNotificationIcon = (type: NotificationType) => {
     switch (type) {
-      case 'alert': return '🔔';
-      case 'info': return 'ℹ️';
-      case 'success': return '✅';
-      case 'warning': return '⚠️';
-      case 'error': return '❌';
-      default: return '📝';
+      case 'alert':
+        return <NotificationsActiveIcon color="warning" />;
+      case 'info':
+        return <InfoIcon color="info" />;
+      case 'success':
+        return <CheckCircleIcon color="success" />;
+      case 'warning':
+        return <WarningIcon color="warning" />;
+      case 'error':
+        return <ErrorIcon color="error" />;
+      default:
+        return <NotificationsIcon color="action" />;
     }
   };
 
@@ -65,169 +95,158 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     if (!notifications.find((n: Notification) => n.id === notificationId)?.read) {
       await markAsRead(notificationId);
     }
+    setAnchorEl(null);
   };
 
   const handleMarkAllAsRead = async () => {
     await markAllAsRead();
   };
 
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const open = Boolean(anchorEl);
+  const id = open ? 'notifications-popover' : undefined;
+
   if (error) {
     console.error('Failed to load notifications:', error);
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Bell icon with badge */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label={`Notifications ${counts?.unread ? `(${counts.unread} unread)` : ''}`}
-        aria-expanded={isOpen}
-        aria-haspopup="true"
+    <>
+      <IconButton
+        aria-describedby={id}
+        onClick={handleClick}
+        sx={{
+          color: 'inherit',
+          position: 'relative',
+          '&:hover': {
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+          },
+        }}
       >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
+        <Badge
+          badgeContent={unreadCount}
+          color="error"
+          variant="dot"
+          invisible={!unreadCount}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
-        </svg>
-        {counts?.unread ? (
-          <span
-            className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full"
-            aria-hidden="true"
-          >
-            {counts.unread}
-          </span>
-        ) : null}
-      </button>
+          <NotificationsIcon />
+        </Badge>
+      </IconButton>
 
-      {/* Desktop Notification Permission Prompt */}
-      {showPermissionPrompt && (
-        <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-lg shadow-lg p-4 z-50">
-          <p className="text-sm text-gray-600 mb-3">
-            Would you like to receive desktop notifications for important updates?
-          </p>
-          <div className="flex justify-end space-x-2">
-            <button
-              onClick={() => setShowPermissionPrompt(false)}
-              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+      <Popover
+        id={id}
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            width: 360,
+            maxHeight: 480,
+            overflow: 'auto',
+            mt: 1.5,
+            '& .MuiList-root': {
+              p: 0,
+            },
+          },
+        }}
+      >
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h6">Notifications</Typography>
+          {unreadCount > 0 && (
+            <Button
+              size="small"
+              onClick={handleMarkAllAsRead}
+              startIcon={<DoneIcon />}
+              sx={{ ml: 1 }}
             >
-              Not now
-            </button>
-            <button
-              onClick={handlePermissionRequest}
-              className="px-3 py-1 text-sm text-white bg-blue-600 rounded hover:bg-blue-700"
-            >
-              Allow
-            </button>
-          </div>
-        </div>
-      )}
+              Mark all as read
+            </Button>
+          )}
+        </Box>
 
-      {/* Notification Dropdown */}
-      {isOpen && (
-        <div
-          className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl z-50"
-          role="menu"
-          aria-orientation="vertical"
-          aria-labelledby="notifications-menu"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2 border-b">
-            <h3 className="text-lg font-semibold">Notifications</h3>
-            <div className="flex items-center space-x-4">
-              {counts?.unread ? (
-                <button
-                  onClick={handleMarkAllAsRead}
-                  className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <Divider />
+
+        {showPermissionPrompt && (
+          <Box sx={{ p: 2 }}>
+            <Alert
+              severity="info"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handlePermissionRequest}
                 >
-                  Mark all as read
-                </button>
-              ) : null}
-              <Link
-                to="/settings/notifications"
-                className="text-sm text-gray-600 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onClick={() => setIsOpen(false)}
-              >
-                Settings
-              </Link>
-            </div>
-          </div>
-
-          {/* Notification list */}
-          <div className="max-h-96 overflow-y-auto">
-            {loading ? (
-              <div className="p-4 text-center text-gray-500">
-                Loading notifications...
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">
-                No notifications
-              </div>
-            ) : (
-              <ul>
-                {notifications.map((notification: Notification) => (
-                  <li key={notification.id}>
-                    <button
-                      className={`w-full text-left p-4 border-b hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
-                        notification.read ? 'bg-white' : 'bg-blue-50'
-                      }`}
-                      onClick={() => handleNotificationClick(notification.id)}
-                      aria-label={`${notification.title} - ${notification.message}`}
-                    >
-                      <div className="flex items-start">
-                        <span className="text-2xl mr-3" aria-hidden="true">
-                          {getNotificationIcon(notification.type)}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">
-                            {notification.title}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formatTimestamp(new Date(notification.createdAt))}
-                          </p>
-                          {notification.link && (
-                            <a
-                              href={notification.link}
-                              className="text-xs text-blue-600 hover:text-blue-800 mt-1 block"
-                              onClick={e => e.stopPropagation()}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              View details
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="p-2 border-t text-center">
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-sm text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  Enable
+                </Button>
+              }
             >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+              Enable desktop notifications?
+            </Alert>
+          </Box>
+        )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ m: 2 }}>
+            Failed to load notifications
+          </Alert>
+        ) : notifications.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Typography color="textSecondary">No notifications</Typography>
+          </Box>
+        ) : (
+          <List>
+            {notifications.map((notification: Notification) => (
+              <ListItem
+                key={notification.id}
+                onClick={() => handleNotificationClick(notification.id)}
+                sx={{
+                  cursor: 'pointer',
+                  bgcolor: notification.read ? 'transparent' : alpha(theme.palette.primary.main, 0.04),
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  {getNotificationIcon(notification.type)}
+                </ListItemIcon>
+                <ListItemText
+                  primary={notification.title}
+                  secondary={
+                    <Box component="span" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Typography variant="body2" color="textSecondary">
+                        {notification.message}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {formatTimestamp(new Date(notification.createdAt))}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Popover>
+    </>
   );
 }

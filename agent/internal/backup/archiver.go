@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -180,15 +181,30 @@ func (a *Archiver) Extract(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
-	defer file.Close()
+
+	var extractErr error
+	defer func() {
+		if cerr := file.Close(); cerr != nil && extractErr == nil {
+			extractErr = fmt.Errorf("failed to close archive file: %w", cerr)
+		}
+	}()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzipReader.Close()
+	defer func() {
+		if cerr := gzipReader.Close(); cerr != nil && extractErr == nil {
+			extractErr = fmt.Errorf("failed to close gzip reader: %w", cerr)
+		}
+	}()
 
 	tarReader := tar.NewReader(gzipReader)
+
+	// Create destination directory if it doesn't exist
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
 
 	for {
 		header, err := tarReader.Next()
@@ -201,35 +217,54 @@ func (a *Archiver) Extract(src, dst string) error {
 
 		target := filepath.Join(dst, header.Name)
 
+		// Validate path is within destination directory
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(dst)) {
+			return fmt.Errorf("invalid tar path: %s (path traversal attempt)", header.Name)
+		}
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0755); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
+				return fmt.Errorf("failed to create directory %s: %w", target, err)
 			}
 		case tar.TypeReg:
-			outFile, err := os.Create(target)
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for %s: %w", target, err)
+			}
+
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
+				return fmt.Errorf("failed to create file %s: %w", target, err)
 			}
-			defer outFile.Close()
 
+			var copyErr error
+			func() {
+				defer func() {
+					if cerr := outFile.Close(); cerr != nil && copyErr == nil {
+						copyErr = fmt.Errorf("failed to close output file %s: %w", target, cerr)
+					}
+				}()
+
+				if a.encrypt {
+					copyErr = a.copyDecrypted(tarReader, outFile)
+				} else {
+					_, copyErr = io.Copy(outFile, tarReader)
+				}
+			}()
+
+			if copyErr != nil {
+				return fmt.Errorf("failed to write file %s: %w", target, copyErr)
+			}
+
+			// Set file permissions after writing
 			if err := os.Chmod(target, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("failed to chmod file: %w", err)
-			}
-
-			if a.encrypt {
-				if err := a.copyDecrypted(tarReader, outFile); err != nil {
-					return fmt.Errorf("failed to decrypt file: %w", err)
-				}
-			} else {
-				if _, err := io.Copy(outFile, tarReader); err != nil {
-					return fmt.Errorf("failed to write file: %w", err)
-				}
+				return fmt.Errorf("failed to set permissions for %s: %w", target, err)
 			}
 		}
 	}
 
-	return nil
+	return extractErr
 }
 
 // copyDecrypted copies data with decryption

@@ -1,117 +1,141 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '../../types/models-shared';
+import { AuthContext } from '../context/AuthContext';
+import { logger } from '../utils/frontendLogger';
+
+interface User {
+  id: string;
+  username: string;
+  email?: string;
+  role: string;
+  permissions: string[];
+}
 
 interface AuthState {
   user: User | null;
+  token: string | null;
   loading: boolean;
   error: string | null;
 }
 
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    loading: true,
-    error: null,
-  });
   const navigate = useNavigate();
+  const context = useContext(AuthContext);
 
-  // Load user on mount
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const response = await fetch('/api/auth/validate', {
-          credentials: 'include',
-        });
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
 
-        if (!response.ok) {
-          throw new Error('Failed to validate session');
-        }
+  const { state, dispatch } = context;
 
-        const data = await response.json();
-        if (data.success && data.data) {
-          setState({
-            user: data.data,
-            loading: false,
-            error: null,
-          });
-        } else {
-          setState({
-            user: null,
-            loading: false,
-            error: data.error || 'Invalid session',
-          });
-        }
-      } catch (error) {
-        setState({
-          user: null,
-          loading: false,
-          error: error instanceof Error ? error.message : 'Failed to load user',
-        });
-      }
-    };
-
-    loadUser();
-  }, []);
+  const isAdmin = state.user?.role === 'admin';
 
   const login = useCallback(async (username: string, password: string) => {
     try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'CLEAR_ERROR' });
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username, password }),
-        credentials: 'include',
       });
 
       const data = await response.json();
-      if (data.success && data.data) {
-        setState({
-          user: data.data,
-          loading: false,
-          error: null,
-        });
-        navigate('/');
-        return true;
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: data.error || 'Invalid credentials',
-        }));
-        return false;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Login failed');
       }
+
+      const { user, token } = data.data;
+
+      localStorage.setItem('token', token);
+      dispatch({ type: 'SET_USER', payload: user });
+      dispatch({ type: 'SET_TOKEN', payload: token });
+
+      logger.info('Login successful:', { username: user.username });
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to login',
-      }));
-      return false;
+      logger.error('Login failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      dispatch({
+        type: 'SET_ERROR',
+        payload: error instanceof Error ? error.message : 'Login failed',
+      });
+      throw error;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [navigate]);
+  }, [dispatch]);
 
   const logout = useCallback(async () => {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
       });
-      setState({
-        user: null,
-        loading: false,
-        error: null,
-      });
-      navigate('/login');
     } catch (error) {
-      console.error('Failed to logout:', error);
+      logger.error('Logout error:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      localStorage.removeItem('token');
+      dispatch({ type: 'CLEAR_AUTH' });
+      navigate('/login');
     }
-  }, [navigate]);
+  }, [state.token, dispatch, navigate]);
+
+  const checkAuth = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      dispatch({ type: 'CLEAR_AUTH' });
+      return;
+    }
+
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      const response = await fetch('/api/auth/verify', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        dispatch({ type: 'SET_USER', payload: data.data });
+        dispatch({ type: 'SET_TOKEN', payload: token });
+      } else {
+        localStorage.removeItem('token');
+        dispatch({ type: 'CLEAR_AUTH' });
+      }
+    } catch (error) {
+      logger.error('Auth verification failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      localStorage.removeItem('token');
+      dispatch({ type: 'CLEAR_AUTH' });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
 
   return {
     user: state.user,
+    token: state.token,
     loading: state.loading,
     error: state.error,
+    isAdmin,
     login,
     logout,
+    checkAuth,
   };
 }

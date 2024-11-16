@@ -1,244 +1,279 @@
-import axios from 'axios';
-
-import type { Container, ContainerStats, Stack } from '../../types/models-shared';
-import { createApiError } from '../../types/error';
-import { BASE_URL } from '../config';
+import type { Container } from '../../types/models-shared';
+import type { DockerStats } from '../../types/docker';
 import { logger } from '../utils/frontendLogger';
+import { config } from '../config';
 
-// Configure axios
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const BASE_URL = `${config.apiUrl}/docker`;
 
-// Add response interceptor for error handling
-api.interceptors.response.use(
-  response => response,
-  error => {
-    logger.error('Docker API request failed:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      error: error.message,
-      response: error.response?.data,
-    });
-    return Promise.reject(error);
-  },
-);
-
-export interface DockerResponse<T> {
-  success: boolean;
-  data: T;
-  error?: string;
-}
-
-export async function listContainers(): Promise<DockerResponse<Container[]>> {
+export async function listContainers(hostId: string): Promise<Container[]> {
   try {
-    logger.info('Listing containers');
-    const response = await api.get<DockerResponse<Container[]>>(`/docker/containers`);
-    logger.info('Containers listed successfully', { count: response.data?.data?.length });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/containers`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to list containers');
+    }
+    return data.data;
   } catch (error) {
     logger.error('Failed to list containers:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to list containers', error, 404);
+    throw error;
   }
 }
 
-export async function getContainerLogs(id: string): Promise<DockerResponse<string>> {
+export async function getContainerStats(hostId: string, containerId: string): Promise<DockerStats> {
   try {
-    logger.info('Fetching container logs', { containerId: id });
-    const response = await api.get<DockerResponse<string>>(`/docker/containers/${id}/logs`);
-    logger.info('Container logs fetched successfully', { containerId: id });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to get container logs:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to get container logs', error, 404);
-  }
-}
-
-export async function startContainer(id: string): Promise<DockerResponse<void>> {
-  try {
-    logger.info('Starting container', { containerId: id });
-    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/start`);
-    logger.info('Container started successfully', { containerId: id });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to start container:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to start container', error, 400);
-  }
-}
-
-export async function stopContainer(id: string): Promise<DockerResponse<void>> {
-  try {
-    logger.info('Stopping container', { containerId: id });
-    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/stop`);
-    logger.info('Container stopped successfully', { containerId: id });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to stop container:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to stop container', error, 400);
-  }
-}
-
-export async function restartContainer(id: string): Promise<DockerResponse<void>> {
-  try {
-    logger.info('Restarting container', { containerId: id });
-    const response = await api.post<DockerResponse<void>>(`/docker/containers/${id}/restart`);
-    logger.info('Container restarted successfully', { containerId: id });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to restart container:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to restart container', error, 400);
-  }
-}
-
-export async function removeContainer(id: string): Promise<DockerResponse<void>> {
-  try {
-    logger.info('Removing container', { containerId: id });
-    const response = await api.delete<DockerResponse<void>>(`/docker/containers/${id}`);
-    logger.info('Container removed successfully', { containerId: id });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to remove container:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to remove container', error, 400);
-  }
-}
-
-export async function getContainerStats(id: string): Promise<DockerResponse<ContainerStats>> {
-  try {
-    logger.info('Fetching container stats', { containerId: id });
-    const response = await api.get<DockerResponse<ContainerStats>>(`/docker/containers/${id}/stats`);
-    logger.info('Container stats fetched successfully', { containerId: id });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}/stats`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get container stats');
+    }
+    return data.data;
   } catch (error) {
     logger.error('Failed to get container stats:', {
-      containerId: id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to get container stats', error, 404);
+    throw error;
   }
 }
 
-export async function getStacks(): Promise<DockerResponse<Stack[]>> {
+export async function startContainer(hostId: string, containerId: string): Promise<void> {
   try {
-    logger.info('Fetching stacks');
-    const response = await api.get<DockerResponse<Stack[]>>(`/docker/stacks`);
-    logger.info('Stacks fetched successfully', { count: response.data?.data?.length });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}/start`, {
+      method: 'POST',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to start container');
+    }
+  } catch (error) {
+    logger.error('Failed to start container:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function stopContainer(hostId: string, containerId: string): Promise<void> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}/stop`, {
+      method: 'POST',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to stop container');
+    }
+  } catch (error) {
+    logger.error('Failed to stop container:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function restartContainer(hostId: string, containerId: string): Promise<void> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}/restart`, {
+      method: 'POST',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to restart container');
+    }
+  } catch (error) {
+    logger.error('Failed to restart container:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function removeContainer(hostId: string, containerId: string): Promise<void> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to remove container');
+    }
+  } catch (error) {
+    logger.error('Failed to remove container:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function listNetworks(hostId: string): Promise<any[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/networks`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to list networks');
+    }
+    return data.data;
+  } catch (error) {
+    logger.error('Failed to list networks:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function listVolumes(hostId: string): Promise<any[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/volumes`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to list volumes');
+    }
+    return data.data;
+  } catch (error) {
+    logger.error('Failed to list volumes:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function getContainerLogs(hostId: string, containerId: string): Promise<string> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/containers/${containerId}/logs`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get container logs');
+    }
+    return data.data;
+  } catch (error) {
+    logger.error('Failed to get container logs:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export async function getStacks(hostId: string): Promise<any[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get stacks');
+    }
+    return data.data;
   } catch (error) {
     logger.error('Failed to get stacks:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to get stacks', error, 404);
+    throw error;
   }
 }
 
-export async function createStack(name: string, composeFile: string): Promise<DockerResponse<void>> {
+export async function createStack(hostId: string, name: string, composeFile: string): Promise<void> {
   try {
-    logger.info('Creating stack', { name });
-    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}`, { composeFile });
-    logger.info('Stack created successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name, composeFile }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create stack');
+    }
   } catch (error) {
     logger.error('Failed to create stack:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to create stack', error, 400);
+    throw error;
   }
 }
 
-export async function deleteStack(name: string): Promise<DockerResponse<void>> {
+export async function deleteStack(hostId: string, stackName: string): Promise<void> {
   try {
-    logger.info('Deleting stack', { name });
-    const response = await api.delete<DockerResponse<void>>(`/docker/stacks/${name}`);
-    logger.info('Stack deleted successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks/${stackName}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to delete stack');
+    }
   } catch (error) {
     logger.error('Failed to delete stack:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to delete stack', error, 400);
+    throw error;
   }
 }
 
-export async function startStack(name: string): Promise<DockerResponse<void>> {
+export async function startStack(hostId: string, stackName: string): Promise<void> {
   try {
-    logger.info('Starting stack', { name });
-    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}/start`);
-    logger.info('Stack started successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks/${stackName}/start`, {
+      method: 'POST',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to start stack');
+    }
   } catch (error) {
     logger.error('Failed to start stack:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to start stack', error, 400);
+    throw error;
   }
 }
 
-export async function stopStack(name: string): Promise<DockerResponse<void>> {
+export async function stopStack(hostId: string, stackName: string): Promise<void> {
   try {
-    logger.info('Stopping stack', { name });
-    const response = await api.post<DockerResponse<void>>(`/docker/stacks/${name}/stop`);
-    logger.info('Stack stopped successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks/${stackName}/stop`, {
+      method: 'POST',
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to stop stack');
+    }
   } catch (error) {
     logger.error('Failed to stop stack:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to stop stack', error, 400);
+    throw error;
   }
 }
 
-export async function getStackComposeFile(name: string): Promise<DockerResponse<string>> {
+export async function getStackComposeFile(hostId: string, stackName: string): Promise<string> {
   try {
-    logger.info('Fetching stack compose file', { name });
-    const response = await api.get<DockerResponse<string>>(`/docker/stacks/${name}`);
-    logger.info('Stack compose file fetched successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks/${stackName}/compose`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get stack compose file');
+    }
+    return data.data;
   } catch (error) {
     logger.error('Failed to get stack compose file:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to get stack compose file', error, 404);
+    throw error;
   }
 }
 
-export async function updateStackComposeFile(name: string, composeFile: string): Promise<DockerResponse<void>> {
+export async function updateStackComposeFile(hostId: string, stackName: string, composeFile: string): Promise<void> {
   try {
-    logger.info('Updating stack compose file', { name });
-    const response = await api.put<DockerResponse<void>>(`/docker/stacks/${name}`, { composeFile });
-    logger.info('Stack compose file updated successfully', { name });
-    return response.data;
+    const response = await fetch(`${BASE_URL}/${hostId}/stacks/${stackName}/compose`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ composeFile }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to update stack compose file');
+    }
   } catch (error) {
     logger.error('Failed to update stack compose file:', {
-      name,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
-    throw createApiError('Failed to update stack compose file', error, 400);
+    throw error;
   }
 }

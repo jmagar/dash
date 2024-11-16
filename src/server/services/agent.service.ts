@@ -1,16 +1,16 @@
 import { Server as SocketServer, Socket, Namespace } from 'socket.io';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import {
-  AgentStatus,
+import { AgentStatus } from '../../types/agent-config';
+import type {
   AgentInfo,
   AgentMetrics,
-  AgentCommand,
   AgentCommandResult,
-  AgentHeartbeat,
   ServerToAgentEvents,
   AgentToServerEvents,
-} from '../../types/agent-config';
+  LogFilter,
+  LogEntry
+} from '../../types/socket.io';
 
 interface ConnectedAgent {
   socket: Socket<AgentToServerEvents, ServerToAgentEvents>;
@@ -91,12 +91,7 @@ class AgentService extends EventEmitter {
     this.emit('agent:registered', info);
 
     // Send command to acknowledge registration
-    this.executeCommand(id, 'acknowledge', [], { timeout: 5000 }).catch(error => {
-      logger.error('Failed to acknowledge agent registration', {
-        agentId: id,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    });
+    socket.emit('command', 'acknowledge');
   }
 
   private setupAgentHandlers(
@@ -128,13 +123,18 @@ class AgentService extends EventEmitter {
       this.emit('agent:error', { agentId, error: err });
     });
 
-    // Handle heartbeats
-    socket.on('heartbeat', (heartbeat: AgentHeartbeat) => {
+    // Handle heartbeat
+    socket.on('heartbeat', (data: { timestamp: string; load: number[] }) => {
       const agent = this.agents.get(agentId);
       if (agent) {
         agent.lastSeen = new Date();
-        this.emit('agent:heartbeat', { agentId, heartbeat });
+        this.emit('agent:heartbeat', { agentId, heartbeat: data });
       }
+    });
+
+    // Handle logs
+    socket.on('logs', (logs: LogEntry[]) => {
+      this.emit('agent:logs', { agentId, logs });
     });
   }
 
@@ -145,6 +145,30 @@ class AgentService extends EventEmitter {
       this.agents.delete(agentId);
       this.emit('agent:disconnected', agentId);
     }
+  }
+
+  /**
+   * Subscribe agent to log streaming with filters
+   */
+  public async subscribeToLogs(agentId: string, filter?: LogFilter): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not connected`);
+    }
+
+    agent.socket.emit('logs:subscribe', filter);
+  }
+
+  /**
+   * Unsubscribe agent from log streaming
+   */
+  public async unsubscribeFromLogs(agentId: string): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not connected`);
+    }
+
+    agent.socket.emit('logs:unsubscribe');
   }
 
   /**
@@ -167,8 +191,7 @@ class AgentService extends EventEmitter {
   public async executeCommand(
     agentId: string,
     command: string,
-    args: string[] = [],
-    options: Partial<Omit<AgentCommand, 'id' | 'command' | 'args'>> = {}
+    args: string[] = []
   ): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) {
@@ -176,25 +199,12 @@ class AgentService extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      const cmd: AgentCommand = {
-        id: Math.random().toString(36).substring(2, 15),
-        command,
-        args,
-        ...options,
-      };
-
       const timeout = setTimeout(() => {
         reject(new Error('Command acknowledgment timeout'));
-      }, options.timeout || 5000);
+      }, 5000);
 
-      agent.socket.emit('command', cmd, (response: { status: string }) => {
-        clearTimeout(timeout);
-        if (response.status === 'accepted') {
-          resolve();
-        } else {
-          reject(new Error(`Command rejected: ${response.status}`));
-        }
-      });
+      agent.socket.emit('command', command, args);
+      resolve();
     });
   }
 

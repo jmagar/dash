@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './useSocket';
-import type { ProcessInfo } from '../../server/services/process.service';
+import type { ProcessInfo } from '../../types/metrics';
 
 interface UseProcessMonitorOptions {
   hostId: string;
@@ -50,9 +50,9 @@ export function useProcessMonitor({
   // Handle process change event
   const handleProcessChange = useCallback((data: { hostId: string; process: ProcessInfo; oldStatus: string }) => {
     if (data.hostId === hostId) {
-      setProcesses(prev => prev.map(p =>
-        p.pid === data.process.pid ? data.process : p
-      ));
+      setProcesses(prev =>
+        prev.map(p => (p.pid === data.process.pid ? data.process : p))
+      );
       onProcessChange?.(data.process, data.oldStatus);
     }
   }, [hostId, onProcessChange]);
@@ -67,26 +67,53 @@ export function useProcessMonitor({
 
   // Start monitoring processes
   const startMonitoring = useCallback(() => {
-    if (!socket) return;
-    socket.emit('process:monitor', { hostId });
-    setIsMonitoring(true);
-    setError(null);
-  }, [socket, hostId]);
+    if (!socket) {
+      setError('Socket not connected');
+      return;
+    }
+
+    try {
+      socket.emit('process:monitor', { hostId });
+      setIsMonitoring(true);
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to start monitoring';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    }
+  }, [socket, hostId, onError]);
 
   // Stop monitoring processes
   const stopMonitoring = useCallback(() => {
     if (!socket) return;
-    socket.emit('process:unmonitor', { hostId });
-    setIsMonitoring(false);
-  }, [socket, hostId]);
+
+    try {
+      socket.emit('process:unmonitor', { hostId });
+      setIsMonitoring(false);
+      setError(null);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to stop monitoring';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    }
+  }, [socket, hostId, onError]);
 
   // Kill a process
   const killProcess = useCallback((pid: number, signal?: string) => {
-    if (!socket) return;
-    socket.emit('process:kill', { hostId, pid, signal });
-  }, [socket, hostId]);
+    if (!socket) {
+      setError('Socket not connected');
+      return;
+    }
 
-  // Setup socket event listeners
+    try {
+      socket.emit('process:kill', { hostId, pid, signal });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to kill process';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    }
+  }, [socket, hostId, onError]);
+
   useEffect(() => {
     if (!socket) return;
 
@@ -106,22 +133,18 @@ export function useProcessMonitor({
       socket.off('process:ended', handleProcessEnd);
       socket.off('process:changed', handleProcessChange);
       socket.off('process:error', handleError);
-
-      if (isMonitoring) {
-        stopMonitoring();
-      }
+      stopMonitoring();
     };
   }, [
     socket,
     autoStart,
+    startMonitoring,
+    stopMonitoring,
     handleProcessList,
     handleProcessStart,
     handleProcessEnd,
     handleProcessChange,
     handleError,
-    startMonitoring,
-    stopMonitoring,
-    isMonitoring,
   ]);
 
   return {

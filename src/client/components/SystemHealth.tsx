@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Grid,
@@ -16,6 +16,8 @@ import {
   Collapse,
   Divider,
   Chip,
+  alpha,
+  Button,
 } from '@mui/material';
 import {
   Timeline as TimelineIcon,
@@ -28,6 +30,7 @@ import {
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
   Speed as SpeedIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import {
   AreaChart,
@@ -53,7 +56,23 @@ interface HealthIndicator {
 
 export const SystemHealth: React.FC = () => {
   const theme = useTheme();
+  const [expanded, setExpanded] = useState<string[]>([]);
   const { metrics, loading, error, refresh } = useHostMetrics();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setTimeout(() => setRefreshing(false), 1000);
+  };
+
+  const toggleExpand = (section: string) => {
+    setExpanded(prev =>
+      prev.includes(section)
+        ? prev.filter(s => s !== section)
+        : [...prev, section]
+    );
+  };
 
   if (loading) {
     return (
@@ -62,9 +81,10 @@ export const SystemHealth: React.FC = () => {
           sx={{
             height: 10,
             borderRadius: 5,
-            backgroundColor: theme.palette.grey[200],
+            backgroundColor: alpha(theme.palette.primary.main, 0.1),
             '& .MuiLinearProgress-bar': {
               borderRadius: 5,
+              bgcolor: theme.palette.primary.main,
             },
           }}
         />
@@ -78,6 +98,11 @@ export const SystemHealth: React.FC = () => {
         <Alert
           severity="error"
           variant="filled"
+          action={
+            <Button color="inherit" size="small" onClick={handleRefresh}>
+              Retry
+            </Button>
+          }
           sx={{
             borderRadius: 2,
             '& .MuiAlert-icon': {
@@ -100,28 +125,12 @@ export const SystemHealth: React.FC = () => {
           variant="outlined"
           sx={{ borderRadius: 2 }}
         >
-          No system health metrics available
+          <AlertTitle>No Data Available</AlertTitle>
+          System health metrics are not available at this time.
         </Alert>
       </Box>
     );
   }
-
-  const getHealthStatus = (value: number, warning: number, critical: number): 'success' | 'warning' | 'error' => {
-    if (value >= critical) return 'error';
-    if (value >= warning) return 'warning';
-    return 'success';
-  };
-
-  const getStatusIcon = (status: 'success' | 'warning' | 'error') => {
-    switch (status) {
-      case 'error':
-        return <ErrorIcon color="error" />;
-      case 'warning':
-        return <WarningIcon color="warning" />;
-      case 'success':
-        return <CheckCircleIcon color="success" />;
-    }
-  };
 
   const healthIndicators: HealthIndicator[] = [
     {
@@ -129,73 +138,78 @@ export const SystemHealth: React.FC = () => {
       value: metrics.cpu.total,
       threshold: 80,
       unit: '%',
-      status: getHealthStatus(metrics.cpu.total, 80, 90),
-      message: `CPU usage is at ${metrics.cpu.total.toFixed(1)}%`,
-      icon: <MemoryIcon />,
+      status: metrics.cpu.total > 90 ? 'error' : metrics.cpu.total > 70 ? 'warning' : 'success',
+      message: metrics.cpu.total > 90 ? 'Critical CPU usage' : metrics.cpu.total > 70 ? 'High CPU usage' : 'Normal',
+      icon: <SpeedIcon />,
     },
     {
       name: 'Memory Usage',
-      value: (metrics.memory.used / metrics.memory.total) * 100,
-      threshold: 80,
+      value: metrics.memory.usage,
+      threshold: 85,
       unit: '%',
-      status: getHealthStatus((metrics.memory.used / metrics.memory.total) * 100, 80, 90),
-      message: `Memory usage is at ${((metrics.memory.used / metrics.memory.total) * 100).toFixed(1)}%`,
-      icon: <StorageIcon />,
+      status: metrics.memory.usage > 90 ? 'error' : metrics.memory.usage > 80 ? 'warning' : 'success',
+      message: metrics.memory.usage > 90 ? 'Critical memory usage' : metrics.memory.usage > 80 ? 'High memory usage' : 'Normal',
+      icon: <MemoryIcon />,
     },
     {
       name: 'Storage Usage',
-      value: metrics.storage.usage * 100,
-      threshold: 80,
+      value: metrics.storage.usage,
+      threshold: 90,
       unit: '%',
-      status: getHealthStatus(metrics.storage.usage * 100, 80, 90),
-      message: `Storage usage is at ${(metrics.storage.usage * 100).toFixed(1)}%`,
+      status: metrics.storage.usage > 95 ? 'error' : metrics.storage.usage > 85 ? 'warning' : 'success',
+      message: metrics.storage.usage > 95 ? 'Critical storage usage' : metrics.storage.usage > 85 ? 'Low storage space' : 'Normal',
       icon: <StorageIcon />,
     },
     {
-      name: 'Load Average',
-      value: metrics.loadAverage[0],
-      threshold: metrics.cpu.cores,
-      unit: '',
-      status: getHealthStatus(metrics.loadAverage[0], metrics.cpu.cores, metrics.cpu.cores * 2),
-      message: `Load average is ${metrics.loadAverage[0].toFixed(2)}`,
-      icon: <SpeedIcon />,
+      name: 'Network Health',
+      value: metrics.network.health,
+      threshold: 70,
+      unit: '%',
+      status: metrics.network.health < 60 ? 'error' : metrics.network.health < 80 ? 'warning' : 'success',
+      message: metrics.network.health < 60 ? 'Poor network health' : metrics.network.health < 80 ? 'Degraded network performance' : 'Normal',
+      icon: <NetworkIcon />,
     },
   ];
 
-  const performanceData = [
-    {
-      name: 'Current',
-      cpu: metrics.cpu.total,
-      memory: (metrics.memory.used / metrics.memory.total) * 100,
-      storage: metrics.storage.usage * 100,
-    },
-  ];
-
-  const getChipColor = (status: 'success' | 'warning' | 'error') => {
+  const getStatusColor = (status: HealthIndicator['status']) => {
     switch (status) {
-      case 'error':
-        return theme.palette.error.main;
-      case 'warning':
-        return theme.palette.warning.main;
       case 'success':
         return theme.palette.success.main;
+      case 'warning':
+        return theme.palette.warning.main;
+      case 'error':
+        return theme.palette.error.main;
+      default:
+        return theme.palette.grey[500];
     }
   };
 
   return (
-    <Box p={3}>
-      <Box display="flex" alignItems="center" mb={3}>
-        <Box display="flex" alignItems="center" gap={1} sx={{ flexGrow: 1 }}>
-          <TimelineIcon color="primary" />
-          <Typography variant="h5">System Health Overview</Typography>
-        </Box>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 600,
+            background: theme.palette.mode === 'dark'
+              ? 'linear-gradient(45deg, #90caf9 30%, #64b5f6 90%)'
+              : 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          System Health
+        </Typography>
+        <Box sx={{ flexGrow: 1 }} />
         <Tooltip title="Refresh metrics">
           <IconButton
-            onClick={refresh}
+            onClick={handleRefresh}
+            disabled={refreshing}
             sx={{
-              transition: 'transform 0.3s ease-in-out',
+              transition: 'transform 0.2s',
               '&:hover': {
                 transform: 'rotate(180deg)',
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
               },
             }}
           >
@@ -205,172 +219,146 @@ export const SystemHealth: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 3,
-              borderRadius: 2,
-              boxShadow: theme.shadows[3],
-              background: `linear-gradient(45deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-              color: 'white',
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              Performance Overview
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={performanceData}>
-                <defs>
-                  <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0.2}/>
-                  </linearGradient>
-                  <linearGradient id="colorMemory" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#82ca9d" stopOpacity={0.2}/>
-                  </linearGradient>
-                  <linearGradient id="colorStorage" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ffc658" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#ffc658" stopOpacity={0.2}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.2)" />
-                <XAxis dataKey="name" stroke="rgba(255,255,255,0.7)" />
-                <YAxis stroke="rgba(255,255,255,0.7)" />
-                <ChartTooltip />
-                <Area
-                  type="monotone"
-                  dataKey="cpu"
-                  stackId="1"
-                  stroke="#8884d8"
-                  fill="url(#colorCpu)"
-                  name="CPU Usage %"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="memory"
-                  stackId="2"
-                  stroke="#82ca9d"
-                  fill="url(#colorMemory)"
-                  name="Memory Usage %"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="storage"
-                  stackId="3"
-                  stroke="#ffc658"
-                  fill="url(#colorStorage)"
-                  name="Storage Usage %"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
         {healthIndicators.map((indicator) => (
           <Grid item xs={12} md={6} lg={3} key={indicator.name}>
-            <Card
+            <Paper
+              elevation={0}
               sx={{
-                height: '100%',
+                p: 3,
+                bgcolor: alpha(getStatusColor(indicator.status), 0.05),
+                borderRadius: 2,
                 transition: 'transform 0.2s',
                 '&:hover': {
-                  transform: 'translateY(-4px)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: theme.shadows[4],
                 },
               }}
             >
-              <CardContent>
-                <Box display="flex" alignItems="center" gap={1} mb={2}>
-                  {React.cloneElement(indicator.icon as React.ReactElement, {
-                    color: indicator.status,
-                    sx: { fontSize: 28 },
-                  })}
-                  <Typography variant="h6" color={getChipColor(indicator.status)}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    bgcolor: alpha(getStatusColor(indicator.status), 0.1),
+                    color: getStatusColor(indicator.status),
+                  }}
+                >
+                  {indicator.icon}
+                </Box>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="subtitle2" color="text.secondary">
                     {indicator.name}
                   </Typography>
-                </Box>
-
-                <Box sx={{ position: 'relative', mb: 2 }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={(indicator.value / indicator.threshold) * 100}
-                    color={indicator.status}
-                    sx={{
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: theme.palette.grey[200],
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 5,
-                      },
-                    }}
-                  />
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      position: 'absolute',
-                      right: 0,
-                      top: -20,
-                      color: getChipColor(indicator.status),
-                    }}
-                  >
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {indicator.value.toFixed(1)}{indicator.unit}
                   </Typography>
                 </Box>
+                <Chip
+                  size="small"
+                  label={indicator.status}
+                  sx={{
+                    bgcolor: alpha(getStatusColor(indicator.status), 0.1),
+                    color: getStatusColor(indicator.status),
+                    fontWeight: 500,
+                  }}
+                />
+              </Box>
 
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Typography variant="body2" color="text.secondary">
-                    Threshold: {indicator.threshold}{indicator.unit}
-                  </Typography>
-                  <Chip
-                    label={indicator.status}
-                    size="small"
-                    color={indicator.status}
-                    icon={getStatusIcon(indicator.status)}
-                    sx={{ textTransform: 'capitalize' }}
-                  />
-                </Box>
-              </CardContent>
-            </Card>
+              <LinearProgress
+                variant="determinate"
+                value={(indicator.value / indicator.threshold) * 100}
+                sx={{
+                  height: 6,
+                  borderRadius: 3,
+                  bgcolor: alpha(getStatusColor(indicator.status), 0.1),
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 3,
+                    bgcolor: getStatusColor(indicator.status),
+                  },
+                }}
+              />
+
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  mt: 1,
+                  color: getStatusColor(indicator.status),
+                }}
+              >
+                {indicator.message}
+              </Typography>
+            </Paper>
           </Grid>
         ))}
 
         <Grid item xs={12}>
-          <Alert
-            severity={
-              healthIndicators.some((i) => i.status === 'error')
-                ? 'error'
-                : healthIndicators.some((i) => i.status === 'warning')
-                ? 'warning'
-                : 'success'
-            }
-            variant="outlined"
+          <Paper
+            elevation={0}
             sx={{
+              p: 3,
+              bgcolor: theme.palette.mode === 'dark'
+                ? alpha(theme.palette.background.paper, 0.8)
+                : theme.palette.background.paper,
               borderRadius: 2,
-              '& .MuiAlert-icon': {
-                fontSize: 28,
-              },
             }}
           >
-            <AlertTitle>System Status Summary</AlertTitle>
-            <Box component="ul" sx={{ mt: 1, pl: 2 }}>
-              {healthIndicators.map((indicator) => (
-                <Box
-                  component="li"
-                  key={indicator.name}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    mb: 0.5,
-                  }}
+            <Typography variant="h6" sx={{ mb: 2 }}>Performance History</Typography>
+            <Box sx={{ height: 300 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={metrics.history}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
                 >
-                  {getStatusIcon(indicator.status)}
-                  <Typography>
-                    {indicator.message}
-                  </Typography>
-                </Box>
-              ))}
+                  <defs>
+                    <linearGradient id="cpu" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={theme.palette.primary.main} stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor={theme.palette.primary.main} stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="memory" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={theme.palette.success.main} stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor={theme.palette.success.main} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.text.primary, 0.1)} />
+                  <XAxis
+                    dataKey="timestamp"
+                    stroke={theme.palette.text.secondary}
+                    tick={{ fill: theme.palette.text.secondary }}
+                  />
+                  <YAxis
+                    stroke={theme.palette.text.secondary}
+                    tick={{ fill: theme.palette.text.secondary }}
+                  />
+                  <ChartTooltip
+                    contentStyle={{
+                      backgroundColor: theme.palette.background.paper,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 8,
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="cpu"
+                    stroke={theme.palette.primary.main}
+                    fillOpacity={1}
+                    fill="url(#cpu)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="memory"
+                    stroke={theme.palette.success.main}
+                    fillOpacity={1}
+                    fill="url(#memory)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </Box>
-          </Alert>
+          </Paper>
         </Grid>
       </Grid>
     </Box>

@@ -255,18 +255,43 @@ func (c *Collector) collectMemoryMetrics() (*MemoryMetrics, error) {
 func (c *Collector) collectStorageMetrics() (*StorageMetrics, error) {
 	partitions, err := disk.Partitions(false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get disk partitions: %w", err)
 	}
 
 	var total, used, free uint64
+	var partitionErrors []error
+
 	for _, partition := range partitions {
-		usage, err := disk.Usage(partition.Mountpoint)
-		if err != nil {
+		// Skip special filesystems
+		if isSpecialFS(partition.Fstype) {
 			continue
 		}
+
+		usage, err := disk.Usage(partition.Mountpoint)
+		if err != nil {
+			partitionErrors = append(partitionErrors, fmt.Errorf("failed to get usage for %s: %w", partition.Mountpoint, err))
+			c.logger.Warn("Failed to get partition usage",
+				zap.String("mountpoint", partition.Mountpoint),
+				zap.Error(err))
+			continue
+		}
+
+		// Skip partitions with zero total space (might be special filesystems)
+		if usage.Total == 0 {
+			continue
+		}
+
 		total += usage.Total
 		used += usage.Used
 		free += usage.Free
+	}
+
+	// If we couldn't get any partition data, return an error
+	if total == 0 {
+		if len(partitionErrors) > 0 {
+			return nil, fmt.Errorf("failed to get storage metrics: %v", partitionErrors)
+		}
+		return nil, fmt.Errorf("no valid partitions found")
 	}
 
 	metrics := &StorageMetrics{
@@ -301,6 +326,24 @@ func (c *Collector) collectStorageMetrics() (*StorageMetrics, error) {
 	}
 
 	return metrics, nil
+}
+
+func isSpecialFS(fstype string) bool {
+	specialFS := map[string]bool{
+		"proc":     true,
+		"sysfs":    true,
+		"devpts":   true,
+		"devtmpfs": true,
+		"tmpfs":    true,
+		"cgroup":   true,
+		"cgroup2":  true,
+		"pstore":   true,
+		"securityfs": true,
+		"debugfs":   true,
+		"configfs":  true,
+		"fusectl":   true,
+	}
+	return specialFS[fstype]
 }
 
 func (c *Collector) collectNetworkMetrics() (*NetMetrics, error) {

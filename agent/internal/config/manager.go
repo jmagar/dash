@@ -239,8 +239,8 @@ func (m *Manager) handleFileChange(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	config, ok := m.configs[path]
-	if !ok {
+	config, exists := m.configs[path]
+	if !exists {
 		return fmt.Errorf("config not found: %s", path)
 	}
 

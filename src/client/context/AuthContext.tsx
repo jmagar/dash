@@ -1,175 +1,133 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useReducer, ReactNode, useContext } from 'react';
 
-import type { AuthenticatedUser, AuthContextType, RefreshTokenResponse } from '../../types/auth';
-import { logger } from '../utils/frontendLogger';
-
-interface AuthResponse {
-  success: boolean;
-  valid?: boolean;
-  token?: string;
-  refreshToken?: string;
-  user?: AuthenticatedUser;
-  error?: string;
+export interface User {
+  id: string;
+  username: string;
+  email?: string;
+  role: string;
+  permissions: string[];
+  isAdmin?: boolean;
 }
 
-function throwNotInitialized(): never {
-  throw new Error('AuthContext not initialized');
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
 }
 
-const AuthContext = createContext<AuthContextType>({
+type AuthAction =
+  | { type: 'SET_USER'; payload: User }
+  | { type: 'SET_TOKEN'; payload: string }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string }
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'CLEAR_AUTH' };
+
+interface AuthContextType {
+  state: AuthState;
+  dispatch: React.Dispatch<AuthAction>;
+}
+
+const initialState: AuthState = {
   user: null,
-  login: () => throwNotInitialized(),
-  logout: () => throwNotInitialized(),
-  refreshSession: () => throwNotInitialized(),
+  token: null,
   loading: true,
   error: null,
-});
+};
 
-export function useAuth(): AuthContextType {
-  return useContext(AuthContext);
+export const AuthContext = createContext<AuthContextType | null>(null);
+
+function authReducer(state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case 'SET_USER':
+      return {
+        ...state,
+        user: action.payload,
+      };
+    case 'SET_TOKEN':
+      return {
+        ...state,
+        token: action.payload,
+      };
+    case 'SET_LOADING':
+      return {
+        ...state,
+        loading: action.payload,
+      };
+    case 'SET_ERROR':
+      return {
+        ...state,
+        error: action.payload,
+      };
+    case 'CLEAR_ERROR':
+      return {
+        ...state,
+        error: null,
+      };
+    case 'CLEAR_AUTH':
+      return {
+        ...initialState,
+        loading: false,
+      };
+    default:
+      return state;
+  }
 }
 
 interface AuthProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
-  const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const validateToken = async (): Promise<void> => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch('/api/auth/validate', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        const data = await response.json() as AuthResponse;
-
-        if (data.success && data.valid && data.user) {
-          setUser(data.user);
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('refreshToken');
-        }
-      } catch (error) {
-        logger.error('Token validation failed:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void validateToken();
-  }, []);
-
-  const login = async (username: string, password: string): Promise<void> => {
-    try {
-      setError(null);
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json() as AuthResponse;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      if (data.token && data.refreshToken && data.user) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('refreshToken', data.refreshToken);
-        setUser(data.user);
-      } else {
-        throw new Error('Invalid response from server');
-      }
-    } catch (error) {
-      logger.error('Login failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      setError(error instanceof Error ? error.message : 'Login failed');
-      throw error;
-    }
-  };
-
-  const logout = async (): Promise<void> => {
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-      }
-    } catch (error) {
-      logger.error('Logout failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      setUser(null);
-    }
-  };
-
-  const refreshSession = async (): Promise<void> => {
-    try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      const data = await response.json() as RefreshTokenResponse;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to refresh session');
-      }
-
-      if (data.token && data.refreshToken) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('refreshToken', data.refreshToken);
-      } else {
-        throw new Error('Invalid response from server');
-      }
-    } catch (error) {
-      logger.error('Session refresh failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      // If refresh fails, force logout
-      await logout();
-      throw error;
-    }
-  };
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [state, dispatch] = useReducer(authReducer, initialState);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshSession, loading, error }}>
+    <AuthContext.Provider value={{ state, dispatch }}>
       {children}
     </AuthContext.Provider>
   );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+
+  const { state, dispatch } = context;
+
+  const login = async (username: string, password: string) => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      // TODO: Implement actual login logic
+      const mockUser: User = {
+        id: '1',
+        username,
+        role: 'admin',
+        permissions: ['read', 'write'],
+        isAdmin: true,
+      };
+      dispatch({ type: 'SET_USER', payload: mockUser });
+      dispatch({ type: 'SET_TOKEN', payload: 'mock-token' });
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Login failed' });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  const logout = () => {
+    dispatch({ type: 'CLEAR_AUTH' });
+  };
+
+  return {
+    user: state.user,
+    token: state.token,
+    loading: state.loading,
+    error: state.error,
+    login,
+    logout,
+    isAuthenticated: !!state.token,
+  };
 }

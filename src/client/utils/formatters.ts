@@ -1,49 +1,89 @@
-// Format bytes to human readable string
-export const formatBytes = (bytes: number): string => {
+/**
+ * Format bytes to human readable string
+ */
+export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 B';
+
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-};
 
-// Format percentage
-export const formatPercent = (value: number): string => {
-  return `${value.toFixed(1)}%`;
-};
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
 
-// Format number with thousands separator
-export const formatNumber = (value: number): string => {
-  return new Intl.NumberFormat().format(value);
-};
+/**
+ * Format percentage to human readable string
+ */
+export function formatPercent(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}
 
-// Format bytes per second
-export const formatBytesPerSecond = (bytes: number): string => {
-  return `${formatBytes(bytes)}/s`;
-};
+/**
+ * Format date to human readable string
+ */
+export function formatDate(date: Date | string): string {
+  const d = new Date(date);
+  return d.toLocaleString();
+}
 
-// Format duration in seconds to human readable string
-export const formatDuration = (seconds: number): string => {
-  if (seconds < 60) return `${seconds}s`;
+/**
+ * Format duration to human readable string
+ */
+export function formatDuration(seconds: number): string {
+  const days = Math.floor(seconds / (24 * 60 * 60));
+  seconds -= days * 24 * 60 * 60;
+  const hours = Math.floor(seconds / (60 * 60));
+  seconds -= hours * 60 * 60;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-};
+  seconds -= minutes * 60;
 
-// Format date to locale string
-export const formatDate = (date: string | number | Date): string => {
-  return new Date(date).toLocaleString();
-};
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0) parts.push(`${Math.floor(seconds)}s`);
 
-// Format load average
-export const formatLoadAvg = (loadAvg: number[]): string => {
-  return loadAvg.map(v => v.toFixed(2)).join(', ');
-};
+  return parts.join(' ') || '0s';
+}
 
-// Format network speed
-export const formatSpeed = (bytesPerSecond: number): string => {
-  return formatBytesPerSecond(bytesPerSecond);
-};
+/**
+ * Format number to human readable string
+ */
+export function formatNumber(value: number, decimals = 0): string {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/**
+ * Format bits per second to human readable string
+ */
+export function formatBitrate(bps: number, decimals = 1): string {
+  if (bps === 0) return '0 bps';
+
+  const k = 1000;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps'];
+
+  const i = Math.floor(Math.log(bps) / Math.log(k));
+
+  return `${parseFloat((bps / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+/**
+ * Format file permissions to human readable string
+ */
+export function formatPermissions(mode: number): string {
+  const octal = (mode & 0o777).toString(8);
+  return octal.padStart(3, '0');
+}
+
+/**
+ * Format file size with appropriate units
+ */
+export function formatFileSize(size: number): string {
+  return formatBytes(size);
+}

@@ -1,186 +1,370 @@
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
   Typography,
   TextField,
   Button,
+  Avatar,
+  IconButton,
+  Divider,
   Alert,
+  useTheme,
+  alpha,
+  Tooltip,
+  Fade,
   CircularProgress,
+  Zoom,
 } from '@mui/material';
-import React, { useState } from 'react';
-
-import { useAuth } from '../context/AuthContext';
+import {
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
+  Person as PersonIcon,
+  Email as EmailIcon,
+  VpnKey as KeyIcon,
+  CheckCircle as SuccessIcon,
+} from '@mui/icons-material';
+import { useAuth } from '../hooks/useAuth';
 import { logger } from '../utils/frontendLogger';
 
-interface PasswordFormData {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-interface ChangePasswordResponse {
-  success: boolean;
-  error?: string;
-}
-
-export function UserProfile(): JSX.Element {
+export function UserProfile() {
+  const theme = useTheme();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [formData, setFormData] = useState<PasswordFormData>({
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [formData, setFormData] = useState({
+    username: user?.username || '',
+    email: user?.email || '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value,
     }));
+    if (error) setError(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError('New passwords do not match');
-      setLoading(false);
-      return;
-    }
+    if (!editing) return;
 
     try {
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
+      setError(null);
+      setLoading(true);
+
+      if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
+        throw new Error('New passwords do not match');
+      }
+
+      const response = await fetch('/api/users/profile', {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          currentPassword: formData.currentPassword,
-          newPassword: formData.newPassword,
-        }),
+        body: JSON.stringify(formData),
       });
 
-      const data = await response.json() as ChangePasswordResponse;
+      const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || 'Failed to change password');
+        throw new Error(data.error || 'Failed to update profile');
       }
 
-      setSuccess('Password changed successfully');
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
+      setSuccess(true);
+      setTimeout(() => {
+        setEditing(false);
+        setSuccess(false);
+      }, 1500);
+      
+      logger.info('Profile updated successfully');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update profile');
+      logger.error('Profile update failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
-    } catch (err) {
-      logger.error('Failed to change password:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError(err instanceof Error ? err.message : 'Failed to change password');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent): void => {
-    void handleSubmit(e);
+  const handleCancel = () => {
+    setEditing(false);
+    setError(null);
+    setFormData({
+      username: user?.username || '',
+      email: user?.email || '',
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    });
   };
 
-  if (!user) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography>Please log in to view your profile.</Typography>
-      </Box>
-    );
-  }
+  if (!user) return null;
 
   return (
     <Box sx={{ p: 3, maxWidth: 600, mx: 'auto' }}>
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          User Profile
-        </Typography>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1">Username: {user.username}</Typography>
-          <Typography variant="subtitle1">Email: {user.email}</Typography>
-          <Typography variant="subtitle1">Role: {user.role}</Typography>
-          <Typography variant="subtitle1">
-            Created: {new Date(user.createdAt).toLocaleString()}
-          </Typography>
-          <Typography variant="subtitle1">
-            Last Updated: {new Date(user.updatedAt).toLocaleString()}
-          </Typography>
+      <Paper
+        elevation={3}
+        sx={{
+          p: 4,
+          borderRadius: 2,
+          transition: theme.transitions.create(['box-shadow']),
+          '&:hover': {
+            boxShadow: theme.shadows[6],
+          },
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            mb: 4,
+          }}
+        >
+          <Avatar
+            sx={{
+              width: 80,
+              height: 80,
+              bgcolor: theme.palette.primary.main,
+              transition: theme.transitions.create(['transform', 'box-shadow']),
+              '&:hover': {
+                transform: 'scale(1.05)',
+                boxShadow: theme.shadows[4],
+              },
+            }}
+          >
+            <PersonIcon sx={{ fontSize: 40 }} />
+          </Avatar>
+          <Box>
+            <Typography variant="h5" fontWeight="bold">
+              {user.username}
+            </Typography>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: alpha(theme.palette.text.secondary, 0.8),
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+              }}
+            >
+              {user.role}
+            </Typography>
+          </Box>
+          <Tooltip title={editing ? "Cancel editing" : "Edit profile"}>
+            <IconButton
+              onClick={() => editing ? handleCancel() : setEditing(true)}
+              sx={{
+                ml: 'auto',
+                transition: theme.transitions.create(['transform', 'background-color']),
+                '&:hover': {
+                  transform: 'scale(1.1)',
+                },
+              }}
+              color={editing ? 'error' : 'primary'}
+            >
+              {editing ? <CancelIcon /> : <EditIcon />}
+            </IconButton>
+          </Tooltip>
         </Box>
 
-        <Typography variant="h6" gutterBottom>
-          Change Password
-        </Typography>
+        <Fade in={error !== null}>
+          <Box sx={{ mb: 3 }}>
+            {error && (
+              <Alert 
+                severity="error" 
+                onClose={() => setError(null)}
+                sx={{
+                  '& .MuiAlert-message': {
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                }}
+              >
+                {error}
+              </Alert>
+            )}
+          </Box>
+        </Fade>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+        <form onSubmit={handleSubmit}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <TextField
+              label="Username"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              disabled={!editing}
+              fullWidth
+              variant="outlined"
+              InputProps={{
+                startAdornment: <PersonIcon color="action" sx={{ mr: 1 }} />,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  transition: theme.transitions.create(['box-shadow']),
+                  '&.Mui-focused': {
+                    boxShadow: `${alpha(theme.palette.primary.main, 0.25)} 0 0 0 2px`,
+                  },
+                },
+              }}
+            />
 
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {success}
-          </Alert>
-        )}
+            <TextField
+              label="Email"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              disabled={!editing}
+              fullWidth
+              variant="outlined"
+              InputProps={{
+                startAdornment: <EmailIcon color="action" sx={{ mr: 1 }} />,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  transition: theme.transitions.create(['box-shadow']),
+                  '&.Mui-focused': {
+                    boxShadow: `${alpha(theme.palette.primary.main, 0.25)} 0 0 0 2px`,
+                  },
+                },
+              }}
+            />
 
-        <form onSubmit={handleFormSubmit}>
-          <TextField
-            fullWidth
-            type="password"
-            label="Current Password"
-            name="currentPassword"
-            value={formData.currentPassword}
-            onChange={handleChange}
-            margin="normal"
-            required
-            disabled={loading}
-          />
+            <Zoom in={editing} unmountOnExit>
+              <Box>
+                <Divider sx={{ my: 2 }}>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: alpha(theme.palette.text.secondary, 0.8),
+                      px: 1,
+                    }}
+                  >
+                    Change Password
+                  </Typography>
+                </Divider>
 
-          <TextField
-            fullWidth
-            type="password"
-            label="New Password"
-            name="newPassword"
-            value={formData.newPassword}
-            onChange={handleChange}
-            margin="normal"
-            required
-            disabled={loading}
-          />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <TextField
+                    label="Current Password"
+                    name="currentPassword"
+                    type="password"
+                    value={formData.currentPassword}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    InputProps={{
+                      startAdornment: <KeyIcon color="action" sx={{ mr: 1 }} />,
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        transition: theme.transitions.create(['box-shadow']),
+                        '&.Mui-focused': {
+                          boxShadow: `${alpha(theme.palette.primary.main, 0.25)} 0 0 0 2px`,
+                        },
+                      },
+                    }}
+                  />
 
-          <TextField
-            fullWidth
-            type="password"
-            label="Confirm New Password"
-            name="confirmPassword"
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            margin="normal"
-            required
-            disabled={loading}
-          />
+                  <TextField
+                    label="New Password"
+                    name="newPassword"
+                    type="password"
+                    value={formData.newPassword}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    InputProps={{
+                      startAdornment: <KeyIcon color="action" sx={{ mr: 1 }} />,
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        transition: theme.transitions.create(['box-shadow']),
+                        '&.Mui-focused': {
+                          boxShadow: `${alpha(theme.palette.primary.main, 0.25)} 0 0 0 2px`,
+                        },
+                      },
+                    }}
+                  />
 
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            disabled={loading}
-            sx={{ mt: 2 }}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Change Password'}
-          </Button>
+                  <TextField
+                    label="Confirm New Password"
+                    name="confirmPassword"
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    InputProps={{
+                      startAdornment: <KeyIcon color="action" sx={{ mr: 1 }} />,
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        transition: theme.transitions.create(['box-shadow']),
+                        '&.Mui-focused': {
+                          boxShadow: `${alpha(theme.palette.primary.main, 0.25)} 0 0 0 2px`,
+                        },
+                      },
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Zoom>
+
+            <Zoom in={editing} unmountOnExit>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={loading}
+                startIcon={
+                  loading ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : success ? (
+                    <SuccessIcon />
+                  ) : (
+                    <SaveIcon />
+                  )
+                }
+                sx={{
+                  mt: 2,
+                  height: 48,
+                  position: 'relative',
+                  transition: theme.transitions.create(
+                    ['background-color', 'box-shadow', 'transform'],
+                    { duration: theme.transitions.duration.short }
+                  ),
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    boxShadow: theme.shadows[4],
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                    boxShadow: theme.shadows[2],
+                  },
+                  ...(success && {
+                    bgcolor: theme.palette.success.main,
+                    '&:hover': {
+                      bgcolor: theme.palette.success.dark,
+                    },
+                  }),
+                }}
+              >
+                {success ? 'Changes Saved!' : 'Save Changes'}
+              </Button>
+            </Zoom>
+          </Box>
         </form>
       </Paper>
     </Box>

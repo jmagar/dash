@@ -1,0 +1,48 @@
+{
+  "id": "host-agent",
+  "server": {
+    "url": "http://localhost:3000",
+    "token": "local-agent-token"
+  },
+  "features": {
+    "docker": true,
+    "kubernetes": false,
+    "monitoring": true,
+    "backup": true,
+    "security": true
+  },
+  "monitoring": {
+    "interval": 10000,
+    "retention": 604800,
+    "metrics": {
+      "system": true,
+      "docker": true,
+      "kubernetes": false
+    }
+  },
+  "backup": {
+    "interval": 86400,
+    "retention": 7,
+    "paths": [
+      "/etc/shh",
+      "/var/log/shh"
+    ]
+  },
+  "security": {
+    "interval": 3600,
+    "rules": [
+      "docker_socket_permissions",
+      "root_login_attempts",
+      "failed_ssh_attempts",
+      "system_updates"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "file": "/var/log/shh/local-agent/agent.log"
+  },
+  "labels": {
+    "type": "host",
+    "role": "server"
+  }
+}

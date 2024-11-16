@@ -7,25 +7,59 @@ import { ApiError } from '../../types/error';
 import type { Host, CommandResult } from '../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../types/socket.io';
 import { db } from '../db';
+import type { ProcessInfo } from '../../types/metrics';
 
-export interface ProcessInfo {
+enum ProcessStatus {
+  RUNNING = 'running',
+  STOPPED = 'stopped',
+  SLEEPING = 'sleeping',
+  ZOMBIE = 'zombie',
+  DEAD = 'dead',
+  UNKNOWN = 'unknown',
+}
+
+interface ProcessInfo {
   pid: number;
   ppid: number;
   name: string;
   command: string;
   args: string[];
+  username: string;
   user: string;
+  cpuUsage: number;
+  memoryUsage: number;
   cpu: number;
   memory: number;
-  status: string;
+  status: ProcessStatus;
   startTime: Date;
+  threads: number;
+  fds: number;
+  memoryRss: number;
+  memoryVms: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export enum ProcessStatus {
-  RUNNING = 'running',
-  STOPPED = 'stopped',
-  ZOMBIE = 'zombie',
-  UNKNOWN = 'unknown',
+interface ProcessMetrics {
+  pid: number;
+  name: string;
+  command: string;
+  username: string;
+  cpuUsage: number;
+  memoryUsage: number;
+  memoryRss: number;
+  memoryVms: number;
+  threads: number;
+  fds: number;
+  ioStats?: {
+    readCount: number;
+    writeCount: number;
+    readBytes: number;
+    writeBytes: number;
+    ioTime: number;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 class ProcessService extends EventEmitter {
@@ -124,7 +158,7 @@ class ProcessService extends EventEmitter {
       }
 
       // Fallback to SSH
-      await sshService.executeCommand(host, `kill -${signal} ${pid}`);
+      await this.executeCommand(host, `kill -${signal} ${pid}`);
     } catch (error) {
       logger.error('Failed to kill process:', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -194,8 +228,45 @@ class ProcessService extends EventEmitter {
    * List processes via SSH
    */
   private async listViaSSH(host: Host): Promise<ProcessInfo[]> {
-    const result = await sshService.executeCommand(host, 'ps -eo pid,ppid,user,%cpu,%mem,stat,start,comm,args');
-    return this.parseProcessList(result.stdout);
+    const output = await this.executeCommand(
+      host,
+      'ps -eo pid,user,pcpu,pmem,vsz,rss,tty,stat,start,time,comm --no-headers'
+    );
+
+    return output
+      .trim()
+      .split('\n')
+      .map(line => {
+        const [
+          pid,
+          username,
+          cpuUsage,
+          memoryUsage,
+          vms,
+          rss,
+          _tty,
+          status,
+          _start,
+          _time,
+          command,
+        ] = line.trim().split(/\s+/);
+
+        return {
+          pid: parseInt(pid, 10),
+          name: command,
+          command,
+          username,
+          status: this.parseProcessStatus(status),
+          cpuUsage: parseFloat(cpuUsage),
+          memoryUsage: parseFloat(memoryUsage),
+          memoryRss: parseInt(rss, 10) * 1024, // Convert KB to bytes
+          memoryVms: parseInt(vms, 10) * 1024, // Convert KB to bytes
+          threads: 0, // Will be populated by getProcessDetails
+          fds: 0, // Will be populated by getProcessDetails
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      });
   }
 
   /**
@@ -221,6 +292,12 @@ class ProcessService extends EventEmitter {
         memory: parseFloat(mem),
         status: this.parseProcessStatus(stat),
         startTime: new Date(start),
+        threads: 0,
+        fds: 0,
+        memoryRss: 0,
+        memoryVms: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
     });
   }
@@ -229,10 +306,20 @@ class ProcessService extends EventEmitter {
    * Parse process status from ps stat column
    */
   private parseProcessStatus(stat: string): ProcessStatus {
-    if (stat.includes('Z')) return ProcessStatus.ZOMBIE;
-    if (stat.includes('T')) return ProcessStatus.STOPPED;
-    if (stat.includes('R') || stat.includes('S')) return ProcessStatus.RUNNING;
-    return ProcessStatus.UNKNOWN;
+    switch (stat.charAt(0)) {
+      case 'R':
+        return ProcessStatus.RUNNING;
+      case 'S':
+        return ProcessStatus.SLEEPING;
+      case 'T':
+        return ProcessStatus.STOPPED;
+      case 'Z':
+        return ProcessStatus.ZOMBIE;
+      case 'X':
+        return ProcessStatus.DEAD;
+      default:
+        return ProcessStatus.UNKNOWN;
+    }
   }
 
   /**
@@ -329,6 +416,196 @@ class ProcessService extends EventEmitter {
       [hostId]
     );
     return result.rows[0] || null;
+  }
+
+  private async executeCommand(host: Host, command: string): Promise<string> {
+    const result = await sshService.executeCommand(host.id, command);
+    if (result.code !== 0) {
+      throw new Error(`Command failed: ${result.stderr}`);
+    }
+    return result.stdout;
+  }
+
+  async getProcessDetails(host: Host, pid: number): Promise<Partial<ProcessInfo>> {
+    try {
+      const [threadsOutput, fdsOutput] = await Promise.all([
+        this.executeCommand(host, `ls /proc/${pid}/task | wc -l`),
+        this.executeCommand(host, `ls /proc/${pid}/fd | wc -l`),
+      ]);
+
+      return {
+        threads: parseInt(threadsOutput.trim(), 10),
+        fds: parseInt(fdsOutput.trim(), 10),
+      };
+    } catch (error) {
+      logger.error('Failed to get process details:', {
+        hostId: host.id,
+        pid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
+  private async parseProcessList(output: string): Promise<ProcessInfo[]> {
+    const lines = output.trim().split('\n');
+    const processes: ProcessInfo[] = [];
+    const now = new Date();
+
+    for (const line of lines) {
+      try {
+        const [
+          pid,
+          ppid,
+          cpu,
+          memory,
+          vsz,
+          rss,
+          tty,
+          stat,
+          start,
+          time,
+          command,
+          ...args
+        ] = line.trim().split(/\s+/);
+
+        const status = this.parseProcessStatus(stat);
+        const startTime = this.parseStartTime(start);
+        const memoryUsage = parseInt(memory, 10);
+        const cpuUsage = parseFloat(cpu);
+
+        processes.push({
+          pid: parseInt(pid, 10),
+          ppid: parseInt(ppid, 10),
+          name: command,
+          command,
+          args,
+          username: '',
+          user: '',
+          cpuUsage,
+          memoryUsage,
+          cpu: cpuUsage,
+          memory: memoryUsage,
+          status,
+          startTime,
+          threads: 0,
+          fds: 0,
+          memoryRss: parseInt(rss, 10) * 1024,
+          memoryVms: parseInt(vsz, 10) * 1024,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (error) {
+        logger.error('Failed to parse process line:', {
+          line,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return processes;
+  }
+
+  private parseProcessStatus(stat: string): ProcessStatus {
+    switch (stat[0]) {
+      case 'R':
+        return ProcessStatus.RUNNING;
+      case 'S':
+        return ProcessStatus.SLEEPING;
+      case 'T':
+        return ProcessStatus.STOPPED;
+      case 'Z':
+        return ProcessStatus.ZOMBIE;
+      default:
+        return ProcessStatus.UNKNOWN;
+    }
+  }
+
+  private parseStartTime(start: string): Date {
+    const now = new Date();
+    const [hour, minute] = start.split(':');
+
+    // If the process started today
+    const startTime = new Date(now);
+    startTime.setHours(parseInt(hour, 10));
+    startTime.setMinutes(parseInt(minute, 10));
+    startTime.setSeconds(0);
+    startTime.setMilliseconds(0);
+
+    // If the start time is in the future, it must be from yesterday
+    if (startTime > now) {
+      startTime.setDate(startTime.getDate() - 1);
+    }
+
+    return startTime;
+  }
+
+  async listProcessesViaSSH(host: Host): Promise<ProcessInfo[]> {
+    try {
+      const result = await sshService.executeCommand(host.id, 'ps -eo pid,ppid,%cpu,%mem,vsz,rss,tty,stat,start,time,comm,args');
+      if (result.code !== 0) {
+        throw new Error(`Failed to list processes: ${result.stderr}`);
+      }
+      return await this.parseProcessList(result.stdout);
+    } catch (error) {
+      logger.error('Failed to list processes:', {
+        hostId: host.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  async getProcessMetrics(host: Host, pid: number): Promise<ProcessMetrics | null> {
+    try {
+      const result = await sshService.executeCommand(host.id, `ps -p ${pid} -o pid,comm,%cpu,%mem,rss,vsz`);
+      if (result.code !== 0) {
+        return null;
+      }
+
+      const lines = result.stdout.trim().split('\n');
+      if (lines.length < 2) {
+        return null;
+      }
+
+      const [
+        _,
+        processLine
+      ] = lines;
+
+      const [
+        pidStr,
+        command,
+        cpuStr,
+        memStr,
+        rssStr,
+        vszStr
+      ] = processLine.trim().split(/\s+/);
+
+      const now = new Date();
+
+      return {
+        pid: parseInt(pidStr, 10),
+        name: command,
+        command,
+        username: '',
+        cpuUsage: parseFloat(cpuStr),
+        memoryUsage: parseFloat(memStr),
+        memoryRss: parseInt(rssStr, 10) * 1024,
+        memoryVms: parseInt(vszStr, 10) * 1024,
+        threads: 0,
+        fds: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+    } catch (error) {
+      logger.error('Failed to get process metrics:', {
+        hostId: host.id,
+        pid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 }
 

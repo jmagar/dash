@@ -1,214 +1,184 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './useSocket';
-import { notificationsClient } from '../api/notifications.client';
-import type {
-  Notification,
-  NotificationCount,
-  NotificationPreferences,
-  NotificationType,
-} from '../../types/notifications';
+import { logger } from '../utils/frontendLogger';
+
+interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  read: boolean;
+  createdAt: Date;
+}
 
 interface UseNotificationsOptions {
   userId: string;
   limit?: number;
-  autoRefresh?: boolean;
 }
 
-interface NotificationEvent {
-  notificationIds: string[];
-  read: boolean;
+interface UseNotificationsResult {
+  notifications: Notification[];
+  unreadCount: number;
+  loading: boolean;
+  error: string | null;
+  markAsRead: (notificationId: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
-export function useNotifications({ userId, limit = 10, autoRefresh = true }: UseNotificationsOptions) {
+export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions): UseNotificationsResult {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [counts, setCounts] = useState<NotificationCount | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const socket = useSocket();
 
-  // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     try {
-      const result = await notificationsClient.getNotifications({
-        userId,
-        limit,
-      });
-      if (result.success && result.data) {
-        setNotifications(result.data);
+      setLoading(true);
+      setError(null);
+      const response = await fetch(`/api/notifications?userId=${userId}&limit=${limit}`);
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        setNotifications(data.data);
       } else {
-        setError(result.error || 'Failed to fetch notifications');
+        throw new Error(data.error || 'Failed to fetch notifications');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch notifications');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch notifications';
+      logger.error('Failed to fetch notifications:', { error: errorMsg, userId });
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
   }, [userId, limit]);
 
-  // Fetch notification counts
-  const fetchCounts = useCallback(async () => {
+  const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      const result = await notificationsClient.getNotificationCount(userId);
-      if (result.success && result.data) {
-        setCounts(result.data);
+      setError(null);
+      const response = await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to mark notification as read');
       }
-    } catch (err) {
-      console.error('Failed to fetch notification counts:', err);
+
+      setNotifications(prev =>
+        prev.map(n =>
+          n.id === notificationId ? { ...n, read: true } : n
+        )
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to mark notification as read';
+      logger.error('Failed to mark notification as read:', { error: errorMsg, notificationId });
+      setError(errorMsg);
+      throw error;
+    }
+  }, []);
+
+  const markAllAsRead = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await fetch(`/api/notifications/read-all`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to mark all notifications as read');
+      }
+
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, read: true }))
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to mark all notifications as read';
+      logger.error('Failed to mark all notifications as read:', { error: errorMsg, userId });
+      setError(errorMsg);
+      throw error;
     }
   }, [userId]);
 
-  // Mark notification as read
-  const markAsRead = useCallback(async (notificationId: string) => {
+  const clearNotifications = useCallback(async () => {
     try {
-      const result = await notificationsClient.markAsRead(notificationId);
-      if (result.success) {
-        setNotifications(prev => prev.map(n =>
-          n.id === notificationId ? { ...n, read: true, readAt: new Date() } : n
-        ));
-        await fetchCounts();
+      setError(null);
+      const response = await fetch(`/api/notifications`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to clear notifications');
       }
-    } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+
+      setNotifications([]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to clear notifications';
+      logger.error('Failed to clear notifications:', { error: errorMsg, userId });
+      setError(errorMsg);
+      throw error;
     }
-  }, [fetchCounts]);
+  }, [userId]);
 
-  // Mark all notifications as read
-  const markAllAsRead = useCallback(async () => {
-    try {
-      const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-      if (unreadIds.length === 0) return;
-
-      const result = await notificationsClient.markAllAsRead(unreadIds);
-      if (result.success) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true, readAt: new Date() })));
-        await fetchCounts();
-      }
-    } catch (err) {
-      console.error('Failed to mark all notifications as read:', err);
-    }
-  }, [notifications, fetchCounts]);
-
-  // Delete notifications
-  const deleteNotifications = useCallback(async (notificationIds: string[]) => {
-    try {
-      const result = await notificationsClient.deleteNotifications(notificationIds);
-      if (result.success) {
-        setNotifications(prev => prev.filter(n => !notificationIds.includes(n.id)));
-        await fetchCounts();
-      }
-    } catch (err) {
-      console.error('Failed to delete notifications:', err);
-    }
-  }, [fetchCounts]);
-
-  // Handle real-time updates
   useEffect(() => {
-    if (!socket || !autoRefresh) return;
+    if (!socket) return;
 
-    const handleNewNotification = (data: unknown) => {
-      const notification = data as Notification;
+    socket.on('notification:created', (notification: Notification) => {
       if (notification.userId === userId) {
-        setNotifications(prev => [notification, ...prev]);
-        fetchCounts();
+        setNotifications(prev => [notification, ...prev].slice(0, limit));
       }
-    };
+    });
 
-    const handleNotificationsUpdated = (data: unknown) => {
-      const event = data as NotificationEvent;
-      setNotifications(prev => prev.map(n =>
-        event.notificationIds.includes(n.id)
-          ? {
-              ...n,
-              read: event.read,
-              readAt: event.read ? new Date() : n.readAt
-            } as Notification
-          : n
-      ));
-      fetchCounts();
-    };
+    socket.on('notification:updated', (notification: Notification) => {
+      if (notification.userId === userId) {
+        setNotifications(prev =>
+          prev.map(n => (n.id === notification.id ? notification : n))
+        );
+      }
+    });
 
-    const handleNotificationsDeleted = (data: unknown) => {
-      const event = data as NotificationEvent;
-      setNotifications(prev => prev.filter(n => !event.notificationIds.includes(n.id)));
-      fetchCounts();
-    };
-
-    socket.on('notification:new', handleNewNotification);
-    socket.on('notifications:updated', handleNotificationsUpdated);
-    socket.on('notifications:deleted', handleNotificationsDeleted);
+    socket.on('notification:deleted', (notificationId: string) => {
+      setNotifications(prev =>
+        prev.filter(n => n.id !== notificationId)
+      );
+    });
 
     return () => {
-      socket.off('notification:new', handleNewNotification);
-      socket.off('notifications:updated', handleNotificationsUpdated);
-      socket.off('notifications:deleted', handleNotificationsDeleted);
+      socket.off('notification:created');
+      socket.off('notification:updated');
+      socket.off('notification:deleted');
     };
-  }, [socket, userId, autoRefresh, fetchCounts]);
+  }, [socket, userId, limit]);
 
-  // Initial fetch
   useEffect(() => {
-    fetchNotifications();
-    fetchCounts();
-  }, [fetchNotifications, fetchCounts]);
+    void fetchNotifications();
+  }, [fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return {
     notifications,
-    counts,
+    unreadCount,
     loading,
     error,
     markAsRead,
     markAllAsRead,
-    deleteNotifications,
+    clearNotifications,
     refresh: fetchNotifications,
-  };
-}
-
-export function useNotificationPreferences() {
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Fetch preferences
-  const fetchPreferences = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await notificationsClient.getPreferences();
-      if (result.success && result.data) {
-        setPreferences(result.data);
-      } else {
-        setError(result.error || 'Failed to fetch notification preferences');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch notification preferences');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Update preferences
-  const updatePreferences = useCallback(async (newPreferences: Omit<NotificationPreferences, 'userId'>) => {
-    try {
-      const result = await notificationsClient.updatePreferences(newPreferences);
-      if (result.success) {
-        setPreferences(prev => prev ? { ...prev, ...newPreferences } : null);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('Failed to update notification preferences:', err);
-      return false;
-    }
-  }, []);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
-
-  return {
-    preferences,
-    loading,
-    error,
-    updatePreferences,
-    refresh: fetchPreferences,
   };
 }

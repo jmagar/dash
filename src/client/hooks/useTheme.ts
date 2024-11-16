@@ -1,44 +1,60 @@
 import { useState, useEffect, useCallback } from 'react';
 
-type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'system';
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Check localStorage first
     const savedTheme = localStorage.getItem('theme') as Theme | null;
     if (savedTheme) {
       return savedTheme;
     }
-    // Then check system preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
+    return 'system';
   });
 
+  const getEffectiveTheme = useCallback((): 'light' | 'dark' => {
+    if (theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return theme;
+  }, [theme]);
+
   useEffect(() => {
-    // Update document class and localStorage when theme changes
-    document.documentElement.classList.remove('light', 'dark');
-    document.documentElement.classList.add(theme);
+    const root = window.document.documentElement;
+    const effectiveTheme = getEffectiveTheme();
+
+    root.classList.remove('light', 'dark');
+    root.classList.add(effectiveTheme);
     localStorage.setItem('theme', theme);
 
-    // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      setTheme(e.matches ? 'dark' : 'light');
+    const handleChange = () => {
+      if (theme === 'system') {
+        root.classList.remove('light', 'dark');
+        root.classList.add(getEffectiveTheme());
+      }
     };
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [theme]);
+  }, [theme, getEffectiveTheme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    setTheme(prev => {
+      switch (prev) {
+        case 'light':
+          return 'dark';
+        case 'dark':
+          return 'system';
+        case 'system':
+          return 'light';
+      }
+    });
   }, []);
 
   return {
     theme,
-    toggleTheme,
+    effectiveTheme: getEffectiveTheme(),
     setTheme,
+    toggleTheme,
   };
 }

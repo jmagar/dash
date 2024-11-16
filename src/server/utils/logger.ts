@@ -22,15 +22,14 @@ const logTransports = [
 ];
 
 // Add Gotify transport if configured
-const gotifyTransport = config.gotify.url && config.gotify.token
-  ? new GotifyTransport({
+if (config.gotify.url && config.gotify.token) {
+  logTransports.push(
+    new GotifyTransport({
       url: config.gotify.url,
       token: config.gotify.token,
-    })
-  : null;
-
-if (gotifyTransport) {
-  logTransports.push(gotifyTransport);
+      level: 'error',
+    }) as unknown as transports.FileTransportInstance
+  );
 }
 
 class ServerLogger implements Logger {

@@ -1,281 +1,228 @@
-import { Send as SendIcon } from '@mui/icons-material';
+import React, { useEffect, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import {
-  Alert,
   Box,
-  Button,
-  CircularProgress,
+  Paper,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
+  IconButton,
   Typography,
+  Stack,
+  Avatar,
+  CircularProgress,
   useTheme,
 } from '@mui/material';
-import React, { useState, useRef, useEffect } from 'react';
-
-import { sendMessage } from '../api/chat.client';
-import { useAuth } from '../context/AuthContext';
-import type { ChatMessage, ChatResponse } from '../../types/chat';
+import {
+  Send as SendIcon,
+  SmartToy as BotIcon,
+  Person as PersonIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
+import { useCopilotChat } from '@copilotkit/react-core';
+import type { Message } from '@copilotkit/shared';
 import { logger } from '../utils/frontendLogger';
 
-interface Model {
-  name: string;
-  value: string;
+interface ChatBotProps {
+  onError?: (error: Error) => void;
 }
 
-const MODELS: Model[] = [
-  { name: 'GPT-4', value: 'gpt-4' },
-  { name: 'Claude-2', value: 'anthropic/claude-2' },
-  { name: 'Mixtral', value: 'mistralai/mixtral-8x7b-instruct' },
-];
-
-export function ChatBot(): JSX.Element {
+export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
   const theme = useTheme();
-  const auth = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0].value);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = (): void => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const {
+    visibleMessages: messages,
+    append: sendMessage,
+    isLoading,
+    input,
+    setInput,
+    stop,
+    clearMessages,
+  } = useCopilotChat({
+    id: 'main-chat',
+    onError: (error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Chat error:', { error: errorMessage });
+      if (onError) {
+        onError(error instanceof Error ? error : new Error(errorMessage));
+      }
+    },
+  });
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+    
+    const message: Message = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: input.trim(),
+    };
+
+    try {
+      await sendMessage(message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to send message:', { error: errorMessage });
+      if (onError) {
+        onError(error instanceof Error ? error : new Error('Failed to send message'));
+      }
+    }
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleKeyPress = (e: React.KeyboardEvent): void => {
+  const handleKeyPress = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
   };
 
-  const handleInputChange = (
-    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ): void => {
-    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-    setInput(target.value);
+  const handleClear = () => {
+    clearMessages();
   };
 
-  const handleSend = async (): Promise<void> => {
-    if (!input.trim() || !auth.user || loading) return;
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await sendMessage(input, {
-        model: selectedModel,
-      });
-
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to get response');
-      }
-
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: response.data.message,
-        timestamp: new Date(),
-        metadata: {
-          model: response.data.model,
-          tokens: response.data.usage.totalTokens,
-        },
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
-      logger.error('Failed to send message:', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
-      setError(err instanceof Error ? err.message : 'Failed to send message');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleModelChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newModel: string | null
-  ): void => {
-    if (newModel !== null) {
-      setSelectedModel(newModel);
-    }
-  };
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   return (
-    <Box
+    <Paper
+      elevation={0}
       sx={{
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        maxHeight: '600px',
-        bgcolor: theme.palette.background.paper,
+        bgcolor: theme.palette.background.default,
       }}
     >
+      {/* Header */}
       <Box
         sx={{
           p: 2,
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          bgcolor: theme.palette.background.default,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
-        <Typography variant="h6" gutterBottom>
-          AI Assistant
-        </Typography>
-        <ToggleButtonGroup
-          value={selectedModel}
-          exclusive
-          onChange={handleModelChange}
-          aria-label="text alignment"
-          size="small"
-          sx={{ mb: 1 }}
+        <Typography variant="h6">AI Assistant</Typography>
+        <IconButton
+          onClick={handleClear}
+          disabled={isLoading || messages.length === 0}
+          color="primary"
         >
-          {MODELS.map(model => (
-            <ToggleButton
-              key={model.value}
-              value={model.value}
-              aria-label={model.name}
-            >
-              {model.name}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+          <DeleteIcon />
+        </IconButton>
       </Box>
 
+      {/* Messages */}
       <Box
         sx={{
           flex: 1,
-          overflow: 'auto',
+          overflowY: 'auto',
           p: 2,
           display: 'flex',
           flexDirection: 'column',
           gap: 2,
         }}
       >
-        {messages.length === 0 && (
-          <Typography variant="body1">
-            {loading ? (
-              <span>Loading...</span>
-            ) : error ? (
-              <span>{error}</span>
-            ) : (
-              <span>No messages yet</span>
-            )}
-          </Typography>
-        )}
-        {messages.map((msg, index) => (
-          <Box
-            key={index}
+        {messages.map((message: Message) => (
+          <Stack
+            key={message.id}
+            direction="row"
+            spacing={2}
+            alignItems="flex-start"
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              bgcolor: message.role === 'assistant' 
+                ? theme.palette.background.paper 
+                : theme.palette.primary.main + '10',
+              p: 2,
+              borderRadius: 2,
             }}
           >
-            <Box
+            <Avatar
               sx={{
-                maxWidth: '80%',
-                p: 2,
-                borderRadius: 2,
-                bgcolor:
-                  msg.role === 'user'
-                    ? theme.palette.primary.main
-                    : theme.palette.background.default,
-                color:
-                  msg.role === 'user'
-                    ? theme.palette.primary.contrastText
-                    : theme.palette.text.primary,
+                bgcolor: message.role === 'assistant'
+                  ? theme.palette.primary.main
+                  : theme.palette.secondary.main,
               }}
             >
+              {message.role === 'assistant' ? <BotIcon /> : <PersonIcon />}
+            </Avatar>
+            <Box sx={{ flex: 1 }}>
               <Typography
                 variant="body1"
-                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
               >
-                {msg.content}
+                {message.content}
               </Typography>
-              {msg.metadata && (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    mt: 1,
-                    display: 'block',
-                    color:
-                      msg.role === 'user'
-                        ? theme.palette.primary.contrastText
-                        : theme.palette.text.secondary,
-                    opacity: 0.8,
-                  }}
-                >
-                  {`${msg.metadata?.model ? `Model: ${msg.metadata.model}` : ''}${
-                    msg.metadata?.tokens ? ` | Tokens: ${msg.metadata.tokens}` : ''
-                  }`}
-                </Typography>
-              )}
             </Box>
-          </Box>
+          </Stack>
         ))}
+        {isLoading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
         <div ref={messagesEndRef} />
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mx: 2, mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <Box
-        component="form"
+      {/* Input */}
+      <Paper
+        elevation={2}
         sx={{
           p: 2,
-          borderTop: `1px solid ${theme.palette.divider}`,
-          bgcolor: theme.palette.background.default,
-          display: 'flex',
-          gap: 1,
-        }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void handleSend();
+          borderTop: 1,
+          borderColor: 'divider',
         }}
       >
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          value={input}
-          onChange={handleInputChange}
-          onKeyPress={handleKeyPress}
-          placeholder="Type your message..."
-          disabled={loading}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              bgcolor: theme.palette.background.paper,
-            },
-          }}
-        />
-        <Button
-          variant="contained"
-          onClick={() => void handleSend()}
-          disabled={!input.trim() || loading}
-          sx={{ minWidth: 'unset', px: 3 }}
-        >
-          {loading ? (
-            <CircularProgress size={24} color="inherit" />
-          ) : (
+        <Stack direction="row" spacing={2}>
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            placeholder="Type a message..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            inputRef={inputRef}
+            disabled={isLoading}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+              },
+            }}
+          />
+          <IconButton
+            color="primary"
+            onClick={() => void handleSend()}
+            disabled={!input.trim() || isLoading}
+            sx={{
+              alignSelf: 'flex-end',
+              bgcolor: theme.palette.primary.main,
+              color: 'white',
+              '&:hover': {
+                bgcolor: theme.palette.primary.dark,
+              },
+              '&.Mui-disabled': {
+                bgcolor: theme.palette.action.disabledBackground,
+                color: theme.palette.action.disabled,
+              },
+            }}
+          >
             <SendIcon />
-          )}
-        </Button>
-      </Box>
-    </Box>
+          </IconButton>
+        </Stack>
+      </Paper>
+    </Paper>
   );
-}
+};

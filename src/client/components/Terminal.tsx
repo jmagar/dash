@@ -1,131 +1,117 @@
 import React, { useEffect, useRef } from 'react';
-import { Box, Paper, useTheme } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { SearchAddon } from 'xterm-addon-search';
+import { useSocket } from '../hooks/useSocket';
+import { logger } from '../utils/frontendLogger';
+
 import 'xterm/css/xterm.css';
 
-import type { Host } from '../../types';
-
-interface Props {
-  host: Host;
-  onData?: (data: string) => void;
+interface TerminalProps {
+  hostId: string;
+  sessionId: string;
   onResize?: (cols: number, rows: number) => void;
-  className?: string;
+  onData?: (data: string) => void;
+  onExit?: () => void;
 }
 
-export default function Terminal({ host, onData, onResize, className = '' }: Props): JSX.Element {
+export function Terminal({
+  hostId,
+  sessionId,
+  onResize,
+  onData,
+  onExit,
+}: TerminalProps): JSX.Element {
   const theme = useTheme();
+  const socket = useSocket();
   const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<XTerm>();
+  const xtermRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
 
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon();
-
     const xterm = new XTerm({
-      fontFamily: '"Cascadia Code", Menlo, monospace',
+      cursorBlink: true,
+      fontFamily: 'JetBrains Mono, monospace',
       fontSize: 14,
       lineHeight: 1.2,
-      cursorBlink: true,
-      cursorStyle: 'block',
       theme: {
-        background: theme.palette.mode === 'dark' 
-          ? theme.palette.background.paper 
-          : theme.palette.background.default,
+        background: theme.palette.background.paper,
         foreground: theme.palette.text.primary,
-        cursor: theme.palette.primary.main,
+        cursor: theme.palette.text.primary,
         selection: theme.palette.action.selected,
-        black: theme.palette.mode === 'dark' ? '#000000' : '#2e3436',
-        red: theme.palette.error.main,
-        green: theme.palette.success.main,
-        yellow: theme.palette.warning.main,
-        blue: theme.palette.primary.main,
-        magenta: theme.palette.secondary.main,
-        cyan: '#2aa198',
-        white: theme.palette.mode === 'dark' ? '#eee8d5' : '#d3d7cf',
-        brightBlack: '#002b36',
-        brightRed: theme.palette.error.light,
-        brightGreen: theme.palette.success.light,
-        brightYellow: theme.palette.warning.light,
-        brightBlue: theme.palette.primary.light,
-        brightMagenta: theme.palette.secondary.light,
-        brightCyan: '#93a1a1',
-        brightWhite: '#fdf6e3',
       },
     });
 
+    const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
+    const searchAddon = new SearchAddon();
+
     xterm.loadAddon(fitAddon);
-    xterm.loadAddon(searchAddon);
     xterm.loadAddon(webLinksAddon);
+    xterm.loadAddon(searchAddon);
 
     xterm.open(terminalRef.current);
     fitAddon.fit();
 
-    xterm.onData((data) => {
+    xtermRef.current = xterm;
+    fitAddonRef.current = fitAddon;
+
+    socket.emit('terminal:join', { hostId, sessionId });
+
+    const handleData = (data: string) => {
+      socket.emit('terminal:data', { hostId, sessionId, data });
       onData?.(data);
-    });
+    };
 
-    xterm.onResize(({ cols, rows }) => {
+    const handleResize = ({ cols, rows }: { cols: number; rows: number }) => {
+      socket.emit('terminal:resize', { hostId, sessionId, cols, rows });
       onResize?.(cols, rows);
+    };
+
+    xterm.onData(handleData);
+    xterm.onResize(handleResize);
+
+    socket.on('terminal:data', (data: string) => {
+      xterm.write(data);
     });
 
-    const handleResize = () => {
+    socket.on('terminal:exit', () => {
+      logger.info('Terminal session ended:', { hostId, sessionId });
+      onExit?.();
+    });
+
+    const handleWindowResize = () => {
       fitAddon.fit();
     };
 
-    window.addEventListener('resize', handleResize);
-    xtermRef.current = xterm;
+    window.addEventListener('resize', handleWindowResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      socket.emit('terminal:leave', { hostId, sessionId });
+      socket.off('terminal:data');
+      socket.off('terminal:exit');
+      window.removeEventListener('resize', handleWindowResize);
       xterm.dispose();
     };
-  }, [onData, onResize, theme]);
-
-  useEffect(() => {
-    const term = xtermRef.current;
-    if (!term) return;
-
-    term.write(`Connected to ${host.name} (${host.hostname}:${host.port})\r\n`);
-  }, [host]);
+  }, [hostId, sessionId, socket, theme, onData, onResize, onExit]);
 
   return (
-    <Paper
-      elevation={3}
+    <Box
+      ref={terminalRef}
       sx={{
+        width: '100%',
         height: '100%',
         overflow: 'hidden',
-        borderRadius: 2,
-        border: `1px solid ${theme.palette.divider}`,
+        backgroundColor: theme.palette.background.paper,
+        borderRadius: 1,
         '& .xterm': {
-          height: '100%',
           padding: 1,
         },
-        '& .xterm-viewport': {
-          '&::-webkit-scrollbar': {
-            width: '10px',
-            height: '10px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: theme.palette.background.default,
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: theme.palette.action.active,
-            borderRadius: '4px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            background: theme.palette.action.hover,
-          },
-        },
       }}
-      className={className}
-    >
-      <Box ref={terminalRef} sx={{ height: '100%' }} />
-    </Paper>
+    />
   );
 }

@@ -7,6 +7,7 @@ import {
   useTheme,
   Paper,
   LinearProgress,
+  alpha,
 } from '@mui/material';
 
 interface LoadingScreenProps {
@@ -25,7 +26,7 @@ export default function LoadingScreen({
   overlay = false,
   delay = 500,
   minHeight = 400,
-}: LoadingScreenProps): JSX.Element {
+}: LoadingScreenProps): JSX.Element | null {
   const theme = useTheme();
   const [show, setShow] = React.useState(!delay);
 

@@ -1,11 +1,12 @@
 package docker
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"time"
+	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -14,143 +15,152 @@ import (
 	"go.uber.org/zap"
 )
 
-// ContainerInfo contains container details
-type ContainerInfo struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Image   string            `json:"image"`
-	Status  string            `json:"status"`
-	State   string            `json:"state"`
-	Created time.Time         `json:"created"`
-	Ports   []types.Port     `json:"ports"`
-	Labels  map[string]string `json:"labels"`
-	Mounts  []types.MountPoint `json:"mounts"`
+// ContainerEvent represents a Docker container event
+type ContainerEvent struct {
+	Action   string
+	ID       string
+	Name     string
+	Type     string
+	Status   string
+	Labels   map[string]string
+	TimeNano int64
 }
 
-// Manager handles Docker operations
 type Manager struct {
-	client *client.Client
-	logger *zap.Logger
+	client  *client.Client
+	logger  *zap.Logger
+	context context.Context
 }
 
-// NewManager creates a new Docker manager
 func NewManager(logger *zap.Logger) (*Manager, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Docker client: %w", err)
 	}
 
+	ctx := context.Background()
+
 	return &Manager{
-		client: cli,
-		logger: logger,
+		client:  cli,
+		logger:  logger,
+		context: ctx,
 	}, nil
 }
 
-// ListContainers returns all containers
-func (m *Manager) ListContainers(ctx context.Context, all bool) ([]ContainerInfo, error) {
-	containers, err := m.client.ContainerList(ctx, types.ContainerListOptions{All: all})
+func (m *Manager) ListContainers(ctx context.Context, includeAll bool) ([]types.Container, error) {
+	options := types.ContainerListOptions{
+		All: includeAll,
+	}
+
+	containers, err := m.client.ContainerList(ctx, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	var infos []ContainerInfo
-	for _, c := range containers {
-		info := ContainerInfo{
-			ID:      c.ID,
-			Name:    c.Names[0],
-			Image:   c.Image,
-			Status:  c.Status,
-			State:   c.State,
-			Created: time.Unix(c.Created, 0),
-			Ports:   c.Ports,
-			Labels:  c.Labels,
-		}
-
-		// Get detailed info
-		details, err := m.client.ContainerInspect(ctx, c.ID)
-		if err != nil {
-			m.logger.Warn("Failed to inspect container",
-				zap.String("id", c.ID),
-				zap.Error(err))
-		} else {
-			info.Mounts = details.Mounts
-		}
-
-		infos = append(infos, info)
-	}
-
-	return infos, nil
+	return containers, nil
 }
 
-// StartContainer starts a container
+func (m *Manager) GetContainer(ctx context.Context, id string) (*types.Container, error) {
+	containers, err := m.ListContainers(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, container := range containers {
+		if container.ID == id {
+			return &container, nil
+		}
+	}
+
+	return nil, fmt.Errorf("container not found: %s", id)
+}
+
 func (m *Manager) StartContainer(ctx context.Context, id string) error {
-	if err := m.client.ContainerStart(ctx, id, types.ContainerStartOptions{}); err != nil {
+	err := m.client.ContainerStart(ctx, id, types.ContainerStartOptions{})
+	if err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 	return nil
 }
 
-// StopContainer stops a container
 func (m *Manager) StopContainer(ctx context.Context, id string, timeout *int) error {
-	if err := m.client.ContainerStop(ctx, id, container.StopOptions{Timeout: timeout}); err != nil {
+	options := container.StopOptions{
+		Timeout: timeout,
+	}
+	err := m.client.ContainerStop(ctx, id, options)
+	if err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 	return nil
 }
 
-// RestartContainer restarts a container
 func (m *Manager) RestartContainer(ctx context.Context, id string, timeout *int) error {
-	if err := m.client.ContainerRestart(ctx, id, container.StopOptions{Timeout: timeout}); err != nil {
+	err := m.client.ContainerRestart(ctx, id, container.StopOptions{
+		Timeout: timeout,
+	})
+	if err != nil {
 		return fmt.Errorf("failed to restart container: %w", err)
 	}
 	return nil
 }
 
-// GetContainerLogs returns container logs
-func (m *Manager) GetContainerLogs(ctx context.Context, id string, tail int) ([]string, error) {
+func (m *Manager) RemoveContainer(ctx context.Context, id string, force bool) error {
+	options := types.ContainerRemoveOptions{
+		Force:         force,
+		RemoveVolumes: true,
+	}
+
+	err := m.client.ContainerRemove(ctx, id, options)
+	if err != nil {
+		return fmt.Errorf("failed to remove container: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) GetContainerLogs(ctx context.Context, id string, tail int) (string, error) {
 	options := types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Timestamps: true,
 		Tail:       fmt.Sprintf("%d", tail),
+		Follow:     false,
 	}
 
-	logs, err := m.client.ContainerLogs(ctx, id, options)
+	reader, err := m.client.ContainerLogs(ctx, id, options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get container logs: %w", err)
+		return "", fmt.Errorf("failed to get container logs: %w", err)
 	}
-	defer logs.Close()
+	defer reader.Close()
 
-	var lines []string
-	scanner := NewLogScanner(logs)
+	var logs strings.Builder
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		logs.WriteString(scanner.Text())
+		logs.WriteString("\n")
 	}
 
-	return lines, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading container logs: %w", err)
+	}
+
+	return logs.String(), nil
 }
 
-// StreamContainerLogs streams container logs
-func (m *Manager) StreamContainerLogs(ctx context.Context, id string, since time.Time, writer io.Writer) error {
-	options := types.ContainerLogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Timestamps: true,
-		Follow:     true,
-		Since:      since.Format(time.RFC3339),
-	}
-
-	logs, err := m.client.ContainerLogs(ctx, id, options)
+func (m *Manager) PullImage(ctx context.Context, image string) error {
+	reader, err := m.client.ImagePull(ctx, image, types.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to get container logs: %w", err)
+		return fmt.Errorf("failed to pull image: %w", err)
 	}
-	defer logs.Close()
+	defer reader.Close()
 
-	_, err = io.Copy(writer, logs)
-	return err
+	// Read the output to complete the pull
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("error reading image pull response: %w", err)
+	}
+
+	return nil
 }
 
-// GetContainerStats returns container stats
 func (m *Manager) GetContainerStats(ctx context.Context, id string) (*types.StatsJSON, error) {
 	stats, err := m.client.ContainerStats(ctx, id, false)
 	if err != nil {
@@ -160,67 +170,63 @@ func (m *Manager) GetContainerStats(ctx context.Context, id string) (*types.Stat
 
 	var statsJSON types.StatsJSON
 	if err := json.NewDecoder(stats.Body).Decode(&statsJSON); err != nil {
-		return nil, fmt.Errorf("failed to decode stats: %w", err)
+		return nil, fmt.Errorf("failed to decode container stats: %w", err)
 	}
 
 	return &statsJSON, nil
 }
 
-// GetImages returns all images
-func (m *Manager) GetImages(ctx context.Context) ([]types.ImageSummary, error) {
-	images, err := m.client.ImageList(ctx, types.ImageListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list images: %w", err)
-	}
-	return images, nil
+func (m *Manager) GetEvents(ctx context.Context) (<-chan ContainerEvent, <-chan error) {
+	eventsChan := make(chan ContainerEvent)
+	errChan := make(chan error)
+
+	go func() {
+		defer close(eventsChan)
+		defer close(errChan)
+
+		options := types.EventsOptions{
+			Filters: filters.NewArgs(
+				filters.Arg("type", "container"),
+			),
+		}
+
+		events, errs := m.client.Events(ctx, options)
+		for {
+			select {
+			case event := <-events:
+				if event.Type == "container" {
+					eventsChan <- ContainerEvent{
+						Action:   event.Action,
+						ID:       event.Actor.ID,
+						Name:     event.Actor.Attributes["name"],
+						Type:     event.Type,
+						Status:   event.Status,
+						Labels:   event.Actor.Attributes,
+						TimeNano: event.TimeNano,
+					}
+				}
+			case err := <-errs:
+				if err != nil {
+					errChan <- fmt.Errorf("error receiving Docker events: %w", err)
+				}
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return eventsChan, errChan
 }
 
-// PullImage pulls an image
-func (m *Manager) PullImage(ctx context.Context, ref string) error {
-	_, err := m.client.ImagePull(ctx, ref, types.ImagePullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
-	}
-	return nil
-}
-
-// RemoveImage removes an image
-func (m *Manager) RemoveImage(ctx context.Context, id string, force bool) error {
-	_, err := m.client.ImageRemove(ctx, id, types.ImageRemoveOptions{Force: force})
-	if err != nil {
-		return fmt.Errorf("failed to remove image: %w", err)
-	}
-	return nil
-}
-
-// GetNetworks returns all networks
-func (m *Manager) GetNetworks(ctx context.Context) ([]types.NetworkResource, error) {
-	networks, err := m.client.NetworkList(ctx, types.NetworkListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list networks: %w", err)
-	}
-	return networks, nil
-}
-
-// GetVolumes returns all volumes
-func (m *Manager) GetVolumes(ctx context.Context) ([]*types.Volume, error) {
-	volumes, err := m.client.VolumeList(ctx, filters.Args{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list volumes: %w", err)
-	}
-	return volumes.Volumes, nil
-}
-
-// Shutdown closes the Docker client
-func (m *Manager) Shutdown(ctx context.Context) error {
-	return m.client.Close()
-}
-
-// HealthCheck implements the health.Checker interface
 func (m *Manager) HealthCheck(ctx context.Context) error {
 	_, err := m.client.Ping(ctx)
 	if err != nil {
-		return fmt.Errorf("Docker daemon not responding: %w", err)
+		return fmt.Errorf("docker health check failed: %w", err)
 	}
 	return nil
+}
+
+func (m *Manager) Shutdown(ctx context.Context) error {
+	return m.client.Close()
 }

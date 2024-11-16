@@ -18,6 +18,7 @@ import {
   LinearProgress,
   Menu,
   MenuItem,
+  Alert,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -26,8 +27,10 @@ import {
   Timer as TimerIcon,
   Storage as StorageIcon,
 } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 import { useProcessMetrics } from '../hooks/useProcessMetrics';
 import { formatBytes } from '../utils/formatters';
+import { alpha } from '@mui/material/styles';
 
 type Order = 'asc' | 'desc';
 type OrderBy = 'cpuUsage' | 'memoryUsage' | 'memoryRss' | 'threads' | 'name';
@@ -45,6 +48,7 @@ export const ProcessList: React.FC<ProcessActions> = ({
   onPause,
   onResume,
 }) => {
+  const theme = useTheme();
   const { processes, loading, error } = useProcessMetrics();
   const [order, setOrder] = useState<Order>('desc');
   const [orderBy, setOrderBy] = useState<OrderBy>('cpuUsage');
@@ -85,40 +89,48 @@ export const ProcessList: React.FC<ProcessActions> = ({
   };
 
   if (loading) {
-    return <LinearProgress />;
+    return (
+      <Box sx={{ width: '100%', mt: 2 }}>
+        <LinearProgress />
+      </Box>
+    );
   }
 
   if (error) {
     return (
-      <Typography color="error">
+      <Alert severity="error" sx={{ mt: 2 }}>
         Error loading process metrics: {error}
-      </Typography>
+      </Alert>
     );
   }
 
   if (!processes) {
-    return <Typography>No process metrics available</Typography>;
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography color="textSecondary">No process metrics available</Typography>
+      </Box>
+    );
   }
 
   const filteredProcesses = processes.filter((process) =>
-    process.name.toLowerCase().includes(filter.toLowerCase()) ||
-    process.command?.toLowerCase().includes(filter.toLowerCase()) ||
-    process.username.toLowerCase().includes(filter.toLowerCase())
+    process.name.toLowerCase().includes(filter.toLowerCase())
   );
 
   const sortedProcesses = filteredProcesses.sort((a, b) => {
-    const multiplier = order === 'desc' ? -1 : 1;
+    const isAsc = order === 'asc';
     switch (orderBy) {
       case 'cpuUsage':
-        return multiplier * (a.cpuUsage - b.cpuUsage);
+        return isAsc ? a.cpuUsage - b.cpuUsage : b.cpuUsage - a.cpuUsage;
       case 'memoryUsage':
-        return multiplier * (a.memoryUsage - b.memoryUsage);
+        return isAsc ? a.memoryUsage - b.memoryUsage : b.memoryUsage - a.memoryUsage;
       case 'memoryRss':
-        return multiplier * (a.memoryRss - b.memoryRss);
+        return isAsc ? a.memoryRss - b.memoryRss : b.memoryRss - a.memoryRss;
       case 'threads':
-        return multiplier * (a.threads - b.threads);
+        return isAsc ? a.threads - b.threads : b.threads - a.threads;
       case 'name':
-        return multiplier * a.name.localeCompare(b.name);
+        return isAsc
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
       default:
         return 0;
     }
@@ -130,153 +142,233 @@ export const ProcessList: React.FC<ProcessActions> = ({
   );
 
   return (
-    <Box>
+    <Box sx={{ width: '100%' }}>
       <Box sx={{ mb: 2 }}>
         <TextField
           fullWidth
           variant="outlined"
+          size="small"
           placeholder="Filter processes..."
           value={filter}
           onChange={handleFilterChange}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon />
+                <SearchIcon color="action" />
               </InputAdornment>
             ),
+            sx: {
+              bgcolor: theme.palette.background.paper,
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.04),
+              },
+            },
           }}
         />
       </Box>
 
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>PID</TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'name'}
-                  direction={orderBy === 'name' ? order : 'asc'}
-                  onClick={() => handleRequestSort('name')}
+      <Paper
+        elevation={0}
+        sx={{
+          width: '100%',
+          mb: 2,
+          bgcolor: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.paper, 0.8)
+            : theme.palette.background.paper,
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <TableContainer>
+          <Table size="medium">
+            <TableHead>
+              <TableRow>
+                <TableCell
+                  sortDirection={orderBy === 'name' ? order : false}
+                  sx={{ fontWeight: 600 }}
                 >
-                  Process
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>User</TableCell>
-              <TableCell align="right">
-                <TableSortLabel
-                  active={orderBy === 'cpuUsage'}
-                  direction={orderBy === 'cpuUsage' ? order : 'asc'}
-                  onClick={() => handleRequestSort('cpuUsage')}
-                >
-                  CPU %
-                </TableSortLabel>
-              </TableCell>
-              <TableCell align="right">
-                <TableSortLabel
-                  active={orderBy === 'memoryUsage'}
-                  direction={orderBy === 'memoryUsage' ? order : 'asc'}
-                  onClick={() => handleRequestSort('memoryUsage')}
-                >
-                  Memory %
-                </TableSortLabel>
-              </TableCell>
-              <TableCell align="right">
-                <TableSortLabel
-                  active={orderBy === 'memoryRss'}
-                  direction={orderBy === 'memoryRss' ? order : 'asc'}
-                  onClick={() => handleRequestSort('memoryRss')}
-                >
-                  RSS
-                </TableSortLabel>
-              </TableCell>
-              <TableCell align="right">
-                <TableSortLabel
-                  active={orderBy === 'threads'}
-                  direction={orderBy === 'threads' ? order : 'asc'}
-                  onClick={() => handleRequestSort('threads')}
-                >
-                  Threads
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>I/O</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {paginatedProcesses.map((process) => (
-              <TableRow key={process.pid}>
-                <TableCell>{process.pid}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {process.name}
-                    {process.command && (
-                      <Chip
-                        size="small"
-                        label={process.command}
-                        variant="outlined"
-                      />
-                    )}
-                  </Box>
-                </TableCell>
-                <TableCell>{process.username}</TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TimerIcon fontSize="small" color="action" />
-                    {process.cpuUsage.toFixed(1)}%
-                  </Box>
-                </TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <MemoryIcon fontSize="small" color="action" />
-                    {process.memoryUsage.toFixed(1)}%
-                  </Box>
-                </TableCell>
-                <TableCell align="right">
-                  {formatBytes(process.memoryRss)}
-                </TableCell>
-                <TableCell align="right">{process.threads}</TableCell>
-                <TableCell>
-                  {process.ioStats && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <StorageIcon fontSize="small" color="action" />
-                      <Typography variant="body2" component="span">
-                        R: {formatBytes(process.ioStats.readBytes)}
-                      </Typography>
-                      <Typography variant="body2" component="span">
-                        W: {formatBytes(process.ioStats.writeBytes)}
-                      </Typography>
-                    </Box>
-                  )}
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton
-                    size="small"
-                    onClick={(e) => handleMenuOpen(e, process.pid)}
+                  <TableSortLabel
+                    active={orderBy === 'name'}
+                    direction={orderBy === 'name' ? order : 'asc'}
+                    onClick={() => handleRequestSort('name')}
                   >
-                    <MoreVertIcon />
-                  </IconButton>
+                    Process
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sortDirection={orderBy === 'cpuUsage' ? order : false}
+                  sx={{ fontWeight: 600 }}
+                >
+                  <TableSortLabel
+                    active={orderBy === 'cpuUsage'}
+                    direction={orderBy === 'cpuUsage' ? order : 'asc'}
+                    onClick={() => handleRequestSort('cpuUsage')}
+                  >
+                    CPU
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sortDirection={orderBy === 'memoryUsage' ? order : false}
+                  sx={{ fontWeight: 600 }}
+                >
+                  <TableSortLabel
+                    active={orderBy === 'memoryUsage'}
+                    direction={orderBy === 'memoryUsage' ? order : 'asc'}
+                    onClick={() => handleRequestSort('memoryUsage')}
+                  >
+                    Memory
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sortDirection={orderBy === 'threads' ? order : false}
+                  sx={{ fontWeight: 600 }}
+                >
+                  <TableSortLabel
+                    active={orderBy === 'threads'}
+                    direction={orderBy === 'threads' ? order : 'asc'}
+                    onClick={() => handleRequestSort('threads')}
+                  >
+                    Threads
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600 }}>
+                  Actions
                 </TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {paginatedProcesses.map((process) => (
+                <TableRow
+                  key={process.pid}
+                  hover
+                  sx={{
+                    '&:last-child td, &:last-child th': { border: 0 },
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.04),
+                    },
+                  }}
+                >
+                  <TableCell component="th" scope="row">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <MemoryIcon
+                        fontSize="small"
+                        sx={{ color: theme.palette.primary.main }}
+                      />
+                      <Typography variant="body2">{process.name}</Typography>
+                      <Chip
+                        label={`PID ${process.pid}`}
+                        size="small"
+                        sx={{
+                          ml: 1,
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          color: theme.palette.primary.main,
+                        }}
+                      />
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                      <Typography variant="body2">
+                        {process.cpuUsage.toFixed(1)}%
+                      </Typography>
+                      <LinearProgress
+                        variant="determinate"
+                        value={process.cpuUsage}
+                        sx={{
+                          width: 60,
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 3,
+                          },
+                        }}
+                      />
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                      <Typography variant="body2">
+                        {formatBytes(process.memoryUsage)}
+                      </Typography>
+                      <LinearProgress
+                        variant="determinate"
+                        value={(process.memoryUsage / process.memoryRss) * 100}
+                        sx={{
+                          width: 60,
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 3,
+                          },
+                        }}
+                      />
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2">{process.threads}</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      size="small"
+                      onClick={(event) => handleMenuOpen(event, process.pid)}
+                      sx={{
+                        color: theme.palette.text.secondary,
+                        '&:hover': {
+                          color: theme.palette.primary.main,
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                        },
+                      }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50, 100]}
-        component="div"
-        count={filteredProcesses.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          component="div"
+          count={sortedProcesses.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      </Paper>
 
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
+        PaperProps={{
+          elevation: 0,
+          sx: {
+            overflow: 'visible',
+            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
+            mt: 1.5,
+            '&:before': {
+              content: '""',
+              display: 'block',
+              position: 'absolute',
+              top: 0,
+              right: 14,
+              width: 10,
+              height: 10,
+              bgcolor: 'background.paper',
+              transform: 'translateY(-50%) rotate(45deg)',
+              zIndex: 0,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
         {onTerminate && (
           <MenuItem

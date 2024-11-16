@@ -1,6 +1,7 @@
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
+import MenuIcon from '@mui/icons-material/Menu';
 import {
   AppBar,
   Box,
@@ -19,7 +20,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Navigation } from './Navigation';
-import ThemeControls from './ThemeControls';
+import { ThemeControls } from './ThemeControls';
 import { FloatingChatButton } from './FloatingChatButton';
 import { NotificationBell } from './NotificationBell';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -74,121 +75,130 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
   const location = useLocation();
   const theme = useTheme();
   const { user } = useAuth();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100vh',
-          bgcolor: 'background.default',
-        }}
-      >
+      <Box sx={{ display: 'flex' }}>
         <AppBar
           position="fixed"
           sx={{
-            zIndex: (theme) => theme.zIndex.drawer + 1,
+            width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
+            ml: { sm: `${DRAWER_WIDTH}px` },
+            boxShadow: theme.shadows[3],
           }}
         >
           <Toolbar>
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              edge="start"
+              onClick={handleDrawerToggle}
+              sx={{ mr: 2, display: { sm: 'none' } }}
+            >
+              <MenuIcon />
+            </IconButton>
             <Typography
               variant="h6"
               noWrap
               component={Link}
               to="/"
-              replace
               sx={{
-                color: 'inherit',
+                flexGrow: 1,
                 textDecoration: 'none',
-                flexGrow: 0,
-                display: { xs: 'none', sm: 'block' },
+                color: 'inherit',
+                fontWeight: 600,
               }}
             >
-              SSH Remote Management
+              SSH Manager
             </Typography>
-
             <Search>
               <SearchIconWrapper>
                 <SearchIcon />
               </SearchIconWrapper>
               <StyledInputBase
-                placeholder="Search hosts, containers, files, logs..."
+                placeholder="Search..."
                 inputProps={{ 'aria-label': 'search' }}
               />
             </Search>
-
-            <Box sx={{ flexGrow: 1 }} />
-
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <ThemeControls />
-
-              <IconButton
-                color="inherit"
-                component={Link}
-                to="/settings"
-                replace
-                size="large"
-                sx={{ '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.1)' } }}
-              >
-                <SettingsIcon />
-              </IconButton>
-              <IconButton
-                color="inherit"
-                component={Link}
-                to="/profile"
-                replace
-                size="large"
-                sx={{ '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.1)' } }}
-              >
-                <AccountCircleIcon />
-              </IconButton>
-            </Box>
+            <NotificationBell />
+            <ThemeControls />
+            <IconButton
+              color="inherit"
+              component={Link}
+              to="/profile"
+              sx={{ ml: 1 }}
+            >
+              <AccountCircleIcon />
+            </IconButton>
           </Toolbar>
         </AppBar>
 
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: DRAWER_WIDTH,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: DRAWER_WIDTH,
-              boxSizing: 'border-box',
-            },
-          }}
+        <Box
+          component="nav"
+          sx={{ width: { sm: DRAWER_WIDTH }, flexShrink: { sm: 0 } }}
         >
-          <Toolbar />
-          <Navigation />
-        </Drawer>
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={handleDrawerToggle}
+            ModalProps={{
+              keepMounted: true,
+            }}
+            sx={{
+              display: { xs: 'block', sm: 'none' },
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: DRAWER_WIDTH,
+                bgcolor: 'background.paper',
+                borderRight: `1px solid ${theme.palette.divider}`,
+              },
+            }}
+          >
+            <Navigation />
+          </Drawer>
+          <Drawer
+            variant="permanent"
+            sx={{
+              display: { xs: 'none', sm: 'block' },
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: DRAWER_WIDTH,
+                bgcolor: 'background.paper',
+                borderRight: `1px solid ${theme.palette.divider}`,
+              },
+            }}
+            open
+          >
+            <Navigation />
+          </Drawer>
+        </Box>
 
         <Box
           component="main"
           sx={{
             flexGrow: 1,
-            pt: { xs: 2, sm: 3 },
-            pb: { xs: 2, sm: 3 },
-            px: { xs: 2, sm: 3 },
-            mt: '64px', // Height of AppBar
-            position: 'relative',
-            zIndex: 1,
+            p: 3,
+            width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
+            minHeight: '100vh',
             bgcolor: 'background.default',
-            borderRadius: '16px 16px 0 0',
-            boxShadow: theme.shadows[1],
+            mt: '64px',
           }}
         >
-          <Container maxWidth="xl">
-            <ErrorBoundary>
-              {children}
-            </ErrorBoundary>
-          </Container>
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+          {user && (
+            <>
+              <FloatingChatButton />
+            </>
+          )}
         </Box>
-        {user && (
-          <>
-            <FloatingChatButton />
-          </>
-        )}
       </Box>
     </ThemeProvider>
   );

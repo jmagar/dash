@@ -2,367 +2,190 @@ package backup
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.uber.org/zap"
 )
 
-// BackupType represents the type of backup
-type BackupType string
-
-const (
-	TypeFull     BackupType = "full"
-	TypePartial  BackupType = "partial"
-	TypeDatabase BackupType = "database"
-	TypeConfig   BackupType = "config"
-)
-
-// BackupStatus represents the status of a backup
-type BackupStatus string
-
-const (
-	StatusPending   BackupStatus = "pending"
-	StatusRunning   BackupStatus = "running"
-	StatusComplete  BackupStatus = "complete"
-	StatusFailed    BackupStatus = "failed"
-	StatusCancelled BackupStatus = "cancelled"
-)
-
-// Config represents backup configuration
-type Config struct {
-	Path      string
-	Retention int
-	Schedule  string
-	Compress  bool
-	Encrypt   bool
-}
-
-// Backup represents a backup operation
-type Backup struct {
-	ID          string
-	Type        BackupType
-	Status      BackupStatus
-	Path        string
-	Size        int64
-	Hash        string
-	StartTime   time.Time
-	EndTime     *time.Time
-	Error       string
-	Compressed  bool
-	Encrypted   bool
-}
-
-// Manager manages backup operations
 type Manager struct {
+	config   *BackupConfig
 	logger   *zap.Logger
-	mu       sync.RWMutex
-	config   Config
-	backups  map[string]*Backup
-	s3Client *s3.Client
+	archiver *Archiver
 }
 
-// NewManager creates a new backup manager
-func NewManager(logger *zap.Logger) *Manager {
-	return &Manager{
-		logger:  logger,
-		backups: make(map[string]*Backup),
-	}
-}
-
-// Configure configures the backup manager
-func (m *Manager) Configure(config Config) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Validate configuration
+func NewManager(config *BackupConfig, logger *zap.Logger) (*Manager, error) {
 	if config.Path == "" {
-		return fmt.Errorf("backup path is required")
+		return nil, fmt.Errorf("backup path is required")
 	}
 
+	archiver := NewArchiver(logger)
+
+	return &Manager{
+		config:   config,
+		logger:   logger,
+		archiver: archiver,
+	}, nil
+}
+
+func (m *Manager) Start(ctx context.Context) error {
 	// Create backup directory if it doesn't exist
-	if err := os.MkdirAll(config.Path, 0755); err != nil {
+	if err := os.MkdirAll(m.config.Path, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	m.config = config
+	// Start backup scheduler
+	go m.scheduleBackups(ctx)
+
 	return nil
 }
 
-// CreateBackup creates a new backup
-func (m *Manager) CreateBackup(ctx context.Context, backupType BackupType) (*Backup, error) {
-	m.mu.Lock()
-	config := m.config
-	m.mu.Unlock()
-
-	// Generate backup ID
-	id := fmt.Sprintf("backup_%s_%d", backupType, time.Now().Unix())
-
-	// Create backup
-	backup := &Backup{
-		ID:        id,
-		Type:      backupType,
-		Status:    StatusPending,
-		Path:      filepath.Join(config.Path, id+".tar.gz"),
-		StartTime: time.Now(),
-		Compressed: config.Compress,
-		Encrypted:  config.Encrypt,
-	}
-
-	// Add to tracking
-	m.mu.Lock()
-	m.backups[id] = backup
-	m.mu.Unlock()
-
-	// Start backup process
-	go func() {
-		if err := m.performBackup(ctx, backup); err != nil {
-			m.logger.Error("Backup failed",
-				zap.String("id", backup.ID),
-				zap.Error(err))
-
-			m.mu.Lock()
-			backup.Status = StatusFailed
-			backup.Error = err.Error()
-			now := time.Now()
-			backup.EndTime = &now
-			m.mu.Unlock()
-		}
-	}()
-
-	return backup, nil
+func (m *Manager) Shutdown(ctx context.Context) error {
+	return nil
 }
 
-// performBackup performs the actual backup operation
-func (m *Manager) performBackup(ctx context.Context, backup *Backup) error {
-	m.mu.Lock()
-	backup.Status = StatusRunning
-	m.mu.Unlock()
+func (m *Manager) CreateBackup(ctx context.Context, source string) error {
+	backupPath := filepath.Join(m.config.Path, fmt.Sprintf("backup_%s.tar.gz", time.Now().Format("20060102_150405")))
 
-	// Create temporary file
-	tmpFile, err := os.CreateTemp("", "backup-*")
+	// Create new archive
+	if err := m.archiver.Create(backupPath); err != nil {
+		return fmt.Errorf("failed to create archive: %w", err)
+	}
+	defer m.archiver.Close()
+
+	// Enable encryption if configured
+	if m.config.Encrypt {
+		// In a real implementation, you would get this from a secure key management system
+		key := []byte("0123456789abcdef0123456789abcdef")
+		m.archiver.SetEncryption(key)
+	}
+
+	// Add source to archive
+	fileInfo, err := os.Stat(source)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// Create hash
-	hash := sha256.New()
-	writer := io.MultiWriter(tmpFile, hash)
-
-	// Perform backup based on type
-	switch backup.Type {
-	case TypeFull:
-		err = m.backupFull(ctx, writer)
-	case TypePartial:
-		err = m.backupPartial(ctx, writer)
-	case TypeDatabase:
-		err = m.backupDatabase(ctx, writer)
-	case TypeConfig:
-		err = m.backupConfig(ctx, writer)
-	default:
-		err = fmt.Errorf("unsupported backup type: %s", backup.Type)
+		return fmt.Errorf("failed to stat source: %w", err)
 	}
 
-	if err != nil {
-		return fmt.Errorf("backup operation failed: %w", err)
-	}
-
-	// Get file size
-	info, err := tmpFile.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
-
-	// Update backup info
-	m.mu.Lock()
-	backup.Size = info.Size()
-	backup.Hash = hex.EncodeToString(hash.Sum(nil))
-	m.mu.Unlock()
-
-	// Move to final location
-	if err := os.Rename(tmpFile.Name(), backup.Path); err != nil {
-		return fmt.Errorf("failed to move backup file: %w", err)
-	}
-
-	// Upload to S3 if configured
-	if m.s3Client != nil {
-		if err := m.uploadToS3(ctx, backup); err != nil {
-			return fmt.Errorf("failed to upload to S3: %w", err)
+	if fileInfo.IsDir() {
+		if err := m.archiver.AddDirectory(source); err != nil {
+			return fmt.Errorf("failed to add directory to archive: %w", err)
+		}
+	} else {
+		if err := m.archiver.AddFile(source, filepath.Base(source)); err != nil {
+			return fmt.Errorf("failed to add file to archive: %w", err)
 		}
 	}
-
-	// Update status
-	m.mu.Lock()
-	backup.Status = StatusComplete
-	now := time.Now()
-	backup.EndTime = &now
-	m.mu.Unlock()
 
 	// Clean up old backups
-	if err := m.cleanupOldBackups(ctx); err != nil {
-		m.logger.Error("Failed to clean up old backups",
-			zap.Error(err))
+	if err := m.cleanup(); err != nil {
+		m.logger.Error("Failed to clean up old backups", zap.Error(err))
 	}
 
 	return nil
 }
 
-// backupFull performs a full system backup
-func (m *Manager) backupFull(ctx context.Context, writer io.Writer) error {
-	// Implementation of full backup
-	// This is a placeholder for actual implementation
-	return nil
-}
-
-// backupPartial performs a partial backup
-func (m *Manager) backupPartial(ctx context.Context, writer io.Writer) error {
-	// Implementation of partial backup
-	// This is a placeholder for actual implementation
-	return nil
-}
-
-// backupDatabase performs a database backup
-func (m *Manager) backupDatabase(ctx context.Context, writer io.Writer) error {
-	// Implementation of database backup
-	// This is a placeholder for actual implementation
-	return nil
-}
-
-// backupConfig performs a configuration backup
-func (m *Manager) backupConfig(ctx context.Context, writer io.Writer) error {
-	// Implementation of config backup
-	// This is a placeholder for actual implementation
-	return nil
-}
-
-// cleanupOldBackups removes old backups based on retention policy
-func (m *Manager) cleanupOldBackups(ctx context.Context) error {
-	m.mu.Lock()
-	retention := m.config.Retention
-	m.mu.Unlock()
-
-	if retention <= 0 {
-		return nil
+func (m *Manager) RestoreBackup(ctx context.Context, backupFile string, destination string) error {
+	if m.config.Encrypt {
+		// In a real implementation, you would get this from a secure key management system
+		key := []byte("0123456789abcdef0123456789abcdef")
+		m.archiver.SetEncryption(key)
 	}
 
-	// Get list of backups
-	files, err := filepath.Glob(filepath.Join(m.config.Path, "backup_*.tar.gz"))
+	return m.archiver.Extract(backupFile, destination)
+}
+
+func (m *Manager) ListBackups() ([]string, error) {
+	files, err := os.ReadDir(m.config.Path)
 	if err != nil {
-		return fmt.Errorf("failed to list backup files: %w", err)
+		return nil, fmt.Errorf("failed to read backup directory: %w", err)
 	}
 
-	// Sort by modification time
-	sort.Slice(files, func(i, j int) bool {
-		iInfo, _ := os.Stat(files[i])
-		jInfo, _ := os.Stat(files[j])
+	var backups []string
+	for _, file := range files {
+		if !file.IsDir() && filepath.Ext(file.Name()) == ".gz" {
+			backups = append(backups, filepath.Join(m.config.Path, file.Name()))
+		}
+	}
+
+	// Sort backups by modification time (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		iInfo, _ := os.Stat(backups[i])
+		jInfo, _ := os.Stat(backups[j])
 		return iInfo.ModTime().After(jInfo.ModTime())
 	})
 
-	// Remove old backups
-	for i := retention; i < len(files); i++ {
-		if err := os.Remove(files[i]); err != nil {
-			m.logger.Error("Failed to remove old backup",
-				zap.String("file", files[i]),
-				zap.Error(err))
-		} else {
-			m.logger.Info("Removed old backup",
-				zap.String("file", files[i]))
+	return backups, nil
+}
+
+func (m *Manager) cleanup() error {
+	files, err := m.ListBackups()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil {
+			m.logger.Error("Failed to get file info", zap.String("file", file), zap.Error(err))
+			continue
+		}
+
+		// Remove files older than retention period
+		if now.Sub(info.ModTime()) > m.config.Retention {
+			if err := os.Remove(file); err != nil {
+				m.logger.Error("Failed to remove old backup", zap.String("file", file), zap.Error(err))
+			}
+		}
+
+		// Remove files if total size exceeds max size
+		if m.config.MaxSize > 0 {
+			var totalSize int64
+			for _, f := range files {
+				info, err := os.Stat(f)
+				if err != nil {
+					continue
+				}
+				totalSize += info.Size()
+				if totalSize > m.config.MaxSize {
+					if err := os.Remove(f); err != nil {
+						m.logger.Error("Failed to remove backup", zap.String("file", f), zap.Error(err))
+					}
+				}
+			}
 		}
 	}
 
 	return nil
 }
 
-// GetBackup returns a specific backup
-func (m *Manager) GetBackup(id string) (*Backup, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (m *Manager) scheduleBackups(ctx context.Context) {
+	if m.config.Interval == 0 {
+		return
+	}
 
-	backup, exists := m.backups[id]
-	return backup, exists
+	ticker := time.NewTicker(m.config.Interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := m.CreateBackup(ctx, m.config.Path); err != nil {
+				m.logger.Error("Scheduled backup failed", zap.Error(err))
+			}
+		}
+	}
 }
 
-// GetBackups returns all backups
-func (m *Manager) GetBackups() []*Backup {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	backups := make([]*Backup, 0, len(m.backups))
-	for _, backup := range m.backups {
-		backups = append(backups, backup)
+func (m *Manager) HealthCheck(ctx context.Context) error {
+	if _, err := os.Stat(m.config.Path); err != nil {
+		return fmt.Errorf("backup directory not accessible: %w", err)
 	}
-
-	return backups
-}
-
-// CancelBackup cancels a running backup
-func (m *Manager) CancelBackup(id string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	backup, exists := m.backups[id]
-	if !exists {
-		return fmt.Errorf("backup not found: %s", id)
-	}
-
-	if backup.Status != StatusRunning {
-		return fmt.Errorf("backup is not running: %s", id)
-	}
-
-	backup.Status = StatusCancelled
-	now := time.Now()
-	backup.EndTime = &now
-
-	return nil
-}
-
-// DeleteBackup deletes a backup
-func (m *Manager) DeleteBackup(id string) error {
-	m.mu.Lock()
-	backup, exists := m.backups[id]
-	if !exists {
-		m.mu.Unlock()
-		return fmt.Errorf("backup not found: %s", id)
-	}
-
-	// Don't delete running backups
-	if backup.Status == StatusRunning {
-		m.mu.Unlock()
-		return fmt.Errorf("cannot delete running backup: %s", id)
-	}
-
-	// Delete file
-	if err := os.Remove(backup.Path); err != nil && !os.IsNotExist(err) {
-		m.mu.Unlock()
-		return fmt.Errorf("failed to delete backup file: %w", err)
-	}
-
-	delete(m.backups, id)
-	m.mu.Unlock()
-
-	return nil
-}
-
-// SetS3Client sets the S3 client for cloud storage
-func (m *Manager) SetS3Client(client *s3.Client) {
-	m.mu.Lock()
-	m.s3Client = client
-	m.mu.Unlock()
-}
-
-// uploadToS3 uploads a backup to S3
-func (m *Manager) uploadToS3(ctx context.Context, backup *Backup) error {
-	// Implementation of S3 upload
-	// This is a placeholder for actual implementation
 	return nil
 }

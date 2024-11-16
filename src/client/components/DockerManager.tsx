@@ -1,23 +1,43 @@
-import { Edit as EditIcon } from '@mui/icons-material';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
-  Tab,
+  Paper,
   Tabs,
+  Tab,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
+  Tooltip,
+  useTheme,
+  alpha,
+  Badge,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  LinearProgress,
 } from '@mui/material';
-import React, { useState } from 'react';
-
-import DockerCompose from './DockerCompose';
+import {
+  ViewList as ContainersIcon,
+  Storage as ComposeIcon,
+  Refresh as RefreshIcon,
+  Settings as SettingsIcon,
+  RestartAlt as RestartIcon,
+  MoreVert as MoreVertIcon,
+  Memory as MemoryIcon,
+  Speed as SpeedIcon,
+  Storage as StorageIcon,
+  NetworkCheck as NetworkIcon,
+  Article as LogsIcon,
+} from '@mui/icons-material';
 import DockerContainers from './DockerContainers';
-import type { Stack } from '../../types';
-import { getStacks } from '../api';
-import { useAsync } from '../hooks';
-import LoadingScreen from './LoadingScreen';
+import DockerCompose from './DockerCompose';
+import { LogViewer } from './LogViewer';
+import { useDockerStats } from '../hooks/useDockerStats';
+import { useDispatch, useSelector } from 'react-redux';
+import { Container } from '../../types/models-shared';
+import { fetchContainers, selectAllContainers, selectIsLoading, selectError } from '../store/slices/dockerSlice';
+import { logger } from '../utils/frontendLogger';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -25,129 +45,372 @@ interface TabPanelProps {
   value: number;
 }
 
-function TabPanel(props: TabPanelProps): JSX.Element {
+function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
   return (
-    <div
+    <Box
       role="tabpanel"
       hidden={value !== index}
       id={`docker-tabpanel-${index}`}
       aria-labelledby={`docker-tab-${index}`}
       {...other}
+      sx={{
+        height: 'calc(100% - 49px)',
+        overflow: 'auto',
+        bgcolor: 'background.paper',
+      }}
     >
       {value === index && (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ height: '100%', p: 3 }}>
           {children}
         </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
-function a11yProps(index: number): {
-  id: string;
-  'aria-controls': string;
-} {
-  return {
-    id: `docker-tab-${index}`,
-    'aria-controls': `docker-tabpanel-${index}`,
-  };
+interface DockerManagerProps {
+  hostId: string;
+  userId: string;
 }
 
-export default function DockerManager(): JSX.Element {
-  const [value, setValue] = useState(0);
-  const [composeOpen, setComposeOpen] = useState(false);
-  const [selectedStack, setSelectedStack] = useState<string>('');
+export function DockerManager({ hostId, userId }: DockerManagerProps) {
+  const theme = useTheme();
+  const dispatch = useDispatch();
+  const containers = useSelector(selectAllContainers);
+  const loading = useSelector(selectIsLoading);
+  const error = useSelector(selectError);
+  const [activeTab, setActiveTab] = useState(0);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const { stats, refresh } = useDockerStats(hostId);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadStacksList = async (): Promise<Stack[]> => {
-    const result = await getStacks();
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to load stacks');
-    }
-    // Explicitly assert the type and provide empty array as default
-    const stacks: Stack[] = result.data ?? [];
-    return stacks;
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
   };
 
-  const {
-    data: stacks,
-    loading,
-    error,
-    execute: loadStacks,
-  } = useAsync<Stack[]>(loadStacksList, { immediate: true });
-
-  const handleChange = (_event: React.SyntheticEvent, newValue: number): void => {
-    setValue(newValue);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setTimeout(() => setRefreshing(false), 1000); // Minimum animation time
+    void dispatch(fetchContainers(hostId));
   };
 
-  const handleNewStack = (): void => {
-    setSelectedStack('');
-    setComposeOpen(true);
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
   };
 
-  const handleEditStack = (stackName: string): void => {
-    setSelectedStack(stackName);
-    setComposeOpen(true);
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
   };
 
-  const handleCloseCompose = (): void => {
-    setComposeOpen(false);
-    setSelectedStack('');
-  };
+  useEffect(() => {
+    const interval = setInterval(refresh, 30000); // Auto-refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [refresh]);
 
-  const handleSaveCompose = (): void => {
-    void loadStacks();
-  };
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={value} onChange={handleChange} aria-label="docker management tabs">
-          <Tab label="Containers" {...a11yProps(0)} />
-          <Tab label="Stacks" {...a11yProps(1)} />
-        </Tabs>
-      </Box>
-      <TabPanel value={value} index={0}>
-        <DockerContainers />
-      </TabPanel>
-      <TabPanel value={value} index={1}>
-        <Box sx={{ mb: 2 }}>
-          <Button variant="contained" onClick={handleNewStack}>
-            New Stack
-          </Button>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 2,
+          bgcolor: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.paper, 0.8)
+            : theme.palette.background.paper,
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 600,
+              background: theme.palette.mode === 'dark'
+                ? 'linear-gradient(45deg, #90caf9 30%, #64b5f6 90%)'
+                : 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Docker Management
+          </Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <Tooltip title="Refresh">
+            <IconButton
+              onClick={handleRefresh}
+              disabled={refreshing}
+              sx={{
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                },
+              }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Settings">
+            <IconButton
+              onClick={handleMenuOpen}
+              sx={{
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                },
+              }}
+            >
+              <MoreVertIcon />
+            </IconButton>
+          </Tooltip>
         </Box>
-        {loading ? (
-          <LoadingScreen fullscreen={false} message="Loading stacks..." />
-        ) : error ? (
-          <Typography color="error">{error}</Typography>
-        ) : (
-          <List>
-            {(stacks ?? []).map((stack) => (
-              <ListItem
-                key={stack.name}
-                secondaryAction={
-                  <IconButton edge="end" onClick={(): void => handleEditStack(stack.name)}>
-                    <EditIcon />
-                  </IconButton>
-                }
-              >
-                <ListItemText
-                  primary={stack.name}
-                  secondary={`Status: ${stack.status}`}
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
-      </TabPanel>
 
-      <DockerCompose
-        stackName={selectedStack}
-        open={composeOpen}
-        onClose={handleCloseCompose}
-        onSave={handleSaveCompose}
-      />
+        {/* Stats Overview */}
+        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              flex: 1,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+              borderRadius: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <MemoryIcon color="primary" />
+              <Typography variant="subtitle2" color="primary">Memory Usage</Typography>
+            </Box>
+            <Typography variant="h6">
+              {stats?.memoryUsage || '0%'}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={parseFloat(stats?.memoryUsage || '0')}
+              sx={{
+                mt: 1,
+                height: 6,
+                borderRadius: 3,
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 3,
+                },
+              }}
+            />
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              flex: 1,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+              borderRadius: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <SpeedIcon color="primary" />
+              <Typography variant="subtitle2" color="primary">CPU Usage</Typography>
+            </Box>
+            <Typography variant="h6">
+              {stats?.cpuUsage || '0%'}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={parseFloat(stats?.cpuUsage || '0')}
+              sx={{
+                mt: 1,
+                height: 6,
+                borderRadius: 3,
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 3,
+                },
+              }}
+            />
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              flex: 1,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+              borderRadius: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <StorageIcon color="primary" />
+              <Typography variant="subtitle2" color="primary">Storage</Typography>
+            </Box>
+            <Typography variant="h6">
+              {stats?.diskUsage || '0%'}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={parseFloat(stats?.diskUsage || '0')}
+              sx={{
+                mt: 1,
+                height: 6,
+                borderRadius: 3,
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 3,
+                },
+              }}
+            />
+          </Paper>
+        </Box>
+
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          aria-label="docker management tabs"
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 48,
+              textTransform: 'none',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: theme.palette.text.secondary,
+              '&.Mui-selected': {
+                color: theme.palette.primary.main,
+              },
+            },
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: '3px 3px 0 0',
+            },
+          }}
+        >
+          <Tab
+            icon={
+              <Badge
+                badgeContent={stats?.containers || 0}
+                color="primary"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    right: -3,
+                    top: 3,
+                  },
+                }}
+              >
+                <ContainersIcon />
+              </Badge>
+            }
+            label="Containers"
+            sx={{
+              '& .MuiTab-iconWrapper': {
+                marginBottom: 0.5,
+              },
+            }}
+          />
+          <Tab
+            icon={<ComposeIcon />}
+            label="Compose"
+            sx={{
+              '& .MuiTab-iconWrapper': {
+                marginBottom: 0.5,
+              },
+            }}
+          />
+          <Tab
+            icon={<LogsIcon />}
+            label="Logs"
+            sx={{
+              '& .MuiTab-iconWrapper': {
+                marginBottom: 0.5,
+              },
+            }}
+          />
+        </Tabs>
+      </Paper>
+
+      {/* Content */}
+      <Paper
+        elevation={0}
+        sx={{
+          flexGrow: 1,
+          bgcolor: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.paper, 0.8)
+            : theme.palette.background.paper,
+          backdropFilter: 'blur(8px)',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        <TabPanel value={activeTab} index={0}>
+          <DockerContainers
+            containers={containers}
+            hostId={hostId}
+            onRefresh={handleRefresh}
+          />
+        </TabPanel>
+        <TabPanel value={activeTab} index={1}>
+          <DockerCompose hostId={hostId} />
+        </TabPanel>
+        <TabPanel value={activeTab} index={2}>
+          <LogViewer hostIds={[hostId]} userId={userId} />
+        </TabPanel>
+      </Paper>
+
+      {/* Settings Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        PaperProps={{
+          elevation: 0,
+          sx: {
+            overflow: 'visible',
+            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
+            mt: 1.5,
+            '&:before': {
+              content: '""',
+              display: 'block',
+              position: 'absolute',
+              top: 0,
+              right: 14,
+              width: 10,
+              height: 10,
+              bgcolor: 'background.paper',
+              transform: 'translateY(-50%) rotate(45deg)',
+              zIndex: 0,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={handleMenuClose}>
+          <ListItemIcon>
+            <RestartIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Restart Docker Daemon</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleMenuClose}>
+          <ListItemIcon>
+            <NetworkIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Network Settings</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleMenuClose}>
+          <ListItemIcon>
+            <SettingsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Advanced Settings</ListItemText>
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }

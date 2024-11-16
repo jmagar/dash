@@ -1,57 +1,57 @@
 import React, { useState } from 'react';
 import {
   Box,
-  Button,
-  Card,
-  CardContent,
-  TextField,
+  Paper,
   Typography,
-  Alert,
+  TextField,
+  Button,
   IconButton,
   InputAdornment,
-  Paper,
-  useTheme,
-  Fade,
+  Alert,
   CircularProgress,
+  useTheme,
+  alpha,
+  Fade,
+  Divider,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  LockOutlined as LockIcon,
+  Login as LoginIcon,
+  Key as KeyIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { logger } from '../utils/frontendLogger';
 
-export function Login(): JSX.Element {
+export default function Login(): JSX.Element {
   const theme = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const { login } = useAuth();
-
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const from = location.state?.from?.pathname || '/';
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setError(null);
-    setLoading(true);
+    if (!username.trim() || !password.trim()) return;
 
     try {
+      setLoading(true);
+      setError(null);
       await login(username, password);
-      navigate(from, { replace: true });
+      navigate('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to login');
+      logger.error('Login failed:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setError('Invalid username or password');
+    } finally {
       setLoading(false);
     }
-  };
-
-  const handleTogglePassword = () => {
-    setShowPassword(!showPassword);
   };
 
   return (
@@ -61,73 +61,89 @@ export function Login(): JSX.Element {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'background.default',
+        bgcolor: alpha(theme.palette.primary.main, 0.04),
         p: 3,
       }}
     >
       <Fade in timeout={800}>
-        <Card
-          elevation={4}
+        <Paper
+          elevation={3}
           sx={{
-            maxWidth: 400,
+            p: 4,
             width: '100%',
+            maxWidth: 400,
             borderRadius: 2,
-            overflow: 'visible',
-            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
           }}
         >
-          <Paper
-            elevation={6}
+          <Box
             sx={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              bgcolor: 'primary.main',
-              position: 'absolute',
-              top: -40,
-              left: '50%',
-              transform: 'translateX(-50%)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
+              gap: 1,
             }}
           >
-            <LockIcon sx={{ fontSize: 40, color: 'primary.contrastText' }} />
-          </Paper>
-
-          <CardContent sx={{ pt: 6 }}>
-            <Typography
-              variant="h4"
-              align="center"
-              gutterBottom
+            <KeyIcon
+              color="primary"
               sx={{
-                fontWeight: 'bold',
-                color: 'primary.main',
-                mt: 2,
-                mb: 4,
+                fontSize: 48,
+                mb: 1,
+                animation: 'float 3s ease-in-out infinite',
+                '@keyframes float': {
+                  '0%, 100%': {
+                    transform: 'translateY(0)',
+                  },
+                  '50%': {
+                    transform: 'translateY(-10px)',
+                  },
+                },
               }}
-            >
+            />
+            <Typography variant="h4" fontWeight="bold" color="primary">
               Welcome Back
             </Typography>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Sign in to access your SSH remote management dashboard
+            </Typography>
+          </Box>
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+          <Divider />
 
-            <form onSubmit={handleSubmit}>
+          {error && (
+            <Alert
+              severity="error"
+              sx={{ borderRadius: 1 }}
+              onClose={() => setError(null)}
+            >
+              {error}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <Box display="flex" flexDirection="column" gap={2}>
               <TextField
                 fullWidth
                 label="Username"
-                variant="outlined"
-                margin="normal"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={loading}
+                required
+                autoFocus
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonIcon color="action" />
+                    </InputAdornment>
+                  ),
+                }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
+                    '&:hover fieldset': {
+                      borderColor: theme.palette.primary.main,
+                    },
                   },
                 }}
               />
@@ -135,73 +151,104 @@ export function Login(): JSX.Element {
               <TextField
                 fullWidth
                 label="Password"
-                variant="outlined"
-                margin="normal"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
+                required
                 InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <KeyIcon color="action" />
+                    </InputAdornment>
+                  ),
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle password visibility"
-                        onClick={handleTogglePassword}
+                        onClick={() => setShowPassword(!showPassword)}
                         edge="end"
+                        size="small"
                       >
-                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                        {showPassword ? (
+                          <VisibilityOffIcon />
+                        ) : (
+                          <VisibilityIcon />
+                        )}
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
+                    '&:hover fieldset': {
+                      borderColor: theme.palette.primary.main,
+                    },
                   },
                 }}
               />
 
               <Button
-                fullWidth
+                type="submit"
                 variant="contained"
                 size="large"
-                type="submit"
-                disabled={loading}
+                disabled={loading || !username.trim() || !password.trim()}
+                startIcon={loading ? <CircularProgress size={20} /> : <LoginIcon />}
                 sx={{
-                  mt: 3,
-                  mb: 2,
+                  mt: 2,
                   py: 1.5,
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontSize: '1.1rem',
-                  fontWeight: 'medium',
                   position: 'relative',
+                  overflow: 'hidden',
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    background: `linear-gradient(45deg, ${alpha(
+                      theme.palette.primary.main,
+                      0
+                    )} 30%, ${alpha(theme.palette.primary.light, 0.3)} 50%, ${alpha(
+                      theme.palette.primary.main,
+                      0
+                    )} 70%)`,
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 2s infinite linear',
+                  },
+                  '@keyframes shimmer': {
+                    '0%': {
+                      backgroundPosition: '200% 0',
+                    },
+                    '100%': {
+                      backgroundPosition: '-200% 0',
+                    },
+                  },
                 }}
               >
-                {loading ? (
-                  <CircularProgress
-                    size={24}
-                    sx={{
-                      color: theme.palette.primary.contrastText,
-                      position: 'absolute',
-                    }}
-                  />
-                ) : (
-                  'Sign In'
-                )}
+                {loading ? 'Signing in...' : 'Sign In'}
               </Button>
-            </form>
+            </Box>
+          </form>
 
-            <Typography
-              variant="body2"
-              color="textSecondary"
-              align="center"
-              sx={{ mt: 2 }}
-            >
-              By signing in, you agree to our Terms of Service and Privacy Policy
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              mt: 2,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Forgot your password?{' '}
+              <Button
+                color="primary"
+                size="small"
+                sx={{ textTransform: 'none', fontWeight: 'bold' }}
+              >
+                Reset it here
+              </Button>
             </Typography>
-          </CardContent>
-        </Card>
+          </Box>
+        </Paper>
       </Fade>
     </Box>
   );

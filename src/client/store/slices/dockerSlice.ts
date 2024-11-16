@@ -1,249 +1,142 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-
-import type { RootState } from '../storeTypes';
-import type { Container, DockerState, ContainerUpdate } from './types/docker';
-import type { LogMetadata } from '../../../types/logger';
-import {
-  listContainers,
-  startContainer,
-  stopContainer,
-  removeContainer,
-} from '../../api/docker.client';
+import type { Container } from '../../../types/models-shared';
+import { listContainers, startContainer, stopContainer, removeContainer } from '../../api/docker.client';
 import { logger } from '../../utils/frontendLogger';
+import type { RootState } from '../storeTypes';
+
+interface DockerState {
+  containers: Container[];
+  loading: boolean;
+  error: string | null;
+  selectedContainerId: string | null;
+}
 
 const initialState: DockerState = {
-  containers: {},
+  containers: [],
   loading: false,
   error: null,
   selectedContainerId: null,
 };
 
-// Async thunks
-export const fetchContainers = createAsyncThunk<
-  Container[],
-  void,
-  {
-    rejectValue: string;
-    state: RootState;
-  }
->('docker/fetchContainers', async (_, { rejectWithValue }) => {
-  try {
-    const response = await listContainers();
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'Failed to fetch containers');
+export const fetchContainers = createAsyncThunk<Container[], string>(
+  'docker/fetchContainers',
+  async (hostId: string) => {
+    try {
+      return await listContainers(hostId);
+    } catch (error) {
+      logger.error('Failed to fetch containers:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    return response.data.map(container => ({
-      ...container,
-      state: container.state as Container['state'],
-    }));
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'DockerSlice',
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to fetch containers:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch containers');
   }
-});
+);
 
-export const startDockerContainer = createAsyncThunk<
-  string,
-  string,
-  {
-    rejectValue: string;
-    state: RootState;
-  }
->('docker/startContainer', async (containerId, { rejectWithValue }) => {
-  try {
-    const response = await startContainer(containerId);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to start container');
+export const startContainerThunk = createAsyncThunk<string, { hostId: string; containerId: string }>(
+  'docker/startContainer',
+  async ({ hostId, containerId }) => {
+    try {
+      await startContainer(hostId, containerId);
+      return containerId;
+    } catch (error) {
+      logger.error('Failed to start container:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    return containerId;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'DockerSlice',
-      containerId,
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to start container:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to start container');
   }
-});
+);
 
-export const stopDockerContainer = createAsyncThunk<
-  string,
-  string,
-  {
-    rejectValue: string;
-    state: RootState;
-  }
->('docker/stopContainer', async (containerId, { rejectWithValue }) => {
-  try {
-    const response = await stopContainer(containerId);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to stop container');
+export const stopContainerThunk = createAsyncThunk<string, { hostId: string; containerId: string }>(
+  'docker/stopContainer',
+  async ({ hostId, containerId }) => {
+    try {
+      await stopContainer(hostId, containerId);
+      return containerId;
+    } catch (error) {
+      logger.error('Failed to stop container:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    return containerId;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'DockerSlice',
-      containerId,
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to stop container:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to stop container');
   }
-});
+);
 
-export const removeDockerContainer = createAsyncThunk<
-  string,
-  string,
-  {
-    rejectValue: string;
-    state: RootState;
-  }
->('docker/removeContainer', async (containerId, { rejectWithValue }) => {
-  try {
-    const response = await removeContainer(containerId);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to remove container');
+export const removeContainerThunk = createAsyncThunk<string, { hostId: string; containerId: string }>(
+  'docker/removeContainer',
+  async ({ hostId, containerId }) => {
+    try {
+      await removeContainer(hostId, containerId);
+      return containerId;
+    } catch (error) {
+      logger.error('Failed to remove container:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    return containerId;
-  } catch (error) {
-    const metadata: LogMetadata = {
-      component: 'DockerSlice',
-      containerId,
-      error: error instanceof Error ? error : new Error('Unknown error'),
-    };
-    logger.error('Failed to remove container:', metadata);
-    return rejectWithValue(error instanceof Error ? error.message : 'Failed to remove container');
   }
-});
+);
 
 const dockerSlice = createSlice({
   name: 'docker',
   initialState,
   reducers: {
-    selectContainer: (state: DockerState, action: PayloadAction<string | null>): void => {
+    selectContainer: (state, action: PayloadAction<string | null>) => {
       state.selectedContainerId = action.payload;
     },
-    clearError: (state: DockerState): void => {
+    clearError: (state) => {
       state.error = null;
-    },
-    updateContainerState: (
-      state: DockerState,
-      action: PayloadAction<ContainerUpdate>,
-    ): void => {
-      const { containerId, updates } = action.payload;
-      if (state.containers[containerId]) {
-        state.containers[containerId] = {
-          ...state.containers[containerId],
-          ...updates,
-        };
-      }
     },
   },
   extraReducers: (builder) => {
     builder
-      // Fetch containers
-      .addCase(fetchContainers.pending, (state: DockerState): void => {
+      .addCase(fetchContainers.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchContainers.fulfilled, (state: DockerState, action: PayloadAction<Container[]>): void => {
+      .addCase(fetchContainers.fulfilled, (state, action) => {
         state.loading = false;
-        state.containers = action.payload.reduce<Record<string, Container>>((acc, container) => {
-          acc[container.id] = container;
-          return acc;
-        }, {});
+        state.containers = action.payload;
       })
-      .addCase(fetchContainers.rejected, (state: DockerState, action): void => {
+      .addCase(fetchContainers.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload || 'Failed to fetch containers';
+        state.error = action.error.message || 'Failed to fetch containers';
       })
-      // Start container
-      .addCase(startDockerContainer.pending, (state: DockerState, action): void => {
-        const containerId = action.meta.arg;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'starting',
-          };
+      .addCase(startContainerThunk.fulfilled, (state, action) => {
+        const container = state.containers.find(c => c.id === action.payload);
+        if (container) {
+          container.state = 'running';
         }
       })
-      .addCase(startDockerContainer.fulfilled, (state: DockerState, action): void => {
-        const containerId = action.payload;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'running',
-          };
+      .addCase(stopContainerThunk.fulfilled, (state, action) => {
+        const container = state.containers.find(c => c.id === action.payload);
+        if (container) {
+          container.state = 'exited';
         }
       })
-      .addCase(startDockerContainer.rejected, (state: DockerState, action): void => {
-        const containerId = action.meta.arg;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'error',
-          };
-        }
-        state.error = action.payload || 'Failed to start container';
-      })
-      // Stop container
-      .addCase(stopDockerContainer.pending, (state: DockerState, action): void => {
-        const containerId = action.meta.arg;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'stopping',
-          };
-        }
-      })
-      .addCase(stopDockerContainer.fulfilled, (state: DockerState, action): void => {
-        const containerId = action.payload;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'exited',
-          };
-        }
-      })
-      .addCase(stopDockerContainer.rejected, (state: DockerState, action): void => {
-        const containerId = action.meta.arg;
-        if (state.containers[containerId]) {
-          state.containers[containerId] = {
-            ...state.containers[containerId],
-            state: 'error',
-          };
-        }
-        state.error = action.payload || 'Failed to stop container';
-      })
-      // Remove container
-      .addCase(removeDockerContainer.fulfilled, (state: DockerState, action): void => {
-        const containerId = action.payload;
-        delete state.containers[containerId];
-        if (state.selectedContainerId === containerId) {
+      .addCase(removeContainerThunk.fulfilled, (state, action) => {
+        state.containers = state.containers.filter(c => c.id !== action.payload);
+        if (state.selectedContainerId === action.payload) {
           state.selectedContainerId = null;
         }
       });
   },
 });
 
-// Export actions and reducer
-export const { selectContainer, clearError, updateContainerState } = dockerSlice.actions;
+export const { selectContainer, clearError } = dockerSlice.actions;
 export default dockerSlice.reducer;
 
 // Selectors
 export const selectAllContainers = (state: RootState): Container[] =>
-  Object.values(state.docker.containers);
+  state.docker.containers;
 
 export const selectSelectedContainer = (state: RootState): Container | null =>
-  state.docker.selectedContainerId ? state.docker.containers[state.docker.selectedContainerId] : null;
+  state.docker.selectedContainerId
+    ? state.docker.containers.find(c => c.id === state.docker.selectedContainerId) || null
+    : null;
 
 export const selectContainerById = (state: RootState, containerId: string): Container | undefined =>
-  state.docker.containers[containerId];
+  state.docker.containers.find(c => c.id === containerId);
 
 export const selectIsLoading = (state: RootState): boolean =>
   state.docker.loading;
