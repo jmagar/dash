@@ -4,7 +4,7 @@
     "module": "commonjs",
     "target": "es2019",
     "lib": ["es2019"],
-    "outDir": "build/server",
+    "outDir": "dist",
     "rootDir": "src",
     "noEmit": false,
     "jsx": "react"
@@ -17,6 +17,7 @@
   "exclude": [
     "node_modules",
     "build",
+    "dist",
     "scripts",
     "src/client",
     "**/*.test.ts",

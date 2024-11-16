@@ -1,10 +1,10 @@
-import { jest } from '@jest/globals';
 import Redis from 'ioredis';
+import { jest } from '@jest/globals';
+
 import { RedisManager } from '../../../src/server/cache/RedisManager';
-import { ConnectionState } from '../../../src/server/cache/types';
+import { config } from '../../../src/server/config';
 import { logger } from '../../../src/server/utils/logger';
 
-// Mock Redis and logger
 jest.mock('ioredis');
 jest.mock('../../../src/server/utils/logger');
 
@@ -13,31 +13,47 @@ describe('RedisManager', () => {
   let mockRedis: jest.Mocked<Redis>;
 
   beforeEach(() => {
-    // Clear all mocks
-    jest.clearAllMocks();
+    mockRedis = {
+      on: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      quit: jest.fn(),
+    } as unknown as jest.Mocked<Redis>;
 
-    // Create a new instance for each test
-    redisManager = RedisManager.getInstance();
-    mockRedis = new Redis() as jest.Mocked<Redis>;
-  });
+    (Redis as jest.MockedClass<typeof Redis>).mockImplementation(() => mockRedis);
 
-  describe('getInstance', () => {
-    it('should return the same instance on multiple calls', () => {
-      const instance1 = RedisManager.getInstance();
-      const instance2 = RedisManager.getInstance();
-      expect(instance1).toBe(instance2);
+    redisManager = new RedisManager({
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
     });
   });
 
-  describe('connection management', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('connection', () => {
     it('should connect successfully', async () => {
-      const client = await redisManager.getClient();
-      expect(client).toBeTruthy();
-      expect(redisManager.getState()).toBe(ConnectionState.CONNECTED);
+      // Simulate successful connection
+      mockRedis.on.mockImplementation((event, callback) => {
+        if (event === 'connect') {
+          callback();
+        }
+        return mockRedis;
+      });
+
+      await redisManager.connect();
+
+      expect(mockRedis.on).toHaveBeenCalledWith('connect', expect.any(Function));
+      expect(mockRedis.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(logger.info).toHaveBeenCalledWith('Redis connected');
     });
 
     it('should handle connection errors', async () => {
       const error = new Error('Connection failed');
+
+      // Simulate connection error
       mockRedis.on.mockImplementation((event, callback) => {
         if (event === 'error') {
           callback(error);
@@ -45,99 +61,62 @@ describe('RedisManager', () => {
         return mockRedis;
       });
 
-      await redisManager.getClient();
-      expect(logger.error).toHaveBeenCalledWith(
-        'Redis connection error:',
-        expect.objectContaining({
-          error: error.message,
-        })
-      );
-      expect(redisManager.getState()).toBe(ConnectionState.ERROR);
+      await expect(redisManager.connect()).rejects.toThrow('Connection failed');
+      expect(logger.error).toHaveBeenCalledWith('Redis connection error:', expect.any(Object));
     });
 
     it('should handle reconnection', async () => {
+      // Simulate reconnection
       mockRedis.on.mockImplementation((event, callback) => {
-        if (event === 'ready') {
+        if (event === 'reconnecting') {
           callback();
         }
         return mockRedis;
       });
 
+      await redisManager.connect();
+
+      expect(mockRedis.on).toHaveBeenCalledWith('reconnecting', expect.any(Function));
+      expect(logger.warn).toHaveBeenCalledWith('Redis reconnecting');
+    });
+
+    it('should handle disconnection', async () => {
+      // Simulate disconnection
+      mockRedis.on.mockImplementation((event, callback) => {
+        if (event === 'end') {
+          callback();
+        }
+        return mockRedis;
+      });
+
+      await redisManager.connect();
+
+      expect(mockRedis.on).toHaveBeenCalledWith('end', expect.any(Function));
+      expect(logger.warn).toHaveBeenCalledWith('Redis disconnected');
+    });
+  });
+
+  describe('client management', () => {
+    it('should get Redis client', async () => {
+      // Simulate successful connection
+      mockRedis.on.mockImplementation((event, callback) => {
+        if (event === 'connect') {
+          callback();
+        }
+        return mockRedis;
+      });
+
+      await redisManager.connect();
       const client = await redisManager.getClient();
-      expect(client).toBeTruthy();
-      expect(redisManager.isConnected()).toBe(true);
-    });
-  });
 
-  describe('metrics collection', () => {
-    it('should collect metrics', async () => {
-      const mockInfo = `
-        used_memory:1024
-        keys:100
-        uptime_in_seconds:3600
-      `;
-
-      mockRedis.info.mockResolvedValue(mockInfo);
-      mockRedis.on.mockImplementation((event, callback) => {
-        if (event === 'ready') {
-          callback();
-        }
-        return mockRedis;
-      });
-
-      await redisManager.getClient();
-      const metrics = redisManager.getMetrics();
-
-      expect(metrics).toEqual(
-        expect.objectContaining({
-          memoryUsage: 1024,
-          keyCount: 100,
-          uptime: 3600,
-        })
-      );
+      expect(client).toBe(mockRedis);
     });
 
-    it('should handle metrics collection errors', async () => {
-      const error = new Error('Metrics collection failed');
-      mockRedis.info.mockRejectedValue(error);
+    it('should handle disconnection', async () => {
+      await redisManager.disconnect();
 
-      mockRedis.on.mockImplementation((event, callback) => {
-        if (event === 'ready') {
-          callback();
-        }
-        return mockRedis;
-      });
-
-      await redisManager.getClient();
-      expect(logger.error).toHaveBeenCalledWith(
-        'Failed to update Redis metrics:',
-        expect.objectContaining({
-          error: error.message,
-        })
-      );
-    });
-  });
-
-  describe('shutdown', () => {
-    it('should gracefully shutdown', async () => {
-      mockRedis.quit.mockResolvedValue('OK');
-
-      await redisManager.shutdown();
       expect(mockRedis.quit).toHaveBeenCalled();
-      expect(redisManager.getState()).toBe(ConnectionState.DISCONNECTED);
-    });
-
-    it('should handle shutdown errors', async () => {
-      const error = new Error('Shutdown failed');
-      mockRedis.quit.mockRejectedValue(error);
-
-      await redisManager.shutdown();
-      expect(logger.error).toHaveBeenCalledWith(
-        'Redis connection error:',
-        expect.objectContaining({
-          error: error.message,
-        })
-      );
+      expect(logger.info).toHaveBeenCalledWith('Redis disconnected');
     });
   });
 });

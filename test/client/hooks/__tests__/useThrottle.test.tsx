@@ -1,7 +1,5 @@
-import { renderHook, act } from '@testing-library/react';
-
-import '@testing-library/jest-dom';
-import { useThrottle } from '../useThrottle';
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useThrottle } from '../../../../src/client/hooks/useThrottle';
 
 describe('useThrottle', () => {
   beforeEach(() => {

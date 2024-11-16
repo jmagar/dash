@@ -1,14 +1,12 @@
-import { renderHook, act } from '@testing-library/react';
-
-import '@testing-library/jest-dom';
-import { useLocalStorage } from '../useLocalStorage';
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useLocalStorage } from '../../../../src/client/hooks/useLocalStorage';
 
 describe('useLocalStorage', () => {
   const key = 'test-key';
   const initialValue = 'initial';
 
   beforeEach(() => {
-    window.localStorage.clear();
+    localStorage.clear();
   });
 
   it('should initialize with the initial value when no stored value exists', () => {
@@ -16,12 +14,12 @@ describe('useLocalStorage', () => {
     const [storedValue] = result.current;
 
     expect(storedValue).toBe(initialValue);
-    expect(window.localStorage.getItem(key)).toBe(JSON.stringify(initialValue));
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(initialValue));
   });
 
   it('should initialize with the stored value when it exists', () => {
     const storedValue = 'stored';
-    window.localStorage.setItem(key, JSON.stringify(storedValue));
+    localStorage.setItem(key, JSON.stringify(storedValue));
 
     const { result } = renderHook(() => useLocalStorage<string>(key, initialValue));
     const [value] = result.current;
@@ -40,7 +38,7 @@ describe('useLocalStorage', () => {
 
     const [storedValue] = result.current;
     expect(storedValue).toBe(newValue);
-    expect(window.localStorage.getItem(key)).toBe(JSON.stringify(newValue));
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(newValue));
   });
 
   it('should handle function updates', () => {
@@ -53,7 +51,7 @@ describe('useLocalStorage', () => {
 
     const [storedValue] = result.current;
     expect(storedValue).toBe(initialValue + ' updated');
-    expect(window.localStorage.getItem(key)).toBe(JSON.stringify(initialValue + ' updated'));
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(initialValue + ' updated'));
   });
 
   it('should handle errors when reading from localStorage', () => {
@@ -90,7 +88,7 @@ describe('useLocalStorage', () => {
   });
 
   it('should handle invalid JSON in localStorage', () => {
-    window.localStorage.setItem(key, 'invalid json');
+    localStorage.setItem(key, 'invalid json');
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
     const { result } = renderHook(() => useLocalStorage<string>(key, initialValue));
@@ -136,6 +134,46 @@ describe('useLocalStorage', () => {
 
     const [storedValue] = result.current;
     expect(storedValue).toEqual(newValue);
-    expect(JSON.parse(window.localStorage.getItem('complex-key') || '')).toEqual(newValue);
+    expect(JSON.parse(localStorage.getItem('complex-key') || '')).toEqual(newValue);
+  });
+
+  it('should handle null values', () => {
+    const { result } = renderHook(() => useLocalStorage('test-key', null));
+
+    expect(result.current[0]).toBeNull();
+
+    act(() => {
+      result.current[1]('value');
+    });
+
+    expect(result.current[0]).toBe('value');
+
+    act(() => {
+      result.current[1](null);
+    });
+
+    expect(result.current[0]).toBeNull();
+  });
+
+  it('should handle localStorage errors', () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const mockError = new Error('Storage quota exceeded');
+    
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = jest.fn().mockImplementation(() => {
+      throw mockError;
+    });
+
+    const { result } = renderHook(() => useLocalStorage('test-key', 'initial'));
+
+    act(() => {
+      result.current[1]('updated');
+    });
+
+    expect(result.current[0]).toBe('initial');
+    expect(errorSpy).toHaveBeenCalled();
+
+    Storage.prototype.setItem = originalSetItem;
+    errorSpy.mockRestore();
   });
 });

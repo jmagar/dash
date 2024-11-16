@@ -1,45 +1,47 @@
-import router from './routes';
+import { Router } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import type { HostParams } from './controller';
+import { validateHostId, validateCreateHostRequest, validateUpdateHostRequest } from '../../middleware/validation';
+import { requireAuth } from '../../middleware/auth';
+import * as hostController from './controller';
+import { getConnection, closeConnection } from './pool';
 
-// Re-export types
-export * from './types';
+// Host connection constants
+export const CONNECTION_TIMEOUT = 20000; // 20 seconds
+export const KEEP_ALIVE_INTERVAL = 10000; // 10 seconds
+export const KEEP_ALIVE_COUNT_MAX = 3;
 
-// Re-export pool utilities
+const router = Router();
+
+// Apply authentication middleware
+router.use(requireAuth);
+
+// Helper function to wrap async handlers with proper typing
+const asyncHandler = (fn: RequestHandler): RequestHandler => {
+  return async (req, res, next) => {
+    try {
+      await Promise.resolve(fn(req, res, next));
+    } catch (error) {
+      next(error);
+    }
+  };
+};
+
+// Host management routes
+router.get('/', asyncHandler(hostController.listHosts as unknown as RequestHandler));
+router.get('/:id', validateHostId, asyncHandler(hostController.getHost as unknown as RequestHandler));
+router.post('/', validateCreateHostRequest, asyncHandler(hostController.createHost as unknown as RequestHandler));
+router.put('/:id', validateHostId, validateUpdateHostRequest, asyncHandler(hostController.updateHost as unknown as RequestHandler));
+router.delete('/:id', validateHostId, asyncHandler(hostController.deleteHost as unknown as RequestHandler));
+
+// Host connection testing
+router.post('/:id/test', validateHostId, asyncHandler(hostController.testConnection as unknown as RequestHandler));
+
+// Export routes
+export default router;
+
+// Export host utilities
 export {
   getConnection,
   closeConnection,
-  testSSHConnection,
-  CONNECTION_TIMEOUT,
-  KEEP_ALIVE_INTERVAL,
-  KEEP_ALIVE_COUNT_MAX,
-} from './pool';
-
-// Re-export monitoring utilities
-export {
-  startHostMonitoring,
-  stopHostMonitoring,
-  getMonitoringStatus,
-  getMonitoredHosts,
-} from './monitoring';
-
-// Re-export service functions with renamed exports
-export {
-  listHosts as listHostsService,
-  getHost as getHostService,
-  createHost as createHostService,
-  updateHost as updateHostService,
-  deleteHost as deleteHostService,
-  testHost as testHostService,
-} from './service';
-
-// Re-export controller functions with renamed exports
-export {
-  listHosts as listHostsController,
-  getHost as getHostController,
-  createHost as createHostController,
-  updateHost as updateHostController,
-  deleteHost as deleteHostController,
-  testHost as testHostController,
-  testConnection as testConnectionController,
-} from './controller';
-
-export default router;
+};

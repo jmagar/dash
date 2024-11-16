@@ -1,6 +1,6 @@
-import { renderHook, act } from '@testing-library/react-hooks';
-
-import { useAsync } from '../useAsync';
+import { renderHook } from '@testing-library/react-hooks';
+import { act } from '@testing-library/react';
+import { useAsync } from '../../../../src/client/hooks/useAsync';
 
 describe('useAsync hook', () => {
   it('should handle successful async function', async () => {
@@ -13,8 +13,12 @@ describe('useAsync hook', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.data).toBe(null);
 
+    act(() => {
+      result.current.execute();
+    });
+
     await act(async () => {
-      await result.current.execute();
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
     expect(result.current.data).toBe('test data');
@@ -30,17 +34,17 @@ describe('useAsync hook', () => {
       useAsync(() => mockAsyncFunction()),
     );
 
+    act(() => {
+      result.current.execute();
+    });
+
     await act(async () => {
-      try {
-        await result.current.execute();
-      } catch (error) {
-        // Expected to throw
-      }
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
     expect(result.current.data).toBe(null);
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('Test error');
+    expect(result.current.error).toBe(mockError);
   });
 
   it('should support immediate option', async () => {

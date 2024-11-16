@@ -3,7 +3,7 @@ import path from 'path';
 import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import express from 'express';
 
-import { createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
 import { logger } from '../utils/logger';
@@ -40,7 +40,7 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
         path: normalizedPath,
       };
       logger.error('Database connection failed:', metadata);
-      throw createApiError('Failed to connect to database', 500, metadata);
+      throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
     const files = [
@@ -70,14 +70,16 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
     };
     logger.error('Failed to list directory:', metadata);
 
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Failed to list directory',
-      500,
-      metadata,
-    );
-    return res.status(apiError.status || 500).json({
+    if (error instanceof ApiError) {
+      return res.status(error.status).json({
+        success: false,
+        error: error.message,
+      });
+    }
+
+    return res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to list directory',
     });
   }
 };

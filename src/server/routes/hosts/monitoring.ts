@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Host } from '../../../types/models-shared';
 
-import { createApiError } from '../../../types/error';
+import { ApiError } from '../../../types/error';
 import type { LogMetadata } from '../../../types/logger';
 import cache from '../../cache';
 import { errorAggregator } from '../../services/errorAggregator';
@@ -26,12 +26,13 @@ export async function invalidateHostCache(req: Request, res: Response): Promise<
       metadata,
     );
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to invalidate host cache',
+      undefined,
       500,
-      metadata,
+      metadata
     );
-    res.status(apiError.status || 500).json({
+    res.status(apiError.status).json({
       success: false,
       error: apiError.message,
     });

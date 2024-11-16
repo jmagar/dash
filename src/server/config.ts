@@ -1,99 +1,139 @@
-import { config as dotenvConfig } from 'dotenv';
+import { config as loadEnv } from 'dotenv';
+import { z } from 'zod';
 
-import type { Config } from '../types/config';
+loadEnv();
 
-dotenvConfig();
+const envSchema = z.object({
+  // Server
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce.number().default(4000),
+  HOST: z.string().default('localhost'),
+  MAX_REQUEST_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
 
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
+  // Database
+  DB_HOST: z.string(),
+  DB_PORT: z.coerce.number().default(5432),
+  DB_NAME: z.string(),
+  DB_USER: z.string(),
+  DB_PASSWORD: z.string(),
 
-function getOptionalEnv(name: string, defaultValue: string): string {
-  return process.env[name] || defaultValue;
-}
+  // Redis
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
 
-function parseOptionalInt(value: string | undefined, defaultValue: number): number {
-  if (!value) return defaultValue;
-  const parsed = parseInt(value, 10);
-  return isNaN(parsed) ? defaultValue : parsed;
-}
+  // JWT
+  JWT_SECRET: z.string(),
+  JWT_EXPIRY: z.string().default('1h'),
+  JWT_REFRESH_EXPIRY: z.string().default('7d'),
 
-function parseOptionalFloat(value: string | undefined, defaultValue: number): number {
-  if (!value) return defaultValue;
-  const parsed = parseFloat(value);
-  return isNaN(parsed) ? defaultValue : parsed;
-}
+  // CORS
+  CORS_ORIGIN: z.string().default('*'),
+  CORS_METHODS: z.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
+  CORS_ALLOWED_HEADERS: z.string().default('Content-Type,Authorization'),
+  CORS_EXPOSED_HEADERS: z.string().default(''),
+  CORS_CREDENTIALS: z.coerce.boolean().default(true),
+  CORS_MAX_AGE: z.coerce.number().default(86400),
 
-export const config: Config = {
-  env: getOptionalEnv('NODE_ENV', 'development'),
-  port: parseOptionalInt(process.env.PORT, 3000),
-  host: getOptionalEnv('HOST', 'localhost'),
+  // Rate Limiting
+  RATE_LIMIT_WINDOW: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
+  RATE_LIMIT_MAX: z.coerce.number().default(100),
 
+  // Security
+  MAX_FILE_SIZE: z.coerce.number().default(50 * 1024 * 1024), // 50MB
+  ALLOWED_METHODS: z.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
+  ALLOWED_HEADERS: z.string().default('Content-Type,Authorization'),
+  EXPOSED_HEADERS: z.string().default(''),
+  CREDENTIALS: z.coerce.boolean().default(true),
+  MAX_AGE: z.coerce.number().default(86400),
+
+  // OpenAI
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-4'),
+  OPENAI_ORG: z.string().optional(),
+  OPENAI_MAX_TOKENS: z.coerce.number().default(2000),
+  OPENAI_TEMPERATURE: z.coerce.number().default(0.7),
+
+  // OpenRouter
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_MODEL: z.string().default('anthropic/claude-2'),
+  OPENROUTER_BASE_URL: z.string().default('https://openrouter.ai/api/v1/chat/completions'),
+  OPENROUTER_MAX_TOKENS: z.coerce.number().default(2000),
+  OPENROUTER_TEMPERATURE: z.coerce.number().default(0.7),
+
+  // Logging
+  LOG_LEVEL: z.string().default('info'),
+  LOG_FILE: z.string().default('logs/app.log'),
+
+  // Prometheus
+  PROMETHEUS_PORT: z.coerce.number().default(9090),
+});
+
+const env = envSchema.parse(process.env);
+
+export const config = {
+  env: env.NODE_ENV,
+  server: {
+    port: env.PORT,
+    host: env.HOST,
+    maxRequestSize: env.MAX_REQUEST_SIZE,
+  },
   db: {
-    host: getRequiredEnv('DB_HOST'),
-    port: parseOptionalInt(getRequiredEnv('DB_PORT'), 5432),
-    user: getRequiredEnv('DB_USER'),
-    password: getRequiredEnv('DB_PASSWORD'),
-    database: getRequiredEnv('DB_NAME'),
+    host: env.DB_HOST,
+    port: env.DB_PORT,
+    database: env.DB_NAME,
+    user: env.DB_USER,
+    password: env.DB_PASSWORD,
   },
-
-  jwt: {
-    secret: getRequiredEnv('JWT_SECRET'),
-    expiresIn: getOptionalEnv('JWT_EXPIRES_IN', '1h'),
-    refreshExpiresIn: getOptionalEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
-  },
-
-  openai: {
-    apiKey: getOptionalEnv('OPENAI_API_KEY', ''),
-    model: getOptionalEnv('OPENAI_MODEL', 'gpt-4'),
-    organization: process.env.OPENAI_ORG,
-    maxTokens: parseOptionalInt(process.env.OPENAI_MAX_TOKENS, 2000),
-    temperature: parseOptionalFloat(process.env.OPENAI_TEMPERATURE, 0.7),
-  },
-
-  openrouter: {
-    apiKey: getOptionalEnv('OPENROUTER_API_KEY', ''),
-    model: getOptionalEnv('OPENROUTER_MODEL', 'anthropic/claude-2'),
-    baseUrl: getOptionalEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1/chat/completions'),
-    maxTokens: parseOptionalInt(process.env.OPENROUTER_MAX_TOKENS, 2000),
-    temperature: parseOptionalFloat(process.env.OPENROUTER_TEMPERATURE, 0.7),
-  },
-
-  logging: {
-    level: getOptionalEnv('LOG_LEVEL', 'info'),
-    file: getOptionalEnv('LOG_FILE', 'logs/app.log'),
-  },
-
-  cors: {
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
-    credentials: process.env.CORS_CREDENTIALS === 'true',
-  },
-
   redis: {
-    host: getOptionalEnv('REDIS_HOST', 'localhost'),
-    port: parseOptionalInt(process.env.REDIS_PORT, 6379),
-    password: process.env.REDIS_PASSWORD,
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: env.REDIS_PASSWORD,
   },
-
-  prometheus: {
-    port: parseOptionalInt(process.env.PROMETHEUS_PORT, 9090),
+  jwt: {
+    secret: env.JWT_SECRET,
+    expiresIn: env.JWT_EXPIRY,
+    refreshExpiresIn: env.JWT_REFRESH_EXPIRY,
   },
-
-  security: {
-    allowedOrigins: process.env.SECURITY_ALLOWED_ORIGINS ? process.env.SECURITY_ALLOWED_ORIGINS.split(',') : ['*'],
-    allowedHeaders: process.env.SECURITY_ALLOWED_HEADERS ? process.env.SECURITY_ALLOWED_HEADERS.split(',') : ['Content-Type', 'Authorization'],
-    allowedMethods: process.env.SECURITY_ALLOWED_METHODS ? process.env.SECURITY_ALLOWED_METHODS.split(',') : ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    exposedHeaders: process.env.SECURITY_EXPOSED_HEADERS ? process.env.SECURITY_EXPOSED_HEADERS.split(',') : [],
-    maxAge: parseOptionalInt(process.env.SECURITY_MAX_AGE, 86400),
-    credentials: process.env.SECURITY_CREDENTIALS === 'true',
+  cors: {
+    origin: env.CORS_ORIGIN.split(','),
+    methods: env.CORS_METHODS.split(','),
+    allowedHeaders: env.CORS_ALLOWED_HEADERS.split(','),
+    exposedHeaders: env.CORS_EXPOSED_HEADERS.split(','),
+    credentials: env.CORS_CREDENTIALS,
+    maxAge: env.CORS_MAX_AGE,
   },
-
   rateLimit: {
-    windowMs: parseOptionalInt(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000), // 15 minutes
-    max: parseOptionalInt(process.env.RATE_LIMIT_MAX, 100), // 100 requests per windowMs
+    windowMs: env.RATE_LIMIT_WINDOW,
+    max: env.RATE_LIMIT_MAX,
   },
-};
+  security: {
+    maxFileSize: env.MAX_FILE_SIZE,
+    allowedMethods: env.ALLOWED_METHODS.split(','),
+    allowedHeaders: env.ALLOWED_HEADERS.split(','),
+    exposedHeaders: env.EXPOSED_HEADERS.split(','),
+    credentials: env.CREDENTIALS,
+    maxAge: env.MAX_AGE,
+  },
+  openai: {
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+    organization: env.OPENAI_ORG,
+    maxTokens: env.OPENAI_MAX_TOKENS,
+    temperature: env.OPENAI_TEMPERATURE,
+  },
+  openrouter: {
+    apiKey: env.OPENROUTER_API_KEY,
+    model: env.OPENROUTER_MODEL,
+    baseUrl: env.OPENROUTER_BASE_URL,
+    maxTokens: env.OPENROUTER_MAX_TOKENS,
+    temperature: env.OPENROUTER_TEMPERATURE,
+  },
+  logging: {
+    level: env.LOG_LEVEL,
+    file: env.LOG_FILE,
+  },
+  prometheus: {
+    port: env.PROMETHEUS_PORT,
+  },
+} as const;

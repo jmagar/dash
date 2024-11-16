@@ -1,139 +1,85 @@
+import type { ApiResponse } from '../../types/express';
+import type { CommandRequest, CommandResult } from '../../types/models-shared';
 import { api } from './api';
 import { createApiError } from '../../types/error';
-import type { CommandRequest, CommandResult } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
 
 const EXEC_ENDPOINTS = {
-  EXECUTE: (hostId: number) => `/exec/${hostId}/execute`,
-  CANCEL: (hostId: number) => `/exec/${hostId}/cancel`,
-  STATUS: (hostId: number) => `/exec/${hostId}/status`,
+  EXECUTE: (hostId: string) => `/hosts/${hostId}/execute`,
+  STREAM: (hostId: string) => `/hosts/${hostId}/stream`,
+  KILL: (hostId: string, pid: number) => `/hosts/${hostId}/processes/${pid}/kill`,
+  LIST: (hostId: string) => `/hosts/${hostId}/processes`,
+  STATUS: (hostId: string, pid: number) => `/hosts/${hostId}/processes/${pid}`,
 } as const;
 
-const COMMAND_ENDPOINTS = {
-  COMMAND: (hostId: number) => `/hosts/${hostId}/commands`,
-  SCRIPT: (hostId: number) => `/hosts/${hostId}/scripts`,
-  HISTORY: (hostId: number) => `/hosts/${hostId}/history`,
-  SAVED: (hostId: number) => `/hosts/${hostId}/saved`,
-  DELETE_SAVED_COMMAND: (hostId: number, commandId: string) => `/hosts/${hostId}/saved/${commandId}`,
-} as const;
-
-export async function executeCommand(hostId: number, command: CommandRequest): Promise<CommandResult> {
+export async function executeCommand(hostId: string, command: CommandRequest): Promise<CommandResult> {
   try {
-    const response = await api.post<{ data: CommandResult }>(EXEC_ENDPOINTS.EXECUTE(hostId), command);
-    return response.data.data;
+    const response = await api.post<CommandResult>(EXEC_ENDPOINTS.EXECUTE(hostId), command);
+
+    return response.data;
   } catch (error) {
     logger.error('Failed to execute command:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
       hostId,
       command,
-      error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to execute command', error);
   }
 }
 
-export async function executeScript(
-  hostId: number,
-  script: string,
-  args?: string[],
-): Promise<string> {
+export async function streamCommand(hostId: string, command: string): Promise<void> {
   try {
-    const response = await api.post<{ success: boolean; data: string }>(COMMAND_ENDPOINTS.SCRIPT(hostId), {
-      script,
-      args,
+    await api.post(EXEC_ENDPOINTS.STREAM(hostId), {
+      command,
     });
-    return response.data.data;
   } catch (error) {
-    logger.error('Failed to execute script:', {
-      script,
+    logger.error('Failed to stream command:', {
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      command,
     });
-    throw createApiError('Failed to execute script', error);
+    throw createApiError('Failed to stream command', error);
   }
 }
 
-export async function getCommandHistory(hostId: number): Promise<string[]> {
+export async function killCommand(hostId: string, pid: number): Promise<void> {
   try {
-    const response = await api.get<{ success: boolean; data: string[] }>(COMMAND_ENDPOINTS.HISTORY(hostId));
-    return response.data.data;
+    await api.post(EXEC_ENDPOINTS.KILL(hostId, pid));
   } catch (error) {
-    logger.error('Failed to get command history:', {
-      hostId,
+    logger.error('Failed to kill command:', {
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      pid,
     });
-    throw createApiError('Failed to get command history', error);
+    throw createApiError('Failed to kill command', error);
   }
 }
 
-export async function getSavedCommands(hostId: number): Promise<CommandRequest[]> {
+export async function listProcesses(hostId: string): Promise<CommandResult[]> {
   try {
-    const response = await api.get<{ success: boolean; data: CommandRequest[] }>(COMMAND_ENDPOINTS.SAVED(hostId));
-    return response.data.data;
+    const response = await api.get<CommandResult[]>(EXEC_ENDPOINTS.LIST(hostId));
+
+    return response.data;
   } catch (error) {
-    logger.error('Failed to get saved commands:', {
-      hostId,
+    logger.error('Failed to list processes:', {
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
     });
-    throw createApiError('Failed to get saved commands', error);
+    throw createApiError('Failed to list processes', error);
   }
 }
 
-export async function saveCommand(
-  hostId: number,
-  command: CommandRequest,
-): Promise<void> {
+export async function getProcessStatus(hostId: string, pid: number): Promise<CommandResult> {
   try {
-    await api.post(COMMAND_ENDPOINTS.SAVED(hostId), command);
-  } catch (error) {
-    logger.error('Failed to save command:', {
-      hostId,
-      command: command.command,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to save command', error);
-  }
-}
+    const response = await api.get<CommandResult>(EXEC_ENDPOINTS.STATUS(hostId, pid));
 
-export async function deleteSavedCommand(
-  hostId: number,
-  commandId: string,
-): Promise<void> {
-  try {
-    await api.delete(COMMAND_ENDPOINTS.DELETE_SAVED_COMMAND(hostId, commandId));
+    return response.data;
   } catch (error) {
-    logger.error('Failed to delete saved command:', {
-      hostId,
-      commandId,
+    logger.error('Failed to get process status:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to delete saved command', error);
-  }
-}
-
-export async function cancelCommand(hostId: number, commandId: string): Promise<void> {
-  try {
-    await api.post(EXEC_ENDPOINTS.CANCEL(hostId), { commandId });
-  } catch (error) {
-    logger.error('Failed to cancel command:', {
       hostId,
-      commandId,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      pid,
     });
-    throw createApiError('Failed to cancel command', error);
-  }
-}
-
-export async function getCommandStatus(hostId: number, commandId: string): Promise<CommandResult> {
-  try {
-    const response = await api.get<{ data: CommandResult }>(EXEC_ENDPOINTS.STATUS(hostId), {
-      params: { commandId },
-    });
-    return response.data.data;
-  } catch (error) {
-    logger.error('Failed to get command status:', {
-      hostId,
-      commandId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to get command status', error);
+    throw createApiError('Failed to get process status', error);
   }
 }

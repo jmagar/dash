@@ -1,7 +1,5 @@
-import { renderHook } from '@testing-library/react';
-
-import '@testing-library/jest-dom';
-import { usePrevious } from '../usePrevious';
+import { renderHook } from '@testing-library/react-hooks';
+import { usePrevious } from '../../../../src/client/hooks/usePrevious';
 
 describe('usePrevious', () => {
   it('should return undefined on first render', () => {

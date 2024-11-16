@@ -19,7 +19,7 @@ export function Dashboard(): JSX.Element {
       try {
         setLoading(true);
         setError(null);
-        const hostStats = await getHostStats(selectedHost.id);
+        const hostStats = await getHostStats(selectedHost.id.toString());
         setStats(hostStats);
       } catch (err) {
         logger.error('Failed to load host stats:', {

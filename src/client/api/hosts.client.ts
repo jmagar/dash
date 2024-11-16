@@ -5,14 +5,15 @@ import { logger } from '../utils/frontendLogger';
 
 const HOST_ENDPOINTS = {
   LIST: '/hosts',
-  GET: (id: number) => `/hosts/${id}`,
+  GET: (id: string) => `/hosts/${id}`,
   CREATE: '/hosts',
-  UPDATE: (id: number) => `/hosts/${id}`,
-  DELETE: (id: number) => `/hosts/${id}`,
+  UPDATE: (id: string) => `/hosts/${id}`,
+  DELETE: (id: string) => `/hosts/${id}`,
   TEST: '/hosts/test',
-  STATS: (id: number) => `/hosts/${id}/stats`,
-  CONNECT: (id: number) => `/hosts/${id}/connect`,
-  DISCONNECT: (id: number) => `/hosts/${id}/disconnect`,
+  STATS: (id: string) => `/hosts/${id}/stats`,
+  CONNECT: (id: string) => `/hosts/${id}/connect`,
+  DISCONNECT: (id: string) => `/hosts/${id}/disconnect`,
+  STATUS: (id: string) => `/hosts/${id}/status`,
 } as const;
 
 export async function listHosts(): Promise<Host[]> {
@@ -27,13 +28,13 @@ export async function listHosts(): Promise<Host[]> {
   }
 }
 
-export async function getHost(id: number): Promise<Host> {
+export async function getHost(hostId: string): Promise<Host> {
   try {
-    const response = await api.get<{ data: Host }>(HOST_ENDPOINTS.GET(id));
+    const response = await api.get<{ data: Host }>(HOST_ENDPOINTS.GET(hostId));
     return response.data.data;
   } catch (error) {
     logger.error('Failed to get host:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to get host', error);
@@ -52,25 +53,25 @@ export async function createHost(host: CreateHostRequest): Promise<Host> {
   }
 }
 
-export async function updateHost(id: number, host: Partial<Host>): Promise<Host> {
+export async function updateHost(hostId: string, host: Partial<Host>): Promise<Host> {
   try {
-    const response = await api.put<{ data: Host }>(HOST_ENDPOINTS.UPDATE(id), host);
+    const response = await api.put<{ data: Host }>(HOST_ENDPOINTS.UPDATE(hostId), host);
     return response.data.data;
   } catch (error) {
     logger.error('Failed to update host:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to update host', error);
   }
 }
 
-export async function deleteHost(id: number): Promise<void> {
+export async function deleteHost(hostId: string): Promise<void> {
   try {
-    await api.delete(HOST_ENDPOINTS.DELETE(id));
+    await api.delete(HOST_ENDPOINTS.DELETE(hostId));
   } catch (error) {
     logger.error('Failed to delete host:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to delete host', error);
@@ -89,39 +90,52 @@ export async function testHost(host: CreateHostRequest): Promise<boolean> {
   }
 }
 
-export async function getHostStats(id: number): Promise<SystemStats> {
+export async function getHostStats(hostId: string): Promise<SystemStats> {
   try {
-    const response = await api.get<{ data: SystemStats }>(HOST_ENDPOINTS.STATS(id));
+    const response = await api.get<{ data: SystemStats }>(HOST_ENDPOINTS.STATS(hostId));
     return response.data.data;
   } catch (error) {
     logger.error('Failed to get host stats:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to get host stats', error);
   }
 }
 
-export async function connectHost(id: number): Promise<void> {
+export async function connectHost(hostId: string): Promise<void> {
   try {
-    await api.post(HOST_ENDPOINTS.CONNECT(id));
+    await api.post(HOST_ENDPOINTS.CONNECT(hostId));
   } catch (error) {
     logger.error('Failed to connect host:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to connect host', error);
   }
 }
 
-export async function disconnectHost(id: number): Promise<void> {
+export async function disconnectHost(hostId: string): Promise<void> {
   try {
-    await api.post(HOST_ENDPOINTS.DISCONNECT(id));
+    await api.post(HOST_ENDPOINTS.DISCONNECT(hostId));
   } catch (error) {
     logger.error('Failed to disconnect host:', {
-      id,
+      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw createApiError('Failed to disconnect host', error);
+  }
+}
+
+export async function getHostStatus(hostId: string): Promise<Host> {
+  try {
+    const response = await api.get<{ data: Host }>(HOST_ENDPOINTS.STATUS(hostId));
+    return response.data.data;
+  } catch (error) {
+    logger.error('Failed to get host status:', {
+      hostId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw createApiError('Failed to get host status', error);
   }
 }

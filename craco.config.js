@@ -46,6 +46,7 @@ module.exports = {
         child_process: false,
         zlib: require.resolve('browserify-zlib'),
         os: require.resolve('os-browserify/browser'),
+        vm: require.resolve('vm-browserify'),
       });
 
       // Add polyfills

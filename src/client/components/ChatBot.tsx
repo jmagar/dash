@@ -12,22 +12,14 @@ import {
 } from '@mui/material';
 import React, { useState, useRef, useEffect } from 'react';
 
+import { sendMessage } from '../api/chat.client';
 import { useAuth } from '../context/AuthContext';
+import type { ChatMessage, ChatResponse } from '../../types/chat';
 import { logger } from '../utils/frontendLogger';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
 
 interface Model {
   name: string;
   value: string;
-}
-
-interface ChatResponse {
-  response: string;
 }
 
 const MODELS: Model[] = [
@@ -39,7 +31,7 @@ const MODELS: Model[] = [
 export function ChatBot(): JSX.Element {
   const theme = useTheme();
   const auth = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +63,7 @@ export function ChatBot(): JSX.Element {
   const handleSend = async (): Promise<void> => {
     if (!input.trim() || !auth.user || loading) return;
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       role: 'user',
       content: input,
       timestamp: new Date(),
@@ -83,49 +75,43 @@ export function ChatBot(): JSX.Element {
     setError(null);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: input,
-          userId: auth.user.id,
-          model: selectedModel,
-        }),
+      const response = await sendMessage(input, {
+        model: selectedModel,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response');
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to get response');
       }
 
-      const data = await response.json() as ChatResponse;
-
-      const assistantMessage: Message = {
+      const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: data.response,
+        content: response.data.message,
         timestamp: new Date(),
+        metadata: {
+          model: response.data.model,
+          tokens: response.data.usage.totalTokens,
+        },
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      logger.error('Failed to get chat response:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+    } catch (err) {
+      logger.error('Failed to send message:', {
+        error: err instanceof Error ? err.message : 'Unknown error',
       });
-
-      setError('Failed to get response. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!auth.user) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography>Please log in to use the chat.</Typography>
-      </Box>
-    );
-  }
+  const handleModelChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    newModel: string | null
+  ): void => {
+    if (newModel !== null) {
+      setSelectedModel(newModel);
+    }
+  };
 
   return (
     <Box
@@ -133,29 +119,33 @@ export function ChatBot(): JSX.Element {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        maxWidth: '800px',
-        mx: 'auto',
-        bgcolor: theme.palette.background.default,
-        borderRadius: 2,
-        boxShadow: theme.shadows[3],
+        maxHeight: '600px',
+        bgcolor: theme.palette.background.paper,
       }}
     >
-      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+      <Box
+        sx={{
+          p: 2,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.background.default,
+        }}
+      >
+        <Typography variant="h6" gutterBottom>
+          AI Assistant
+        </Typography>
         <ToggleButtonGroup
           value={selectedModel}
           exclusive
-          onChange={(_, value): void => value && setSelectedModel(value)}
+          onChange={handleModelChange}
+          aria-label="text alignment"
           size="small"
-          sx={{ width: '100%', justifyContent: 'center' }}
+          sx={{ mb: 1 }}
         >
-          {MODELS.map((model) => (
+          {MODELS.map(model => (
             <ToggleButton
               key={model.value}
               value={model.value}
-              sx={{
-                fontFamily: 'Noto Sans, sans-serif',
-                textTransform: 'none',
-              }}
+              aria-label={model.name}
             >
               {model.name}
             </ToggleButton>
@@ -163,109 +153,128 @@ export function ChatBot(): JSX.Element {
         </ToggleButtonGroup>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mx: 2, mt: 2 }} onClose={(): void => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      <Box sx={{
-        flexGrow: 1,
-        overflowY: 'auto',
-        p: 2,
-        '&::-webkit-scrollbar': {
-          width: '8px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: theme.palette.background.default,
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: theme.palette.primary.light,
-          borderRadius: '4px',
-        },
-      }}>
-        {messages.map((message, index) => (
+      <Box
+        sx={{
+          flex: 1,
+          overflow: 'auto',
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        {messages.length === 0 && (
+          <Typography variant="body1">
+            {loading ? (
+              <span>Loading...</span>
+            ) : error ? (
+              <span>{error}</span>
+            ) : (
+              <span>No messages yet</span>
+            )}
+          </Typography>
+        )}
+        {messages.map((msg, index) => (
           <Box
             key={index}
             sx={{
               display: 'flex',
-              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-              mb: 1,
+              flexDirection: 'column',
+              alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
             }}
           >
             <Box
               sx={{
-                p: 1.5,
-                maxWidth: '70%',
-                backgroundColor: message.role === 'user'
-                  ? theme.palette.primary.main
-                  : theme.palette.background.paper,
-                color: message.role === 'user'
-                  ? theme.palette.primary.contrastText
-                  : theme.palette.text.primary,
-                borderRadius: '12px',
-                fontFamily: 'Noto Sans, sans-serif',
-                boxShadow: theme.shadows[1],
+                maxWidth: '80%',
+                p: 2,
+                borderRadius: 2,
+                bgcolor:
+                  msg.role === 'user'
+                    ? theme.palette.primary.main
+                    : theme.palette.background.default,
+                color:
+                  msg.role === 'user'
+                    ? theme.palette.primary.contrastText
+                    : theme.palette.text.primary,
               }}
             >
               <Typography
                 variant="body1"
-                sx={{
-                  whiteSpace: 'pre-wrap',
-                  fontFamily: 'Noto Sans, sans-serif',
-                }}
+                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
               >
-                {message.content}
+                {msg.content}
               </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  opacity: 0.7,
-                  display: 'block',
-                  mt: 0.5,
-                  fontFamily: 'Noto Sans, sans-serif',
-                }}
-              >
-                {message.timestamp.toLocaleTimeString()}
-              </Typography>
+              {msg.metadata && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    mt: 1,
+                    display: 'block',
+                    color:
+                      msg.role === 'user'
+                        ? theme.palette.primary.contrastText
+                        : theme.palette.text.secondary,
+                    opacity: 0.8,
+                  }}
+                >
+                  {`${msg.metadata?.model ? `Model: ${msg.metadata.model}` : ''}${
+                    msg.metadata?.tokens ? ` | Tokens: ${msg.metadata.tokens}` : ''
+                  }`}
+                </Typography>
+              )}
             </Box>
           </Box>
         ))}
         <div ref={messagesEndRef} />
       </Box>
 
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={4}
-            value={input}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
-            disabled={loading}
-            sx={{
-              backgroundColor: theme.palette.background.paper,
-              '& .MuiInputBase-root': {
-                fontFamily: 'Noto Sans, sans-serif',
-              },
-            }}
-            error={!!error}
-          />
-          <Button
-            variant="contained"
-            onClick={(): void => void handleSend()}
-            disabled={!input.trim() || loading}
-            endIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
-            sx={{
-              fontFamily: 'Noto Sans, sans-serif',
-              minWidth: '100px',
-            }}
-          >
-            Send
-          </Button>
-        </Box>
+      {error && (
+        <Alert severity="error" sx={{ mx: 2, mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box
+        component="form"
+        sx={{
+          p: 2,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.background.default,
+          display: 'flex',
+          gap: 1,
+        }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void handleSend();
+        }}
+      >
+        <TextField
+          fullWidth
+          multiline
+          maxRows={4}
+          value={input}
+          onChange={handleInputChange}
+          onKeyPress={handleKeyPress}
+          placeholder="Type your message..."
+          disabled={loading}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              bgcolor: theme.palette.background.paper,
+            },
+          }}
+        />
+        <Button
+          variant="contained"
+          onClick={() => void handleSend()}
+          disabled={!input.trim() || loading}
+          sx={{ minWidth: 'unset', px: 3 }}
+        >
+          {loading ? (
+            <CircularProgress size={24} color="inherit" />
+          ) : (
+            <SendIcon />
+          )}
+        </Button>
       </Box>
     </Box>
   );

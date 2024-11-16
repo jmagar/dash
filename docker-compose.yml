@@ -8,18 +8,78 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Server
       - NODE_ENV=development
+      - PORT=3000
+      - HOST=0.0.0.0
+      - MAX_REQUEST_SIZE=10485760
+
+      # Database
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=shh
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - JWT_SECRET=${JWT_SECRET}
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+
+      # JWT
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - JWT_EXPIRY=1h
+      - JWT_REFRESH_EXPIRY=7d
+
+      # CORS
+      - CORS_ORIGIN=http://localhost:3000
+      - CORS_METHODS=GET,HEAD,PUT,PATCH,POST,DELETE
+      - CORS_ALLOWED_HEADERS=Content-Type,Authorization
+      - CORS_EXPOSED_HEADERS=
+      - CORS_CREDENTIALS=true
+      - CORS_MAX_AGE=86400
+
+      # Rate Limiting
+      - RATE_LIMIT_WINDOW=900000
+      - RATE_LIMIT_MAX=100
+
+      # Security
+      - MAX_FILE_SIZE=52428800
+      - ALLOWED_METHODS=GET,HEAD,PUT,PATCH,POST,DELETE
+      - ALLOWED_HEADERS=Content-Type,Authorization
+      - EXPOSED_HEADERS=
+      - CREDENTIALS=true
+      - MAX_AGE=86400
+
+      # OpenAI (optional)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=gpt-4
+      - OPENAI_ORG=${OPENAI_ORG:-}
+      - OPENAI_MAX_TOKENS=2000
+      - OPENAI_TEMPERATURE=0.7
+
+      # OpenRouter (optional)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=anthropic/claude-2
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+      - OPENROUTER_MAX_TOKENS=2000
+      - OPENROUTER_TEMPERATURE=0.7
+
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FILE=/var/log/shh/app.log
+
+      # Prometheus
+      - PROMETHEUS_PORT=9090
     volumes:
-      - .:/app
-      - /app/node_modules
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsconfig.server.json:/app/tsconfig.server.json
+      - ./craco.config.js:/app/craco.config.js
+      - node_modules:/app/node_modules
+      - logs:/var/log/shh
     depends_on:
       - postgres
       - redis
@@ -59,6 +119,8 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
 
 volumes:
+  node_modules:
+  logs:
   postgres_data:
   redis_data:
   prometheus_data:

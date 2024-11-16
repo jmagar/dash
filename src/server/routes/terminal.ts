@@ -1,7 +1,7 @@
 import express from 'express';
 
 import type { CacheCommand } from '../../types/cache';
-import { createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { ApiResponse } from '../../types/models-shared';
@@ -42,6 +42,10 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
     });
   }
 
+  if (!req.user) {
+    throw new ApiError('Authentication required', undefined, 401);
+  }
+
   if (!validateCommand(req.body)) {
     return res.status(400).json({
       success: false,
@@ -80,7 +84,7 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
     });
   } catch (error) {
     const metadata: LogMetadata = {
-      userId: req.user.id,
+      userId: req.user?.id,
       hostId: String(hostId),
       command,
       workingDirectory,
@@ -88,12 +92,13 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
     };
     logger.error('Failed to cache command:', metadata);
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to cache command',
+      undefined,
       500,
-      metadata,
+      metadata
     );
-    return res.status(apiError.status || 500).json({
+    return res.status(apiError.status).json({
       success: false,
       error: apiError.message,
     });
@@ -110,6 +115,10 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
       success: false,
       error: 'Invalid host ID',
     });
+  }
+
+  if (!req.user) {
+    throw new ApiError('Authentication required', undefined, 401);
   }
 
   try {
@@ -133,15 +142,21 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
     });
   } catch (error) {
     const metadata: LogMetadata = {
-      userId: req.user.id,
+      userId: req.user?.id,
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to get command history:', metadata);
 
-    return res.status(500).json({
+    const apiError = new ApiError(
+      error instanceof Error ? error.message : 'Failed to get command history',
+      undefined,
+      500,
+      metadata
+    );
+    return res.status(apiError.status).json({
       success: false,
-      error: 'Failed to get command history',
+      error: apiError.message,
     });
   }
 };

@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { ApiError, createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import type { Package, ApiResponse } from '../../types/models-shared';
@@ -17,11 +17,11 @@ interface InstallPackageBody {
   package: string;
 }
 
-type PackageListResponse = ApiResponse<Package[]> & Record<string, unknown>;
-type PackageInstallResponse = ApiResponse<void> & Record<string, unknown>;
+type PackageListResponse = ApiResponse<Package[]>;
+type PackageInstallResponse = ApiResponse<void>;
 
 // List packages
-const listPackages: AuthenticatedRequestHandler<PackageParams> = async (req, res) => {
+const listPackages: AuthenticatedRequestHandler<PackageParams, PackageListResponse> = async (req, res) => {
   const { hostId } = req.params;
 
   try {
@@ -75,7 +75,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams> = async (req, res
 };
 
 // Install package
-const installPackage: AuthenticatedRequestHandler<PackageParams, unknown, InstallPackageBody> = async (
+const installPackage: AuthenticatedRequestHandler<PackageParams, PackageInstallResponse, InstallPackageBody> = async (
   req,
   res,
 ) => {

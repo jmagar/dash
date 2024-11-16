@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
@@ -25,12 +25,13 @@ export const testRoute: RequestHandler = async (req, res) => {
     };
     logger.error('Test route failed:', metadata);
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Test route failed',
+      undefined,
       500,
-      metadata,
+      metadata
     );
-    return res.status(apiError.status || 500).json({
+    return res.status(apiError.status).json({
       success: false,
       error: apiError.message,
     });

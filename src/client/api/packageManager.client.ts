@@ -1,123 +1,83 @@
+import type { ApiResponse } from '../../types/express';
+import type { Package } from '../../types/models-shared';
 import { api } from './api';
 import { createApiError } from '../../types/error';
-import type { Package } from '../../types/models-shared';
-import type { ApiResponse } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
 
-const PKG_ENDPOINTS = {
-  LIST: (hostId: number) => `/packages/${hostId}/list`,
-  SEARCH: (hostId: number) => `/packages/${hostId}/search`,
-  INSTALL: (hostId: number) => `/packages/${hostId}/install`,
-  UNINSTALL: (hostId: number) => `/packages/${hostId}/uninstall`,
-  UPDATE: (hostId: number) => `/packages/${hostId}/update`,
-  INFO: (hostId: number, packageName: string) => `/packages/${hostId}/${packageName}`,
+const PACKAGE_ENDPOINTS = {
+  LIST: (hostId: string) => `/packages/${hostId}/list`,
+  INSTALL: (hostId: string) => `/packages/${hostId}/install`,
+  UNINSTALL: (hostId: string) => `/packages/${hostId}/uninstall`,
+  UPDATE: (hostId: string) => `/packages/${hostId}/update`,
+  SEARCH: (hostId: string) => `/packages/${hostId}/search`,
 } as const;
 
-export async function listPackages(hostId: number): Promise<ApiResponse<Package[]>> {
+export async function listPackages(hostId: string): Promise<Package[]> {
   try {
-    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.LIST(hostId));
-    return response.data;
+    const response = await api.get<{ data: Package[] }>(PACKAGE_ENDPOINTS.LIST(hostId));
+
+    return response.data.data;
   } catch (error) {
     logger.error('Failed to list packages:', {
-      hostId,
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
     });
     throw createApiError('Failed to list packages', error);
   }
 }
 
-export async function searchPackages(hostId: number, query: string): Promise<ApiResponse<Package[]>> {
+export async function installPackage(hostId: string, name: string): Promise<void> {
   try {
-    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.SEARCH(hostId), {
-      params: { query },
-    });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to search packages:', {
-      hostId,
-      query,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to search packages', error);
-  }
-}
-
-export async function installPackage(hostId: number, pkg: string, version?: string): Promise<ApiResponse<void>> {
-  try {
-    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.INSTALL(hostId), { package: pkg, version });
-    return response.data;
+    await api.post(PACKAGE_ENDPOINTS.INSTALL(hostId), { name });
   } catch (error) {
     logger.error('Failed to install package:', {
-      hostId,
-      package: pkg,
-      version,
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      name,
     });
     throw createApiError('Failed to install package', error);
   }
 }
 
-export async function uninstallPackage(hostId: number, pkg: string): Promise<ApiResponse<void>> {
+export async function uninstallPackage(hostId: string, name: string): Promise<void> {
   try {
-    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.UNINSTALL(hostId), { package: pkg });
-    return response.data;
+    await api.post(PACKAGE_ENDPOINTS.UNINSTALL(hostId), { name });
   } catch (error) {
     logger.error('Failed to uninstall package:', {
-      hostId,
-      package: pkg,
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      name,
     });
     throw createApiError('Failed to uninstall package', error);
   }
 }
 
-export async function updatePackage(hostId: number, pkg: string): Promise<ApiResponse<void>> {
+export async function updatePackage(hostId: string, name: string): Promise<void> {
   try {
-    const response = await api.post<ApiResponse<void>>(PKG_ENDPOINTS.UPDATE(hostId), { package: pkg });
-    return response.data;
+    await api.post(PACKAGE_ENDPOINTS.UPDATE(hostId), { name });
   } catch (error) {
     logger.error('Failed to update package:', {
-      hostId,
-      package: pkg,
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      name,
     });
     throw createApiError('Failed to update package', error);
   }
 }
 
-export async function listInstalledPackages(hostId: number): Promise<ApiResponse<Package[]>> {
+export async function searchPackages(hostId: string, query: string): Promise<Package[]> {
   try {
-    logger.info('Listing installed packages', { hostId: String(hostId) });
-    const response = await api.get<ApiResponse<Package[]>>(PKG_ENDPOINTS.LIST(hostId));
-    logger.info('Installed packages listed successfully', {
-      hostId: String(hostId),
-      count: response.data.data?.length ?? 0
+    const response = await api.get<{ data: Package[] }>(PACKAGE_ENDPOINTS.SEARCH(hostId), {
+      params: { query },
     });
-    return response.data;
-  } catch (error) {
-    logger.error('Failed to list installed packages:', {
-      hostId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to list installed packages', error);
-  }
-}
 
-export async function getPackageInfo(hostId: number, packageName: string): Promise<ApiResponse<Package>> {
-  try {
-    logger.info('Getting package info', { hostId: String(hostId), packageName });
-    const response = await api.get<ApiResponse<Package>>(PKG_ENDPOINTS.INFO(hostId, packageName));
-    logger.info('Package info retrieved successfully', {
-      hostId: String(hostId),
-      packageName
-    });
-    return response.data;
+    return response.data.data;
   } catch (error) {
-    logger.error('Failed to get package info:', {
-      hostId,
-      packageName,
+    logger.error('Failed to search packages:', {
       error: error instanceof Error ? error.message : 'Unknown error',
+      hostId,
+      query,
     });
-    throw createApiError('Failed to get package info', error);
+    throw createApiError('Failed to search packages', error);
   }
 }

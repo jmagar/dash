@@ -1,213 +1,227 @@
-import {
-  Refresh as RefreshIcon,
-  Search as SearchIcon,
-} from '@mui/icons-material';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-  Alert,
-  TextField,
   IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  TextField,
+  Typography,
 } from '@mui/material';
-import React, { useState } from 'react';
-
-import type { Package } from '../../types';
+import { Add, Delete, Refresh, Update } from '@mui/icons-material';
+import { useParams } from 'react-router-dom';
 import {
-  listInstalledPackages,
+  listPackages,
   installPackage,
   uninstallPackage,
   updatePackage,
   searchPackages,
-} from '../api';
-import { useAsync } from '../hooks';
-import LoadingScreen from './LoadingScreen';
+} from '../api/packageManager.client';
+import type { Package } from '../../types/models-shared';
+import { logger } from '../utils/frontendLogger';
 
-interface Props {
-  hostId: number;
-}
-
-export default function PackageManager({ hostId }: Props): JSX.Element {
-  const [searchTerm, setSearchTerm] = useState('');
+export function PackageManager() {
+  const { hostId } = useParams<{ hostId: string }>();
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<Package[] | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [packageName, setPackageName] = useState('');
 
-  const loadPackages = async (): Promise<Package[]> => {
-    const result = await listInstalledPackages(hostId);
-    if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to load packages');
+  const loadPackages = useCallback(async () => {
+    if (!hostId) {
+      setError('No host ID provided');
+      return;
     }
-    return result.data;
-  };
-
-  const {
-    data: packages,
-    loading,
-    error: loadError,
-    execute: refreshPackages,
-  } = useAsync<Package[]>(loadPackages, { immediate: true });
-
-  const handleSearch = async (): Promise<void> => {
-    if (!searchTerm.trim()) return;
-    setError(null);
-    setSearchResults(null);
 
     try {
-      const result = await searchPackages(hostId, searchTerm);
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Search failed');
-      }
-      setSearchResults(result.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      setLoading(true);
+      setError(null);
+      const data = await listPackages(hostId);
+      setPackages(data);
+    } catch (error) {
+      logger.error('Failed to load packages:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+      });
+      setError('Failed to load packages');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [hostId]);
 
-  const handleInstall = async (pkg: Package): Promise<void> => {
-    setError(null);
+  const handleInstall = useCallback(async () => {
+    if (!hostId || !packageName.trim()) return;
+
     try {
-      const result = await installPackage(hostId, pkg.name);
-      if (!result.success) {
-        throw new Error(result.error || 'Installation failed');
-      }
-      void refreshPackages();
-      setSearchResults(null); // Clear search results after successful install
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Installation failed');
+      setLoading(true);
+      setError(null);
+      await installPackage(hostId, packageName);
+      await loadPackages();
+      setPackageName('');
+    } catch (error) {
+      logger.error('Failed to install package:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+        packageName,
+      });
+      setError('Failed to install package');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [hostId, packageName, loadPackages]);
 
-  const handleUninstall = async (pkg: Package): Promise<void> => {
-    setError(null);
+  const handleUninstall = useCallback(async (name: string) => {
+    if (!hostId) return;
+
     try {
-      const result = await uninstallPackage(hostId, pkg.name);
-      if (!result.success) {
-        throw new Error(result.error || 'Uninstallation failed');
-      }
-      void refreshPackages();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Uninstallation failed');
+      setLoading(true);
+      setError(null);
+      await uninstallPackage(hostId, name);
+      await loadPackages();
+    } catch (error) {
+      logger.error('Failed to uninstall package:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+        packageName: name,
+      });
+      setError('Failed to uninstall package');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [hostId, loadPackages]);
 
-  const handleUpdate = async (pkg: Package): Promise<void> => {
-    setError(null);
+  const handleUpdate = useCallback(async (name: string) => {
+    if (!hostId) return;
+
     try {
-      const result = await updatePackage(hostId, pkg.name);
-      if (!result.success) {
-        throw new Error(result.error || 'Update failed');
-      }
-      void refreshPackages();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed');
+      setLoading(true);
+      setError(null);
+      await updatePackage(hostId, name);
+      await loadPackages();
+    } catch (error) {
+      logger.error('Failed to update package:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+        packageName: name,
+      });
+      setError('Failed to update package');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [hostId, loadPackages]);
 
-  if (loading) {
-    return <LoadingScreen fullscreen={false} message="Loading packages..." />;
+  const handleSearch = useCallback(async () => {
+    if (!hostId || !searchQuery.trim()) {
+      void loadPackages();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await searchPackages(hostId, searchQuery);
+      setPackages(data);
+    } catch (error) {
+      logger.error('Failed to search packages:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+        query: searchQuery,
+      });
+      setError('Failed to search packages');
+    } finally {
+      setLoading(false);
+    }
+  }, [hostId, searchQuery, loadPackages]);
+
+  useEffect(() => {
+    void loadPackages();
+  }, [loadPackages]);
+
+  if (!hostId) {
+    return <Typography color="error">No host ID provided</Typography>;
   }
 
-  const displayPackages = searchResults ?? packages ?? [];
-
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="h5">Package Manager</Typography>
-        <IconButton onClick={(): void => void refreshPackages()}>
-          <RefreshIcon />
+    <Box>
+      <Box display="flex" alignItems="center" mb={2}>
+        <Typography variant="h5" sx={{ flexGrow: 1 }}>
+          Package Manager
+        </Typography>
+        <IconButton onClick={() => void loadPackages()}>
+          <Refresh />
         </IconButton>
-        <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            placeholder="Search packages..."
-            value={searchTerm}
-            onChange={(e): void => setSearchTerm(e.target.value)}
-            fullWidth
-          />
-          <Button
-            variant="contained"
-            startIcon={<SearchIcon />}
-            onClick={(): void => void handleSearch()}
-            disabled={!searchTerm.trim()}
-          >
-            Search
-          </Button>
-        </Box>
       </Box>
 
-      {(error || loadError) && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error || loadError}
-        </Alert>
+      {error && (
+        <Typography color="error" mb={2}>
+          {error}
+        </Typography>
       )}
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Version</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {displayPackages.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center">
-                  <Typography color="textSecondary">
-                    {searchResults ? 'No packages found' : 'No packages installed'}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              displayPackages.map((pkg) => (
-                <TableRow key={pkg.name}>
-                  <TableCell>{pkg.name}</TableCell>
-                  <TableCell>{pkg.version}</TableCell>
-                  <TableCell>{pkg.description}</TableCell>
-                  <TableCell align="right">
-                    {pkg.installed ? (
-                      <>
-                        <Button
-                          size="small"
-                          onClick={(): void => void handleUninstall(pkg)}
-                        >
-                          Uninstall
-                        </Button>
-                        {pkg.updateAvailable && (
-                          <Button
-                            size="small"
-                            color="primary"
-                            onClick={(): void => void handleUpdate(pkg)}
-                          >
-                            Update
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      <Button
-                        size="small"
-                        color="primary"
-                        onClick={(): void => void handleInstall(pkg)}
-                      >
-                        Install
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Box display="flex" gap={2} mb={2}>
+        <TextField
+          label="Search packages"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && void handleSearch()}
+          fullWidth
+        />
+        <Button variant="contained" onClick={() => void handleSearch()}>
+          Search
+        </Button>
+      </Box>
+
+      <Box display="flex" gap={2} mb={2}>
+        <TextField
+          label="Package name"
+          value={packageName}
+          onChange={(e) => setPackageName(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && void handleInstall()}
+          fullWidth
+        />
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => void handleInstall()}
+          disabled={!packageName.trim()}
+        >
+          Install
+        </Button>
+      </Box>
+
+      {loading ? (
+        <Typography>Loading...</Typography>
+      ) : (
+        <List>
+          {packages.map((pkg) => (
+            <ListItem
+              key={pkg.name}
+              secondaryAction={
+                <Box>
+                  <IconButton onClick={() => void handleUpdate(pkg.name)}>
+                    <Update />
+                  </IconButton>
+                  <IconButton onClick={() => void handleUninstall(pkg.name)}>
+                    <Delete />
+                  </IconButton>
+                </Box>
+              }
+            >
+              <ListItemText
+                primary={pkg.name}
+                secondary={`Version: ${pkg.version}`}
+              />
+            </ListItem>
+          ))}
+          {packages.length === 0 && (
+            <Typography variant="body2" color="textSecondary" align="center">
+              No packages found
+            </Typography>
+          )}
+        </List>
+      )}
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { createApiError } from '../../types/error';
+import { ApiError } from '../../types/error';
 import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { cacheService } from '../cache/CacheService';
@@ -36,7 +36,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
         error: dbHealth.error,
       };
       logger.error('Database connection failed:', metadata);
-      throw createApiError(`Database connection failed: ${dbHealth.error}`, 500, metadata);
+      throw new ApiError(`Database connection failed: ${dbHealth.error}`, undefined, 500, metadata);
     }
 
     // Check cache connection
@@ -46,7 +46,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
         error: cacheHealth.error,
       };
       logger.error('Cache connection failed:', metadata);
-      throw createApiError(`Cache connection failed: ${cacheHealth.error}`, 500, metadata);
+      throw new ApiError(`Cache connection failed: ${cacheHealth.error}`, undefined, 500, metadata);
     }
 
     // Get system metrics
@@ -78,12 +78,13 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
     };
     logger.error('Failed to get system status:', metadata);
 
-    const apiError = createApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to get system status',
+      undefined,
       500,
-      metadata,
+      metadata
     );
-    return res.status(apiError.status || 500).json({
+    return res.status(apiError.status).json({
       success: false,
       status: {
         database: {

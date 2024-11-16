@@ -70,7 +70,7 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
         headers: {
           'Authorization': `Bearer ${config.openrouter.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': config.host,
+          'HTTP-Referer': config.server.host,
         },
         body: JSON.stringify(requestBody),
       });

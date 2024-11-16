@@ -1,12 +1,10 @@
 import { performance } from 'perf_hooks';
-
 import type { Response, NextFunction } from 'express';
-
 import type { Request } from '../../types/express';
-import type { LogMetadata } from '../../types/logger';
+import type { LogMetadata, LogContext } from '../../types/logger';
 import { logger } from '../utils/logger';
 
-interface RequestTiming {
+export interface RequestTiming {
   startTime: number;
   dbTime: number;
   processingTime: number;
@@ -34,6 +32,19 @@ function cleanupRequest(req: Request, res: ExtendedResponse): void {
 }
 
 /**
+ * Converts RequestTiming to the format expected by LogMetadata
+ */
+function formatTiming(timing: RequestTiming | undefined) {
+  if (!timing) return undefined;
+
+  return {
+    total: timing.processingTime,
+    db: timing.dbTime,
+    processing: timing.processingTime - timing.dbTime
+  };
+}
+
+/**
  * Request tracing middleware that adds timing information
  * to help track requests through the system.
  */
@@ -48,106 +59,84 @@ export function requestTracer(req: Request, res: Response, next: NextFunction) {
   });
 
   // Create child logger with request context
-  const requestLogger = logger.withContext({
-    component: 'HTTP',
+  const context: LogContext = {
     requestId: req.requestId,
     userId: req.user?.id,
-  });
-
-  // Log request start with detailed metadata
-  const metadata: LogMetadata = {
-    method: req.method,
-    url: req.url,
-    path: req.path,
-    params: req.params,
-    query: req.query,
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
-    correlationId: req.get('x-correlation-id'),
-    sessionId: req.get('x-session-id'),
   };
 
-  requestLogger.info('Request started:', metadata);
+  const requestLogger = logger.withContext(context);
 
-  // Track response time
-  const startHrTime = process.hrtime();
-
-  // Patch response methods to track timing
+  // Wrap json method to capture response data
   const extendedRes = res as ExtendedResponse;
-  const originalJson = res.json.bind(res) as JsonResponseFunction;
-  extendedRes.__originalJson = originalJson;
-  res.json = function(body: unknown): Response {
+  extendedRes.__originalJson = res.json;
+  extendedRes.json = function(body) {
     const timing = timings.get(req);
     if (timing) {
       timing.processingTime = performance.now() - timing.startTime;
     }
-    return originalJson(body);
+
+    const metadata: LogMetadata = {
+      requestId: req.requestId,
+      userId: req.user?.id,
+      timing: formatTiming(timing),
+      responseSize: JSON.stringify(body).length,
+    };
+
+    requestLogger.info('Request completed', metadata);
+
+    if (extendedRes.__originalJson) {
+      return extendedRes.__originalJson.call(this, body);
+    }
+    return res.json.call(this, body);
   };
 
-  // Add response listener to log completion
+  // Handle request completion
   res.on('finish', () => {
     const timing = timings.get(req);
-    const diff = process.hrtime(startHrTime);
-    const responseTime = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
+    if (timing) {
+      const totalTime = performance.now() - timing.startTime;
+      timing.processingTime = totalTime;
 
-    const responseMetadata: LogMetadata = {
-      ...metadata,
-      statusCode: res.statusCode,
-      responseTime: `${responseTime}ms`,
-      contentLength: res.get('content-length'),
-      timing: timing ? {
-        total: timing.processingTime,
-        db: timing.dbTime,
-        processing: timing.processingTime - timing.dbTime,
-      } : undefined,
-    };
+      const metadata: LogMetadata = {
+        requestId: req.requestId,
+        userId: req.user?.id,
+        statusCode: res.statusCode,
+        timing: formatTiming(timing),
+      };
 
-    if (res.statusCode >= 500) {
-      requestLogger.error('Request failed:', responseMetadata);
-    } else if (res.statusCode >= 400) {
-      requestLogger.warn('Request failed:', responseMetadata);
-    } else {
-      requestLogger.info('Request completed:', responseMetadata);
+      if (totalTime > 1000) {
+        requestLogger.warn('Slow request detected', metadata);
+      } else {
+        requestLogger.debug('Request timing', metadata);
+      }
     }
 
     cleanupRequest(req, extendedRes);
   });
 
-  // Add response listener to log errors
+  // Handle request errors
   res.on('error', (error: Error) => {
     const timing = timings.get(req);
-    const diff = process.hrtime(startHrTime);
-    const responseTime = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
+    if (timing) {
+      const totalTime = performance.now() - timing.startTime;
+      timing.processingTime = totalTime;
 
-    const errorMetadata: LogMetadata = {
-      ...metadata,
-      error: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      },
-      responseTime: `${responseTime}ms`,
-      timing: timing ? {
-        total: timing.processingTime,
-        db: timing.dbTime,
-        processing: timing.processingTime - timing.dbTime,
-      } : undefined,
-    };
+      const metadata: LogMetadata = {
+        requestId: req.requestId,
+        userId: req.user?.id,
+        error: {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        },
+        timing: formatTiming(timing),
+      };
 
-    requestLogger.error('Request error:', errorMetadata);
+      requestLogger.error('Request error', metadata);
+    }
+
     cleanupRequest(req, extendedRes);
   });
-
-  // Add helper to get request logger
-  res.locals.logger = requestLogger;
-
-  // Add helper to track DB time
-  res.locals.trackDbTime = (time: number) => {
-    const timing = timings.get(req);
-    if (timing) {
-      timing.dbTime += time;
-    }
-  };
 
   next();
 }
@@ -156,28 +145,22 @@ export function requestTracer(req: Request, res: Response, next: NextFunction) {
  * Performance monitoring middleware that tracks response times
  * and reports slow requests
  */
-export function performanceMonitor(threshold = 1000): (req: Request, res: Response, next: NextFunction) => void {
-  return function(req: Request, res: Response, next: NextFunction) {
+export function performanceMonitor(threshold = 1000) {
+  return (req: Request, res: Response, next: NextFunction) => {
     const start = performance.now();
 
     res.on('finish', () => {
-      const cleanup = () => res.removeAllListeners("finish");
       const duration = performance.now() - start;
       if (duration > threshold) {
-        const timing = timings.get(req);
-        logger.warn('Slow request detected:', {
+        logger.warn('Slow request detected', {
+          requestId: req.requestId,
+          userId: req.user?.id,
           method: req.method,
-          url: req.url,
-          duration: `${duration.toFixed(2)}ms`,
+          path: req.path,
+          duration: `${duration}ms`,
           threshold: `${threshold}ms`,
-          timing: timing ? {
-            total: timing.processingTime,
-            db: timing.dbTime,
-            processing: timing.processingTime - timing.dbTime,
-          } : undefined,
         });
       }
-      cleanup();
     });
 
     next();

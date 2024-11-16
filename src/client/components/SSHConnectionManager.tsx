@@ -1,158 +1,158 @@
-import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Grid,
+  IconButton,
+  Typography,
+} from '@mui/material';
+import { Refresh, PowerSettingsNew } from '@mui/icons-material';
+import { useParams } from 'react-router-dom';
+import {
+  connectHost,
+  disconnectHost,
+  getHostStatus,
+} from '../api/hosts.client';
+import type { Host } from '../../types/models-shared';
+import { logger } from '../utils/frontendLogger';
 
-import type { SystemStats } from '../../types/models-shared';
-import { getHost, getHostStats } from '../api/hosts.client';
-import { useHost } from '../context/HostContext';
-import { logger } from '../utils/logger';
-
-interface SSHConnectionManagerProps {
-  hostId: number;
-}
-
-export function SSHConnectionManager({ hostId }: SSHConnectionManagerProps): JSX.Element {
-  const { selectedHost, setSelectedHost } = useHost();
-  const [stats, setStats] = useState<SystemStats | null>(null);
-  const [loading, setLoading] = useState(false);
+export function SSHConnectionManager() {
+  const { hostId } = useParams<{ hostId: string }>();
+  const [host, setHost] = useState<Host | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadHost() {
-      try {
-        setLoading(true);
-        setError(null);
-        const host = await getHost(hostId);
-        setSelectedHost(host);
-      } catch (err) {
-        logger.error('Failed to load host:', {
-          hostId,
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-        setError('Failed to load host');
-      } finally {
-        setLoading(false);
-      }
+  const loadHostStatus = useCallback(async () => {
+    if (!hostId) {
+      setError('No host ID provided');
+      return;
     }
 
-    void loadHost();
-  }, [hostId, setSelectedHost]);
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getHostStatus(hostId);
+      setHost(data);
+    } catch (error) {
+      logger.error('Failed to load host status:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+      });
+      setError('Failed to load host status');
+    } finally {
+      setLoading(false);
+    }
+  }, [hostId]);
+
+  const handleConnect = useCallback(async () => {
+    if (!hostId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      await connectHost(hostId);
+      await loadHostStatus();
+    } catch (error) {
+      logger.error('Failed to connect host:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+      });
+      setError('Failed to connect host');
+    } finally {
+      setLoading(false);
+    }
+  }, [hostId, loadHostStatus]);
+
+  const handleDisconnect = useCallback(async () => {
+    if (!hostId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      await disconnectHost(hostId);
+      await loadHostStatus();
+    } catch (error) {
+      logger.error('Failed to disconnect host:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hostId,
+      });
+      setError('Failed to disconnect host');
+    } finally {
+      setLoading(false);
+    }
+  }, [hostId, loadHostStatus]);
 
   useEffect(() => {
-    async function loadStats() {
-      if (!selectedHost) return;
+    void loadHostStatus();
+  }, [loadHostStatus]);
 
-      try {
-        setLoading(true);
-        setError(null);
-        const hostStats = await getHostStats(selectedHost.id);
-        setStats(hostStats);
-      } catch (err) {
-        logger.error('Failed to load host stats:', {
-          hostId: selectedHost.id,
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-        setError('Failed to load host stats');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    const interval = setInterval(() => {
-      void loadStats();
-    }, 5000);
-
-    void loadStats();
-
-    return () => clearInterval(interval);
-  }, [selectedHost]);
-
-  if (loading && !selectedHost) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
-      </Box>
-    );
-  }
-
-  if (!selectedHost) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography>No host selected</Typography>
-      </Box>
-    );
+  if (!hostId) {
+    return <Typography color="error">No host ID provided</Typography>;
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h6">{selectedHost.name}</Typography>
-      <Typography color="textSecondary">
-        {selectedHost.hostname}:{selectedHost.port}
-      </Typography>
+    <Box>
+      <Box display="flex" alignItems="center" mb={2}>
+        <Typography variant="h5" sx={{ flexGrow: 1 }}>
+          SSH Connection Manager
+        </Typography>
+        <IconButton onClick={() => void loadHostStatus()}>
+          <Refresh />
+        </IconButton>
+      </Box>
 
-      {stats && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle1">System Stats</Typography>
-          <Typography>
-            CPU Usage: {stats.cpu.usage.toFixed(1)}% ({stats.cpu.cores} cores)
-          </Typography>
-          <Typography>
-            Memory: {formatBytes(stats.memory.used)}/{formatBytes(stats.memory.total)} (
-            {((stats.memory.used / stats.memory.total) * 100).toFixed(1)}%)
-          </Typography>
-          <Typography>
-            Disk: {formatBytes(stats.disk.used)}/{formatBytes(stats.disk.total)} (
-            {((stats.disk.used / stats.disk.total) * 100).toFixed(1)}%)
-          </Typography>
-          <Typography>Uptime: {formatUptime(stats.uptime)}</Typography>
-          <Typography>Load Average: {stats.loadAvg.join(', ')}</Typography>
-        </Box>
+      {error && (
+        <Typography color="error" mb={2}>
+          {error}
+        </Typography>
       )}
 
-      <Box sx={{ mt: 2 }}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={(): void => {
-            // Handle connect/disconnect
-          }}
-        >
-          {selectedHost.status === 'connected' ? 'Disconnect' : 'Connect'}
-        </Button>
-      </Box>
+      {loading ? (
+        <Typography>Loading...</Typography>
+      ) : host ? (
+        <Card>
+          <CardContent>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs>
+                <Typography variant="h6" gutterBottom>
+                  {host.name}
+                </Typography>
+                <Typography color="textSecondary">
+                  {host.hostname}:{host.port}
+                </Typography>
+                <Typography color="textSecondary">
+                  Status: {host.status}
+                </Typography>
+              </Grid>
+              <Grid item>
+                {host.status === 'connected' ? (
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<PowerSettingsNew />}
+                    onClick={() => void handleDisconnect()}
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<PowerSettingsNew />}
+                    onClick={() => void handleConnect()}
+                  >
+                    Connect
+                  </Button>
+                )}
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      ) : (
+        <Typography>Host not found</Typography>
+      )}
     </Box>
   );
-}
-
-function formatBytes(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-
-  return `${value.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-
-  return parts.join(' ') || '< 1m';
 }

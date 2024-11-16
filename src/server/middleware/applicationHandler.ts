@@ -1,7 +1,6 @@
-import type { Application, Response, NextFunction } from 'express';
-
-import { errorHandler, notFoundHandler } from './errorHandler';
-import type { Request } from '../../types/express';
+import type { Application, Request, Response, NextFunction } from 'express';
+import { ApiError } from '../../types/error';
+import { errorHandler, notFoundHandler } from './error';
 import type { LogMetadata } from '../../types/logger';
 import { logger } from '../utils/logger';
 
@@ -35,13 +34,7 @@ export function configureApplicationHandlers(app: Application): void {
   // Handle unhandled rejections
   process.on('unhandledRejection', (reason: unknown) => {
     const metadata: LogMetadata = {
-      error: reason instanceof Error ? {
-        name: reason.name,
-        message: reason.message,
-        stack: reason.stack,
-      } : {
-        message: String(reason),
-      },
+      error: reason instanceof Error ? reason : String(reason)
     };
     logger.error('Unhandled Rejection:', metadata);
   });
@@ -50,43 +43,30 @@ export function configureApplicationHandlers(app: Application): void {
 }
 
 /**
- * Helper function to wrap async route handlers
- */
-export function asyncHandler<P = unknown, ResBody = unknown, ReqBody = unknown>(
-  fn: (
-    req: Request<P, ResBody, ReqBody>,
-    res: Response<ResBody>,
-    next: NextFunction
-  ) => Promise<void>,
-): (
-  req: Request<P, ResBody, ReqBody>,
-  res: Response<ResBody>,
-  next: NextFunction
-) => void {
-  return (req, res, next) => {
-    fn(req, res, next).catch(next);
-  };
-}
-
-/**
  * Helper function to create route-specific error handlers
+ * @param routeName - The name of the route for logging purposes
+ * @returns A middleware function that handles errors for the specific route
  */
 export function createRouteErrorHandler(routeName: string) {
-  return (error: Error, req: Request, res: Response, next: NextFunction): void => {
+  return function(error: Error, req: Request, res: Response, _next: NextFunction) {
     const metadata: LogMetadata = {
       route: routeName,
-      requestId: req.requestId,
-      userId: req.user?.id,
-      method: req.method,
-      url: req.url,
       error: {
         name: error.name,
         message: error.message,
         stack: error.stack,
       },
+      path: req.path,
+      method: req.method,
+      requestId: req.requestId,
+      userId: req.user?.id,
     };
 
-    logger.error('Route Error:', metadata);
-    next(error);
+    logger.error('Route error:', metadata);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   };
 }

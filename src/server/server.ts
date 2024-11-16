@@ -1,73 +1,99 @@
-import path from 'path';
-import compression from 'compression';
-import cors from 'cors';
 import express from 'express';
-import { createServer } from 'http';
-import { security, corsConfig } from './middleware/security';
-import { authenticate } from './middleware/auth';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { requestLogger } from './middleware/requestLogger';
-import { requestTracer, performanceMonitor } from './middleware/requestTracer';
-import routes from './routes';
-import { logger } from './utils/logger';
+import { Server } from 'socket.io';
+import http from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import fileUpload from 'express-fileupload';
+import { rateLimit } from 'express-rate-limit';
+import { createClient } from 'redis';
+import { RedisStore } from 'rate-limit-redis';
+
 import { config } from './config';
+import { logger } from './utils/logger';
+import routes from './routes';
+import { setupMetrics } from './metrics';
+import { errorHandler, notFoundHandler } from './middleware/error';
+import { requestTracer } from './middleware/requestTracer';
+import { securityHeaders } from './middleware/security';
 
-// Validate required environment variables in production
-if (process.env.NODE_ENV === 'production') {
-  for (const envVar of ['JWT_SECRET', 'POSTGRES_HOST', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB', 'REDIS_HOST']) {
-    if (!process.env[envVar]) {
-      logger.error(`Missing required environment variable: ${envVar}`);
-      process.exit(1);
-    }
-  }
-}
-
+// Create Express app
 const app = express();
-const PORT = config.server.port;
+const server = http.createServer(app);
 
-// Apply security middleware stack
-app.use(security);
+// Export server for use in bootstrap.ts
+export { server };
 
-// Basic middleware
-app.use(compression());
-app.use(cors(corsConfig));
-app.use(express.json({ limit: config.server.maxRequestSize }));
-app.use(express.urlencoded({ extended: true, limit: config.server.maxRequestSize }));
-
-// Request processing middleware
-app.use(requestLogger);
-app.use(requestTracer);
-app.use(performanceMonitor);
-
-// Authentication middleware for API routes
-app.use('/api', authenticate);
-
-// API routes
-app.use('/api', routes);
-
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../build')));
-  
-  // Serve React app for all other routes
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../build/index.html'));
-  });
-}
-
-// Error handling
-app.use(notFoundHandler);
-app.use(errorHandler);
-
-// Create HTTP server
-const server = createServer(app);
-
-// Start server
-server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+// Configure Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: config.cors.origin,
+    methods: config.cors.methods,
+    allowedHeaders: config.cors.allowedHeaders,
+    exposedHeaders: config.cors.exposedHeaders,
+    credentials: config.cors.credentials,
+    maxAge: config.cors.maxAge,
+  },
 });
 
-// Graceful shutdown
+// Configure Redis rate limiter
+const redisClient = createClient({
+  url: `redis://${config.redis.host}:${config.redis.port}`,
+  password: config.redis.password,
+});
+
+redisClient.on('error', (err) => {
+  logger.error('Redis client error:', err);
+});
+
+const limiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new RedisStore({
+    sendCommand: (...args: string[]) => redisClient.sendCommand(args),
+  }),
+});
+
+// Apply middleware
+app.use(cors({
+  origin: config.cors.origin,
+  methods: config.cors.methods,
+  allowedHeaders: config.cors.allowedHeaders,
+  exposedHeaders: config.cors.exposedHeaders,
+  credentials: config.cors.credentials,
+  maxAge: config.cors.maxAge,
+}));
+app.use(helmet());
+app.use(compression());
+app.use(express.json({ limit: config.server.maxRequestSize }));
+app.use(express.urlencoded({ extended: true, limit: config.server.maxRequestSize }));
+app.use(fileUpload({
+  limits: { fileSize: config.security.maxFileSize },
+  abortOnLimit: true,
+}));
+app.use(requestTracer);
+app.use(securityHeaders);
+app.use(limiter);
+
+// Setup routes
+app.use('/api', routes);
+
+// Setup Prometheus metrics
+setupMetrics(app);
+
+// Error handling
+app.use(errorHandler);
+app.use(notFoundHandler);
+
+// Start server
+const port = config.server.port;
+server.listen(port, () => {
+  logger.info(`Server running on port ${port}`);
+});
+
+// Handle process termination
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received. Closing server...');
   server.close(() => {
@@ -75,30 +101,3 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received. Closing server...');
-  server.close(() => {
-    logger.info('Server closed');
-    process.exit(0);
-  });
-});
-
-// Error handling for uncaught exceptions and unhandled rejections
-process.on('uncaughtException', (error: Error) => {
-  logger.error('Uncaught exception:', {
-    error: error.message,
-    stack: error.stack,
-  });
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason: unknown) => {
-  logger.error('Unhandled rejection:', {
-    error: reason instanceof Error ? reason.message : 'Unknown error',
-    stack: reason instanceof Error ? reason.stack : undefined,
-  });
-  process.exit(1);
-});
-
-export { app, server };

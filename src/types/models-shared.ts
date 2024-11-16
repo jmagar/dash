@@ -1,5 +1,5 @@
 export interface Host {
-  id: number;
+  id: string;
   name: string;
   hostname: string;
   port: number;
@@ -18,7 +18,7 @@ export interface CreateHostRequest {
   password?: string;
 }
 
-export type UpdateHostRequest = Partial<CreateHostRequest>
+export type UpdateHostRequest = Partial<CreateHostRequest>;
 
 export interface Container {
   id: string;
@@ -138,14 +138,6 @@ export interface CommandResult {
   completedAt?: Date;
 }
 
-export interface AuthResult {
-  success: boolean;
-  data?: import('./auth').User;
-  token?: string;
-  mfaRequired?: boolean;
-  error?: string;
-}
-
 export interface UserRegistration {
   username: string;
   email: string;
@@ -201,7 +193,7 @@ export interface ContainerStats {
   };
 }
 
-export interface ApiResponse<T> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;

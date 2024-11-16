@@ -1,13 +1,13 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createApiError } from '../../types/error';
-import type { LogMetadata } from '../../types/logger';
+import { ApiError } from '../../types/error';
 import { logger } from '../utils/logger';
 
 /**
- * Global error handler middleware
+ * Global error handling middleware
  */
-export function errorHandler(error: Error, req: Request, res: Response, next: NextFunction) {
-  const metadata: LogMetadata = {
+export function errorHandler(error: Error, req: Request, res: Response, _next: NextFunction) {
+  const statusCode = error instanceof ApiError ? error.status : 500;
+  const metadata = {
     error: {
       name: error.name,
       message: error.message,
@@ -19,12 +19,11 @@ export function errorHandler(error: Error, req: Request, res: Response, next: Ne
     userId: req.user?.id,
   };
 
-  logger.error('Unhandled error:', metadata);
+  logger.error('Server error:', metadata);
 
-  const apiError = createApiError(error.message, error, 500);
-  res.status(apiError.status || 500).json({
+  res.status(statusCode).json({
     success: false,
-    error: apiError.message,
+    error: error.message,
   });
 }
 
@@ -32,7 +31,7 @@ export function errorHandler(error: Error, req: Request, res: Response, next: Ne
  * 404 Not Found handler
  */
 export function notFoundHandler(req: Request, res: Response) {
-  const metadata: LogMetadata = {
+  const metadata = {
     path: req.path,
     method: req.method,
     requestId: req.requestId,
@@ -41,9 +40,8 @@ export function notFoundHandler(req: Request, res: Response) {
 
   logger.warn('Route not found:', metadata);
 
-  const apiError = createApiError('Route not found', null, 404);
   res.status(404).json({
     success: false,
-    error: apiError.message,
+    error: 'Not Found',
   });
 }

@@ -13,7 +13,7 @@ export const securityHeaders = helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", ...config.security.allowedOrigins],
+      connectSrc: ["'self'", ...config.cors.origin],
       fontSrc: ["'self'", 'https:', 'data:'],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
@@ -35,7 +35,7 @@ export const securityHeaders = helmet({
 // CORS configuration
 export const corsConfig = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || config.security.allowedOrigins.includes(origin)) {
+    if (!origin || config.cors.origin.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -52,12 +52,14 @@ export const corsConfig = {
 export const rateLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.max,
-  headers: true,
   message: 'Too many requests, please try again later.',
   handler: (req: Request, res: Response) => {
     logger.warn('Rate limit exceeded', {
       ip: req.ip,
       path: req.path,
+      method: req.method,
+      requestId: req.requestId,
+      userId: req.user?.id,
     });
     res.status(429).json({
       success: false,
@@ -69,44 +71,59 @@ export const rateLimiter = rateLimit({
 // File upload configuration
 export const fileUploadConfig = fileUpload({
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB max file size
+    fileSize: config.security.maxFileSize,
   },
+  abortOnLimit: true,
   useTempFiles: true,
   tempFileDir: '/tmp/',
   debug: process.env.NODE_ENV === 'development',
   safeFileNames: true,
   preserveExtension: true,
-  abortOnLimit: true,
-  uploadTimeout: 60000, // 1 minute
+  createParentPath: true,
 });
 
-// Content type validation middleware
+/**
+ * Content type validation middleware
+ * Ensures requests have appropriate content type headers
+ */
 export function validateContentType(req: Request, res: Response, next: NextFunction): void {
-  if (req.method === 'POST' || req.method === 'PUT') {
-    const contentType = req.headers['content-type'];
-    if (!contentType || !contentType.includes('application/json')) {
-      res.status(415).json({
-        success: false,
-        error: 'Content-Type must be application/json',
-      });
-      return;
-    }
+  const contentType = req.headers['content-type'];
+  const acceptedTypes = ['application/json', 'multipart/form-data'];
+
+  if (req.method !== 'GET' && !contentType) {
+    res.status(400).json({
+      success: false,
+      error: 'Content-Type header is required',
+    });
+    return;
   }
+
+  if (contentType && !acceptedTypes.some(type => contentType.includes(type))) {
+    res.status(415).json({
+      success: false,
+      error: `Unsupported Content-Type. Accepted types: ${acceptedTypes.join(', ')}`,
+    });
+    return;
+  }
+
   next();
 }
 
-// Request size validation middleware
+/**
+ * Request size validation middleware
+ * Ensures requests don't exceed configured size limits
+ */
 export function validateRequestSize(req: Request, res: Response, next: NextFunction): void {
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
-  const maxSize = 10 * 1024 * 1024; // 10MB
 
-  if (contentLength > maxSize) {
+  if (contentLength > config.server.maxRequestSize) {
     res.status(413).json({
       success: false,
       error: 'Request entity too large',
     });
     return;
   }
+
   next();
 }
 
@@ -114,7 +131,7 @@ export function validateRequestSize(req: Request, res: Response, next: NextFunct
 export const security = [
   securityHeaders,
   rateLimiter,
-  fileUploadConfig,
   validateContentType,
   validateRequestSize,
+  fileUploadConfig,
 ];

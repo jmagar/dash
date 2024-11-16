@@ -1,17 +1,11 @@
-import type {
-  Logger,
-  ContextualLogger,
-  LogMetadata,
-  LogContext,
-  LogOptions,
-} from '../../types/logger';
+import type { Logger, LogMetadata } from '../../types/logger';
 
 /**
  * Frontend logger implementation with context support and browser-specific features
  */
-class FrontendLogger implements ContextualLogger {
+class FrontendLogger implements Logger {
   private static instance: FrontendLogger;
-  private context: LogContext | null = null;
+  private context: LogMetadata = {};
 
   private constructor() {
     this.setupErrorHandlers();
@@ -56,19 +50,10 @@ class FrontendLogger implements ContextualLogger {
   /**
    * Create a new logger instance with context
    */
-  withContext(context: LogContext): Logger {
-    const contextualLogger = new FrontendLogger();
-    contextualLogger.context = context;
-    return contextualLogger;
-  }
-
-  /**
-   * Create a child logger with additional options
-   */
-  child(options: LogOptions): Logger {
-    const childLogger = new FrontendLogger();
-    childLogger.context = this.context;
-    return childLogger;
+  withContext(context: LogMetadata): Logger {
+    const newLogger = new FrontendLogger();
+    newLogger.context = { ...this.context, ...context };
+    return newLogger;
   }
 
   /**
@@ -80,57 +65,45 @@ class FrontendLogger implements ContextualLogger {
       ...meta,
     };
 
-    if (this.context) {
-      formattedMeta.component = this.context.component;
-      formattedMeta.requestId = this.context.requestId;
-      formattedMeta.userId = this.context.userId;
-      formattedMeta.hostId = this.context.hostId;
-    }
-
-    return formattedMeta;
+    return { ...this.context, ...formattedMeta };
   }
 
   /**
    * Format log message with context
    */
   private formatMessage(level: string, message: string, meta?: LogMetadata): string {
-    const contextStr = this.context ? `[${this.context.component}] ` : '';
-    return `[${level}] ${contextStr}${message}`;
+    return `[${level}] ${message}`;
   }
 
   /**
    * Log methods with context and metadata support
    */
-  info(message: string, meta?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(meta);
-    // eslint-disable-next-line no-console
-    console.info(this.formatMessage('INFO', message), formattedMeta);
-  }
-
-  warn(message: string, meta?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(meta);
-    // eslint-disable-next-line no-console
-    console.warn(this.formatMessage('WARN', message), formattedMeta);
-  }
-
-  error(message: string, meta?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(meta);
-    // eslint-disable-next-line no-console
+  error(message: string, metadata?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(metadata);
     console.error(this.formatMessage('ERROR', message), formattedMeta);
 
     // In development, also log to error monitoring service if available
-    if (process.env.NODE_ENV === 'development' && meta?.error instanceof Error) {
+    if (process.env.NODE_ENV === 'development' && metadata?.error instanceof Error) {
       console.error('Error details:', {
-        name: meta.error.name,
-        message: meta.error.message,
-        stack: meta.error.stack,
+        name: metadata.error.name,
+        message: metadata.error.message,
+        stack: metadata.error.stack,
       });
     }
   }
 
-  debug(message: string, meta?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(meta);
-    // eslint-disable-next-line no-console
+  warn(message: string, metadata?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(metadata);
+    console.warn(this.formatMessage('WARN', message), formattedMeta);
+  }
+
+  info(message: string, metadata?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(metadata);
+    console.info(this.formatMessage('INFO', message), formattedMeta);
+  }
+
+  debug(message: string, metadata?: LogMetadata): void {
+    const formattedMeta = this.formatMeta(metadata);
     console.debug(this.formatMessage('DEBUG', message), formattedMeta);
   }
 }

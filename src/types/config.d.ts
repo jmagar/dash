@@ -2,6 +2,10 @@ export interface Config {
   env: string;
   port: number;
   host: string;
+  server: {
+    port: number;
+    maxRequestSize: string;
+  };
   db: {
     host: string;
     port: number;
@@ -51,6 +55,8 @@ export interface Config {
     exposedHeaders: string[];
     maxAge: number;
     credentials: boolean;
+    maxFileSize: number;
+    maxRequestSize: number;
   };
   rateLimit: {
     windowMs: number;

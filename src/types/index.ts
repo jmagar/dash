@@ -1,30 +1,3 @@
-// Export auth types
-export type {
-  LoginRequest,
-  LoginResponse,
-  ValidateResponse,
-  LogoutResponse,
-  AuthenticatedUser,
-} from './auth';
-
-// Export error types
-export type {
-  ApiError,
-  ApiResult,
-} from './error';
-
-// Export express types
-export type {
-  RequestHandler,
-  RequestParams,
-} from './express';
-
-// Export logger types
-export type {
-  LogLevel,
-  LogMetadata,
-} from './logger';
-
 // Export shared model types
 export type {
   Host,
@@ -36,18 +9,50 @@ export type {
   DockerVolume,
   Stack,
   FileItem,
-  User,
   Package,
   CommandRequest,
   Command,
   CommandResult,
-  AuthResult,
   UserRegistration,
   SSHConfig,
   SystemStats,
   ContainerStats,
   ApiResponse,
 } from './models-shared';
+
+// Export auth types
+export type {
+  LoginRequest,
+  LoginResponse,
+  LogoutResponse,
+  ValidateResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  TokenPayload,
+  AccessTokenPayload,
+  RefreshTokenPayload,
+  AuthenticatedUser,
+} from './auth';
+
+// Export logger types
+export type { LogMetadata } from './logger';
+
+// Export express types
+export type {
+  Request,
+  Response,
+  NextFunction,
+  RequestHandler,
+  ErrorRequestHandler,
+  AuthenticatedRequest,
+  JsonResponseBody,
+} from './express';
+
+// Export error types
+export type {
+  ApiError,
+  ApiResult,
+} from './error';
 
 // Re-export logging configuration types
 export type {

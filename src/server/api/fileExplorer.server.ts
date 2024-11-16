@@ -9,6 +9,9 @@ import type { FileItem, ApiResponse } from '../../types/models-shared';
 import { logger } from '../utils/logger';
 
 function validatePath(inputPath: unknown): inputPath is string {
+  if (Array.isArray(inputPath)) {
+    inputPath = inputPath[0];
+  }
   return typeof inputPath === 'string' && inputPath.trim().length > 0;
 }
 
@@ -20,6 +23,16 @@ function sanitizePath(inputPath: string): string {
 
 function validateFileContent(content: unknown): content is string {
   return typeof content === 'string';
+}
+
+function getPathFromQuery(query: unknown): string | undefined {
+  if (Array.isArray(query)) {
+    return query[0]?.toString();
+  }
+  if (typeof query === 'object' && query !== null) {
+    return Object.values(query)[0]?.toString();
+  }
+  return query?.toString();
 }
 
 export async function listFiles(req: Request, res: Response): Promise<Response> {
@@ -80,7 +93,7 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
     return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
-      path: rawPath,
+      path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to list files:', metadata);
@@ -142,7 +155,7 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
     return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
-      path: rawPath,
+      path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to read file:', metadata);
@@ -195,7 +208,7 @@ export async function writeFile(req: Request, res: Response): Promise<Response> 
     return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
-      path: rawPath,
+      path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to write file:', metadata);
@@ -253,7 +266,7 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
     return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
-      path: rawPath,
+      path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to delete file/directory:', metadata);
@@ -308,7 +321,7 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
     return res.json(result);
   } catch (error) {
     const metadata: LogMetadata = {
-      path: rawPath,
+      path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
     logger.error('Failed to create directory:', metadata);

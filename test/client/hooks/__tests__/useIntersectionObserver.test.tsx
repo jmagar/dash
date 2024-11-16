@@ -1,17 +1,5 @@
-import { renderHook } from '@testing-library/react';
-
-import '@testing-library/jest-dom';
-import { useIntersectionObserver } from '../useIntersectionObserver';
-
-const createMockEntry = (isIntersecting: boolean, target: Element): IntersectionObserverEntry => ({
-  isIntersecting,
-  target,
-  boundingClientRect: new DOMRect(),
-  intersectionRatio: isIntersecting ? 1 : 0,
-  intersectionRect: new DOMRect(),
-  rootBounds: new DOMRect(),
-  time: Date.now(),
-});
+import { renderHook } from '@testing-library/react-hooks';
+import { useIntersectionObserver } from '../../../../src/client/hooks/useIntersectionObserver';
 
 describe('useIntersectionObserver', () => {
   let mockIntersectionObserver: jest.Mock;
@@ -35,6 +23,10 @@ describe('useIntersectionObserver', () => {
     });
 
     window.IntersectionObserver = mockIntersectionObserver;
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should initialize with default options', () => {
@@ -161,3 +153,15 @@ describe('useIntersectionObserver', () => {
     expect(onVisibilityChange).toHaveBeenCalledWith(false);
   });
 });
+
+function createMockEntry(isIntersecting: boolean, target: Element): IntersectionObserverEntry {
+  return {
+    isIntersecting,
+    target,
+    boundingClientRect: new DOMRect(),
+    intersectionRatio: isIntersecting ? 1 : 0,
+    intersectionRect: new DOMRect(),
+    rootBounds: new DOMRect(),
+    time: Date.now(),
+  };
+}

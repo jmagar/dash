@@ -1,131 +1,133 @@
-import { Request, Response, NextFunction } from 'express';
-import { verify } from 'jsonwebtoken';
-
+import type { Request, Response, NextFunction } from '../../types/express';
 import type { TokenPayload } from '../../types/auth';
-import { config } from '../config';
+import { verifyToken } from '../utils/jwt';
+import { ApiError } from '../../types/error';
 import { logger } from '../utils/logger';
 
-interface RequestParams {
-  userId?: string;
+interface RequestWithAuth extends Request {
+  user: TokenPayload;
 }
 
-interface RequestBody {
-  userId?: string;
+interface RequestWithBody {
+  [key: string]: unknown;
 }
 
-interface JwtPayload extends TokenPayload {
-  iat?: number;
-  exp?: number;
-}
-
-function isJwtPayload(payload: unknown): payload is JwtPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'id' in payload &&
-    'username' in payload &&
-    'role' in payload &&
-    'is_active' in payload &&
-    'type' in payload &&
-    typeof (payload as JwtPayload).id === 'string' &&
-    typeof (payload as JwtPayload).username === 'string' &&
-    typeof (payload as JwtPayload).is_active === 'boolean' &&
-    ((payload as JwtPayload).role === 'admin' || (payload as JwtPayload).role === 'user') &&
-    ((payload as JwtPayload).type === 'access' || (payload as JwtPayload).type === 'refresh')
-  );
-}
-
-export function requireAuth(
+/**
+ * Authenticate JWT token middleware
+ */
+export async function authenticateToken(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      throw new ApiError('No token provided', undefined, 401);
+    }
 
-    if (!token) {
-      res.status(401).json({
+    const token = authHeader.split(' ')[1];
+    const payload = await verifyToken(token);
+    if (!payload) {
+      throw new ApiError('Invalid token', undefined, 401);
+    }
+
+    req.user = payload;
+    next();
+  } catch (error) {
+    logger.warn('Authentication failed:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+    });
+
+    if (error instanceof ApiError) {
+      res.status(error.status).json({
         success: false,
-        error: 'Authentication required',
+        error: error.message,
       });
       return;
     }
 
-    const decoded = verify(token, config.jwt.secret);
+    res.status(401).json({
+      success: false,
+      error: 'Invalid or expired token',
+    });
+  }
+}
 
-    if (isJwtPayload(decoded)) {
-      if (decoded.type !== 'access') {
-        res.status(401).json({
+/**
+ * Check user role middleware
+ */
+export function checkRole(requiredRole: string) {
+  return async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new ApiError('Authentication required', undefined, 401);
+      }
+
+      if (req.user.role !== requiredRole) {
+        throw new ApiError('Insufficient permissions', undefined, 403);
+      }
+
+      next();
+    } catch (error) {
+      logger.warn('Role check failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        requiredRole,
+        userRole: req.user?.role,
+      });
+
+      if (error instanceof ApiError) {
+        res.status(error.status).json({
           success: false,
-          error: 'Invalid token type',
+          error: error.message,
         });
         return;
       }
 
-      const tokenPayload: TokenPayload = {
-        id: decoded.id,
-        username: decoded.username,
-        role: decoded.role,
-        is_active: decoded.is_active,
-        type: decoded.type,
-      };
-      req.user = tokenPayload;
-      next();
-    } else {
-      res.status(401).json({
+      res.status(500).json({
         success: false,
-        error: 'Invalid token format',
+        error: 'Internal server error',
       });
     }
-  } catch (error) {
-    logger.error('Authentication failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.status(401).json({
-      success: false,
-      error: 'Invalid token',
-    });
-  }
+  };
 }
 
-export function requireAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({
-      success: false,
-      error: 'Admin access required',
-    });
-    return;
-  }
-  next();
-}
+/**
+ * Check if user is accessing their own resources
+ */
+export function checkOwnership(userIdParam: string = 'userId') {
+  return async (
+    req: RequestWithAuth,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    const params = req.params as RequestWithBody;
+    const body = req.body as RequestWithBody;
+    const resourceUserId = params[userIdParam] || body[userIdParam];
 
-export function requireSameUser(
-  req: Request<RequestParams, unknown, RequestBody>,
-  res: Response,
-  next: NextFunction
-): void {
-  const requestUserId = req.params.userId || req.body.userId;
-  const currentUserId = req.user?.id;
-  const userRole = req.user?.role;
+    if (!resourceUserId || resourceUserId !== req.user.id) {
+      res.status(403).json({
+        success: false,
+        error: 'Access denied',
+      });
+      return;
+    }
 
-  if (!requestUserId || (!currentUserId && userRole !== 'admin')) {
-    res.status(403).json({
-      success: false,
-      error: 'Access denied',
-    });
-    return;
-  }
-
-  if (userRole === 'admin' || requestUserId === currentUserId) {
     next();
-  } else {
-    res.status(403).json({
-      success: false,
-      error: 'Access denied',
-    });
-  }
+  };
 }
+
+// Export middleware
+export const requireAuth = authenticateToken;
+export const requireRole = checkRole;
+export const requireOwnership = checkOwnership;

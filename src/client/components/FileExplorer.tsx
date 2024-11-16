@@ -12,11 +12,10 @@ import LoadingScreen from './LoadingScreen';
 import { logger } from '../utils/logger';
 
 interface FileExplorerProps {
-  _hostId: number;
+  hostId: string;
 }
 
-export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Element {
-  const { hosts, selectedHost, setSelectedHost } = useHost();
+export default function FileExplorer({ hostId }: FileExplorerProps): JSX.Element {
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,20 +23,19 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
   const [searchQuery, setSearchQuery] = useState('');
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  const [hostSelectorOpen, setHostSelectorOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const loadFiles = useCallback(async (path: string) => {
-    if (!selectedHost) return;
+    if (!hostId) return;
 
     try {
       setLoading(true);
       setError(null);
-      const data = await listFiles(selectedHost.id, path);
+      const data = await listFiles(hostId, path);
       setFiles(data);
     } catch (err) {
       logger.error('Failed to load files:', {
-        hostId: selectedHost.id,
+        hostId,
         path,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -45,19 +43,19 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
     } finally {
       setLoading(false);
     }
-  }, [selectedHost]);
+  }, [hostId]);
 
   const handleSearch = useCallback(async () => {
-    if (!selectedHost || !searchQuery.trim()) return;
+    if (!hostId || !searchQuery.trim()) return;
 
     try {
       setLoading(true);
       setError(null);
-      const data = await searchFiles(selectedHost.id, searchQuery);
+      const data = await searchFiles(hostId, searchQuery);
       setFiles(data);
     } catch (err) {
       logger.error('Failed to search files:', {
-        hostId: selectedHost.id,
+        hostId,
         query: searchQuery,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -65,13 +63,11 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
     } finally {
       setLoading(false);
     }
-  }, [selectedHost, searchQuery]);
+  }, [hostId, searchQuery]);
 
   useEffect(() => {
-    if (selectedHost) {
-      void loadFiles(currentPath);
-    }
-  }, [selectedHost, currentPath, loadFiles]);
+    void loadFiles(currentPath);
+  }, [currentPath, loadFiles]);
 
   useEffect(() => {
     if (debouncedSearch) {
@@ -84,18 +80,18 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
   };
 
   const handleCreateDirectory = async () => {
-    if (!selectedHost || !newFolderName.trim()) return;
+    if (!hostId || !newFolderName.trim()) return;
 
     try {
       setLoading(true);
       setError(null);
-      await createDirectory(selectedHost.id, `${currentPath}/${newFolderName}`);
+      await createDirectory(hostId, `${currentPath}/${newFolderName}`);
       await loadFiles(currentPath);
       setCreateFolderDialogOpen(false);
       setNewFolderName('');
     } catch (err) {
       logger.error('Failed to create directory:', {
-        hostId: selectedHost.id,
+        hostId,
         path: `${currentPath}/${newFolderName}`,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
@@ -106,11 +102,11 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
   };
 
   const handleDeleteFile = async (path: string) => {
-    if (!selectedHost) return;
+    if (!hostId) return;
 
     try {
       setError(null);
-      await deleteFile(selectedHost.id, path);
+      await deleteFile(hostId, path);
       await loadFiles(currentPath);
     } catch (err) {
       logger.error('Failed to delete file:', {
@@ -120,25 +116,10 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
     }
   };
 
-  const handleHostSelect = (selectedHosts: Host[]) => {
-    if (selectedHosts.length > 0) {
-      setSelectedHost(selectedHosts[0]);
-    }
-    setHostSelectorOpen(false);
-  };
-
-  if (!selectedHost) {
+  if (!hostId) {
     return (
       <Box sx={{ p: 3 }}>
-        <Button variant="contained" onClick={(): void => setHostSelectorOpen(true)}>
-          Select Host
-        </Button>
-        <HostSelector
-          hosts={hosts}
-          open={hostSelectorOpen}
-          onClose={(): void => setHostSelectorOpen(false)}
-          onSelect={handleHostSelect}
-        />
+        <Typography color="error">No host ID provided</Typography>
       </Box>
     );
   }
@@ -167,7 +148,7 @@ export default function FileExplorer({ _hostId }: FileExplorerProps): JSX.Elemen
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="h5">File Explorer</Typography>
         <Typography variant="subtitle1" color="textSecondary">
-          {selectedHost.name} - {currentPath}
+          {currentPath}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button

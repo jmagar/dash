@@ -1,8 +1,121 @@
-import type { Request as BaseRequest, Response, NextFunction, RequestHandler as BaseRequestHandler, ErrorRequestHandler as BaseErrorRequestHandler } from 'express';
+import type { Request as BaseRequest, Response as BaseResponse, NextFunction as BaseNextFunction } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
-
 import type { TokenPayload } from './auth';
+
+// Base API response type
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Request types
+export type RequestParams = ParamsDictionary
+export type RequestQuery = ParsedQs
+export interface RequestBody {
+  [key: string]: unknown;
+}
+
+// Authenticated request with user
+export interface AuthenticatedRequest<
+  P = RequestParams,
+  ResBody = ApiResponse,
+  ReqBody = RequestBody,
+  ReqQuery = RequestQuery,
+> extends BaseRequest<P, ResBody, ReqBody, ReqQuery> {
+  user?: TokenPayload;
+  requestId?: string;
+  files?: import('express-fileupload').FileArray | null;
+}
+
+// Re-export express types
+export type Request<
+  P = RequestParams,
+  ResBody = ApiResponse<unknown>,
+  ReqBody = unknown,
+  ReqQuery = RequestQuery
+> = BaseRequest<P, ResBody, ReqBody, ReqQuery>;
+
+export type Response<ResBody = ApiResponse<unknown>> = BaseResponse<ResBody>;
+export type NextFunction = BaseNextFunction;
+
+// Handler types
+export type HandlerResult<ResBody> = void | Promise<void | Response<ResBody>> | Response<ResBody>;
+
+export type RequestHandler<
+  P = RequestParams,
+  ResBody = ApiResponse<unknown>,
+  ReqBody = unknown,
+  ReqQuery = RequestQuery
+> = (
+  req: Request<P, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>,
+  next: NextFunction
+) => HandlerResult<ResBody>;
+
+export type AuthenticatedRequestHandler<
+  P = RequestParams,
+  ResBody = ApiResponse,
+  ReqBody = RequestBody,
+  ReqQuery = RequestQuery
+> = (
+  req: AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>,
+  next: NextFunction
+) => HandlerResult<ResBody>;
+
+export type ErrorRequestHandler<
+  P = RequestParams,
+  ResBody = ApiResponse<unknown>,
+  ReqBody = unknown,
+  ReqQuery = RequestQuery
+> = (
+  err: Error,
+  req: Request<P, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>,
+  next: NextFunction
+) => HandlerResult<ResBody>;
+
+export type JsonResponseBody<T = unknown> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+};
+
+// Helper to create authenticated handlers
+export function createAuthHandler<P, ResBody extends ApiResponse, ReqBody, ReqQuery>(
+  handler: AuthenticatedRequestHandler<P, ResBody, ReqBody, ReqQuery>
+): RequestHandler<P, ResBody, ReqBody, ReqQuery> {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      } as ResBody);
+    }
+    return handler(req as AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>, res, next);
+  };
+}
+
+// Declare module augmentations
+declare module 'express' {
+  interface Request {
+    requestId?: string;
+    user?: TokenPayload;
+    files?: import('express-fileupload').FileArray | null;
+  }
+}
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    requestId?: string;
+    user?: TokenPayload;
+    files?: import('express-fileupload').FileArray | null;
+  }
+}
 
 // Re-export FileArray type from express-fileupload
 declare module 'express-fileupload' {
@@ -21,94 +134,5 @@ declare module 'express-fileupload' {
     md5: string;
     mv(path: string, callback: (err: Error | null) => void): void;
     mv(path: string): Promise<void>;
-  }
-}
-
-// Define common response body types
-export type JsonResponseBody = Record<string, unknown> | unknown[] | null;
-
-// Extend the base Request type with our custom properties
-export interface Request<
-  P = ParamsDictionary,
-  ResBody = JsonResponseBody,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> extends BaseRequest<P, ResBody, ReqBody, ReqQuery> {
-  requestId?: string;
-  user?: TokenPayload;
-  files?: import('express-fileupload').FileArray | null;
-}
-
-// Authenticated request requires user and requestId to be present
-export interface AuthenticatedRequest<
-  P = ParamsDictionary,
-  ResBody = JsonResponseBody,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> extends Request<P, ResBody, ReqBody, ReqQuery> {
-  user: NonNullable<Request['user']>;
-  requestId: NonNullable<Request['requestId']>;
-}
-
-export type RequestHandler<
-  P = ParamsDictionary,
-  ResBody = JsonResponseBody,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> = BaseRequestHandler<P, ResBody, ReqBody, ReqQuery>;
-
-export type ErrorRequestHandler<
-  P = ParamsDictionary,
-  ResBody = JsonResponseBody,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> = BaseErrorRequestHandler<P, ResBody, ReqBody, ReqQuery>;
-
-export type AuthenticatedRequestHandler<
-  P = ParamsDictionary,
-  ResBody = JsonResponseBody,
-  ReqBody = unknown,
-  ReqQuery = ParsedQs,
-> = (
-  req: AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>,
-  res: Response<ResBody>,
-  next: NextFunction,
-) => Promise<Response<ResBody> | void> | Response<ResBody> | void;
-
-export type AuthMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => Promise<Response | void> | Response | void;
-
-export type RequestParams = Record<string, string>;
-
-export function createAuthHandler<P, ResBody, ReqBody, ReqQuery>(
-  handler: AuthenticatedRequestHandler<P, ResBody, ReqBody, ReqQuery>,
-): RequestHandler<P, ResBody, ReqBody, ReqQuery> {
-  return async (req, res, next) => {
-    const authReq = req as AuthenticatedRequest<P, ResBody, ReqBody, ReqQuery>;
-    try {
-      await handler(authReq, res, next);
-    } catch (error) {
-      next(error);
-    }
-  };
-}
-
-// Declare module augmentations
-declare module 'express' {
-  interface Request {
-    requestId?: string;
-    user?: TokenPayload;
-    files?: import('express-fileupload').FileArray | null;
-  }
-}
-
-declare module 'express-serve-static-core' {
-  interface Request {
-    requestId?: string;
-    user?: TokenPayload;
-    files?: import('express-fileupload').FileArray | null;
   }
 }

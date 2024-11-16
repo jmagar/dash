@@ -4,51 +4,56 @@
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
-export interface LogMetadata {
-  [key: string]: unknown;
-  timestamp?: string;
-  context?: string;
+export interface LogContext {
   requestId?: string;
-  userId?: string | number;
-  hostId?: string | number;
+  userId?: string;
+  hostId?: string;
   component?: string;
+  [key: string]: unknown;
+}
+
+export interface LogMetadata extends LogContext {
+  error?: string | Error;
+  statusCode?: number;
+  path?: string;
+  method?: string;
+  ip?: string;
+  timing?: {
+    total?: number;
+    db?: number;
+    processing?: number;
+  };
+  responseSize?: number;
+  containerId?: string;
+  stackId?: string;
+  [key: string]: unknown;
 }
 
 export interface LogEntry {
   level: LogLevel;
   message: string;
   timestamp: string;
-  meta?: LogMetadata;
+  metadata?: LogMetadata;
 }
 
 export interface LogOptions {
   timestamp?: boolean;
   colors?: boolean;
-  metadata?: LogMetadata;
+  level?: LogLevel;
 }
 
-export interface LogContext {
-  component: string;
-  requestId?: string;
-  userId?: string | number;
-  hostId?: string | number;
-}
-
-/**
- * Core logger interface that all logger implementations must follow
- */
 export interface Logger {
-  info(message: string, meta?: LogMetadata): void;
-  warn(message: string, meta?: LogMetadata): void;
-  error(message: string, meta?: LogMetadata): void;
-  debug(message: string, meta?: LogMetadata): void;
+  error(message: string, metadata?: LogMetadata): void;
+  warn(message: string, metadata?: LogMetadata): void;
+  info(message: string, metadata?: LogMetadata): void;
+  debug(message: string, metadata?: LogMetadata): void;
+  withContext(context: LogContext): Logger;
 }
 
 /**
  * Extended logger interface with context support
  */
-export interface ContextualLogger extends Logger {
-  withContext(context: LogContext): Logger;
+export interface ExtendedLogger extends Logger {
   child(options: LogOptions): Logger;
 }
 

@@ -1,49 +1,74 @@
-import { createLogger, format, transports } from 'winston';
+import winston from 'winston';
 import 'winston-daily-rotate-file';
 
-const { combine, timestamp, printf, colorize } = format;
+import type { LogMetadata } from '../types/logger';
+import { config } from '../server/config';
 
-// Custom log format
-const logFormat = printf(({ level, message, timestamp, ...metadata }) => {
-  let msg = `${timestamp} [${level}] ${message}`;
-  if (Object.keys(metadata).length > 0) {
-    msg += ` ${JSON.stringify(metadata)}`;
-  }
-  return msg;
+const { format } = winston;
+
+const logFormat = format.printf(({ level, message, timestamp, ...metadata }) => {
+  const metaString = Object.keys(metadata).length
+    ? JSON.stringify(metadata, null, 2)
+    : '';
+
+  return `${timestamp} [${level.toUpperCase()}]: ${message}${
+    metaString ? `\n${metaString}` : ''
+  }`;
 });
 
-// Create the logger
-const serverLogger = createLogger({
-  format: combine(
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    logFormat,
+const serverLogger = winston.createLogger({
+  level: config.logging.level || 'info',
+  format: format.combine(
+    format.timestamp(),
+    format.errors({ stack: true }),
+    format.splat(),
+    format.json()
   ),
+  defaultMeta: { service: 'shh-server' },
   transports: [
     // Console transport
-    new transports.Console({
-      format: combine(
-        colorize(),
-        logFormat,
+    new winston.transports.Console({
+      format: format.combine(
+        format.colorize(),
+        format.timestamp(),
+        logFormat
       ),
-      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     }),
-    // Rotating file transport for errors
-    new transports.DailyRotateFile({
+
+    // Error log file
+    new winston.transports.DailyRotateFile({
       filename: 'logs/error-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
-      level: 'error',
-      maxFiles: '14d',
+      zippedArchive: true,
       maxSize: '20m',
+      maxFiles: '14d',
+      level: 'error',
     }),
-    // Rotating file transport for all logs
-    new transports.DailyRotateFile({
+
+    // Combined log file
+    new winston.transports.DailyRotateFile({
       filename: 'logs/combined-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
-      maxFiles: '14d',
+      zippedArchive: true,
       maxSize: '20m',
+      maxFiles: '14d',
     }),
   ],
 });
+
+// Add request context to logs
+export const withContext = (metadata: LogMetadata) => {
+  return {
+    info: (message: string, meta: LogMetadata = {}) =>
+      serverLogger.info(message, { ...metadata, ...meta }),
+    warn: (message: string, meta: LogMetadata = {}) =>
+      serverLogger.warn(message, { ...metadata, ...meta }),
+    error: (message: string, meta: LogMetadata = {}) =>
+      serverLogger.error(message, { ...metadata, ...meta }),
+    debug: (message: string, meta: LogMetadata = {}) =>
+      serverLogger.debug(message, { ...metadata, ...meta }),
+  };
+};
 
 // Add shutdown handler
 process.on('SIGTERM', () => {

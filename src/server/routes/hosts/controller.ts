@@ -1,17 +1,29 @@
-import type { Request, Response } from 'express';
-import type { Host } from '../../../types/models-shared';
-import { createApiError } from '../../../types/error';
+import type { Request, Response, ApiResponse } from '../../../types/express';
+import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/models-shared';
+import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
 import * as hostService from './service';
-import { cacheService } from '../../cache/CacheService';
 
-interface HostParams {
+export interface HostParams {
   id: string;
 }
 
-export async function listHosts(req: Request, res: Response): Promise<void> {
+type HostResponse = ApiResponse<Host>;
+type HostListResponse = ApiResponse<Host[]>;
+
+/**
+ * List all hosts for a user
+ */
+export async function listHosts(
+  req: Request,
+  res: Response<HostListResponse>
+): Promise<void> {
   try {
-    const hosts = await hostService.listHosts();
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    const hosts = await hostService.listHosts(req.user.id);
     res.json({
       success: true,
       data: hosts,
@@ -19,170 +31,187 @@ export async function listHosts(req: Request, res: Response): Promise<void> {
   } catch (error) {
     logger.error('Failed to list hosts:', {
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
     });
-    const apiError = createApiError('Failed to list hosts', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to list hosts',
     });
   }
 }
 
-export async function getHost(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
+/**
+ * Get a specific host by ID
+ */
+export async function getHost(
+  req: Request<HostParams>,
+  res: Response<HostResponse>
+): Promise<void> {
   try {
-    const host = await hostService.getHost(id);
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    const host = await hostService.getHost(req.user.id, req.params.id);
+
     if (!host) {
-      const apiError = createApiError('Host not found', null, 404);
       res.status(404).json({
         success: false,
-        error: apiError.message,
+        error: 'Host not found',
       });
       return;
     }
+
     res.json({
       success: true,
       data: host,
     });
   } catch (error) {
     logger.error('Failed to get host:', {
-      hostId: id,
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
+      hostId: req.params.id,
     });
-    const apiError = createApiError('Failed to get host', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to get host',
     });
   }
 }
 
-export async function createHost(req: Request, res: Response): Promise<void> {
+/**
+ * Create a new host
+ */
+export async function createHost(
+  req: Request<unknown, HostResponse, CreateHostRequest>,
+  res: Response<HostResponse>
+): Promise<void> {
   try {
-    const host = await hostService.createHost({
-      ...req.body,
-      status: 'disconnected',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    const host = await hostService.createHost(req.user.id, req.body);
     res.status(201).json({
       success: true,
       data: host,
     });
   } catch (error) {
     logger.error('Failed to create host:', {
-      data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
     });
-    const apiError = createApiError('Failed to create host', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to create host',
     });
   }
 }
 
-export async function updateHost(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
+/**
+ * Update an existing host
+ */
+export async function updateHost(
+  req: Request<HostParams, HostResponse, UpdateHostRequest>,
+  res: Response<HostResponse>
+): Promise<void> {
   try {
-    const host = await hostService.updateHost(id, {
-      ...req.body,
-      updatedAt: new Date(),
-    });
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    const host = await hostService.updateHost(req.user.id, req.params.id, req.body);
+
+    if (!host) {
+      res.status(404).json({
+        success: false,
+        error: 'Host not found',
+      });
+      return;
+    }
+
     res.json({
       success: true,
       data: host,
     });
   } catch (error) {
     logger.error('Failed to update host:', {
-      hostId: id,
-      data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
+      hostId: req.params.id,
     });
-    const apiError = createApiError('Failed to update host', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to update host',
     });
   }
 }
 
-export async function deleteHost(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
+/**
+ * Delete a host
+ */
+export async function deleteHost(
+  req: Request<HostParams>,
+  res: Response<ApiResponse>
+): Promise<void> {
   try {
-    await hostService.deleteHost(id);
-    await cacheService.removeHost(String(id));
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    await hostService.deleteHost(req.user.id, req.params.id);
+
     res.json({
       success: true,
     });
   } catch (error) {
     logger.error('Failed to delete host:', {
-      hostId: id,
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
+      hostId: req.params.id,
     });
-    const apiError = createApiError('Failed to delete host', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
+      error: 'Failed to delete host',
     });
   }
 }
 
-export async function testConnection(req: Request, res: Response): Promise<void> {
+/**
+ * Test connection to a host
+ */
+export async function testConnection(
+  req: Request<HostParams>,
+  res: Response<ApiResponse>
+): Promise<void> {
   try {
-    const host: Omit<Host, 'id'> = {
-      ...req.body,
-      status: 'disconnected',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    await hostService.testHost(host as Host);
+    if (!req.user) {
+      throw new ApiError('Authentication required', undefined, 401);
+    }
+
+    const host = await hostService.getHost(req.user.id, req.params.id);
+
+    if (!host) {
+      res.status(404).json({
+        success: false,
+        error: 'Host not found',
+      });
+      return;
+    }
+
+    await hostService.testConnection(host);
     res.json({
       success: true,
     });
   } catch (error) {
     logger.error('Failed to test host connection:', {
-      data: req.body,
       error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.user?.id,
+      hostId: req.params.id,
     });
-    const apiError = createApiError('Failed to test host connection', error, 500);
-    res.status(apiError.status).json({
+    res.status(500).json({
       success: false,
-      error: apiError.message,
-    });
-  }
-}
-
-export async function testHost(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
-  try {
-    logger.info('Testing host connection', { hostId: String(id) });
-
-    // TODO: Implement testHost in service
-    await new Promise<void>((resolve) => setTimeout(resolve, 1000)); // Placeholder
-
-    // Invalidate host cache after successful test
-    await cacheService.removeHost(String(id));
-
-    logger.info('Host connection test successful', { hostId: String(id) });
-    res.json({
-      success: true,
-    });
-  } catch (error) {
-    const metadata: { hostId: string; error: string } = {
-      hostId: String(id),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('Failed to test host connection:', metadata);
-
-    const apiError = createApiError(
-      error instanceof Error ? error.message : 'Failed to test host connection',
-      error,
-      error instanceof Error && error.message.includes('not found') ? 404 : 500,
-    );
-    res.status(apiError.status || 500).json({
-      success: false,
-      error: apiError.message,
+      error: 'Failed to test connection',
     });
   }
 }
