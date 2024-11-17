@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -441,7 +442,19 @@ func (o *Optimizer) AdjustProcessPriority(pid int32, priority int) error {
 		return fmt.Errorf("failed to find process: %w", err)
 	}
 
-	if err := proc.SetNice(priority); err != nil {
+	// Get process UID
+	uids, err := proc.Uids()
+	if err != nil {
+		return fmt.Errorf("failed to get process UIDs: %w", err)
+	}
+
+	if len(uids) == 0 {
+		return fmt.Errorf("no UIDs found for process")
+	}
+
+	// Set process priority using syscall
+	err = syscall.Setpriority(syscall.PRIO_PROCESS, int(pid), priority)
+	if err != nil {
 		return fmt.Errorf("failed to set process priority: %w", err)
 	}
 

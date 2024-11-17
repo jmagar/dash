@@ -51,6 +51,8 @@ export interface SystemMetrics {
     used: number;
     free: number;
     usage: number;
+    read_bytes: number;
+    write_bytes: number;
     ioStats?: {
       readCount: number;
       writeCount: number;
@@ -60,21 +62,21 @@ export interface SystemMetrics {
     };
   };
   network: {
-    bytesSent: number;
-    bytesRecv: number;
-    packetsSent: number;
-    packetsRecv: number;
-    errorsIn: number;
-    errorsOut: number;
-    dropsIn: number;
-    dropsOut: number;
+    rx_bytes: number;
+    tx_bytes: number;
+    rx_packets: number;
+    tx_packets: number;
+    rx_errors: number;
+    tx_errors: number;
+    rx_dropped: number;
+    tx_dropped: number;
     connections: number;
-    tcpConns: number;
-    udpConns: number;
-    listenPorts: number;
+    tcp_conns: number;
+    udp_conns: number;
+    listen_ports: number;
     interfaces: string[];
-    totalSpeed: number;
-    averageSpeed: number;
+    total_speed: number;
+    average_speed: number;
     health: number;
   };
   uptimeSeconds: number;
@@ -86,16 +88,51 @@ export interface SystemMetrics {
 
 export interface ProcessInfo {
   pid: number;
+  ppid: number;
   name: string;
   command: string;
+  args: string[];
+  user: string;
   username: string;
-  status: string;
+  cpu: number;
+  memory: number;
   cpuUsage: number;
   memoryUsage: number;
   memoryRss: number;
   memoryVms: number;
+  status: 'running' | 'sleeping' | 'stopped' | 'zombie' | 'unknown';
+  startTime: Date;
   threads: number;
   fds: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MetricsAlert {
+  id: string;
+  hostId: string;
+  type: 'cpu' | 'memory' | 'disk' | 'network' | 'process';
+  level: 'info' | 'warning' | 'error';
+  message: string;
+  threshold: number;
+  value: number;
+  timestamp: Date;
+  acknowledged: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MetricsThreshold {
+  id: string;
+  hostId: string;
+  type: 'cpu' | 'memory' | 'disk' | 'network' | 'process';
+  level: 'info' | 'warning' | 'error';
+  operator: '>' | '<' | '>=' | '<=' | '==' | '!=';
+  value: number;
+  duration: number;
+  enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

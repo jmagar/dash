@@ -6,22 +6,11 @@ import (
 	"path/filepath"
 
 	"shh/agent/internal/config"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
-// LoggingConfig defines logging configuration
-type LoggingConfig struct {
-	Level      string `json:"level"`
-	Format     string `json:"format"`
-	File       string `json:"file"`
-	MaxSize    int    `json:"max_size"`
-	MaxBackups int    `json:"max_backups"`
-	MaxAge     int    `json:"max_age"`
-	Compress   bool   `json:"compress"`
-	UseSyslog  bool   `json:"use_syslog"`
-}
 
 // Setup initializes the logger with the given configuration
 func Setup(cfg *config.LoggingConfig) (*zap.Logger, error) {
@@ -70,20 +59,6 @@ func Setup(cfg *config.LoggingConfig) (*zap.Logger, error) {
 			zapcore.AddSync(writer),
 			level,
 		))
-	}
-
-	// Add syslog output if configured
-	if cfg.UseSyslog {
-		syslogCore, err := NewSyslogCore(
-			os.Getenv("SYSLOG_PROTOCOL"),
-			os.Getenv("SYSLOG_SERVER"),
-			"shh-agent",
-			level,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create syslog core: %w", err)
-		}
-		cores = append(cores, syslogCore)
 	}
 
 	// Combine cores

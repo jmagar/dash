@@ -14,20 +14,22 @@ import (
 )
 
 type Client struct {
-	url      string
-	conn     *websocket.Conn
-	logger   *zap.Logger
-	handlers map[protocol.MessageType]protocol.MessageHandler
-	done     chan struct{}
-	mu       sync.RWMutex
+	url       string
+	agentInfo protocol.AgentInfo
+	conn      *websocket.Conn
+	logger    *zap.Logger
+	handlers  map[protocol.MessageType]protocol.MessageHandler
+	done      chan struct{}
+	mu        sync.RWMutex
 }
 
-func NewClient(url string, logger *zap.Logger) *Client {
+func NewClient(url string, agentInfo protocol.AgentInfo, logger *zap.Logger) *Client {
 	return &Client{
-		url:      url,
-		logger:   logger,
-		handlers: make(map[protocol.MessageType]protocol.MessageHandler),
-		done:     make(chan struct{}),
+		url:       url,
+		agentInfo: agentInfo,
+		logger:    logger,
+		handlers:  make(map[protocol.MessageType]protocol.MessageHandler),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -44,6 +46,23 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	c.conn = conn
 	c.mu.Unlock()
+
+	// Send registration message with agent info
+	regMsg := protocol.Message{
+		Type:      protocol.TypeRegister,
+		ID:        fmt.Sprintf("register-%d", time.Now().UnixNano()),
+		Timestamp: time.Now(),
+	}
+
+	regPayload, err := json.Marshal(c.agentInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal agent info: %w", err)
+	}
+	regMsg.Payload = regPayload
+
+	if err := c.SendMessage(regMsg); err != nil {
+		return fmt.Errorf("failed to send registration message: %w", err)
+	}
 
 	go c.readPump()
 
@@ -166,4 +185,8 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Client) Shutdown(ctx context.Context) error {
+	return c.Close(ctx)
 }

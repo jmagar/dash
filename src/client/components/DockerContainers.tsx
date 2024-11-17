@@ -1,5 +1,5 @@
 import {
-  PlayArrow as StartIcon,
+  PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
   Refresh as RestartIcon,
   Delete as DeleteIcon,
@@ -41,7 +41,7 @@ import {
 } from '@mui/material';
 import React, { useState, useMemo } from 'react';
 
-import { Container } from '../../types/models-shared';
+import type { DockerContainer, DockerPort } from '../../types/docker';
 import { startContainer, stopContainer, restartContainer, removeContainer } from '../api/docker.client';
 import { useDockerUpdates } from '../hooks';
 import LoadingScreen from './LoadingScreen';
@@ -49,107 +49,29 @@ import { logger } from '../utils/frontendLogger';
 
 interface DockerContainersProps {
   hostId: string;
-  onRefresh?: () => void;
+  containers: DockerContainer[];
+  onRefresh: () => Promise<void>;
 }
 
-export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
+export function DockerContainers({ hostId, containers, onRefresh }: DockerContainersProps) {
   const theme = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
+  const [selectedContainer, setSelectedContainer] = useState<DockerContainer | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const { containers, loading, error, refresh } = useDockerUpdates({
-    hostId,
-    interval: 5000,
-  });
-
-  // Filter containers based on search term
   const filteredContainers = useMemo(() => {
-    if (!searchTerm) return containers;
-    const term = searchTerm.toLowerCase();
-    return containers.filter(container =>
-      container.name.toLowerCase().includes(term) ||
-      container.image.toLowerCase().includes(term) ||
-      container.id.substring(0, 12).includes(term)
-    );
+    if (!containers) return [];
+    return containers.filter(container => {
+      const searchString = searchTerm.toLowerCase();
+      return (
+        container.names[0].toLowerCase().includes(searchString) ||
+        container.image.toLowerCase().includes(searchString) ||
+        container.status.toLowerCase().includes(searchString)
+      );
+    });
   }, [containers, searchTerm]);
-
-  const handleStartContainer = async (containerId: string) => {
-    try {
-      setActionInProgress(containerId);
-      setActionError(null);
-      await startContainer(hostId, containerId);
-      await refresh();
-      onRefresh?.();
-    } catch (error) {
-      logger.error('Failed to start container:', {
-        error: error instanceof Error ? error.message : String(error),
-        containerId,
-      });
-      setActionError('Failed to start container');
-    } finally {
-      setActionInProgress(null);
-    }
-  };
-
-  const handleStopContainer = async (containerId: string) => {
-    try {
-      setActionInProgress(containerId);
-      setActionError(null);
-      await stopContainer(hostId, containerId);
-      await refresh();
-      onRefresh?.();
-    } catch (error) {
-      logger.error('Failed to stop container:', {
-        error: error instanceof Error ? error.message : String(error),
-        containerId,
-      });
-      setActionError('Failed to stop container');
-    } finally {
-      setActionInProgress(null);
-    }
-  };
-
-  const handleRestartContainer = async (containerId: string) => {
-    try {
-      setActionInProgress(containerId);
-      setActionError(null);
-      await restartContainer(hostId, containerId);
-      await refresh();
-      onRefresh?.();
-    } catch (error) {
-      logger.error('Failed to restart container:', {
-        error: error instanceof Error ? error.message : String(error),
-        containerId,
-      });
-      setActionError('Failed to restart container');
-    } finally {
-      setActionInProgress(null);
-    }
-  };
-
-  const handleRemoveContainer = async (containerId: string) => {
-    try {
-      setActionInProgress(containerId);
-      setActionError(null);
-      await removeContainer(hostId, containerId);
-      await refresh();
-      onRefresh?.();
-      setShowDeleteDialog(false);
-      setSelectedContainer(null);
-    } catch (error) {
-      logger.error('Failed to remove container:', {
-        error: error instanceof Error ? error.message : String(error),
-        containerId,
-      });
-      setActionError('Failed to remove container');
-    } finally {
-      setActionInProgress(null);
-    }
-  };
 
   const handleFilterClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setFilterAnchorEl(event.currentTarget);
@@ -159,30 +81,78 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
     setFilterAnchorEl(null);
   };
 
-  if (loading && containers.length === 0) {
-    return <LoadingScreen />;
-  }
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+  };
+
+  const handleContainerAction = async (
+    container: DockerContainer,
+    action: 'start' | 'stop' | 'restart' | 'remove'
+  ) => {
+    setLoading(true);
+    try {
+      switch (action) {
+        case 'start':
+          await startContainer(hostId, container.id);
+          break;
+        case 'stop':
+          await stopContainer(hostId, container.id);
+          break;
+        case 'restart':
+          await restartContainer(hostId, container.id);
+          break;
+        case 'remove':
+          setSelectedContainer(container);
+          setShowDeleteDialog(true);
+          break;
+      }
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (err) {
+      logger.error('Failed to perform container action:', {
+        action,
+        containerId: container.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedContainer) return;
+
+    setLoading(true);
+    try {
+      await removeContainer(hostId, selectedContainer.id);
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (err) {
+      logger.error('Failed to remove container:', {
+        containerId: selectedContainer.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setLoading(false);
+      setShowDeleteDialog(false);
+      setSelectedContainer(null);
+    }
+  };
 
   return (
-    <Box sx={{ width: '100%', mb: 2 }}>
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {actionError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {actionError}
-        </Alert>
-      )}
-
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+    <Box>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <TextField
           size="small"
           placeholder="Search containers..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={handleSearchChange}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -191,7 +161,7 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
             ),
             endAdornment: searchTerm && (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearchTerm('')}>
+                <IconButton size="small" onClick={handleClearSearch}>
                   <ClearIcon />
                 </IconButton>
               </InputAdornment>
@@ -211,21 +181,17 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
         >
           <MenuItem>
             <ListItemIcon>
-              <PlayArrow />
+              <PlayArrowIcon />
             </ListItemIcon>
             <ListItemText primary="Running" />
           </MenuItem>
           <MenuItem>
             <ListItemIcon>
-              <Stop />
+              <StopIcon />
             </ListItemIcon>
             <ListItemText primary="Stopped" />
           </MenuItem>
         </Menu>
-
-        <IconButton onClick={() => refresh()}>
-          <RestartIcon />
-        </IconButton>
       </Box>
 
       <TableContainer component={Paper}>
@@ -236,6 +202,7 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
               <TableCell>Image</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Created</TableCell>
+              <TableCell>Ports</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -246,22 +213,15 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
                 sx={{
                   '&:last-child td, &:last-child th': { border: 0 },
                   backgroundColor:
-                    actionInProgress === container.id
-                      ? alpha(theme.palette.primary.main, 0.1)
-                      : 'inherit',
+                    container.state === 'running'
+                      ? alpha(theme.palette.success.main, 0.1)
+                      : undefined,
                 }}
               >
                 <TableCell component="th" scope="row">
-                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                    {container.name}
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary">
-                    {container.id.substring(0, 12)}
-                  </Typography>
+                  {container.names[0].replace(/^\//, '')}
                 </TableCell>
-                <TableCell>
-                  <Typography variant="body2">{container.image}</Typography>
-                </TableCell>
+                <TableCell>{container.image}</TableCell>
                 <TableCell>
                   <Chip
                     size="small"
@@ -270,65 +230,66 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
                   />
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">
-                    {new Date(container.created * 1000).toLocaleString()}
-                  </Typography>
+                  {new Date(container.created * 1000).toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  {container.ports.map((port: DockerPort) => (
+                    <Chip
+                      key={`${port.privatePort}-${port.publicPort}`}
+                      size="small"
+                      label={`${port.publicPort}:${port.privatePort}`}
+                      sx={{ mr: 0.5, mb: 0.5 }}
+                    />
+                  ))}
                 </TableCell>
                 <TableCell align="right">
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                    {container.state === 'running' ? (
-                      <Tooltip title="Stop">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleStopContainer(container.id)}
-                          disabled={Boolean(actionInProgress)}
-                        >
-                          <StopIcon />
-                        </IconButton>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title="Start">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleStartContainer(container.id)}
-                          disabled={Boolean(actionInProgress)}
-                        >
-                          <StartIcon />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Restart">
+                  {container.state !== 'running' ? (
+                    <Tooltip title="Start">
                       <IconButton
                         size="small"
-                        onClick={() => handleRestartContainer(container.id)}
-                        disabled={Boolean(actionInProgress)}
+                        onClick={() => handleContainerAction(container, 'start')}
+                        disabled={loading}
                       >
-                        <RestartIcon />
+                        <PlayArrowIcon />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                  ) : (
+                    <Tooltip title="Stop">
                       <IconButton
                         size="small"
-                        onClick={() => {
-                          setSelectedContainer(container);
-                          setShowDeleteDialog(true);
-                        }}
-                        disabled={Boolean(actionInProgress)}
+                        onClick={() => handleContainerAction(container, 'stop')}
+                        disabled={loading}
                       >
-                        <DeleteIcon />
+                        <StopIcon />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Settings">
-                      <IconButton size="small">
-                        <SettingsIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Info">
-                      <IconButton size="small">
-                        <InfoIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+                  )}
+
+                  <Tooltip title="Restart">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleContainerAction(container, 'restart')}
+                      disabled={loading}
+                    >
+                      <RestartIcon />
+                    </IconButton>
+                  </Tooltip>
+
+                  <Tooltip title="Remove">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleContainerAction(container, 'remove')}
+                      disabled={loading}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+
+                  <Tooltip title="Settings">
+                    <IconButton size="small" disabled={loading}>
+                      <SettingsIcon />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}
@@ -336,34 +297,42 @@ export function DockerContainers({ hostId, onRefresh }: DockerContainersProps) {
         </Table>
       </TableContainer>
 
-      <Dialog
-        open={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Delete Container</DialogTitle>
+      <Dialog open={showDeleteDialog} onClose={() => setShowDeleteDialog(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete container{' '}
-            <strong>{selectedContainer?.name}</strong>?
-          </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-            This action cannot be undone.
+            Are you sure you want to remove container{' '}
+            <strong>{selectedContainer?.names[0]}</strong>?
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
-          <Button
-            onClick={() => selectedContainer && handleRemoveContainer(selectedContainer.id)}
-            color="error"
-            variant="contained"
-            disabled={Boolean(actionInProgress)}
-          >
+          <Button onClick={handleConfirmDelete} color="error">
             Delete
           </Button>
         </DialogActions>
       </Dialog>
+
+      {loading && (
+        <Fade in>
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 9999,
+            }}
+          >
+            <CircularProgress />
+          </Box>
+        </Fade>
+      )}
     </Box>
   );
 }

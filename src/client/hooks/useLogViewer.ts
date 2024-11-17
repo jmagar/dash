@@ -40,12 +40,8 @@ export function useLogViewer({
       setError(null);
       setCurrentFilter(filter);
 
-      socket.emit('logs:subscribe', { hostIds, filter }, (response: { error?: string }) => {
-        if (response.error) {
-          throw new Error(response.error);
-        }
-        logger.info('Subscribed to logs:', { hostIds, filter });
-      });
+      socket.emit('logs:subscribe', { hostIds, filter });
+      logger.info('Subscribed to logs:', { hostIds, filter });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to subscribe to logs';
       setError(errorMsg);
@@ -60,15 +56,13 @@ export function useLogViewer({
   }, [socket]);
 
   const unsubscribe = useCallback((hostIds: string[]) => {
-    if (!socket) return;
+    if (!socket) {
+      return;
+    }
 
     try {
-      socket.emit('logs:unsubscribe', { hostIds }, (response: { error?: string }) => {
-        if (response.error) {
-          throw new Error(response.error);
-        }
-        logger.info('Unsubscribed from logs:', { hostIds });
-      });
+      socket.emit('logs:unsubscribe', { hostIds });
+      logger.info('Unsubscribed from logs:', { hostIds });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to unsubscribe from logs';
       logger.error('Failed to unsubscribe from logs:', {
@@ -78,10 +72,6 @@ export function useLogViewer({
     }
   }, [socket]);
 
-  const clearLogs = useCallback(() => {
-    setLogs([]);
-  }, []);
-
   const filterLogs = useCallback((filter: LogFilter) => {
     if (!socket) {
       setError('Socket not connected');
@@ -90,12 +80,8 @@ export function useLogViewer({
 
     try {
       setCurrentFilter(filter);
-      socket.emit('logs:filter', { filter }, (response: { error?: string }) => {
-        if (response.error) {
-          throw new Error(response.error);
-        }
-        logger.info('Applied log filter:', { filter });
-      });
+      socket.emit('logs:filter', { filter });
+      logger.info('Applied log filter:', { filter });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to apply log filter';
       setError(errorMsg);
@@ -105,6 +91,10 @@ export function useLogViewer({
       });
     }
   }, [socket]);
+
+  const clearLogs = useCallback(() => {
+    setLogs([]);
+  }, []);
 
   const downloadLogs = useCallback(() => {
     try {
@@ -121,40 +111,37 @@ export function useLogViewer({
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to download logs';
       setError(errorMsg);
-      logger.error('Failed to download logs:', { error: errorMsg });
+      logger.error('Failed to download logs:', {
+        error: errorMsg,
+      });
     }
   }, [logs]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      return;
+    }
 
-    const handleNewLog = (log: LogEntry) => {
+    socket.on('logs:new', (log: LogEntry) => {
       setLogs(prev => {
         const newLogs = [...prev, log];
-        if (newLogs.length > maxLogs) {
+        if (maxLogs && newLogs.length > maxLogs) {
           return newLogs.slice(-maxLogs);
         }
         return newLogs;
       });
+    });
 
-      if (autoScroll) {
-        window.scrollTo(0, document.body.scrollHeight);
-      }
-    };
-
-    const handleError = (err: { error: string }) => {
-      setError(err.error);
-      logger.error('Log viewer error:', { error: err.error });
-    };
-
-    socket.on('logs:new', handleNewLog);
-    socket.on('logs:error', handleError);
+    socket.on('logs:error', (data: { error: string }) => {
+      setError(data.error);
+      setLoading(false);
+    });
 
     return () => {
-      socket.off('logs:new', handleNewLog);
-      socket.off('logs:error', handleError);
+      socket.off('logs:new');
+      socket.off('logs:error');
     };
-  }, [socket, maxLogs, autoScroll]);
+  }, [socket, maxLogs]);
 
   return {
     logs,

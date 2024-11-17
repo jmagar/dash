@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"shh/agent/internal/config"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -121,7 +123,7 @@ func (c *SyslogCore) Sync() error {
 }
 
 // NewSyslogLogger creates a new zap logger that writes to syslog
-func NewSyslogLogger(cfg *LoggingConfig) (*zap.Logger, error) {
+func NewSyslogLogger(cfg *config.LoggingConfig) (*zap.Logger, error) {
 	// Get syslog configuration from environment
 	syslogServer := os.Getenv("SYSLOG_SERVER")
 	if syslogServer == "" {

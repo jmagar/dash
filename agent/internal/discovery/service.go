@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 // Service represents the service discovery component
@@ -54,7 +54,7 @@ func NewService(logger *zap.Logger) *Service {
 // Start begins the service discovery process
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("Starting service discovery")
-	
+
 	// Start periodic scanning
 	go func() {
 		ticker := time.NewTicker(s.scanConfig.Interval)

@@ -3,8 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -253,11 +252,9 @@ func (c *AdvancedCollector) collectProcessMetrics(metrics *AdvancedMetrics) erro
 	}
 
 	// Sort by CPU usage and get top N
-	sort := func(i, j int) bool {
+	sort.Slice(procMetrics, func(i, j int) bool {
 		return procMetrics[i].CPUPercent > procMetrics[j].CPUPercent
-	}
-	// Sort in-place using sort.Slice
-	// sort.Slice(procMetrics, sort)
+	})
 
 	if len(procMetrics) > c.numProcs {
 		metrics.TopProcesses = procMetrics[:c.numProcs]

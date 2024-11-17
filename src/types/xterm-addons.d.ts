@@ -1,6 +1,6 @@
-import type { Terminal } from 'xterm';
-
 declare module '@xterm/addon-fit' {
+  import { Terminal } from '@xterm/xterm';
+
   export class FitAddon {
     activate(terminal: Terminal): void;
     dispose(): void;
@@ -9,29 +9,22 @@ declare module '@xterm/addon-fit' {
 }
 
 declare module '@xterm/addon-web-links' {
-  export interface ILinkProvider {
-    provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void;
-  }
-
-  export interface ILink {
-    range: {
-      start: { x: number; y: number };
-      end: { x: number; y: number };
-    };
-    text: string;
-    activate(): void;
-    hover?: (event: MouseEvent) => void;
-    leave?: (event: MouseEvent) => void;
-    dispose?: () => void;
-  }
+  import { Terminal } from '@xterm/xterm';
 
   export class WebLinksAddon {
-    constructor(handler?: (event: MouseEvent, uri: string) => void, options?: {
-      urlRegex?: RegExp;
-      hover?: (event: MouseEvent, text: string) => void;
-      leave?: (event: MouseEvent, text: string) => void;
-    });
+    constructor(handler?: (event: MouseEvent, uri: string) => void, options?: { hover?: boolean });
     activate(terminal: Terminal): void;
     dispose(): void;
+  }
+}
+
+declare module '@xterm/addon-search' {
+  import { Terminal } from '@xterm/xterm';
+
+  export class SearchAddon {
+    activate(terminal: Terminal): void;
+    dispose(): void;
+    findNext(term: string, searchOptions?: { regex?: boolean; wholeWord?: boolean; caseSensitive?: boolean }): boolean;
+    findPrevious(term: string, searchOptions?: { regex?: boolean; wholeWord?: boolean; caseSensitive?: boolean }): boolean;
   }
 }

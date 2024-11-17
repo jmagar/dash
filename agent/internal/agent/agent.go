@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -30,6 +32,7 @@ type Agent struct {
 type Config struct {
 	ServerURL string
 	AgentID   string
+	Version   string
 	Labels    map[string]string
 }
 
@@ -38,9 +41,31 @@ func New(config *Config, logger *zap.Logger) (*Agent, error) {
 		return nil, fmt.Errorf("server URL is required")
 	}
 
+	// Get system info for agent registration
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hostname: %w", err)
+	}
+
+	// Create agent info
+	agentInfo := protocol.AgentInfo{
+		ID:       config.AgentID,
+		Version:  config.Version,
+		Hostname: hostname,
+		Platform: runtime.GOOS,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Labels:   config.Labels,
+		Features: []string{
+			"exec",
+			"metrics",
+			"health",
+		},
+	}
+
 	healthChecker := health.NewChecker(logger)
 	metricsCollector := metrics.NewCollector(logger)
-	wsClient := websocket.NewClient(config.ServerURL, logger)
+	wsClient := websocket.NewClient(config.ServerURL, agentInfo, logger)
 	processManager := process.NewManager(logger)
 
 	return &Agent{

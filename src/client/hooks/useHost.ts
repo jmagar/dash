@@ -150,8 +150,10 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
   }, [fetchHost]);
 
   useEffect(() => {
-    if (autoConnect && host && host.agentStatus === 'offline') {
-      void connect();
+    if (autoConnect && host) {
+      if (host.status === 'offline') {
+        void connect();
+      }
     }
   }, [autoConnect, host, connect]);
 

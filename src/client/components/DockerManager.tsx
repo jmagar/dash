@@ -30,7 +30,7 @@ import {
   NetworkCheck as NetworkIcon,
   Article as LogsIcon,
 } from '@mui/icons-material';
-import DockerContainers from './DockerContainers';
+import { DockerContainers } from './DockerContainers';
 import DockerCompose from './DockerCompose';
 import { LogViewer } from './LogViewer';
 import { useDockerStats } from '../hooks/useDockerStats';

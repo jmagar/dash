@@ -1,11 +1,11 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { Container } from '../../../types/models-shared';
-import { listContainers, startContainer, stopContainer, removeContainer } from '../../api/docker.client';
+import type { DockerContainer } from '../../../types/docker';
+import { listContainers, startContainer, stopContainer, removeContainer as removeContainerApi } from '../../api/docker.client';
 import { logger } from '../../utils/frontendLogger';
 import type { RootState } from '../storeTypes';
 
 interface DockerState {
-  containers: Container[];
+  containers: DockerContainer[];
   loading: boolean;
   error: string | null;
   selectedContainerId: string | null;
@@ -18,7 +18,7 @@ const initialState: DockerState = {
   selectedContainerId: null,
 };
 
-export const fetchContainers = createAsyncThunk<Container[], string>(
+export const fetchContainers = createAsyncThunk<DockerContainer[], string>(
   'docker/fetchContainers',
   async (hostId: string) => {
     try {
@@ -66,7 +66,7 @@ export const removeContainerThunk = createAsyncThunk<string, { hostId: string; c
   'docker/removeContainer',
   async ({ hostId, containerId }) => {
     try {
-      await removeContainer(hostId, containerId);
+      await removeContainerApi(hostId, containerId);
       return containerId;
     } catch (error) {
       logger.error('Failed to remove container:', {
@@ -86,6 +86,27 @@ const dockerSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+    },
+    setContainers: (state, action: PayloadAction<DockerContainer[]>) => {
+      state.containers = action.payload;
+    },
+    addContainer: (state, action: PayloadAction<DockerContainer>) => {
+      state.containers.push(action.payload);
+    },
+    updateContainer: (state, action: PayloadAction<DockerContainer>) => {
+      const index = state.containers.findIndex(c => c.id === action.payload.id);
+      if (index !== -1) {
+        state.containers[index] = action.payload;
+      }
+    },
+    removeContainer: (state, action: PayloadAction<string>) => {
+      state.containers = state.containers.filter(c => c.id !== action.payload);
+    },
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.loading = action.payload;
+    },
+    setError: (state, action: PayloadAction<string | null>) => {
+      state.error = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -123,19 +144,29 @@ const dockerSlice = createSlice({
   },
 });
 
-export const { selectContainer, clearError } = dockerSlice.actions;
+export const {
+  selectContainer,
+  clearError,
+  setContainers,
+  addContainer,
+  updateContainer,
+  removeContainer,
+  setLoading,
+  setError
+} = dockerSlice.actions;
+
 export default dockerSlice.reducer;
 
 // Selectors
-export const selectAllContainers = (state: RootState): Container[] =>
+export const selectAllContainers = (state: RootState): DockerContainer[] =>
   state.docker.containers;
 
-export const selectSelectedContainer = (state: RootState): Container | null =>
+export const selectSelectedContainer = (state: RootState): DockerContainer | null =>
   state.docker.selectedContainerId
     ? state.docker.containers.find(c => c.id === state.docker.selectedContainerId) || null
     : null;
 
-export const selectContainerById = (state: RootState, containerId: string): Container | undefined =>
+export const selectContainerById = (state: RootState, containerId: string): DockerContainer | undefined =>
   state.docker.containers.find(c => c.id === containerId);
 
 export const selectIsLoading = (state: RootState): boolean =>

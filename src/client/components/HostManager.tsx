@@ -62,6 +62,30 @@ export function HostManager({ hostId }: HostManagerProps) {
     );
   }
 
+  // Update network metrics to use correct field names
+  const networkData = [
+    {
+      name: 'Current',
+      received: metrics.network.rx_bytes,
+      sent: metrics.network.tx_bytes,
+    },
+  ];
+
+  const connectionData = [
+    {
+      name: 'Current',
+      tcp: metrics.network.tcp_conns,
+      udp: metrics.network.udp_conns,
+    },
+  ];
+
+  const speedData = [
+    {
+      name: 'Current',
+      speed: metrics.network.average_speed,
+    },
+  ];
+
   return (
     <Box sx={{ p: 3 }}>
       <Grid container spacing={3}>
@@ -183,21 +207,21 @@ export function HostManager({ hostId }: HostManagerProps) {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography color="text.secondary">Received</Typography>
-                <Typography>{formatBytes(metrics.network.bytesRecv)}</Typography>
+                <Typography>{formatBytes(networkData[0].received)}</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography color="text.secondary">Sent</Typography>
-                <Typography>{formatBytes(metrics.network.bytesSent)}</Typography>
+                <Typography>{formatBytes(networkData[0].sent)}</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography color="text.secondary">Connections</Typography>
                 <Typography>
-                  TCP: {metrics.network.tcpConns}, UDP: {metrics.network.udpConns}
+                  TCP: {connectionData[0].tcp}, UDP: {connectionData[0].udp}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography color="text.secondary">Speed</Typography>
-                <Typography>{formatBytes(metrics.network.averageSpeed)}/s</Typography>
+                <Typography>{formatBytes(speedData[0].speed)}/s</Typography>
               </Box>
             </Box>
           </Paper>

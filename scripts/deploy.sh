@@ -31,7 +31,7 @@ cleanup_on_error() {
 
     # Get the current state
     local current_state=$(get_state)
-    
+
     case ${current_state} in
         "services_started")
             print_substep "Stopping services..."
@@ -65,7 +65,7 @@ cleanup_on_error() {
 check_disk_space() {
     local min_space=$((10 * 1024 * 1024)) # 10GB in KB
     local available_space=$(df -k . | awk 'NR==2 {print $4}')
-    
+
     if [ "${available_space}" -lt "${min_space}" ]; then
         cleanup_on_error "Insufficient disk space. At least 10GB required."
     fi
@@ -121,7 +121,7 @@ verify_dependencies() {
     print_step "Verifying dependencies"
 
     local required_commands=(
-        "docker" "docker-compose" "curl" "jq" "awk" "sed"
+        "docker" "docker compose" "curl" "jq" "awk" "sed"
         "openssl" "grep" "lsof" "df" "mkdir" "chmod"
     )
 
@@ -140,10 +140,10 @@ pull_images() {
     fi
 
     print_step "Pulling Docker images"
-    
+
     # Get list of required images
     local images=$(docker compose config | grep 'image:' | awk '{print $2}' | sort -u)
-    
+
     # Pull each image with retry logic
     for image in ${images}; do
         local retries=3
@@ -166,7 +166,7 @@ pull_images() {
 # Enhanced build images function
 build_images() {
     print_step "Building Docker images"
-    
+
     local build_args=""
     if [ -n "${NO_CACHE:-}" ]; then
         print_substep "Building without cache..."
@@ -345,16 +345,16 @@ display_info() {
 main() {
     # Clean up any existing state
     rm -f "${STATE_FILE}"
-    
+
     # Print banner
     print_banner
-    
+
     # Initial checks
     verify_dependencies
     check_system_requirements || exit 1
     check_deployment_resources
     verify_network
-    
+
     # Initial setup
     create_directories
     setup_env || exit 1

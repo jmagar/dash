@@ -16,6 +16,7 @@ import { setupMetrics } from './metrics';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestTracer } from './middleware/requestTracer';
 import { securityHeaders } from './middleware/security';
+import { createProcessService } from './services/process';
 
 // Create Express app
 const app = express();
@@ -32,6 +33,9 @@ export const io = new Server(server, {
     maxAge: config.cors.maxAge,
   },
 });
+
+// Initialize services
+const processService = createProcessService(io);
 
 // Configure Redis rate limiter
 const redisClient = createClient({
@@ -93,6 +97,7 @@ server.listen(port, () => {
 // Handle process termination
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received. Closing server...');
+  processService.stop();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

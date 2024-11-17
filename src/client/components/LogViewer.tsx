@@ -12,7 +12,6 @@ import {
   Alert,
   CircularProgress,
   Stack,
-  Chip,
   useTheme,
 } from '@mui/material';
 import {
@@ -23,7 +22,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import type { LogEntry, LogFilter } from '../../types/socket.io';
+import type { LogEntry, LogFilter } from '../../types/logs';
 import { useLogViewer } from '../hooks/useLogViewer';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -48,47 +47,20 @@ interface LogRowProps extends ListChildComponentProps {
 const LogRow = React.memo(({ data, index, style }: LogRowProps) => {
   const log = data.logs[index];
   return (
-    <Box style={style}>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ height: '100%', px: 2 }}>
-        {data.getLevelIcon(log.level)}
-        <Box sx={{ minWidth: 180 }}>
-          <Typography variant="caption" color="textSecondary">
-            {new Date(log.timestamp).toLocaleString()}
-          </Typography>
-        </Box>
-        <Chip
-          label={log.hostname}
-          size="small"
-          sx={{ minWidth: 100 }}
-        />
-        <Chip
-          label={log.program}
-          size="small"
-          variant="outlined"
-          sx={{ minWidth: 80 }}
-        />
-        <Typography
-          sx={{
-            color: data.getLevelColor(log.level),
-            flex: 1,
-            fontFamily: 'monospace',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}
-        >
-          {log.message}
-        </Typography>
-      </Stack>
-    </Box>
+    <div style={style} className={`log-row ${log.level}`}>
+      <span className="timestamp">{log.timestamp}</span>
+      <span className={`level ${log.level}`}>{log.level}</span>
+      <span className="source">{log.source}</span>
+      <span className="message">{log.message}</span>
+    </div>
   );
 });
 
 LogRow.displayName = 'LogRow';
 
-function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
+function LogViewerContent({ hostIds, maxLogs }: LogViewerProps) {
   const theme = useTheme();
-  const [selectedLevels, setSelectedLevels] = useState<string[]>(['info', 'warn', 'error']);
+  const [selectedLevel, setSelectedLevel] = useState<'debug' | 'info' | 'warn' | 'error'>('info');
   const [showFilters, setShowFilters] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = React.useRef<List | null>(null);
@@ -99,16 +71,17 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
     error,
     subscribe,
     unsubscribe,
-    clearLogs
+    clearLogs,
+    filterLogs
   } = useLogViewer({
-    userId,
-    maxLogs
+    maxLogs,
+    autoScroll
   });
 
   useEffect(() => {
     if (hostIds.length > 0) {
       const filter: LogFilter = {
-        level: selectedLevels
+        level: selectedLevel
       };
       subscribe(hostIds, filter);
     }
@@ -118,7 +91,7 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
         unsubscribe(hostIds);
       }
     };
-  }, [hostIds, selectedLevels, subscribe, unsubscribe]);
+  }, [hostIds, selectedLevel, subscribe, unsubscribe]);
 
   useEffect(() => {
     if (autoScroll && listRef.current && logs.length > 0) {
@@ -126,14 +99,10 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
     }
   }, [logs, autoScroll]);
 
-  const handleLevelToggle = useCallback((level: string) => {
-    setSelectedLevels(prev => {
-      if (prev.includes(level)) {
-        return prev.filter(l => l !== level);
-      }
-      return [...prev, level];
-    });
-  }, []);
+  const handleLevelChange = useCallback((level: 'debug' | 'info' | 'warn' | 'error') => {
+    setSelectedLevel(level);
+    filterLogs({ level });
+  }, [filterLogs]);
 
   const handleAutoScrollChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setAutoScroll(event.target.checked);
@@ -141,10 +110,10 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
 
   const handleRefresh = useCallback(() => {
     const filter: LogFilter = {
-      level: selectedLevels
+      level: selectedLevel
     };
     subscribe(hostIds, filter);
-  }, [hostIds, selectedLevels, subscribe]);
+  }, [hostIds, selectedLevel, subscribe]);
 
   const getLevelIcon = useCallback((level: string): JSX.Element => {
     switch (level) {
@@ -186,7 +155,7 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
           </IconButton>
         }
       >
-        Failed to load logs: {error.message}
+        Failed to load logs: {error}
       </Alert>
     );
   }
@@ -241,8 +210,8 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={selectedLevels.includes('info')}
-                  onChange={() => handleLevelToggle('info')}
+                  checked={selectedLevel === 'info'}
+                  onChange={() => handleLevelChange('info')}
                   color="info"
                 />
               }
@@ -251,8 +220,8 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={selectedLevels.includes('warn')}
-                  onChange={() => handleLevelToggle('warn')}
+                  checked={selectedLevel === 'warn'}
+                  onChange={() => handleLevelChange('warn')}
                   color="warning"
                 />
               }
@@ -261,8 +230,8 @@ function LogViewerContent({ hostIds, userId, maxLogs }: LogViewerProps) {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={selectedLevels.includes('error')}
-                  onChange={() => handleLevelToggle('error')}
+                  checked={selectedLevel === 'error'}
+                  onChange={() => handleLevelChange('error')}
                   color="error"
                 />
               }

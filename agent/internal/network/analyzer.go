@@ -3,13 +3,13 @@ package network
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/shirou/gopsutil/v3/net"
 	"go.uber.org/zap"
 )
 
@@ -190,7 +190,7 @@ func (a *Analyzer) trackConnections(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			conns, err := net.Connections("all")
+			conns, err := net.Connections("inet")
 			if err != nil {
 				a.logger.Error("Failed to get connections",
 					zap.Error(err))
@@ -213,8 +213,8 @@ func (a *Analyzer) updateConnections(conns []net.ConnectionStat) {
 	for _, conn := range conns {
 		key := fmt.Sprintf("%s-%s-%s",
 			conn.Type,
-			conn.Laddr.String(),
-			conn.Raddr.String())
+			conn.Laddr,
+			conn.Raddr)
 
 		// Update existing or create new
 		c, ok := a.connections[key]

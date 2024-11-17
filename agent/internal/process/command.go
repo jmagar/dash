@@ -2,7 +2,6 @@ package process
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"shh/agent/internal/metrics"
 
 	"go.uber.org/zap"
 )
@@ -35,18 +36,18 @@ type CommandOutput struct {
 
 // CommandResult contains the complete execution result
 type CommandResult struct {
-	ID            string          `json:"id"`
-	Command       string          `json:"command"`
-	Args          []string        `json:"args"`
-	WorkingDir    string          `json:"working_dir"`
-	Environment   []string        `json:"environment"`
-	StartTime     time.Time       `json:"start_time"`
-	EndTime       time.Time       `json:"end_time,omitempty"`
-	State         CommandState    `json:"state"`
-	ExitCode      int            `json:"exit_code"`
-	Error         string         `json:"error,omitempty"`
-	OutputFile    string         `json:"output_file"`
-	ResourceUsage *ProcessMetrics `json:"resource_usage,omitempty"`
+	ID            string                `json:"id"`
+	Command       string                `json:"command"`
+	Args          []string             `json:"args"`
+	WorkingDir    string               `json:"working_dir"`
+	Environment   []string             `json:"environment"`
+	StartTime     time.Time            `json:"start_time"`
+	EndTime       time.Time            `json:"end_time,omitempty"`
+	State         CommandState         `json:"state"`
+	ExitCode      int                  `json:"exit_code"`
+	Error         string               `json:"error,omitempty"`
+	OutputFile    string               `json:"output_file"`
+	ResourceUsage *metrics.ProcessMetrics `json:"resource_usage,omitempty"`
 }
 
 // OutputWriter manages command output logging

@@ -136,16 +136,15 @@ func (c *Checker) runCheck(ctx context.Context, name string, check *DependencyCh
 // executeCheck runs a single health check with retries
 func (c *Checker) executeCheck(ctx context.Context, check *DependencyCheck) *CheckResult {
 	var result *CheckResult
-	var err error
 
 	for i := 0; i <= check.RetryCount; i++ {
 		checkCtx, cancel := context.WithTimeout(ctx, check.Timeout)
 		start := time.Now()
-		
+
 		result = check.Check(checkCtx)
 		result.Duration = time.Since(start)
 		result.Timestamp = start
-		
+
 		cancel()
 
 		if result.Status == StatusHealthy {

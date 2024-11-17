@@ -48,8 +48,49 @@ export const NetworkAnalytics: React.FC = () => {
   const networkData = [
     {
       name: 'Current',
-      sent: metrics.network.bytesSent,
-      received: metrics.network.bytesRecv,
+      sent: metrics.network.tx_bytes,
+      received: metrics.network.rx_bytes,
+    },
+  ];
+
+  const packetData = [
+    {
+      name: 'Current',
+      sent: metrics.network.tx_packets,
+      received: metrics.network.rx_packets,
+    },
+  ];
+
+  const errorData = [
+    {
+      name: 'Current',
+      errors_in: metrics.network.rx_errors,
+      errors_out: metrics.network.tx_errors,
+    },
+  ];
+
+  const dropData = [
+    {
+      name: 'Current',
+      drops_in: metrics.network.rx_dropped,
+      drops_out: metrics.network.tx_dropped,
+    },
+  ];
+
+  const connectionData = [
+    {
+      name: 'Current',
+      tcp: metrics.network.tcp_conns,
+      udp: metrics.network.udp_conns,
+      listening: metrics.network.listen_ports,
+    },
+  ];
+
+  const speedData = [
+    {
+      name: 'Current',
+      average: metrics.network.average_speed,
+      total: metrics.network.total_speed,
     },
   ];
 
@@ -93,16 +134,16 @@ export const NetworkAnalytics: React.FC = () => {
                     Connections
                   </Typography>
                   <Typography variant="body1">
-                    Total: {metrics.network.connections}
+                    Total: {metrics.network.tcp_conns + metrics.network.udp_conns}
                   </Typography>
                   <Typography variant="body1">
-                    TCP: {metrics.network.tcpConns}
+                    TCP: {metrics.network.tcp_conns}
                   </Typography>
                   <Typography variant="body1">
-                    UDP: {metrics.network.udpConns}
+                    UDP: {metrics.network.udp_conns}
                   </Typography>
                   <Typography variant="body1">
-                    Listening Ports: {metrics.network.listenPorts}
+                    Listening Ports: {metrics.network.listen_ports}
                   </Typography>
                 </CardContent>
               </Card>
@@ -115,10 +156,10 @@ export const NetworkAnalytics: React.FC = () => {
                     Network Health
                   </Typography>
                   <Typography variant="body1">
-                    Errors (In/Out): {metrics.network.errorsIn}/{metrics.network.errorsOut}
+                    Errors (In/Out): {metrics.network.rx_errors}/{metrics.network.tx_errors}
                   </Typography>
                   <Typography variant="body1">
-                    Drops (In/Out): {metrics.network.dropsIn}/{metrics.network.dropsOut}
+                    Drops (In/Out): {metrics.network.rx_dropped}/{metrics.network.tx_dropped}
                   </Typography>
                   <Typography variant="body1">
                     Interfaces: {metrics.network.interfaces}
@@ -144,34 +185,34 @@ export const NetworkAnalytics: React.FC = () => {
                 <TableRow>
                   <TableCell>Bytes</TableCell>
                   <TableCell align="right">
-                    {formatBytes(metrics.network.bytesSent)}
+                    {formatBytes(metrics.network.tx_bytes)}
                   </TableCell>
                   <TableCell align="right">
-                    {formatBytes(metrics.network.bytesRecv)}
+                    {formatBytes(metrics.network.rx_bytes)}
                   </TableCell>
                   <TableCell align="right">
-                    {formatBytes(metrics.network.bytesSent + metrics.network.bytesRecv)}
+                    {formatBytes(metrics.network.tx_bytes + metrics.network.rx_bytes)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Packets</TableCell>
                   <TableCell align="right">
-                    {metrics.network.packetsSent.toLocaleString()}
+                    {metrics.network.tx_packets.toLocaleString()}
                   </TableCell>
                   <TableCell align="right">
-                    {metrics.network.packetsRecv.toLocaleString()}
+                    {metrics.network.rx_packets.toLocaleString()}
                   </TableCell>
                   <TableCell align="right">
-                    {(metrics.network.packetsSent + metrics.network.packetsRecv).toLocaleString()}
+                    {(metrics.network.tx_packets + metrics.network.rx_packets).toLocaleString()}
                   </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Speed</TableCell>
                   <TableCell align="right" colSpan={2}>
-                    Average: {formatBytes(metrics.network.averageSpeed)}/s
+                    Average: {formatBytes(metrics.network.average_speed)}/s
                   </TableCell>
                   <TableCell align="right">
-                    Peak: {formatBytes(metrics.network.totalSpeed)}/s
+                    Peak: {formatBytes(metrics.network.total_speed)}/s
                   </TableCell>
                 </TableRow>
               </TableBody>

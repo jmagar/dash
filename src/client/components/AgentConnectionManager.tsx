@@ -226,7 +226,7 @@ export function AgentConnectionManager() {
                 </Typography>
               </Grid>
               <Grid item>
-                {host.status === 'connected' ? (
+                {host.status === 'online' ? (
                   <Button
                     variant="contained"
                     color="error"

@@ -3,7 +3,6 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"net"
 	"regexp"
 	"sync"
 	"time"

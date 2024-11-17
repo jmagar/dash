@@ -34,12 +34,12 @@ import {
   Tooltip as ChartTooltip,
   Legend,
 } from 'recharts';
-import { formatBytes } from '../utils/format';
-import type { MetricsData } from '../../types/metrics';
+import { formatBytes, formatPercentage, formatNumber } from '../utils/format';
+import type { SystemMetrics } from '../../types/metrics';
 
 interface MetricsDisplayProps {
-  metrics: MetricsData;
-  history?: MetricsData[];
+  metrics: SystemMetrics;
+  history?: SystemMetrics[];
   className?: string;
   onRefresh?: () => void;
 }
@@ -51,338 +51,370 @@ export function MetricsDisplay({
   onRefresh,
 }: MetricsDisplayProps) {
   const theme = useTheme();
-  const [selectedMetric, setSelectedMetric] = useState<'cpu' | 'memory' | 'storage' | 'network'>('cpu');
+  const [selectedView, setSelectedView] = useState<'realtime' | 'history'>('realtime');
 
-  const handleMetricChange = (_: React.MouseEvent<HTMLElement>, newMetric: 'cpu' | 'memory' | 'storage' | 'network') => {
-    if (newMetric !== null) {
-      setSelectedMetric(newMetric);
+  const handleViewChange = (_event: React.MouseEvent<HTMLElement>, newView: 'realtime' | 'history' | null) => {
+    if (newView !== null) {
+      setSelectedView(newView);
     }
   };
 
-  const getChartColors = () => ({
-    primary: theme.palette.primary.main,
-    secondary: theme.palette.secondary.main,
-    success: theme.palette.success.main,
-    warning: theme.palette.warning.main,
-    error: theme.palette.error.main,
-    info: theme.palette.info.main,
-  });
+  const cpuData = history.map(m => ({
+    time: new Date(m.timestamp).toLocaleTimeString(),
+    user: m.cpu.user,
+    system: m.cpu.system,
+    idle: m.cpu.idle,
+  }));
 
-  const renderCPUChart = () => {
-    const colors = getChartColors();
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={history}>
-          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-            stroke={theme.palette.text.secondary}
-          />
-          <YAxis
-            domain={[0, 100]}
-            unit="%"
-            stroke={theme.palette.text.secondary}
-          />
-          <ChartTooltip
-            labelFormatter={(time) => new Date(time).toLocaleString()}
-            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Usage']}
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="cpu.total"
-            name="Total CPU"
-            stroke={colors.primary}
-            dot={false}
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="cpu.user"
-            name="User"
-            stroke={colors.secondary}
-            dot={false}
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="cpu.system"
-            name="System"
-            stroke={colors.warning}
-            dot={false}
-            strokeWidth={2}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  };
+  const memoryData = history.map(m => ({
+    time: new Date(m.timestamp).toLocaleTimeString(),
+    used: m.memory.used,
+    free: m.memory.free,
+    cached: m.memory.cached,
+    buffers: m.memory.buffers,
+  }));
 
-  const renderMemoryChart = () => {
-    const colors = getChartColors();
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={history}>
-          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-            stroke={theme.palette.text.secondary}
-          />
-          <YAxis
-            tickFormatter={formatBytes}
-            stroke={theme.palette.text.secondary}
-          />
-          <ChartTooltip
-            labelFormatter={(time) => new Date(time).toLocaleString()}
-            formatter={(value: number) => [formatBytes(value), 'Memory']}
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          />
-          <Legend />
-          <Area
-            type="monotone"
-            dataKey="memory.used"
-            stackId="1"
-            name="Used"
-            fill={colors.error}
-            stroke={colors.error}
-            fillOpacity={0.6}
-          />
-          <Area
-            type="monotone"
-            dataKey="memory.cached"
-            stackId="1"
-            name="Cached"
-            fill={colors.warning}
-            stroke={colors.warning}
-            fillOpacity={0.6}
-          />
-          <Area
-            type="monotone"
-            dataKey="memory.free"
-            stackId="1"
-            name="Free"
-            fill={colors.success}
-            stroke={colors.success}
-            fillOpacity={0.6}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    );
-  };
+  const networkData = history.map(m => ({
+    time: new Date(m.timestamp).toLocaleTimeString(),
+    rx: m.network.rx_bytes,
+    tx: m.network.tx_bytes,
+  }));
 
-  const renderStorageChart = () => {
-    const colors = getChartColors();
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={history}>
-          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-            stroke={theme.palette.text.secondary}
-          />
-          <YAxis
-            tickFormatter={formatBytes}
-            stroke={theme.palette.text.secondary}
-          />
-          <ChartTooltip
-            labelFormatter={(time) => new Date(time).toLocaleString()}
-            formatter={(value: number) => [formatBytes(value), 'I/O']}
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="storage.ioStats.readBytes"
-            name="Read"
-            stroke={colors.primary}
-            dot={false}
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="storage.ioStats.writeBytes"
-            name="Write"
-            stroke={colors.secondary}
-            dot={false}
-            strokeWidth={2}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  };
-
-  const renderNetworkChart = () => {
-    const colors = getChartColors();
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={history}>
-          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-            stroke={theme.palette.text.secondary}
-          />
-          <YAxis
-            tickFormatter={formatBytes}
-            stroke={theme.palette.text.secondary}
-          />
-          <ChartTooltip
-            labelFormatter={(time) => new Date(time).toLocaleString()}
-            formatter={(value: number) => [formatBytes(value), 'Network']}
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="network.bytesSent"
-            name="Sent"
-            stroke={colors.primary}
-            dot={false}
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="network.bytesRecv"
-            name="Received"
-            stroke={colors.secondary}
-            dot={false}
-            strokeWidth={2}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  };
-
-  const renderMetricCards = () => {
-    const getMetricValue = (type: 'cpu' | 'memory' | 'storage' | 'network') => {
-      switch (type) {
-        case 'cpu':
-          return `${metrics.cpu.total.toFixed(1)}%`;
-        case 'memory':
-          return formatBytes(metrics.memory.used);
-        case 'storage':
-          return `${(metrics.storage.usage * 100).toFixed(1)}%`;
-        case 'network':
-          return `${formatBytes(metrics.network.bytesSent + metrics.network.bytesRecv)}/s`;
-      }
-    };
-
-    const cards = [
-      { type: 'cpu', icon: <TimelineIcon />, label: 'CPU Usage' },
-      { type: 'memory', icon: <MemoryIcon />, label: 'Memory Usage' },
-      { type: 'storage', icon: <StorageIcon />, label: 'Storage Usage' },
-      { type: 'network', icon: <NetworkIcon />, label: 'Network I/O' },
-    ];
-
-    return (
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {cards.map((card) => (
-          <Grid item xs={12} sm={6} md={3} key={card.type}>
-            <Card
-              raised={selectedMetric === card.type}
-              sx={{
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                },
-              }}
-              onClick={() => setSelectedMetric(card.type as typeof selectedMetric)}
-            >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  {React.cloneElement(card.icon as React.ReactElement, {
-                    sx: { mr: 1, color: 'primary.main' },
-                  })}
-                  <Typography variant="h6" component="div">
-                    {card.label}
-                  </Typography>
-                </Box>
-                <Typography variant="h4" component="div">
-                  {getMetricValue(card.type as typeof selectedMetric)}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-    );
-  };
+  const diskData = history.map(m => ({
+    time: new Date(m.timestamp).toLocaleTimeString(),
+    read: m.storage.read_bytes,
+    write: m.storage.write_bytes,
+  }));
 
   return (
     <Box className={className}>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h5" gutterBottom>
-          System Metrics
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box display="flex" alignItems="center" mb={2}>
+        <ToggleButtonGroup
+          value={selectedView}
+          exclusive
+          onChange={handleViewChange}
+          size="small"
+          sx={{ mr: 2 }}
+        >
+          <ToggleButton value="realtime">
+            <Tooltip title="Real-time metrics">
+              <TimelineIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="history">
+            <Tooltip title="Historical metrics">
+              <TimelineIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        {onRefresh && (
           <Tooltip title="Refresh metrics">
             <IconButton onClick={onRefresh} size="small">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Metrics are updated every 5 seconds">
-            <IconButton size="small">
-              <InfoIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        )}
       </Box>
 
-      <Fade in>
-        <Box>
-          {renderMetricCards()}
+      <Grid container spacing={2}>
+        {/* CPU Usage */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <MemoryIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">CPU Usage</Typography>
+                <Tooltip title="CPU usage across all cores">
+                  <IconButton size="small" sx={{ ml: 'auto' }}>
+                    <InfoIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
 
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ mb: 2 }}>
-              <ToggleButtonGroup
-                value={selectedMetric}
-                exclusive
-                onChange={handleMetricChange}
-                aria-label="metrics view"
-                size="small"
-              >
-                <ToggleButton value="cpu" aria-label="cpu metrics">
-                  <TimelineIcon sx={{ mr: 1 }} />
-                  CPU
-                </ToggleButton>
-                <ToggleButton value="memory" aria-label="memory metrics">
-                  <MemoryIcon sx={{ mr: 1 }} />
-                  Memory
-                </ToggleButton>
-                <ToggleButton value="storage" aria-label="storage metrics">
-                  <StorageIcon sx={{ mr: 1 }} />
-                  Storage
-                </ToggleButton>
-                <ToggleButton value="network" aria-label="network metrics">
-                  <NetworkIcon sx={{ mr: 1 }} />
-                  Network
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+              {selectedView === 'realtime' ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Total: {formatPercentage(metrics.cpu.total)}
+                  </Typography>
+                  <Box mb={2}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={metrics.cpu.total}
+                      sx={{
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: theme.palette.grey[200],
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 5,
+                        },
+                      }}
+                    />
+                  </Box>
+                  <Grid container spacing={1}>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        User: {formatPercentage(metrics.cpu.user)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        System: {formatPercentage(metrics.cpu.system)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Idle: {formatPercentage(metrics.cpu.idle)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </>
+              ) : (
+                <Box height={200}>
+                  <ResponsiveContainer>
+                    <AreaChart data={cpuData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis />
+                      <ChartTooltip />
+                      <Legend />
+                      <Area
+                        type="monotone"
+                        dataKey="user"
+                        stackId="1"
+                        stroke={theme.palette.primary.main}
+                        fill={theme.palette.primary.light}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="system"
+                        stackId="1"
+                        stroke={theme.palette.secondary.main}
+                        fill={theme.palette.secondary.light}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="idle"
+                        stackId="1"
+                        stroke={theme.palette.grey[500]}
+                        fill={theme.palette.grey[200]}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
 
-            {selectedMetric === 'cpu' && renderCPUChart()}
-            {selectedMetric === 'memory' && renderMemoryChart()}
-            {selectedMetric === 'storage' && renderStorageChart()}
-            {selectedMetric === 'network' && renderNetworkChart()}
-          </Paper>
-        </Box>
-      </Fade>
+        {/* Memory Usage */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <StorageIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Memory Usage</Typography>
+                <Tooltip title="Physical memory usage">
+                  <IconButton size="small" sx={{ ml: 'auto' }}>
+                    <InfoIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              {selectedView === 'realtime' ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Used: {formatBytes(metrics.memory.used)} of {formatBytes(metrics.memory.total)}
+                  </Typography>
+                  <Box mb={2}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={(metrics.memory.used / metrics.memory.total) * 100}
+                      sx={{
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: theme.palette.grey[200],
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 5,
+                        },
+                      }}
+                    />
+                  </Box>
+                  <Grid container spacing={1}>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Free: {formatBytes(metrics.memory.free)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Cached: {formatBytes(metrics.memory.cached)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Buffers: {formatBytes(metrics.memory.buffers)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </>
+              ) : (
+                <Box height={200}>
+                  <ResponsiveContainer>
+                    <AreaChart data={memoryData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis />
+                      <ChartTooltip />
+                      <Legend />
+                      <Area
+                        type="monotone"
+                        dataKey="used"
+                        stackId="1"
+                        stroke={theme.palette.error.main}
+                        fill={theme.palette.error.light}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="cached"
+                        stackId="1"
+                        stroke={theme.palette.warning.main}
+                        fill={theme.palette.warning.light}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="buffers"
+                        stackId="1"
+                        stroke={theme.palette.info.main}
+                        fill={theme.palette.info.light}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="free"
+                        stackId="1"
+                        stroke={theme.palette.success.main}
+                        fill={theme.palette.success.light}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Network Usage */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <NetworkIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Network Usage</Typography>
+                <Tooltip title="Network traffic across all interfaces">
+                  <IconButton size="small" sx={{ ml: 'auto' }}>
+                    <InfoIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              {selectedView === 'realtime' ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Received: {formatBytes(metrics.network.rx_bytes)}/s
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Transmitted: {formatBytes(metrics.network.tx_bytes)}/s
+                    </Typography>
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box height={200}>
+                  <ResponsiveContainer>
+                    <LineChart data={networkData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis />
+                      <ChartTooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="rx"
+                        name="Received"
+                        stroke={theme.palette.primary.main}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="tx"
+                        name="Transmitted"
+                        stroke={theme.palette.secondary.main}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Disk Usage */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <StorageIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Disk Usage</Typography>
+                <Tooltip title="Disk I/O across all devices">
+                  <IconButton size="small" sx={{ ml: 'auto' }}>
+                    <InfoIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              {selectedView === 'realtime' ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Read: {formatBytes(metrics.storage.read_bytes)}/s
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Write: {formatBytes(metrics.storage.write_bytes)}/s
+                    </Typography>
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box height={200}>
+                  <ResponsiveContainer>
+                    <LineChart data={diskData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis />
+                      <ChartTooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="read"
+                        name="Read"
+                        stroke={theme.palette.primary.main}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="write"
+                        name="Write"
+                        stroke={theme.palette.secondary.main}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

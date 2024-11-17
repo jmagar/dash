@@ -142,7 +142,7 @@ func (m *ComposeManager) Logs(ctx context.Context, project *ComposeProject, serv
 			}
 
 			for _, line := range logs {
-				fmt.Fprintf(writer, "[%s] %s\n", serviceName, line)
+				fmt.Fprintf(writer, "[%s] %v\n", serviceName, line)
 			}
 		}
 	}

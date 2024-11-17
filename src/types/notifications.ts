@@ -70,16 +70,40 @@ export interface NotificationEvent {
   notification: Notification;
 }
 
-export interface NotificationDesktopEvent {
+export interface DesktopNotification {
   title: string;
   message: string;
+  type?: NotificationType;
   icon?: string;
   link?: string;
+  duration?: number;
 }
 
-export interface NotificationGotifyEvent {
+export interface GotifyNotification {
   title: string;
   message: string;
   priority?: number;
   link?: string;
+}
+
+export interface NotificationResponse {
+  success: boolean;
+  error?: string;
+  data?: {
+    notification?: Notification;
+    notifications?: Notification[];
+    count?: NotificationCount;
+    preferences?: NotificationPreferences;
+  };
+}
+
+export interface NotificationSubscription {
+  userId: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }

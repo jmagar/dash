@@ -1,5 +1,7 @@
-import type { ProcessInfo } from './metrics';
+import type { ProcessInfo, SystemMetrics, ProcessMetrics } from './metrics';
 import type { Container, Host } from './models-shared';
+import type { LogEntry, LogFilter } from './logs';
+import type { DesktopNotification } from './notifications';
 
 export type MessageType =
   | 'command'
@@ -10,26 +12,6 @@ export type MessageType =
   | 'register'
   | 'heartbeat'
   | 'result';
-
-export interface LogEntry {
-  id: string;
-  timestamp: string;
-  level: 'info' | 'warn' | 'error' | 'debug';
-  message: string;
-  hostname: string;
-  program: string;
-  metadata?: Record<string, any>;
-  facility?: string;
-}
-
-export interface LogFilter {
-  level?: string[];
-  program?: string[];
-  hostname?: string[];
-  search?: string;
-  startTime?: string;
-  endTime?: string;
-}
 
 export interface AgentInfo {
   id: string;
@@ -126,10 +108,11 @@ export interface ServerToClientEvents {
   'process:error': (data: { hostId: string; error: string }) => void;
   'process:update': (data: { hostId: string; process: ProcessInfo }) => void;
   'process:changed': (data: { hostId: string; process: ProcessInfo; oldStatus: string }) => void;
+  'process:metrics': (data: { hostId: string; metrics: ProcessMetrics[] }) => void;
 
   // Log events
-  'logs:stream': (data: { hostId: string; logs: LogEntry[] }) => void;
-  'logs:error': (data: { hostId: string; error: string }) => void;
+  'logs:new': (log: LogEntry) => void;
+  'logs:error': (data: { error: string }) => void;
 
   // Docker events
   'docker:containers': (data: { hostId: string; containers: Container[] }) => void;
@@ -140,6 +123,9 @@ export interface ServerToClientEvents {
   'docker:event': (data: { hostId: string; event: ContainerEvent }) => void;
   'docker:stats': (data: { hostId: string; stats: DockerStats }) => void;
   'docker:error': (data: { hostId: string; error: string }) => void;
+  'docker:compose:created': (data: { hostId: string; name: string }) => void;
+  'docker:compose:updated': (data: { hostId: string; name: string }) => void;
+  'docker:compose:deleted': (data: { hostId: string; name: string }) => void;
 
   // Command events
   'command:result': (data: CommandResult) => void;
@@ -163,6 +149,18 @@ export interface ServerToClientEvents {
   'agent:config': (data: { hostId: string; config: AgentConfig }) => void;
   'agent:update': (data: { hostId: string; update: AgentUpdate }) => void;
   'agent:heartbeat': (data: { hostId: string; heartbeat: AgentHeartbeat }) => void;
+
+  // Metrics events
+  'metrics:update': (data: { hostId: string; metrics: SystemMetrics }) => void;
+
+  // Notification events
+  'notification:desktop': (notification: DesktopNotification) => void;
+  'notification:created': (notification: { id: string; userId: string; title: string; message: string; type: string; read: boolean; createdAt: Date }) => void;
+  'notification:updated': (notification: { id: string; userId: string; title: string; message: string; type: string; read: boolean; createdAt: Date }) => void;
+  'notification:deleted': (notificationId: string) => void;
+
+  // Chat events
+  'chat:message': (message: { id: string; content: string; role: string; timestamp: Date }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -177,6 +175,7 @@ export interface ClientToServerEvents {
   // Log events
   'logs:subscribe': (data: { hostIds: string[]; filter?: LogFilter }) => void;
   'logs:unsubscribe': (data: { hostIds: string[] }) => void;
+  'logs:filter': (data: { filter: LogFilter }) => void;
 
   // Docker events
   'docker:subscribe': (data: { hostId: string }) => void;
@@ -185,6 +184,11 @@ export interface ClientToServerEvents {
   'docker:container:stop': (data: { hostId: string; containerId: string }) => void;
   'docker:container:restart': (data: { hostId: string; containerId: string }) => void;
   'docker:container:remove': (data: { hostId: string; containerId: string; force?: boolean }) => void;
+  'docker:compose:create': (data: { hostId: string; name: string; content: string }, callback: (response: { error?: string }) => void) => void;
+  'docker:compose:update': (data: { hostId: string; name: string; content: string }, callback: (response: { error?: string }) => void) => void;
+  'docker:compose:delete': (data: { hostId: string; name: string }, callback: (response: { error?: string }) => void) => void;
+  'docker:compose:get': (data: { hostId: string; name: string }, callback: (response: { error?: string; config?: any }) => void) => void;
+  'docker:compose:list': (data: { hostId: string }) => void;
 
   // Terminal events
   'terminal:join': (data: { hostId: string; sessionId: string }) => void;
@@ -192,11 +196,22 @@ export interface ClientToServerEvents {
   'terminal:data': (data: { hostId: string; sessionId: string; data: string }) => void;
   'terminal:resize': (data: { hostId: string; sessionId: string; cols: number; rows: number }) => void;
 
+  // Host events
+  'host:connect': (data: { hostId: string }, callback: (response: { error?: string }) => void) => void;
+  'host:disconnect': (data: { hostId: string }, callback: (response: { error?: string }) => void) => void;
+
+  // Metrics events
+  'metrics:subscribe': (data: { hostId: string }) => void;
+  'metrics:unsubscribe': (data: { hostId: string }) => void;
+
   // Agent events
   'agent:config:update': (data: { hostId: string; config: AgentConfig }) => void;
   'agent:update:start': (data: { hostId: string }) => void;
 
-  // Connection events
+  // Chat events
+  'chat:send': (message: { content: string; role: string }) => void;
+
+  // Room events
   'join': (room: string) => void;
   'leave': (room: string) => void;
 }
