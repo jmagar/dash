@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNotificationPreferences } from '../hooks/useNotifications';
+import { useNotificationPreferences } from '../hooks/useNotificationPreferencesV2';
 import type { NotificationType } from '../../types/notifications';
 
 interface NotificationSettingsProps {
@@ -70,7 +70,7 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     loading,
     error,
     updatePreferences,
-  } = useNotificationPreferences();
+  } = useNotificationPreferences({ userId });
 
   const [isSaving, setIsSaving] = React.useState(false);
 

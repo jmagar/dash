@@ -293,7 +293,7 @@ func (m *Manager) GetChanges() []ConfigChange {
 
 // ValidateConfig validates a configuration file
 func (m *Manager) ValidateConfig(path string) error {
-	config, ok := m.GetConfig(path)
+	_, ok := m.GetConfig(path)
 	if !ok {
 		return fmt.Errorf("config not found: %s", path)
 	}

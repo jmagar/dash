@@ -83,7 +83,7 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
   const error = useSelector(selectError);
   const [activeTab, setActiveTab] = useState(0);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const { stats, refresh } = useDockerStats(hostId);
+  const { stats, refresh } = useDockerStats({ hostId });
   const [refreshing, setRefreshing] = useState(false);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -94,7 +94,7 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
     setRefreshing(true);
     await refresh();
     setTimeout(() => setRefreshing(false), 1000); // Minimum animation time
-    void dispatch(fetchContainers(hostId));
+    dispatch(fetchContainers(hostId));
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {

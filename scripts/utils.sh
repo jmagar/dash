@@ -9,6 +9,9 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Initialize Docker Compose command
+DOCKER_COMPOSE="docker compose"
+
 # Function to print status messages
 print_status() {
     echo -e "${GREEN}==>${NC} $1"
@@ -61,14 +64,17 @@ check_docker() {
 # Check if Docker Compose is installed
 check_docker_compose() {
     print_substep "Checking Docker Compose installation..."
-    if ! docker compose version &> /dev/null; then
-        print_error "Docker Compose is not installed" "Visit https://docs.docker.com/compose/install/ for installation instructions"
-        return 1
+    
+    # Check for the new docker compose command
+    if docker compose version &> /dev/null; then
+        local version=$(docker compose version --short)
+        print_substep "Docker Compose ${version}"
+        export DOCKER_COMPOSE="docker compose"
+        return 0
     fi
 
-    local version=$(docker compose version --short)
-    print_substep "Docker Compose ${version} "
-    return 0
+    print_error "Docker Compose is not installed or not properly configured" "Please install the latest version of Docker Compose V2: https://docs.docker.com/compose/install/"
+    return 1
 }
 
 # Check system resources
@@ -144,52 +150,89 @@ create_directories() {
 setup_env() {
     print_step "Setting up environment"
 
+    # Get the project root directory (one level up from scripts)
+    local PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    cd "${PROJECT_ROOT}"
+
     if [ ! -f .env ]; then
-        if [ ! -f .env.example ]; then
-            print_error "No .env.example file found"
+        if [ ! -f env.example ]; then
+            print_error "No env.example file found in ${PROJECT_ROOT}"
             return 1
         fi
 
-        print_substep "Creating .env from .env.example..."
-        cp .env.example .env
+        print_substep "Creating .env from env.example..."
+        cp env.example .env
+    fi
         
-        # Generate random JWT secret if not set
-        if ! grep -q "JWT_SECRET=" .env || grep -q "JWT_SECRET=your-secret-key" .env; then
-            print_substep "Generating secure JWT secret..."
-            local jwt_secret=$(openssl rand -hex 32)
-            sed -i "s/JWT_SECRET=.*/JWT_SECRET=${jwt_secret}/" .env
-        fi
-
-        print_warning "Please update the .env file with your configuration"
-    else
-        print_substep "Using existing .env file"
-        
-        # Validate required environment variables
-        local required_vars=(
-            "NODE_ENV"
-            "PORT"
-            "DB_HOST"
-            "DB_PORT"
-            "DB_USER"
-            "DB_PASSWORD"
-            "DB_NAME"
-            "JWT_SECRET"
-        )
-
-        local missing_vars=()
-        for var in "${required_vars[@]}"; do
-            if ! grep -q "^${var}=" .env || grep -q "^${var}=$" .env; then
-                missing_vars+=("${var}")
+    # Generate random secrets if not set
+    local secrets=("JWT_SECRET" "SESSION_SECRET" "COOKIE_SECRET" "AGENT_INSTALL_KEY")
+    for secret in "${secrets[@]}"; do
+        if ! grep -q "^${secret}=" .env || grep -q "^${secret}=\$" .env || grep -q "^${secret}=your-.*-key" .env; then
+            print_substep "Generating secure ${secret}..."
+            local new_secret=$(openssl rand -hex 32)
+            if grep -q "^${secret}=" .env; then
+                sed -i "s|^${secret}=.*|${secret}=${new_secret}|" .env
+            else
+                echo "${secret}=${new_secret}" >> .env
             fi
-        done
-
-        if [ ${#missing_vars[@]} -ne 0 ]; then
-            print_error "Missing required environment variables" "${missing_vars[*]}"
-            return 1
         fi
+    done
+
+    # Ensure required variables are set with default values if missing
+    local defaults=(
+        "NODE_ENV=development"
+        "SERVER_PORT=4000"
+        "SERVER_HOST=localhost"
+        "POSTGRES_HOST=localhost"
+        "POSTGRES_PORT=5432"
+        "POSTGRES_USER=postgres"
+        "POSTGRES_PASSWORD=postgres"
+        "POSTGRES_DB=shh"
+    )
+
+    for default in "${defaults[@]}"; do
+        local var_name="${default%%=*}"
+        local var_value="${default#*=}"
+        if ! grep -q "^${var_name}=" .env || grep -q "^${var_name}=\$" .env; then
+            print_substep "Setting default value for ${var_name}..."
+            if grep -q "^${var_name}=" .env; then
+                sed -i "s|^${var_name}=.*|${var_name}=${var_value}|" .env
+            else
+                echo "${var_name}=${var_value}" >> .env
+            fi
+        fi
+    done
+        
+    # Validate required environment variables
+    local required_vars=(
+        "NODE_ENV"
+        "SERVER_PORT"
+        "SERVER_HOST"
+        "POSTGRES_HOST"
+        "POSTGRES_PORT"
+        "POSTGRES_USER"
+        "POSTGRES_PASSWORD"
+        "POSTGRES_DB"
+        "JWT_SECRET"
+        "SESSION_SECRET"
+        "COOKIE_SECRET"
+    )
+
+    local missing_vars=()
+    for var in "${required_vars[@]}"; do
+        if ! grep -q "^${var}=" .env || grep -q "^${var}=\$" .env || grep -q "^${var}=your-.*-key" .env; then
+            missing_vars+=("${var}")
+        fi
+    done
+
+    if [ ${#missing_vars[@]} -ne 0 ]; then
+        print_error "Missing required environment variables" "${missing_vars[*]}"
+        print_warning "Please update these variables in your .env file"
+        return 1
     fi
 
-    print_status "Environment setup complete "
+    print_status "Environment setup complete"
+    return 0
 }
 
 # Set permissions

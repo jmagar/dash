@@ -50,26 +50,24 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
   const {
     loading,
     error,
-    status,
-    compose,
-    loadCompose,
-    saveCompose,
-    upCompose,
-    downCompose,
-    removeCompose,
-  } = useDockerCompose(hostId);
+    configs,
+    createConfig,
+    updateConfig,
+    deleteConfig,
+    getConfig
+  } = useDockerCompose({ hostId });
 
   const handleAction = async (action: 'up' | 'down' | 'remove') => {
     try {
       switch (action) {
         case 'up':
-          await upCompose();
+          await createConfig();
           break;
         case 'down':
-          await downCompose();
+          await deleteConfig();
           break;
         case 'remove':
-          await removeCompose();
+          await deleteConfig();
           break;
       }
     } catch (err) {
@@ -82,7 +80,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
 
   const handleSave = async () => {
     try {
-      await saveCompose(composeContent);
+      await updateConfig(composeContent);
       setEditMode(false);
     } catch (err) {
       logger.error('Failed to save docker-compose:', {
@@ -131,11 +129,11 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
           </Typography>
           <Box display="flex" gap={1}>
             <Chip
-              label={status}
+              label={configs.status}
               size="small"
               sx={{
-                bgcolor: alpha(getStatusColor(status), 0.1),
-                color: getStatusColor(status),
+                bgcolor: alpha(getStatusColor(configs.status), 0.1),
+                color: getStatusColor(configs.status),
                 fontWeight: 'medium',
               }}
             />
@@ -163,7 +161,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               <Tooltip title="Edit compose file">
                 <IconButton
                   onClick={() => {
-                    setComposeContent(compose);
+                    setComposeContent(getConfig());
                     setEditMode(true);
                   }}
                   size="small"
@@ -183,7 +181,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               <Button
                 color="inherit"
                 size="small"
-                onClick={() => void loadCompose()}
+                onClick={() => void getConfig()}
               >
                 Retry
               </Button>
@@ -222,7 +220,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
                 maxHeight: 600,
               }}
             >
-              {compose || 'No docker-compose.yml found'}
+              {getConfig() || 'No docker-compose.yml found'}
             </Box>
           )}
         </Box>
@@ -246,7 +244,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('up');
               setShowConfirmDialog(true);
             }}
-            disabled={!compose || status === 'running'}
+            disabled={!getConfig() || configs.status === 'running'}
           >
             Up
           </Button>
@@ -258,7 +256,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('down');
               setShowConfirmDialog(true);
             }}
-            disabled={!compose || status === 'stopped'}
+            disabled={!getConfig() || configs.status === 'stopped'}
           >
             Down
           </Button>
@@ -270,7 +268,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('remove');
               setShowConfirmDialog(true);
             }}
-            disabled={!compose}
+            disabled={!getConfig()}
           >
             Remove
           </Button>

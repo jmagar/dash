@@ -126,7 +126,7 @@ export default function Layout({ children }: LayoutProps): JSX.Element {
                 inputProps={{ 'aria-label': 'search' }}
               />
             </Search>
-            <NotificationBell />
+            {user && <NotificationBell userId={user.id} />}
             <ThemeControls />
             <IconButton
               color="inherit"

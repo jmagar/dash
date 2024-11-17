@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -26,8 +26,18 @@ import {
 import { useHostMetrics } from '../hooks/useHostMetrics';
 import { formatBytes } from '../utils/formatters';
 
-export const NetworkAnalytics: React.FC = () => {
-  const { metrics, loading, error } = useHostMetrics();
+interface NetworkAnalyticsProps {
+  hostId: string;
+}
+
+export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) => {
+  const [selectedInterface, setSelectedInterface] = useState<string>('');
+  const [timeRange, setTimeRange] = useState<string>('1h');
+  const { metrics, loading, error } = useHostMetrics({ hostId });
+
+  useEffect(() => {
+    // ... (rest of the code remains the same)
+  }, []);
 
   if (loading) {
     return <LinearProgress />;

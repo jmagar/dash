@@ -1,15 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useSocket } from './useSocket';
 import { logger } from '../utils/frontendLogger';
-
-interface DesktopNotification {
-  title: string;
-  message: string;
-  type?: 'info' | 'success' | 'warning' | 'error';
-  icon?: string;
-  link?: string;
-  duration?: number;
-}
+import type { DesktopNotification } from '../../types/notifications';
 
 interface UseDesktopNotificationsResult {
   requestPermission: () => Promise<boolean>;
@@ -20,7 +12,7 @@ interface UseDesktopNotificationsResult {
 export function useDesktopNotifications(): UseDesktopNotificationsResult {
   const socket = useSocket();
 
-  const requestPermission = useCallback(async () => {
+  const requestPermission = useCallback(async (): Promise<boolean> => {
     if (!('Notification' in window)) {
       logger.warn('This browser does not support desktop notifications');
       return false;

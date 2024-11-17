@@ -1,35 +1,58 @@
 import type { Alert } from './metrics-alerts';
 
-export type NotificationType =
-  | 'alert'      // System alerts
-  | 'info'       // General information
-  | 'success'    // Success messages
-  | 'warning'    // Warning messages
-  | 'error';     // Error messages
+export type NotificationType = 'alert' | 'error' | 'warning' | 'info' | 'success';
+export type NotificationChannel = 'web' | 'gotify' | 'desktop';
 
-export interface Notification {
+export interface NotificationBase {
   id: string;
   userId: string;
   type: NotificationType;
   title: string;
   message: string;
-  metadata?: Record<string, unknown>;
+  timestamp: Date;
   read: boolean;
-  readAt?: Date;
-  createdAt: Date;
-  alert?: Alert;  // Associated alert if type is 'alert'
-  link?: string;  // Optional link to related page/resource
+  metadata?: Record<string, unknown>;
 }
 
-export interface NotificationPreferences {
-  userId: string;
+export interface WebNotification extends NotificationBase {
+  channel: 'web';
+  link?: string;
+}
+
+export interface GotifyNotification extends NotificationBase {
+  channel: 'gotify';
+  priority: number;
+  link?: string;
+}
+
+export interface DesktopNotification extends NotificationBase {
+  channel: 'desktop';
+  type: NotificationType;
+  icon?: string;
+  duration?: number;
+  link?: string;
+}
+
+export type Notification = WebNotification | GotifyNotification | DesktopNotification;
+
+export interface NotificationPreferencesV2 {
   webEnabled: boolean;
   gotifyEnabled: boolean;
   desktopEnabled: boolean;
   alertTypes: {
     [K in NotificationType]: boolean;
   };
-  mutedUntil?: Date;
+}
+
+export interface NotificationPreferencesV1 {
+  web: NotificationType[];
+  gotify: NotificationType[];
+  desktop: NotificationType[];
+}
+
+export interface NotificationPreferences {
+  userId: string;
+  preferences: NotificationPreferencesV2;
 }
 
 export interface NotificationFilter {
@@ -70,22 +93,6 @@ export interface NotificationEvent {
   notification: Notification;
 }
 
-export interface DesktopNotification {
-  title: string;
-  message: string;
-  type?: NotificationType;
-  icon?: string;
-  link?: string;
-  duration?: number;
-}
-
-export interface GotifyNotification {
-  title: string;
-  message: string;
-  priority?: number;
-  link?: string;
-}
-
 export interface NotificationResponse {
   success: boolean;
   error?: string;
@@ -106,4 +113,23 @@ export interface NotificationSubscription {
   };
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Utility type for converting between V1 and V2 formats
+export interface NotificationPreferencesConverter {
+  toV2(v1: NotificationPreferencesV1): NotificationPreferencesV2;
+  toV1(v2: NotificationPreferencesV2): NotificationPreferencesV1;
+}
+
+// Response types
+export interface NotificationPreferencesResponse {
+  success: boolean;
+  error?: string;
+  data?: NotificationPreferencesV1;
+}
+
+export interface NotificationPreferencesV2Response {
+  success: boolean;
+  error?: string;
+  data?: NotificationPreferencesV2;
 }

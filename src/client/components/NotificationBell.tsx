@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Badge,
@@ -17,6 +16,8 @@ import {
   Divider,
   useTheme,
   alpha,
+  Tooltip,
+  ListItemButton,
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
@@ -26,10 +27,13 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   Done as DoneIcon,
+  Link as LinkIcon,
 } from '@mui/icons-material';
 import { useNotifications } from '../hooks/useNotifications';
 import { useDesktopNotifications } from '../hooks/useDesktopNotifications';
 import type { Notification, NotificationType } from '../../types/notifications';
+import { logger } from '../utils/frontendLogger';
+import type { LogMetadata } from '../../types/logger';
 
 interface NotificationBellProps {
   userId: string;
@@ -86,15 +90,24 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     try {
       return formatDistanceToNow(date, { addSuffix: true });
     } catch (error) {
-      console.error('Failed to format timestamp:', error);
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+      logger.error('Error formatting timestamp', metadata);
       return 'some time ago';
     }
   };
 
-  const handleNotificationClick = async (notificationId: string) => {
-    if (!notifications.find((n: Notification) => n.id === notificationId)?.read) {
-      await markAsRead(notificationId);
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
     }
+
+    // Handle notification link if present
+    if ('link' in notification && notification.link) {
+      window.open(notification.link, '_blank');
+    }
+
     setAnchorEl(null);
   };
 
@@ -114,7 +127,10 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const id = open ? 'notifications-popover' : undefined;
 
   if (error) {
-    console.error('Failed to load notifications:', error);
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+    logger.error('Failed to load notifications', metadata);
   }
 
   return (
@@ -214,34 +230,70 @@ export function NotificationBell({ userId }: NotificationBellProps) {
           </Box>
         ) : (
           <List>
-            {notifications.map((notification: Notification) => (
+            {notifications.map((notification) => (
               <ListItem
                 key={notification.id}
-                onClick={() => handleNotificationClick(notification.id)}
+                disablePadding
                 sx={{
-                  cursor: 'pointer',
-                  bgcolor: notification.read ? 'transparent' : alpha(theme.palette.primary.main, 0.04),
-                  '&:hover': {
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                  },
+                  borderBottom: `1px solid ${theme.palette.divider}`,
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  {getNotificationIcon(notification.type)}
-                </ListItemIcon>
-                <ListItemText
-                  primary={notification.title}
-                  secondary={
-                    <Box component="span" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                      <Typography variant="body2" color="textSecondary">
-                        {notification.message}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {formatTimestamp(new Date(notification.createdAt))}
-                      </Typography>
-                    </Box>
-                  }
-                />
+                <ListItemButton
+                  onClick={() => handleNotificationClick(notification)}
+                  sx={{
+                    bgcolor: notification.read 
+                      ? 'transparent' 
+                      : alpha(theme.palette.primary.main, 0.08),
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.12),
+                    },
+                  }}
+                >
+                  <ListItemIcon>
+                    {getNotificationIcon(notification.type)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle2" noWrap>
+                          {notification.title}
+                        </Typography>
+                        {'link' in notification && notification.link && (
+                          <Tooltip title="Open link">
+                            <LinkIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      <>
+                        <Typography
+                          variant="body2"
+                          color="textSecondary"
+                          sx={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            mb: 0.5,
+                          }}
+                        >
+                          {notification.message}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{ display: 'block' }}
+                        >
+                          {formatTimestamp(notification.timestamp)}
+                        </Typography>
+                      </>
+                    }
+                    secondaryTypographyProps={{
+                      component: 'div',
+                    }}
+                  />
+                </ListItemButton>
               </ListItem>
             ))}
           </List>

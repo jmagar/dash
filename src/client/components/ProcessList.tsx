@@ -42,14 +42,19 @@ interface ProcessActions {
   onResume?: (pid: number) => void;
 }
 
-export const ProcessList: React.FC<ProcessActions> = ({
+interface ProcessListProps extends ProcessActions {
+  hostId: string;
+}
+
+export const ProcessList: React.FC<ProcessListProps> = ({
+  hostId,
   onTerminate,
   onRestart,
   onPause,
   onResume,
 }) => {
   const theme = useTheme();
-  const { processes, loading, error } = useProcessMetrics();
+  const { processes, loading, error } = useProcessMetrics(hostId);
   const [order, setOrder] = useState<Order>('desc');
   const [orderBy, setOrderBy] = useState<OrderBy>('cpuUsage');
   const [page, setPage] = useState(0);

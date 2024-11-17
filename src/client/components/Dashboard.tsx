@@ -1,4 +1,5 @@
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -56,8 +57,9 @@ function TabPanel(props: TabPanelProps) {
 
 export const Dashboard: React.FC = () => {
   const theme = useTheme();
+  const { hostId } = useParams<{ hostId: string }>();
   const [tabValue, setTabValue] = React.useState(0);
-  const { metrics, loading, error, refresh } = useHostMetrics();
+  const { metrics, loading, error, refresh } = useHostMetrics({ hostId });
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -217,19 +219,19 @@ export const Dashboard: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <ProcessList />
+          {hostId ? <ProcessList hostId={hostId} /> : <Typography>No host selected</Typography>}
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <NetworkAnalytics />
+          {hostId ? <NetworkAnalytics hostId={hostId} /> : <Typography>No host selected</Typography>}
         </TabPanel>
 
         <TabPanel value={tabValue} index={3}>
-          <StorageManager />
+          {hostId ? <StorageManager hostId={hostId} /> : <Typography>No host selected</Typography>}
         </TabPanel>
 
         <TabPanel value={tabValue} index={4}>
-          <SystemHealth />
+          {hostId ? <SystemHealth hostId={hostId} /> : <Typography>No host selected</Typography>}
         </TabPanel>
       </Box>
 

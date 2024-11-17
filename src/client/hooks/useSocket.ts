@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import type { Socket } from 'socket.io-client/build/esm/socket';
 import { config } from '../config';
 import { logger } from '../utils/frontendLogger';
-import type { ServerToClientEvents, ClientToServerEvents } from '../../types/socket.io';
+import type { SocketClient } from '../../types/socket-events';
 
-type SocketType = Socket<ServerToClientEvents, ClientToServerEvents>;
+type SocketType = SocketClient;
 
 export function useSocket(): SocketType {
   const socketRef = useRef<SocketType | null>(null);

@@ -6,7 +6,7 @@ import { sshService } from '../ssh.service';
 import { db } from '../../db';
 import { parseProcessList } from './process-parser';
 import { ProcessMonitor } from './process-monitor';
-import type { Host, CommandResult } from '../../../types/models-shared';
+import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket.io';
 import type { ProcessInfo } from '../../../types/metrics';
 import type { ProcessCache } from './types';
@@ -149,7 +149,7 @@ export class ProcessService extends EventEmitter {
       agentService.executeCommand(hostId, 'ps', ['-eo', 'pid,ppid,user,%cpu,%mem,stat,start,comm,args']);
 
       // Wait for command result
-      const handler = (data: { agentId: string; result: CommandResult }) => {
+      const handler = (data: { agentId: string; result: { status: string; stdout: string; stderr: string } }) => {
         if (data.agentId === hostId) {
           clearTimeout(timeout);
           agentService.removeListener('agent:commandResult', handler);

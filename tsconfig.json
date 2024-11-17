@@ -14,7 +14,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react",
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
@@ -35,9 +35,6 @@
     "src/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "build",
-    "dist",
-    "coverage"
+    "node_modules"
   ]
 }

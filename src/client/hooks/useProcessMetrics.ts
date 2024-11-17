@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ProcessInfo } from '../../types/metrics';
 import { useSocket } from './useSocket';
 import { logger } from '../utils/frontendLogger';
+import type { ProcessInfo } from '../../types/process';
 
 interface UseProcessMetricsResult {
   processes: ProcessInfo[];

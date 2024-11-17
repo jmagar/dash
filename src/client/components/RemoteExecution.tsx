@@ -36,7 +36,7 @@ import { logger } from '../utils/logger';
 import type { CommandRequest, CommandResult } from '../../types/models-shared';
 
 export function RemoteExecution() {
-  const { selectedHost } = useHost();
+  const { selectedHost } = useHost({ autoConnect: false });
   const [command, setCommand] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [result, setResult] = useState<CommandResult | null>(null);

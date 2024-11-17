@@ -1,16 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './useSocket';
 import { logger } from '../utils/frontendLogger';
-
-interface Notification {
-  id: string;
-  userId: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  read: boolean;
-  createdAt: Date;
-}
+import type { Notification } from '../../types/notifications';
 
 interface UseNotificationsOptions {
   userId: string;

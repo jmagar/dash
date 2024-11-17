@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Grid,
@@ -13,6 +13,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import {
   PieChart,
@@ -26,8 +28,14 @@ import { formatBytes } from '../utils/formatters';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-export const StorageManager: React.FC = () => {
-  const { metrics, loading, error } = useHostMetrics();
+interface StorageManagerProps {
+  hostId: string;
+}
+
+export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
+  const theme = useTheme();
+  const [selectedDrive, setSelectedDrive] = useState<string>('');
+  const { metrics, loading, error } = useHostMetrics({ hostId });
 
   if (loading) {
     return <LinearProgress />;

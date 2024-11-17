@@ -52,7 +52,10 @@ export function useChat({ onError }: UseChatOptions = {}) {
 
       // Notify connected clients about new message
       if (socket) {
-        socket.emit('chat:message', assistantMessage);
+        socket.emit('chat:send', {
+          content: assistantMessage.content,
+          role: assistantMessage.role
+        });
       }
 
       return assistantMessage;

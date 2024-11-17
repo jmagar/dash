@@ -5,6 +5,7 @@ set -euo pipefail
 
 # Load utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/utils.sh"
 
 # Deployment state file for recovery
@@ -29,21 +30,27 @@ cleanup_on_error() {
     print_error "Deployment failed" "$1"
     print_warning "Running cleanup..."
 
+    # Check if docker compose is available
+    if ! docker compose version &> /dev/null; then
+        print_warning "Docker Compose not available, skipping cleanup"
+        return 1
+    fi
+
     # Get the current state
     local current_state=$(get_state)
 
     case ${current_state} in
         "services_started")
             print_substep "Stopping services..."
-            docker compose down --volumes --remove-orphans || true
+            ${DOCKER_COMPOSE} down --volumes --remove-orphans || true
             ;;
         "images_built")
             print_substep "Removing built images..."
-            docker compose down --rmi local --volumes --remove-orphans || true
+            ${DOCKER_COMPOSE} down --rmi local --volumes --remove-orphans || true
             ;;
         *)
             print_substep "Basic cleanup..."
-            docker compose down --volumes --remove-orphans || true
+            ${DOCKER_COMPOSE} down --volumes --remove-orphans || true
             ;;
     esac
 
@@ -120,9 +127,18 @@ verify_network() {
 verify_dependencies() {
     print_step "Verifying dependencies"
 
+    # Check Docker and Docker Compose first
+    if ! command -v docker &> /dev/null; then
+        cleanup_on_error "Required command not found: docker"
+    fi
+
+    if ! docker compose version &> /dev/null; then
+        cleanup_on_error "Required command not found: docker compose. Please install Docker Compose V2"
+    fi
+
+    # Check other required commands
     local required_commands=(
-        "docker" "docker compose" "curl" "jq" "awk" "sed"
-        "openssl" "grep" "lsof" "df" "mkdir" "chmod"
+        "curl" "jq" "awk" "sed" "openssl" "grep" "lsof" "df" "mkdir" "chmod"
     )
 
     for cmd in "${required_commands[@]}"; do
@@ -142,7 +158,7 @@ pull_images() {
     print_step "Pulling Docker images"
 
     # Get list of required images
-    local images=$(docker compose config | grep 'image:' | awk '{print $2}' | sort -u)
+    local images=$(${DOCKER_COMPOSE} config | grep 'image:' | awk '{print $2}' | sort -u)
 
     # Pull each image with retry logic
     for image in ${images}; do
@@ -181,7 +197,7 @@ build_images() {
     # Build with retry logic
     local retries=3
     while [ ${retries} -gt 0 ]; do
-        if docker compose build ${build_args}; then
+        if ${DOCKER_COMPOSE} build ${build_args}; then
             break
         fi
         retries=$((retries - 1))
@@ -208,7 +224,7 @@ start_services() {
     # Start with retry logic
     local retries=3
     while [ ${retries} -gt 0 ]; do
-        if docker compose up ${up_args}; then
+        if ${DOCKER_COMPOSE} up ${up_args}; then
             break
         fi
         retries=$((retries - 1))
@@ -233,7 +249,7 @@ verify_deployment() {
     local elapsed=0
 
     while [ ${elapsed} -lt ${timeout} ]; do
-        local failed_containers=$(docker compose ps --format json | jq -r '.[] | select(.State != "running") | .Name')
+        local failed_containers=$(${DOCKER_COMPOSE} ps --format json | jq -r '.[] | select(.State != "running") | .Name')
         if [ -z "${failed_containers}" ]; then
             break
         fi
@@ -246,7 +262,7 @@ verify_deployment() {
 
     # Check service health with improved error reporting
     if ! check_health 300; then
-        local unhealthy_services=$(docker compose ps --format json | jq -r '.[] | select(.Health != "healthy") | "\(.Name) (\(.Health))"')
+        local unhealthy_services=$(${DOCKER_COMPOSE} ps --format json | jq -r '.[] | select(.Health != "healthy") | "\(.Name) (\(.Health))"')
         cleanup_on_error "Health check failed for services: ${unhealthy_services}"
     fi
 
@@ -277,13 +293,13 @@ verify_deployment() {
 
     # Verify database connection
     print_substep "Verifying database connection..."
-    if ! docker compose exec -T db pg_isready -U postgres -d shh; then
+    if ! ${DOCKER_COMPOSE} exec -T db pg_isready -U postgres -d shh; then
         cleanup_on_error "Database is not ready"
     fi
 
     # Verify Redis connection
     print_substep "Verifying Redis connection..."
-    if ! docker compose exec -T redis redis-cli ping | grep -q "PONG"; then
+    if ! ${DOCKER_COMPOSE} exec -T redis redis-cli ping | grep -q "PONG"; then
         cleanup_on_error "Redis is not responding"
     fi
 

@@ -163,11 +163,11 @@ export const selectAllContainers = (state: RootState): DockerContainer[] =>
 
 export const selectSelectedContainer = (state: RootState): DockerContainer | null =>
   state.docker.selectedContainerId
-    ? state.docker.containers.find(c => c.id === state.docker.selectedContainerId) || null
+    ? state.docker.containers.find((container: DockerContainer) => container.id === state.docker.selectedContainerId) || null
     : null;
 
 export const selectContainerById = (state: RootState, containerId: string): DockerContainer | undefined =>
-  state.docker.containers.find(c => c.id === containerId);
+  state.docker.containers.find((container: DockerContainer) => container.id === containerId);
 
 export const selectIsLoading = (state: RootState): boolean =>
   state.docker.loading;

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { Login } from './components/Login';
+import Login from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { HostManager } from './components/HostManager';
 import { DockerManager } from './components/DockerManager';
@@ -22,7 +22,24 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HostManagerRoute() {
+  const { hostId } = useParams<{ hostId: string }>();
+  return hostId ? <HostManager hostId={hostId} /> : <Navigate to="/hosts" replace />;
+}
+
+function DockerManagerRoute() {
+  const { hostId } = useParams<{ hostId: string }>();
+  const { user } = useAuth();
+  return hostId && user ? <DockerManager hostId={hostId} userId={user.id} /> : <Navigate to="/docker" replace />;
+}
+
 export function AppRoutes() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -33,15 +50,15 @@ export function AppRoutes() {
         </PrivateRoute>
       } />
 
-      <Route path="/hosts" element={
+      <Route path="/hosts/:hostId" element={
         <PrivateRoute>
-          <HostManager />
+          <HostManagerRoute />
         </PrivateRoute>
       } />
 
-      <Route path="/docker" element={
+      <Route path="/docker/:hostId" element={
         <PrivateRoute>
-          <DockerManager />
+          <DockerManagerRoute />
         </PrivateRoute>
       } />
 
@@ -51,9 +68,9 @@ export function AppRoutes() {
         </PrivateRoute>
       } />
 
-      <Route path="/settings" element={
+      <Route path="/notifications" element={
         <PrivateRoute>
-          <NotificationSettings userId={useAuth().user?.id || ''} />
+          <NotificationSettings userId={user.id} />
         </PrivateRoute>
       } />
 

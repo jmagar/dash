@@ -1,40 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
   Card,
   CardContent,
-  CircularProgress,
-  Divider,
-  IconButton,
-  LinearProgress,
-  Paper,
-  Step,
-  StepContent,
-  StepLabel,
-  Stepper,
   TextField,
   Typography,
+  Stepper,
+  Step,
+  StepLabel,
+  StepContent,
+  IconButton,
+  Tooltip,
+  CircularProgress,
+  LinearProgress,
   Alert,
   AlertTitle,
-  Tooltip,
-  Fade,
   Collapse,
+  Divider,
   Zoom,
 } from '@mui/material';
 import {
   Computer as ComputerIcon,
   Security as SecurityIcon,
   CloudUpload as CloudUploadIcon,
-  Check as CheckIcon,
-  Info as InfoIcon,
   Help as HelpIcon,
-  Refresh as RefreshIcon,
-  Settings as SettingsIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
-import { api } from '../utils/api';
+import { api } from '../api/api';
 import { logger } from '../utils/logger';
+import type { Host } from '../../types/models-shared';
+
+interface ApiSuccessResponse<T> {
+  success: true;
+  data: T;
+  message?: string;
+}
+
+interface ApiErrorResponse {
+  success: false;
+  message: string;
+}
+
+type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 interface SetupForm {
   friendlyName: string;
@@ -49,13 +58,20 @@ interface SetupStatus {
   error?: string;
 }
 
+interface SetupStep {
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  help: string;
+}
+
 const initialForm: SetupForm = {
   friendlyName: '',
   hostname: '',
   port: 22,
 };
 
-const steps = [
+const steps: SetupStep[] = [
   {
     label: 'Connection Details',
     description: 'Enter host connection details',
@@ -76,7 +92,7 @@ const steps = [
   },
 ];
 
-export function SetupWizard() {
+export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const [form, setForm] = useState<SetupForm>(initialForm);
   const [error, setError] = useState<string | null>(null);
@@ -92,59 +108,80 @@ export function SetupWizard() {
     progress: 0,
   });
 
-  const handleChange = (field: keyof SetupForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    setForm(prev => ({
-      ...prev,
-      [field]: field === 'port' ? parseInt(event.target.value) || 22 : event.target.value
-    }));
-  };
-
-  const updateStatus = (message: string, progress: number, error?: string) => {
+  const updateStatus = useCallback((message: string, progress: number, error?: string) => {
     setStatus(prev => ({
       ...prev,
       message,
       progress,
       error,
     }));
-  };
+  }, []);
 
-  const handleTest = async () => {
+  const handleChange = useCallback((field: keyof SetupForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (field === 'port') {
+      const portValue = parseInt(event.target.value, 10);
+      if (isNaN(portValue) || portValue < 1 || portValue > 65535) {
+        setError('Port must be a number between 1 and 65535');
+        return;
+      }
+      setError(null);
+      setForm(prev => ({ ...prev, [field]: portValue }));
+    } else {
+      setForm(prev => ({ ...prev, [field]: event.target.value.trim() }));
+    }
+  }, []);
+
+  const handleTest = useCallback(async (): Promise<void> => {
     setError(null);
+    setSuccess(null);
     setTesting(true);
     setActiveStep(1);
     updateStatus('Testing agent connection...', 25);
 
     try {
-      const response = await api.post('/api/hosts/test', {
-        hostname: form.hostname,
+      if (!form.hostname.trim()) {
+        throw new Error('Hostname is required');
+      }
+
+      if (!form.port || form.port < 1 || form.port > 65535) {
+        throw new Error('Invalid port number');
+      }
+
+      const response = await api.post<ApiResponse<{ message: string }>>('/api/hosts/test', {
+        hostname: form.hostname.trim(),
         port: form.port,
       });
 
-      if (response.ok) {
+      if (response.data.success) {
         setSuccess('Agent connection test successful!');
         setTestPassed(true);
         updateStatus('Connection test successful', 50);
         setActiveStep(2);
       } else {
-        const data = await response.json();
-        setError(data.message || 'Connection test failed');
+        setError(response.data.message || 'Connection test failed');
         setTestPassed(false);
-        updateStatus('Connection test failed', 25, data.message);
+        updateStatus('Connection test failed', 25, response.data.message);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('Connection test failed:', err);
       setError('Connection test failed: ' + message);
       setTestPassed(false);
       updateStatus('Connection test failed', 25, message);
     } finally {
       setTesting(false);
     }
-  };
+  }, [form.hostname, form.port, updateStatus]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!testPassed) {
       setError('Please test the connection first');
+      return;
+    }
+
+    if (!form.friendlyName.trim()) {
+      setError('Friendly name is required');
       return;
     }
 
@@ -154,43 +191,66 @@ export function SetupWizard() {
     updateStatus('Creating host record...', 60);
 
     try {
-      // 1. Create host record
-      const createResponse = await api.post('/api/hosts', form);
-      if (!createResponse.ok) throw new Error('Failed to create host');
-      const host = await createResponse.json();
-      updateStatus('Installing agent...', 75);
-
-      // 2. Install agent
-      const installResponse = await api.post(`/api/hosts/${host.id}/install`, {
-        type: 'docker',
-        config: {
-          logLevel: 'info',
-          useSyslog: true,
-          metrics: {
-            collectionInterval: 5000,
-            retentionPeriod: 168,
-            includeIO: true,
-            includeNetwork: true,
-            includeExtended: true,
-          },
-        },
+      const createResponse = await api.post<ApiResponse<Host>>('/api/hosts', {
+        ...form,
+        friendlyName: form.friendlyName.trim(),
+        hostname: form.hostname.trim(),
       });
 
-      if (!installResponse.ok) throw new Error('Failed to install agent');
-      updateStatus('Configuring metrics collection...', 90);
+      if (createResponse.data.success) {
+        const host = createResponse.data.data;
+        updateStatus('Installing agent...', 75);
 
-      setSuccess('Host added and agent installed successfully!');
-      updateStatus('Setup complete!', 100);
-      setTimeout(() => {
-        navigate(`/hosts/${host.id}`);
-      }, 2000);
+        const installResponse = await api.post<ApiResponse<void>>(`/api/hosts/${host.id}/install`, {
+          type: 'docker',
+          config: {
+            logLevel: 'info',
+            useSyslog: true,
+            metrics: {
+              collectionInterval: 5000,
+              retentionPeriod: 168,
+              includeIO: true,
+              includeNetwork: true,
+              includeExtended: true,
+            },
+          },
+        });
+
+        if (installResponse.data.success) {
+          updateStatus('Configuring metrics collection...', 90);
+          setSuccess('Host added and agent installed successfully!');
+          updateStatus('Setup complete!', 100);
+          setTimeout(() => {
+            navigate(`/hosts/${host.id}`);
+          }, 2000);
+        } else {
+          throw new Error(installResponse.data.message || 'Failed to install agent');
+        }
+      } else {
+        throw new Error(createResponse.data.message || 'Failed to create host');
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('Installation failed:', err);
       setError('Installation failed: ' + message);
       updateStatus('Installation failed', status.progress, message);
     } finally {
       setInstalling(false);
     }
+  }, [form, testPassed, updateStatus, navigate, status.progress]);
+
+  const toggleHelp = useCallback(() => {
+    setShowHelp(prev => prev === null ? activeStep : null);
+  }, [activeStep]);
+
+  const renderStepIcon = (index: number): React.ReactElement => {
+    if (index < activeStep) {
+      return <CheckIcon color="success" />;
+    }
+    if (index === activeStep) {
+      return steps[index].icon as React.ReactElement;
+    }
+    return <Box sx={{ opacity: 0.5 }}>{steps[index].icon}</Box> as React.ReactElement;
   };
 
   return (
@@ -202,24 +262,27 @@ export function SetupWizard() {
               Add New Host
             </Typography>
             <Tooltip title="Setup Help">
-              <IconButton onClick={() => setShowHelp(showHelp === null ? activeStep : null)}>
+              <IconButton onClick={toggleHelp}>
                 <HelpIcon />
               </IconButton>
             </Tooltip>
           </Box>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              <AlertTitle>Error</AlertTitle>
-              {error}
-            </Alert>
-          )}
-          
-          {success && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              <AlertTitle>Success</AlertTitle>
-              {success}
-            </Alert>
+          {(error || success) && (
+            <Box sx={{ mb: 2 }}>
+              {error && (
+                <Alert severity="error">
+                  <AlertTitle>Error</AlertTitle>
+                  {error}
+                </Alert>
+              )}
+              {success && (
+                <Alert severity="success">
+                  <AlertTitle>Success</AlertTitle>
+                  {success}
+                </Alert>
+              )}
+            </Box>
           )}
 
           <Stepper activeStep={activeStep} orientation="vertical" sx={{ mb: 3 }}>
@@ -229,13 +292,7 @@ export function SetupWizard() {
                   StepIconComponent={() => (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Zoom in={true} style={{ transitionDelay: `${index * 100}ms` }}>
-                        {index < activeStep ? (
-                          <CheckIcon color="success" />
-                        ) : index === activeStep ? (
-                          step.icon
-                        ) : (
-                          <Box sx={{ opacity: 0.5 }}>{step.icon}</Box>
-                        )}
+                        {renderStepIcon(index)}
                       </Zoom>
                     </Box>
                   )}
@@ -269,6 +326,7 @@ export function SetupWizard() {
               required
               helperText="A memorable name for this host"
               disabled={installing}
+              error={!form.friendlyName.trim() && error !== null}
             />
 
             <TextField
@@ -280,6 +338,7 @@ export function SetupWizard() {
               required
               helperText="Hostname or IP address"
               disabled={installing}
+              error={!form.hostname.trim() && error !== null}
             />
 
             <TextField
@@ -292,6 +351,11 @@ export function SetupWizard() {
               required
               helperText="Agent port (default: 22)"
               disabled={installing}
+              error={(!form.port || form.port < 1 || form.port > 65535) && error !== null}
+              inputProps={{
+                min: 1,
+                max: 65535
+              }}
             />
 
             <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
@@ -299,7 +363,7 @@ export function SetupWizard() {
                 variant="outlined"
                 color="primary"
                 onClick={() => void handleTest()}
-                disabled={testing || installing || !form.hostname || !form.port}
+                disabled={testing || installing || !form.hostname.trim() || !form.port}
                 startIcon={testing ? <CircularProgress size={20} /> : <SecurityIcon />}
               >
                 {testing ? 'Testing...' : 'Test Connection'}
@@ -309,7 +373,7 @@ export function SetupWizard() {
                 variant="contained"
                 color="primary"
                 type="submit"
-                disabled={installing || !testPassed}
+                disabled={installing || !testPassed || !form.friendlyName.trim()}
                 startIcon={installing ? <CircularProgress size={20} /> : <CloudUploadIcon />}
               >
                 {installing ? 'Installing...' : 'Install Agent'}

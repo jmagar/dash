@@ -54,10 +54,14 @@ interface HealthIndicator {
   icon: React.ReactNode;
 }
 
-export const SystemHealth: React.FC = () => {
+interface SystemHealthProps {
+  hostId: string;
+}
+
+export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
   const theme = useTheme();
   const [expanded, setExpanded] = useState<string[]>([]);
-  const { metrics, loading, error, refresh } = useHostMetrics();
+  const { metrics, loading, error, refresh } = useHostMetrics({ hostId });
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
