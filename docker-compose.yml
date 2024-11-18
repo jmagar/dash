@@ -1,117 +1,125 @@
+version: '3.8'
+
 services:
   app:
     build:
       context: .
       target: app
     container_name: shh-app
-    privileged: true
-    network_mode: host
+    restart: unless-stopped
     ports:
       - "3000:3000"
       - "1514:1514"
       - "9090:9090"
     environment:
-      # Build Configuration
-      - DOCKER_BUILD=1
-      - NODE_OPTIONS=--max-old-space-size=4096
-      - SKIP_PREFLIGHT_CHECK=true
-      - DISABLE_ESLINT_PLUGIN=true
-
-      # Server
+      # Core Configuration
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - HOST=0.0.0.0
-      - MAX_REQUEST_SIZE=10485760
 
       # Database
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=shh
+      - DB_USER=${POSTGRES_USER:-shh_user}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB:-shh}
 
       # Redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-
-      # Authentication
-      - DISABLE_AUTH=${DISABLE_AUTH:-false}
-      - REACT_APP_DISABLE_AUTH=${REACT_APP_DISABLE_AUTH:-false}
-
-      # JWT
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
-      - JWT_EXPIRY=1h
-      - JWT_REFRESH_EXPIRY=7d
-
-      # CORS
-      - CORS_ORIGIN=http://localhost:3000
-      - CORS_METHODS=GET,HEAD,PUT,PATCH,POST,DELETE
-      - CORS_ALLOWED_HEADERS=Content-Type,Authorization
-      - CORS_EXPOSED_HEADERS=
-      - CORS_CREDENTIALS=true
-      - CORS_MAX_AGE=86400
-
-      # Rate Limiting
-      - RATE_LIMIT_WINDOW=900000
-      - RATE_LIMIT_MAX=100
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # Security
-      - MAX_FILE_SIZE=52428800
-
-      # OpenAI (optional)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=gpt-4
-      - OPENAI_ORG=${OPENAI_ORG:-}
-      - OPENAI_MAX_TOKENS=2000
-      - OPENAI_TEMPERATURE=0.7
-
-      # OpenRouter (optional)
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENROUTER_MODEL=anthropic/claude-2
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
-      - OPENROUTER_MAX_TOKENS=2000
-      - OPENROUTER_TEMPERATURE=0.7
-
-      # Logging
-      - LOG_LEVEL=info
-      - LOG_FILE=/var/log/shh/app.log
-
-      # Gotify (optional)
-      - GOTIFY_URL=${GOTIFY_URL:-}
-      - GOTIFY_TOKEN=${GOTIFY_TOKEN:-}
-
-      # Prometheus
-      - PROMETHEUS_PORT=9090
+      - JWT_SECRET=${JWT_SECRET:?JWT secret is required}
     volumes:
       - ${SHH_DATA_DIR:-/var/lib/shh}/logs:/var/log/shh
       - ${SHH_DATA_DIR:-/var/lib/shh}/data:/var/lib/shh
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    networks:
+      - shh_network
 
   postgres:
-    image: postgres:16
+    build:
+      context: ./db
+      dockerfile: Dockerfile
     container_name: shh-postgres
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=shh
+      - POSTGRES_USER=${POSTGRES_USER:-shh_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Database password is required}
+      - POSTGRES_DB=${POSTGRES_DB:-shh}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shh_user} -d ${POSTGRES_DB:-shh}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - shh_network
 
   redis:
     image: redis:7-alpine
     container_name: shh-redis
-    command: redis-server --appendonly yes
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    networks:
+      - shh_network
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
+
+networks:
+  shh_network:
+    driver: bridge

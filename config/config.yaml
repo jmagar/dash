@@ -1,0 +1,48 @@
+# Server Configuration
+server:
+  port: 3000
+  host: '0.0.0.0'
+  maxRequestSize: 10485760  # 10MB
+
+# Database Configuration
+database:
+  host: postgres
+  port: 5432
+  user: shh_user
+  password: ${POSTGRES_PASSWORD}  # from .env
+  name: shh
+  ssl: false
+
+# Redis Configuration
+redis:
+  host: redis
+  port: 6379
+  password: ${REDIS_PASSWORD}  # from .env
+
+# Authentication
+auth:
+  jwtSecret: ${JWT_SECRET}  # from .env
+  jwtExpiry: '1h'
+  jwtRefreshExpiry: '7d'
+
+# Security
+security:
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, POST, PUT, DELETE, PATCH]
+    allowedHeaders: [Content-Type, Authorization]
+    credentials: true
+    maxAge: 86400  # 24 hours
+  rateLimit:
+    window: 900000  # 15 minutes
+    max: 100
+
+# Monitoring
+monitoring:
+  prometheusPort: 9090
+  logLevel: info
+  syslogPort: 1514
+
+# Data Storage
+storage:
+  dataDir: /var/lib/shh

@@ -3,9 +3,9 @@ FROM node:20-slim AS node-builder
 
 WORKDIR /app
 
-# Install Python and pip
-RUN apt-get update && apt-get install -y \
-    python3 \
+# Install Python and pip with minimal dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-minimal \
     python3-pip \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
@@ -19,8 +19,8 @@ RUN pip install mem0ai
 
 # Install dependencies with increased memory limit for CopilotKit
 COPY package*.json ./
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps && \
-    NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps -D @types/jsonwebtoken
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps -D @types/jsonwebtoken
 
 # Copy source code
 COPY . .
@@ -55,10 +55,13 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflag
 # Postgres stage
 FROM postgres:16 AS postgres
 
-# Install pgvector
+# Install pgvector with minimal dependencies
 RUN apt-get update \
-    && apt-get install -y postgresql-server-dev-16 build-essential git \
-    && git clone https://github.com/pgvector/pgvector.git \
+    && apt-get install -y --no-install-recommends \
+        postgresql-server-dev-16 \
+        build-essential \
+        git \
+    && git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git \
     && cd pgvector \
     && make \
     && make install \
@@ -66,6 +69,7 @@ RUN apt-get update \
     && rm -rf pgvector \
     && apt-get remove -y postgresql-server-dev-16 build-essential git \
     && apt-get autoremove -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy init scripts
@@ -74,10 +78,13 @@ COPY db/init.sql /docker-entrypoint-initdb.d/
 # Final stage
 FROM node:20-slim AS app
 
+# Create non-root user
+RUN groupadd -r shh && useradd -r -g shh -s /bin/false shh
+
 WORKDIR /app
 
-# Install required packages
-RUN apt-get update && apt-get install -y \
+# Install required packages with minimal dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     rsyslog \
     libpcap-dev \
     tzdata \
@@ -93,23 +100,33 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=node-builder /app/build ./build
 COPY --from=node-builder /app/dist ./dist
 COPY --from=node-builder /app/package*.json ./
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps --production
+
+# Install production dependencies only
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps --only=production
 
 # Copy agent binary and configs
 COPY --from=agent-builder /build/shh-agent /usr/local/bin/shh-agent
 COPY config/host-agent.json /etc/shh/agent.json
 COPY config/rsyslog.conf /etc/rsyslog.conf
 
-# Create required directories
-RUN mkdir -p /var/log/shh /var/lib/shh /etc/shh
+# Create required directories and set permissions
+RUN mkdir -p /var/log/shh /var/lib/shh /etc/shh && \
+    chown -R shh:shh /app /var/log/shh /var/lib/shh /etc/shh
 
 # Set environment variables
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0
 
+# Switch to non-root user
+USER shh
+
 # Expose ports
 EXPOSE 3000 1514 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD nc -z localhost $PORT || exit 1
 
 # Start the application
 CMD ["node", "dist/server/server.js"]

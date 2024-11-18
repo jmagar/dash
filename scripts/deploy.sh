@@ -59,7 +59,7 @@ cleanup_on_error() {
             print_substep "Removing built images..."
             ${DOCKER_COMPOSE} down --rmi local --volumes --remove-orphans || true
             ;;
-        *)
+        * )
             print_substep "No cleanup needed"
             ;;
     esac
@@ -146,13 +146,39 @@ verify_dependencies() {
     fi
 }
 
+# Function to verify configuration
+verify_config() {
+    print_step "Verifying configuration..."
+    save_state "verifying_config"
+
+    # Check if config.yaml exists
+    if [ ! -f "${PROJECT_ROOT}/config/config.yaml" ]; then
+        print_error "Configuration file not found" "config/config.yaml is missing"
+        exit 1
+    fi
+
+    # Check required environment variables
+    local required_vars=("POSTGRES_PASSWORD" "REDIS_PASSWORD" "JWT_SECRET")
+    for var in "${required_vars[@]}"; do
+        if [ -z "${!var:-}" ]; then
+            print_error "Missing environment variable" "$var is required"
+            exit 1
+        fi
+    done
+
+    print_success "Configuration verified"
+}
+
 # Function to create required directories
 create_directories() {
     print_step "Creating required directories..."
+    save_state "creating_directories"
 
-    # Create app data directories with current user
+    # Create app data directories with proper permissions
     mkdir -p "${SHH_DATA_DIR}"/{logs,data}
+    mkdir -p "${PROJECT_ROOT}/config"
     chmod -R 755 "${SHH_DATA_DIR}"
+    chmod 600 "${PROJECT_ROOT}/config/config.yaml"
 
     print_success "Created required directories in ${SHH_DATA_DIR}"
 }
@@ -272,24 +298,243 @@ display_info() {
     echo "Data Directory:  ${SHH_DATA_DIR}"
 }
 
+# Function to check minimum versions
+check_versions() {
+    print_step "Checking minimum versions..."
+    save_state "checking_versions"
+    
+    # Check Docker version
+    local docker_version=$(docker version --format '{{.Server.Version}}')
+    if ! version_gte "${docker_version}" "20.10.0"; then
+        print_error "Docker version too old" "Required: 20.10.0+, Found: ${docker_version}"
+        exit 1
+    fi
+    
+    # Check Docker Compose version
+    local compose_version=$(docker compose version --short)
+    if ! version_gte "${compose_version}" "2.0.0"; then
+        print_error "Docker Compose version too old" "Required: 2.0.0+, Found: ${compose_version}"
+        exit 1
+    fi
+    
+    print_success "Version requirements met"
+}
+
+# Function to create backup
+backup_data() {
+    print_step "Creating backup..."
+    save_state "creating_backup"
+    
+    local backup_dir="${SHH_DATA_DIR}/backups"
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    
+    # Create backup directory
+    mkdir -p "${backup_dir}"
+    
+    # Backup PostgreSQL data
+    if [ -d "${SHH_DATA_DIR}/data/postgres" ]; then
+        tar czf "${backup_dir}/postgres_${timestamp}.tar.gz" -C "${SHH_DATA_DIR}/data" postgres
+    fi
+    
+    # Backup application logs
+    if [ -d "${SHH_DATA_DIR}/logs" ]; then
+        tar czf "${backup_dir}/logs_${timestamp}.tar.gz" -C "${SHH_DATA_DIR}" logs
+    fi
+    
+    # Backup configuration
+    if [ -f "${PROJECT_ROOT}/config/config.yaml" ]; then
+        cp "${PROJECT_ROOT}/config/config.yaml" "${backup_dir}/config_${timestamp}.yaml"
+    fi
+    
+    print_success "Backup created in ${backup_dir}"
+}
+
+# Function to monitor deployment
+monitor_deployment() {
+    local duration=${1:-300}  # Default 5 minutes
+    print_step "Monitoring deployment for ${duration} seconds..."
+    save_state "monitoring_deployment"
+    
+    local end_time=$(($(date +%s) + duration))
+    while [ $(date +%s) -lt ${end_time} ]; do
+        # Get container stats
+        local stats=$(docker stats --no-stream --format "{{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}")
+        
+        # Get application metrics
+        local metrics
+        if curl -s -f "http://localhost:9090/metrics" > /dev/null; then
+            metrics=$(curl -s "http://localhost:9090/metrics")
+        else
+            metrics="Metrics unavailable"
+        fi
+        
+        # Log performance data
+        echo "$(date) - Container Stats:
+${stats}
+Metrics:
+${metrics}" >> "${SHH_DATA_DIR}/logs/performance.log"
+        
+        sleep 10
+    done
+}
+
+# Function to handle rollback
+rollback() {
+    local previous_state=$1
+    print_step "Rolling back to previous state..."
+    save_state "rolling_back"
+    
+    case ${previous_state} in
+        "services_started")
+            print_substep "Stopping services..."
+            ${DOCKER_COMPOSE} down
+            print_substep "Restoring previous services..."
+            ${DOCKER_COMPOSE} up -d --no-build
+            ;;
+        "images_built")
+            print_substep "Removing new images..."
+            ${DOCKER_COMPOSE} down --rmi local
+            print_substep "Restoring from registry..."
+            ${DOCKER_COMPOSE} pull
+            ;;
+    esac
+}
+
+# Function to clean up resources
+cleanup_resources() {
+    print_step "Cleaning up resources..."
+    save_state "cleaning_resources"
+    
+    # Remove old logs
+    find "${SHH_DATA_DIR}/logs" -type f -name "*.log" -mtime +30 -exec rm {} \;
+    
+    # Remove old backups
+    find "${SHH_DATA_DIR}/backups" -type f -mtime +7 -exec rm {} \;
+    
+    # Clean Docker resources
+    docker system prune -f --filter "until=168h"
+    
+    print_success "Cleanup completed"
+}
+
+# Function to check health endpoints
+check_health_endpoints() {
+    print_step "Testing health endpoints..."
+    save_state "testing_health"
+    
+    local endpoints=(
+        "http://localhost:3000/health"
+        "http://localhost:3000/api/health"
+        "http://localhost:9090/-/healthy"
+    )
+    
+    for endpoint in "${endpoints[@]}"; do
+        if ! curl -s -f "${endpoint}" > /dev/null; then
+            print_error "Health check failed" "Could not reach ${endpoint}"
+            exit 1
+        fi
+        print_substep "Health check passed for ${endpoint}"
+    done
+    
+    print_success "All health checks passed"
+}
+
+# Function to validate environment variables
+validate_env_variables() {
+    print_step "Validating environment variables..."
+    save_state "validating_env"
+    
+    # Define patterns for validation
+    local patterns=(
+        "^[a-zA-Z0-9_-]+$:DB_USER"
+        "^[a-zA-Z0-9_-]+$:DB_NAME"
+        "^[0-9]+$:PORT"
+        "^[a-zA-Z0-9._-]+$:HOST"
+    )
+    
+    for pattern in "${patterns[@]}"; do
+        local regex="${pattern%%:*}"
+        local var="${pattern#*:}"
+        if [ -n "${!var}" ] && ! [[ "${!var}" =~ ${regex} ]]; then
+            print_error "Invalid environment variable" "${var} contains invalid characters"
+            exit 1
+        fi
+    done
+    
+    print_success "Environment variables validated"
+}
+
+# Function to rotate logs
+rotate_logs() {
+    print_step "Rotating logs..."
+    save_state "rotating_logs"
+    
+    local log_dir="${SHH_DATA_DIR}/logs"
+    local max_size=$((100 * 1024 * 1024))  # 100MB
+    local max_files=5
+    
+    find "${log_dir}" -type f -name "*.log" -size +${max_size}c | while read -r log_file; do
+        # Rotate existing logs
+        for i in $(seq $((max_files - 1)) -1 1); do
+            if [ -f "${log_file}.$i" ]; then
+                mv "${log_file}.$i" "${log_file}.$((i + 1))"
+            fi
+        done
+        
+        # Move current log
+        mv "${log_file}" "${log_file}.1"
+        touch "${log_file}"
+    done
+    
+    print_success "Log rotation completed"
+}
+
+# Function to validate dependency graph
+validate_dependency_graph() {
+    print_step "Validating service dependencies..."
+    save_state "validating_dependencies"
+    
+    # Extract dependencies from compose file
+    local deps=$(${DOCKER_COMPOSE} config --format json | jq -r '.services | to_entries[] | select(.value.depends_on) | .key as $service | .value.depends_on[] | "\($service) \(.)"')
+    
+    # Check for circular dependencies
+    if echo "${deps}" | tsort >/dev/null 2>&1; then
+        print_success "Dependency graph is valid"
+    else
+        print_error "Invalid dependencies" "Circular dependency detected"
+        exit 1
+    fi
+}
+
 # Main deployment flow
 main() {
     print_header "Starting SHH Deployment (${NODE_ENV} mode)"
     
     # Pre-deployment checks
+    check_versions
     check_disk_space
     check_deployment_resources
     verify_network
     verify_dependencies
-    create_directories
+    verify_config
+    validate_env_variables
+    validate_dependency_graph
+
+    # Pre-deployment tasks
+    rotate_logs
+    cleanup_resources
+    backup_data
     
     # Deployment steps
+    create_directories
     pull_images
     build_images
     start_services
     verify_deployment
+    check_health_endpoints
     
     # Post-deployment
+    monitor_deployment 300
     display_info
     print_header "Deployment Complete"
 }

@@ -1,12 +1,21 @@
 import { Client } from 'ssh2';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import type { Host , CommandResult } from '../../types/models-shared';
+import type { Host, CommandResult } from '../../types/models-shared';
+import type { LogMetadata } from '../../types/logger';
+import { db } from '../db';
+import { ApiError } from '../../types/error';
 
 interface SSHConnection {
   client: Client;
   connected: boolean;
   lastUsed: Date;
+  reconnectAttempts: number;
+}
+
+interface SSHError extends Error {
+  level?: string;
+  code?: string;
 }
 
 class SSHService extends EventEmitter {
@@ -51,14 +60,29 @@ class SSHService extends EventEmitter {
           client,
           connected: true,
           lastUsed: new Date(),
+          reconnectAttempts: 0
         });
         resolve(client);
       });
 
-      client.on('error', (err) => {
+      client.on('error', (err: SSHError) => {
         clearTimeout(timeout);
-        this.disconnect(host.id);
-        reject(err);
+        const metadata: LogMetadata = {
+          error: err.message,
+          code: err.code,
+          level: err.level,
+          hostname: host.hostname
+        };
+        logger.error('SSH connection error', metadata);
+        reject(new ApiError(`Failed to connect to host: ${err.message}`, 500));
+      });
+
+      client.on('end', () => {
+        const connection = this.connections.get(host.id);
+        if (connection) {
+          connection.connected = false;
+          logger.info('SSH connection ended', { hostname: host.hostname });
+        }
       });
 
       client.connect({
@@ -72,10 +96,10 @@ class SSHService extends EventEmitter {
     });
   }
 
-  public async executeCommand(hostId: string, command: string): Promise<CommandResult> {
-    const host = await this.getHost(hostId);
+  public async executeCommand(hostname: string, command: string): Promise<CommandResult> {
+    const host = await this.getHost(hostname);
     if (!host) {
-      throw new Error(`Host ${hostId} not found`);
+      throw new Error(`Host ${hostname} not found`);
     }
 
     const startTime = Date.now();
@@ -95,12 +119,20 @@ class SSHService extends EventEmitter {
           stdout += data.toString();
         });
 
-        stream.stderr.on('data', (data: Buffer) => {
-          stderr += data.toString();
+        stream.on('error', (err: SSHError) => {
+          const metadata: LogMetadata = {
+            error: err.message,
+            code: err.code,
+            level: err.level,
+            hostname: host.hostname,
+            command
+          };
+          logger.error('SSH command execution error', metadata);
+          reject(new ApiError(`Command execution failed: ${err.message}`, 500));
         });
 
-        stream.on('error', (err) => {
-          reject(err);
+        stream.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString();
         });
 
         stream.on('close', (code: number) => {
@@ -115,6 +147,52 @@ class SSHService extends EventEmitter {
             startedAt: new Date(startTime),
             completedAt: new Date(endTime)
           });
+        });
+      });
+    });
+  }
+
+  public async transferFile(hostname: string, localPath: string, remotePath: string): Promise<void> {
+    const host = await this.getHost(hostname);
+    if (!host) {
+      throw new Error(`Host ${hostname} not found`);
+    }
+
+    const client = await this.getConnection(host);
+
+    return new Promise((resolve, reject) => {
+      client.sftp((err: Error | undefined, sftp) => {
+        if (err) {
+          const metadata: LogMetadata = {
+            error: err.message,
+            hostname,
+            localPath,
+            remotePath
+          };
+          logger.error('Failed to create SFTP session', metadata);
+          reject(err);
+          return;
+        }
+
+        const handleError = (err: Error | undefined | null) => {
+          if (err) {
+            const metadata: LogMetadata = {
+              error: err.message,
+              hostname,
+              localPath,
+              remotePath
+            };
+            logger.error('Failed to transfer file', metadata);
+            reject(err);
+            return true;
+          }
+          return false;
+        };
+
+        sftp.fastPut(localPath, remotePath, {}, (err) => {
+          if (!handleError(err)) {
+            resolve();
+          }
         });
       });
     });
@@ -135,9 +213,25 @@ class SSHService extends EventEmitter {
     }
   }
 
-  private async getHost(hostId: string): Promise<Host | null> {
-    // TODO: Implement host lookup from database
-    throw new Error('Not implemented');
+  private async getHost(hostname: string): Promise<Host | null> {
+    try {
+      const result = await db.query<Host>(
+        'SELECT * FROM hosts WHERE hostname = $1',
+        [hostname]
+      );
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Failed to get host from database', {
+        error: error instanceof Error ? error.message : String(error),
+        hostname
+      });
+      throw new ApiError('Failed to get host from database', 500);
+    }
   }
 }
 

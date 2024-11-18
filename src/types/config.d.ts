@@ -6,6 +6,9 @@ export interface Config {
     port: number;
     maxRequestSize: string;
   };
+  paths?: {
+    binaries: string;
+  };
   db: {
     host: string;
     port: number;

@@ -3,8 +3,20 @@ import { createLogger, format, transports } from 'winston';
 import type { Logger, LogMetadata } from '../../types/logger';
 import { config } from '../config';
 import { GotifyTransport } from './gotifyTransport';
+import os from 'os';
 
-const logFile = join(process.cwd(), config.logging.file);
+// Use platform-specific log directory
+const isWindows = os.platform() === 'win32';
+const logDir = isWindows ? 'C:\\ProgramData\\shh\\logs' : '/var/log/shh';
+const logFile = join(logDir, 'server.log');
+
+// Ensure log directory exists
+import { mkdirSync } from 'fs';
+try {
+  mkdirSync(logDir, { recursive: true });
+} catch (error) {
+  console.warn(`Failed to create log directory: ${error}`);
+}
 
 // Create transports array
 const logTransports = [
@@ -18,6 +30,8 @@ const logTransports = [
     filename: logFile,
     maxsize: 5242880, // 5MB
     maxFiles: 5,
+    tailable: true,
+    zippedArchive: !isWindows, // Only use zipped archives on Unix systems
   }),
 ];
 
@@ -60,21 +74,28 @@ class ServerLogger implements Logger {
     this.logger.debug(message, { ...this.context, ...metadata });
   }
 
-  critical(message: string, metadata?: LogMetadata & { notify?: boolean }): void {
-    // Always log as error level
-    this.logger.error(message, {
-      ...this.context,
-      ...metadata,
-      notify: metadata?.notify ?? true, // Default to true for critical messages
-      critical: true,
-    });
+  setContext(context: LogMetadata): void {
+    this.context = context;
   }
 
-  withContext(context: LogMetadata): Logger {
-    const newLogger = new ServerLogger();
-    newLogger.context = { ...this.context, ...context };
-    return newLogger;
+  child(options: LogMetadata): Logger {
+    const childLogger = new ServerLogger();
+    childLogger.setContext({ ...this.context, ...options });
+    return childLogger;
   }
 }
 
 export const logger = new ServerLogger();
+
+// Add shutdown handler for Windows service
+if (isWindows) {
+  process.on('SIGTERM', () => {
+    logger.info('Received SIGTERM. Performing graceful shutdown...');
+    process.exit(0);
+  });
+
+  process.on('SIGINT', () => {
+    logger.info('Received SIGINT. Performing graceful shutdown...');
+    process.exit(0);
+  });
+}

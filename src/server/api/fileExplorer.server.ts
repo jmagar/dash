@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 
 import type { Request, Response } from 'express';
 
@@ -7,6 +8,8 @@ import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import type { FileItem, ApiResponse } from '../../types/models-shared';
 import { logger } from '../utils/logger';
+
+const isWindows = os.platform() === 'win32';
 
 function validatePath(inputPath: unknown): inputPath is string {
   if (Array.isArray(inputPath)) {
@@ -16,9 +19,15 @@ function validatePath(inputPath: unknown): inputPath is string {
 }
 
 function sanitizePath(inputPath: string): string {
+  // Convert forward slashes to backslashes on Windows
+  const normalizedPath = isWindows ? inputPath.replace(/\//g, '\\') : inputPath;
+  
   // Normalize path and remove any ".." to prevent directory traversal
-  const normalized = path.normalize(inputPath).replace(/^(\.\.[\\/])+/, '');
-  return path.resolve('/', normalized);
+  const normalized = path.normalize(normalizedPath).replace(/^(\.\.[\\/])+/, '');
+  
+  // Use platform-specific root directory
+  const rootDir = isWindows ? 'C:\\' : '/';
+  return path.resolve(rootDir, normalized);
 }
 
 function validateFileContent(content: unknown): content is string {
@@ -77,10 +86,11 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
         const stats = await fs.stat(filePath);
         return {
           name: file.name,
-          path: filePath,
+          path: isWindows ? filePath.replace(/\\/g, '/') : filePath, // Convert to forward slashes for client
           type: file.isDirectory() ? 'directory' : 'file',
           size: stats.size,
           modified: stats.mtime,
+          permissions: isWindows ? undefined : stats.mode & 0o777, // Only include Unix permissions
         };
       }),
     );
