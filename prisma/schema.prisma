@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username     String    @unique
+  email        String    @unique
+  role         Role      @default(user)
+  isActive     Boolean   @default(true) @map("is_active")
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  memories     Memory[]
+  hosts        Host[]
+  commands     Command[]
+  interactions MemoryInteraction[]
+
+  @@map("users")
+}
+
+model Memory {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  content      String
+  embedding    Unsupported("vector(1536)")?
+  metadata     Json?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  user         User      @relation(fields: [userId], references: [id])
+  categories   MemoryCategoryAssignment[]
+  interactions MemoryInteraction[]
+
+  @@map("memories")
+}
+
+model MemoryInteraction {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memoryId        String   @map("memory_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  interactionType String   @map("interaction_type")
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  memory          Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@map("memory_interactions")
+}
+
+model MemoryCategory {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  memories    MemoryCategoryAssignment[]
+
+  @@map("memory_categories")
+}
+
+model MemoryCategoryAssignment {
+  memoryId   String        @map("memory_id") @db.Uuid
+  categoryId String        @map("category_id") @db.Uuid
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  memory     Memory        @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  category   MemoryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([memoryId, categoryId])
+  @@map("memory_category_assignments")
+}
+
+model Host {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  name          String
+  hostname      String
+  port          Int
+  username      String
+  password      String?
+  status        String    @default("offline")
+  agentStatus   String    @default("unknown") @map("agent_status")
+  agentVersion  String?   @map("agent_version")
+  agentLastSeen DateTime? @map("agent_last_seen") @db.Timestamptz
+  metadata      Json      @default("{}")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  user          User      @relation(fields: [userId], references: [id])
+  commands      Command[]
+  metrics       Metric[]
+
+  @@map("hosts")
+}
+
+model Command {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostId    String   @map("host_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  command   String
+  args      Json?
+  cwd       String?
+  env       Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  host      Host     @relation(fields: [hostId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("commands")
+}
+
+model Metric {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostId    String   @map("host_id") @db.Uuid
+  timestamp DateTime @default(now()) @db.Timestamptz
+  host      Host     @relation(fields: [hostId], references: [id])
+
+  @@map("metrics")
+}
+
+enum Role {
+  admin
+  user
+}

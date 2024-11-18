@@ -25,6 +25,9 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps && \
 # Copy source code
 COPY . .
 
+# Set database URL for Prisma
+ENV DATABASE_URL="postgresql://shh_user:P@ssw0rd_lf2qcTdAjYVkwD6B@postgres:5432/shh"
+
 # Generate Prisma client
 RUN npx prisma generate
 
@@ -99,10 +102,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=node-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy built Node.js assets
-COPY --from=node-builder /app/build ./build
+# Copy built files
 COPY --from=node-builder /app/dist ./dist
-COPY --from=node-builder /app/package*.json ./
+COPY --from=node-builder /app/build ./build
+COPY --from=node-builder /app/node_modules ./node_modules
+COPY --from=node-builder /app/package.json ./package.json
+COPY --from=node-builder /app/prisma ./prisma
+
+# Set database environment variables
+ENV DB_HOST=postgres \
+    DB_PORT=5432 \
+    DB_NAME=shh \
+    DB_USER=shh_user \
+    DB_PASSWORD=P@ssw0rd_lf2qcTdAjYVkwD6B \
+    DATABASE_URL="postgresql://shh_user:P@ssw0rd_lf2qcTdAjYVkwD6B@postgres:5432/shh"
+
+# Generate Prisma client in production
+RUN npx prisma generate
 
 # Install production dependencies only
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps --only=production
