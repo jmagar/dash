@@ -3,11 +3,16 @@ services:
     build:
       context: .
       target: app
+    container_name: shh-app
+    privileged: true
+    network_mode: host
     ports:
       - "3000:3000"
+      - "1514:1514"
+      - "9090:9090"
     environment:
       # Server
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - HOST=0.0.0.0
       - MAX_REQUEST_SIZE=10485760
@@ -23,6 +28,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
+
+      # Authentication
+      - DISABLE_AUTH=${DISABLE_AUTH:-false}
+      - REACT_APP_DISABLE_AUTH=${REACT_APP_DISABLE_AUTH:-false}
 
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your-secret-key}
@@ -43,11 +52,6 @@ services:
 
       # Security
       - MAX_FILE_SIZE=52428800
-      - ALLOWED_METHODS=GET,HEAD,PUT,PATCH,POST,DELETE
-      - ALLOWED_HEADERS=Content-Type,Authorization
-      - EXPOSED_HEADERS=
-      - CREDENTIALS=true
-      - MAX_AGE=86400
 
       # OpenAI (optional)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -74,79 +78,34 @@ services:
       # Prometheus
       - PROMETHEUS_PORT=9090
     volumes:
-      - ./src:/app/src
-      - ./package.json:/app/package.json
-      - ./package-lock.json:/app/package-lock.json
-      - ./tsconfig.json:/app/tsconfig.json
-      - ./tsconfig.server.json:/app/tsconfig.server.json
-      - ./craco.config.js:/app/craco.config.js
-      - node_modules:/app/node_modules
-      - /mnt/user/appdata/shh/logs:/var/log/shh
+      - ${SHH_DATA_DIR:-/var/lib/shh}/logs:/var/log/shh
+      - ${SHH_DATA_DIR:-/var/lib/shh}/data:/var/lib/shh
     depends_on:
       - postgres
       - redis
 
-  server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: shh-server
-    privileged: true
-    network_mode: host
-    ports:
-      - "3000:3000"
-      - "1514:1514"
-    volumes:
-      - /mnt/user/appdata/shh/logs:/var/log/shh
-      - /mnt/user/appdata/shh/data:/var/lib/shh
-      - /mnt/user/appdata/shh/config:/etc/shh
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /:/host:ro
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - LOG_DIR=/var/log/shh/server
-      # Agent configuration
-      - SYSLOG_SERVER=localhost:1514
-      - SYSLOG_PROTOCOL=tcp
-      - SYSLOG_FACILITY=local0
-    restart: unless-stopped
-
   postgres:
-    image: postgres:14-alpine
+    image: postgres:16
     container_name: shh-postgres
     environment:
-      - POSTGRES_USER=shh
-      - POSTGRES_PASSWORD=shh
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=shh
     volumes:
-      - /mnt/user/appdata/shh/data/postgres:/var/lib/postgresql/data
-    restart: unless-stopped
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
 
   redis:
     image: redis:7-alpine
     container_name: shh-redis
+    command: redis-server --appendonly yes
     volumes:
-      - /mnt/user/appdata/shh/data/redis:/data
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus
+      - redis_data:/data
     ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - "6379:6379"
 
 volumes:
-  node_modules:
-  logs:
   postgres_data:
   redis_data:
-  prometheus_data:

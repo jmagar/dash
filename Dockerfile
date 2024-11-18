@@ -19,7 +19,7 @@ RUN pip install mem0ai
 
 # Install dependencies with increased memory limit for CopilotKit
 COPY package*.json ./
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm install
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -92,40 +92,23 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=node-builder /app/build ./build
 COPY --from=node-builder /app/dist ./dist
 COPY --from=node-builder /app/package*.json ./
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps --production
 
 # Copy agent binary and configs
 COPY --from=agent-builder /build/shh-agent /usr/local/bin/shh-agent
 COPY config/host-agent.json /etc/shh/agent.json
 COPY config/rsyslog.conf /etc/rsyslog.conf
 
-# Create required directories with proper permissions
-RUN mkdir -p \
-    /var/log/shh/agents \
-    /var/log/shh/local-agent \
-    /var/lib/shh \
-    /etc/shh \
-    /var/spool/rsyslog \
-    && chmod +x /usr/local/bin/shh-agent \
-    && chmod 600 /etc/shh/agent.json \
-    && chmod 644 /etc/rsyslog.conf \
-    && chmod -R 755 /var/log/shh \
-    && chmod 755 /var/spool/rsyslog
-
-# Install production dependencies only
-RUN npm install --only=production
+# Create required directories
+RUN mkdir -p /var/log/shh /var/lib/shh /etc/shh
 
 # Set environment variables
-ENV NODE_ENV=production
-ENV SYSLOG_SERVER=localhost:1514
-ENV SYSLOG_PROTOCOL=tcp
-ENV SYSLOG_FACILITY=local0
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOST=0.0.0.0
 
-EXPOSE 3000
-EXPOSE 1514
+# Expose ports
+EXPOSE 3000 1514 9090
 
-# Create entrypoint script
-COPY docker-entrypoint.sh /
-RUN chmod +x /docker-entrypoint.sh
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["node", "dist/server/index.js"]
+# Start the application
+CMD ["node", "dist/server/server.js"]

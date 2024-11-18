@@ -93,13 +93,13 @@ export async function login(
     const token = sign(
       { ...userData, type: 'access' as const },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      { expiresIn: config.jwt.expiry }
     );
 
     const refreshToken = sign(
       { ...userData, type: 'refresh' as const },
       config.jwt.secret,
-      { expiresIn: config.jwt.refreshExpiresIn }
+      { expiresIn: config.jwt.refreshExpiry }
     );
 
     // Update last login
@@ -223,7 +223,7 @@ export async function validate(
       const newRefreshToken = sign(
         { ...userData, type: 'refresh' as const },
         config.jwt.secret,
-        { expiresIn: config.jwt.refreshExpiresIn }
+        { expiresIn: config.jwt.refreshExpiry }
       );
 
       const authenticatedUser: AuthenticatedUser = {
@@ -321,13 +321,13 @@ export async function refresh(
       const newToken = sign(
         { ...userData, type: 'access' as const },
         config.jwt.secret,
-        { expiresIn: config.jwt.expiresIn }
+        { expiresIn: config.jwt.expiry }
       );
 
       const newRefreshToken = sign(
         { ...userData, type: 'refresh' as const },
         config.jwt.secret,
-        { expiresIn: config.jwt.refreshExpiresIn }
+        { expiresIn: config.jwt.refreshExpiry }
       );
 
       res.json({
