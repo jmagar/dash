@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '../hooks/useSocket';
-import type { ProcessInfo } from '../../types/metrics';
+import type { ProcessInfo } from '@/types/process';
 import { logger } from '../utils/frontendLogger';
 
 interface ProcessMonitorProps {
   hostId: string;
+}
+
+interface ProcessListData {
+  hostId: string;
+  processes: ProcessInfo[];
+}
+
+interface ProcessErrorData {
+  hostId: string;
+  error: string;
 }
 
 export function ProcessMonitor({ hostId }: ProcessMonitorProps) {
@@ -17,16 +27,20 @@ export function ProcessMonitor({ hostId }: ProcessMonitorProps) {
 
     socket.emit('process:monitor', { hostId });
 
-    socket.on('process:list', (data) => {
-      if (data.hostId === hostId) {
-        setProcesses(data.processes);
+    socket.on('process:list', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; processes: ProcessInfo[] };
+      if (processData.hostId === hostId) {
+        setProcesses(processData.processes);
       }
     });
 
-    socket.on('process:error', (data) => {
-      if (data.hostId === hostId) {
-        setError(data.error);
-        logger.error('Process monitor error:', { error: data.error });
+    socket.on('process:error', (...args: unknown[]) => {
+      const [data] = args;
+      const errorData = data as { hostId: string; error: string };
+      if (errorData.hostId === hostId) {
+        setError(errorData.error);
+        logger.error('Process monitor error:', { error: errorData.error });
       }
     });
 

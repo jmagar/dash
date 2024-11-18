@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -8,7 +8,6 @@ import {
   IconButton,
   Tooltip,
   Alert,
-  CircularProgress,
   Fade,
   useTheme,
   alpha,
@@ -22,65 +21,97 @@ import {
 import {
   PlayArrow as StartIcon,
   Stop as StopIcon,
-  Refresh as RestartIcon,
   Delete as DeleteIcon,
-  Upload as UploadIcon,
-  Download as DownloadIcon,
   Edit as EditIcon,
   Save as SaveIcon,
   Close as CloseIcon,
-  Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { useDockerCompose } from '../hooks/useDockerCompose';
 import { logger } from '../utils/frontendLogger';
 import LoadingScreen from './LoadingScreen';
+import type { DockerComposeConfig } from '@/types/models-shared';
 
 interface DockerComposeProps {
   hostId: string;
 }
 
-export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Element {
+interface DockerComposeConfigWithStatus extends DockerComposeConfig {
+  status?: 'running' | 'stopped' | 'error';
+}
+
+export default function DockerCompose({ hostId }: DockerComposeProps) {
   const theme = useTheme();
   const [editMode, setEditMode] = useState(false);
   const [composeContent, setComposeContent] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [dialogAction, setDialogAction] = useState<'up' | 'down' | 'remove'>('up');
-  
+  const [configName] = useState('docker-compose.yml');
+  const [currentConfig, setCurrentConfig] = useState<DockerComposeConfigWithStatus | null>(null);
+
   const {
     loading,
     error,
-    configs,
     createConfig,
     updateConfig,
     deleteConfig,
     getConfig
-  } = useDockerCompose({ hostId });
+  } = useDockerCompose(hostId);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await getConfig(configName);
+        if (config) {
+          setComposeContent(config.content);
+          setCurrentConfig({ ...config, status: 'stopped' });
+        }
+      } catch (err) {
+        logger.error('Failed to load docker-compose config:', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    };
+    void loadConfig();
+  }, [getConfig, configName]);
 
   const handleAction = async (action: 'up' | 'down' | 'remove') => {
     try {
       switch (action) {
         case 'up':
-          await createConfig();
+          await createConfig(configName, composeContent);
+          if (currentConfig) {
+            setCurrentConfig({ ...currentConfig, status: 'running' });
+          }
           break;
         case 'down':
-          await deleteConfig();
+          await deleteConfig(configName);
+          if (currentConfig) {
+            setCurrentConfig({ ...currentConfig, status: 'stopped' });
+          }
           break;
         case 'remove':
-          await deleteConfig();
+          await deleteConfig(configName);
+          setCurrentConfig(null);
           break;
       }
     } catch (err) {
       logger.error(`Failed to ${action} docker-compose:`, {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
+      if (currentConfig) {
+        setCurrentConfig({ ...currentConfig, status: 'error' });
+      }
     }
     setShowConfirmDialog(false);
   };
 
   const handleSave = async () => {
     try {
-      await updateConfig(composeContent);
+      await updateConfig(configName, composeContent);
+      if (currentConfig) {
+        setCurrentConfig({ ...currentConfig, content: composeContent });
+      }
       setEditMode(false);
     } catch (err) {
       logger.error('Failed to save docker-compose:', {
@@ -90,87 +121,79 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
   };
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (status) {
       case 'running':
         return theme.palette.success.main;
       case 'stopped':
         return theme.palette.error.main;
-      case 'partial':
-        return theme.palette.warning.main;
+      case 'error':
+        return theme.palette.error.main;
       default:
-        return theme.palette.grey[500];
+        return theme.palette.warning.main;
     }
   };
 
   if (loading) {
-    return <LoadingScreen message="Loading Docker Compose..." />;
+    return <LoadingScreen />;
   }
 
   return (
-    <Box p={3}>
+    <Box>
       <Paper
-        elevation={3}
+        elevation={0}
         sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
+          p: 2,
+          bgcolor: alpha(theme.palette.primary.main, 0.04),
         }}
       >
-        <Box
-          sx={{
-            p: 2,
-            display: 'flex',
-            alignItems: 'center',
-            borderBottom: `1px solid ${theme.palette.divider}`,
-            bgcolor: alpha(theme.palette.primary.main, 0.04),
-          }}
-        >
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Docker Compose
-          </Typography>
-          <Box display="flex" gap={1}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          Docker Compose
+        </Typography>
+        <Box display="flex" gap={1}>
+          {currentConfig && currentConfig.status && (
             <Chip
-              label={configs.status}
+              label={currentConfig.status}
               size="small"
               sx={{
-                bgcolor: alpha(getStatusColor(configs.status), 0.1),
-                color: getStatusColor(configs.status),
+                bgcolor: alpha(getStatusColor(currentConfig.status), 0.1),
+                color: getStatusColor(currentConfig.status),
                 fontWeight: 'medium',
               }}
             />
-            {editMode ? (
-              <>
-                <Tooltip title="Save changes">
-                  <IconButton
-                    onClick={handleSave}
-                    size="small"
-                    color="primary"
-                  >
-                    <SaveIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Cancel editing">
-                  <IconButton
-                    onClick={() => setEditMode(false)}
-                    size="small"
-                  >
-                    <CloseIcon />
-                  </IconButton>
-                </Tooltip>
-              </>
-            ) : (
-              <Tooltip title="Edit compose file">
+          )}
+          {editMode ? (
+            <>
+              <Tooltip title="Save changes">
                 <IconButton
-                  onClick={() => {
-                    setComposeContent(getConfig());
-                    setEditMode(true);
-                  }}
+                  onClick={handleSave}
                   size="small"
+                  color="primary"
                 >
-                  <EditIcon />
+                  <SaveIcon />
                 </IconButton>
               </Tooltip>
-            )}
-          </Box>
+              <Tooltip title="Cancel editing">
+                <IconButton
+                  onClick={() => setEditMode(false)}
+                  size="small"
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <Tooltip title="Edit compose file">
+              <IconButton
+                onClick={() => {
+                  setComposeContent(currentConfig?.content || '');
+                  setEditMode(true);
+                }}
+                size="small"
+              >
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         {error && (
@@ -181,7 +204,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               <Button
                 color="inherit"
                 size="small"
-                onClick={() => void getConfig()}
+                onClick={() => void getConfig(configName)}
               >
                 Retry
               </Button>
@@ -220,7 +243,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
                 maxHeight: 600,
               }}
             >
-              {getConfig() || 'No docker-compose.yml found'}
+              {currentConfig?.content || 'No docker-compose.yml found'}
             </Box>
           )}
         </Box>
@@ -244,7 +267,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('up');
               setShowConfirmDialog(true);
             }}
-            disabled={!getConfig() || configs.status === 'running'}
+            disabled={!currentConfig || currentConfig.status === 'running'}
           >
             Up
           </Button>
@@ -256,7 +279,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('down');
               setShowConfirmDialog(true);
             }}
-            disabled={!getConfig() || configs.status === 'stopped'}
+            disabled={!currentConfig || currentConfig.status === 'stopped'}
           >
             Down
           </Button>
@@ -268,7 +291,7 @@ export default function DockerCompose({ hostId }: DockerComposeProps): JSX.Eleme
               setDialogAction('remove');
               setShowConfirmDialog(true);
             }}
-            disabled={!getConfig()}
+            disabled={!currentConfig}
           >
             Remove
           </Button>

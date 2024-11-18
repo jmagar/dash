@@ -1,117 +1,83 @@
-import type { Logger, LogMetadata } from '../../types/logger';
+import type { Logger, LogLevel, LogMetadata } from '@/types/logging';
 
-/**
- * Frontend logger implementation with context support and browser-specific features
- */
-class FrontendLogger implements Logger {
-  private static instance: FrontendLogger;
-  private context: LogMetadata = {};
+const LOG_LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  critical: 4,
+};
 
-  private constructor() {
-    this.setupErrorHandlers();
+export class FrontendLogger implements Logger {
+  private readonly level: LogLevel;
+  private readonly prefix: string;
+
+  constructor(level: LogLevel = 'info', prefix = '[Frontend]') {
+    this.level = level;
+    this.prefix = prefix;
   }
 
-  /**
-   * Get singleton instance
-   */
-  public static getInstance(): FrontendLogger {
-    if (!FrontendLogger.instance) {
-      FrontendLogger.instance = new FrontendLogger();
+  private shouldLog(level: LogLevel): boolean {
+    return LOG_LEVELS[level] >= LOG_LEVELS[this.level];
+  }
+
+  private formatMessage(level: LogLevel, message: string, meta?: LogMetadata): string {
+    const timestamp = new Date().toISOString();
+    const formattedMeta = meta ? this.formatMeta(meta) : '';
+    return `${timestamp} ${this.prefix} [${level.toUpperCase()}] ${message}${formattedMeta}`;
+  }
+
+  private formatMeta(meta: LogMetadata): string {
+    if (!meta || Object.keys(meta).length === 0) {
+      return '';
     }
-    return FrontendLogger.instance;
+
+    const formattedMeta = Object.entries(meta)
+      .map(([key, value]) => {
+        if (value instanceof Error) {
+          return `${key}=${value.message}`;
+        }
+        if (typeof value === 'object') {
+          return `${key}=${JSON.stringify(value)}`;
+        }
+        return `${key}=${value}`;
+      })
+      .join(' ');
+
+    return ` ${formattedMeta}`;
   }
 
-  /**
-   * Set up global error handlers
-   */
-  private setupErrorHandlers(): void {
-    if (typeof window !== 'undefined') {
-      // Handle unhandled promise rejections
-      window.addEventListener('unhandledrejection', (event) => {
-        this.error('Unhandled Promise Rejection:', {
-          reason: event.reason,
-          error: event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
-        });
-      });
-
-      // Handle uncaught errors
-      window.addEventListener('error', (event) => {
-        this.error('Uncaught Error:', {
-          message: event.message,
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-          error: event.error,
-        });
-      });
-    }
-  }
-
-  /**
-   * Create a new logger instance with context
-   */
-  withContext(context: LogMetadata): Logger {
-    const newLogger = new FrontendLogger();
-    newLogger.context = { ...this.context, ...context };
-    return newLogger;
-  }
-
-  /**
-   * Format metadata with context
-   */
-  private formatMeta(meta?: LogMetadata): LogMetadata {
-    const formattedMeta: LogMetadata = {
-      timestamp: new Date().toISOString(),
-      ...meta,
-    };
-
-    return { ...this.context, ...formattedMeta };
-  }
-
-  /**
-   * Format log message with context
-   */
-  private formatMessage(level: string, message: string, meta?: LogMetadata): string {
-    return `[${level}] ${message}`;
-  }
-
-  /**
-   * Log methods with context and metadata support
-   */
-  error(message: string, metadata?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(metadata);
-    console.error(this.formatMessage('ERROR', message), formattedMeta);
-
-    // In development, also log to error monitoring service if available
-    if (process.env.NODE_ENV === 'development' && metadata?.error instanceof Error) {
-      console.error('Error details:', {
-        name: metadata.error.name,
-        message: metadata.error.message,
-        stack: metadata.error.stack,
-      });
+  debug(message: string, meta?: LogMetadata): void {
+    if (this.shouldLog('debug')) {
+      console.debug(this.formatMessage('debug', message, meta));
     }
   }
 
-  warn(message: string, metadata?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(metadata);
-    console.warn(this.formatMessage('WARN', message), formattedMeta);
+  info(message: string, meta?: LogMetadata): void {
+    if (this.shouldLog('info')) {
+      console.info(this.formatMessage('info', message, meta));
+    }
   }
 
-  info(message: string, metadata?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(metadata);
-    console.info(this.formatMessage('INFO', message), formattedMeta);
+  warn(message: string, meta?: LogMetadata): void {
+    if (this.shouldLog('warn')) {
+      console.warn(this.formatMessage('warn', message, meta));
+    }
   }
 
-  debug(message: string, metadata?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(metadata);
-    console.debug(this.formatMessage('DEBUG', message), formattedMeta);
+  error(message: string, meta?: LogMetadata): void {
+    if (this.shouldLog('error')) {
+      console.error(this.formatMessage('error', message, meta));
+    }
   }
 
-  critical(message: string, metadata?: LogMetadata): void {
-    const formattedMeta = this.formatMeta(metadata);
-    console.error(this.formatMessage('CRITICAL', message), formattedMeta);
+  critical(message: string, meta?: LogMetadata): void {
+    if (this.shouldLog('critical')) {
+      console.error(this.formatMessage('critical', message, meta));
+    }
   }
 }
 
-// Export singleton instance
-export const logger = FrontendLogger.getInstance();
+export const logger = new FrontendLogger(
+  (process.env.REACT_APP_LOG_LEVEL as LogLevel) || 'info'
+);

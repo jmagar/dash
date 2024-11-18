@@ -69,7 +69,13 @@ async function handleHostError(host: Host, error: Error): Promise<void> {
   }
 
   host.status = 'error';
-  host.lastError = error.message;
+  host.metadata = {
+    ...host.metadata,
+    lastError: {
+      message: error.message,
+      timestamp: new Date().toISOString()
+    }
+  };
   // Assuming hostService is defined somewhere
   // await this.hostService.updateHost(host);
 }

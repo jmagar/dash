@@ -1,37 +1,15 @@
-export interface ProcessMetrics {
-  pid: number;
-  timestamp: Date;
-  name: string;
-  command: string;
-  username: string;
-  cpuUsage: number;
-  memoryUsage: number;
-  memoryRss: number;
-  memoryVms: number;
-  threads: number;
-  fds: number;
-  ioStats?: {
-    readCount: number;
-    writeCount: number;
-    readBytes: number;
-    writeBytes: number;
-    ioTime: number;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface SystemMetrics {
   timestamp: Date;
   cpu: {
+    usage: number;
     user: number;
     system: number;
     idle: number;
     iowait: number;
     steal: number;
-    total: number;
     cores: number;
     threads: number;
+    total: number;
   };
   memory: {
     total: number;
@@ -41,9 +19,9 @@ export interface SystemMetrics {
     buffers: number;
     cached: number;
     available: number;
-    swapTotal: number;
-    swapUsed: number;
-    swapFree: number;
+    swap_total: number;
+    swap_used: number;
+    swap_free: number;
     usage: number;
   };
   storage: {
@@ -53,33 +31,55 @@ export interface SystemMetrics {
     usage: number;
     read_bytes: number;
     write_bytes: number;
-    ioStats?: {
-      readCount: number;
-      writeCount: number;
+    read_count: number;
+    write_count: number;
+    health: string;
+    ioStats: {
       readBytes: number;
       writeBytes: number;
+      readCount: number;
+      writeCount: number;
+      readTime: number;
+      writeTime: number;
       ioTime: number;
     };
   };
   network: {
-    rx_bytes: number;
+    bytesRecv: number;
+    bytesSent: number;
+    packetsRecv: number;
+    packetsSent: number;
+    errorsIn: number;
+    errorsOut: number;
+    dropsIn: number;
+    dropsOut: number;
     tx_bytes: number;
-    rx_packets: number;
+    rx_bytes: number;
     tx_packets: number;
+    rx_packets: number;
     rx_errors: number;
     tx_errors: number;
     rx_dropped: number;
     tx_dropped: number;
-    connections: number;
     tcp_conns: number;
     udp_conns: number;
     listen_ports: number;
-    interfaces: string[];
-    total_speed: number;
     average_speed: number;
+    total_speed: number;
     health: number;
+    interfaces: {
+      name: string;
+      bytesRecv: number;
+      bytesSent: number;
+      packetsRecv: number;
+      packetsSent: number;
+      errorsIn: number;
+      errorsOut: number;
+      dropsIn: number;
+      dropsOut: number;
+    }[];
   };
-  uptimeSeconds: number;
+  uptime: number;
   loadAverage: [number, number, number];
   history?: SystemMetrics[];
   createdAt: Date;
@@ -92,47 +92,54 @@ export interface ProcessInfo {
   name: string;
   command: string;
   args: string[];
+  status: string;
   user: string;
   username: string;
   cpu: number;
-  memory: number;
   cpuUsage: number;
+  memory: number;
   memoryUsage: number;
   memoryRss: number;
   memoryVms: number;
-  status: 'running' | 'sleeping' | 'stopped' | 'zombie' | 'unknown';
-  startTime: Date;
   threads: number;
   fds: number;
+  startTime: Date;
+  children?: ProcessInfo[];
+  ioStats?: {
+    readCount: number;
+    writeCount: number;
+    readBytes: number;
+    writeBytes: number;
+    ioTime: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface MetricsAlert {
+export interface ProcessMetrics {
   id: string;
   hostId: string;
-  type: 'cpu' | 'memory' | 'disk' | 'network' | 'process';
-  level: 'info' | 'warning' | 'error';
-  message: string;
-  threshold: number;
-  value: number;
+  pid: number;
+  cpu: number;
+  cpuUsage: number;
+  memory: number;
+  memoryUsage: number;
+  memoryRss: number;
+  memoryVms: number;
+  diskRead: number;
+  diskWrite: number;
+  netRead: number;
+  netWrite: number;
+  threads: number;
+  fds: number;
   timestamp: Date;
-  acknowledged: boolean;
-  acknowledgedBy?: string;
-  acknowledgedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface MetricsThreshold {
-  id: string;
-  hostId: string;
-  type: 'cpu' | 'memory' | 'disk' | 'network' | 'process';
-  level: 'info' | 'warning' | 'error';
-  operator: '>' | '<' | '>=' | '<=' | '==' | '!=';
-  value: number;
-  duration: number;
-  enabled: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+export interface MetricsFilter {
+  startTime?: Date;
+  endTime?: Date;
+  interval?: string;
+  metrics?: string[];
 }

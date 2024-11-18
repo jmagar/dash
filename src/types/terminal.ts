@@ -1,16 +1,58 @@
-import type { Socket } from 'socket.io';
+import type { Socket } from 'socket.io-client/build/esm/socket';
 import type { TokenPayload } from './auth';
-
 import { CacheCommand } from './cache';
 import { SSHClient, SSHStream } from './ssh';
 
-export interface TerminalData {
+export interface TerminalOptions {
+  hostId: string;
+  sessionId: string;
   cols: number;
   rows: number;
-  hostId: string;
   cwd?: string;
-  data?: string;
+  env?: Record<string, string>;
 }
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalSession {
+  id: string;
+  hostId: string;
+  pid: number;
+  title: string;
+  status: 'connected' | 'disconnected' | 'error';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TerminalData {
+  hostId: string;
+  sessionId: string;
+  data: string;
+}
+
+export interface TerminalResize extends TerminalSize {
+  hostId: string;
+  sessionId: string;
+}
+
+export interface TerminalExit {
+  hostId: string;
+  sessionId: string;
+  code: number;
+}
+
+export interface TerminalEvents {
+  'terminal:join': (data: { hostId: string; sessionId: string }) => void;
+  'terminal:leave': (data: { hostId: string; sessionId: string }) => void;
+  'terminal:data': (data: TerminalData) => void;
+  'terminal:resize': (data: TerminalResize) => void;
+  'terminal:exit': (data: TerminalExit) => void;
+}
+
+export type TerminalSocket = Socket<TerminalEvents>;
 
 export interface CommandData {
   command: string;
@@ -41,18 +83,6 @@ export interface CommandHistoryResponse {
   limit: number;
   data?: (CommandHistory | CacheCommand)[];
   error?: string;
-}
-
-export interface TerminalEvents {
-  'terminal:data': (data: string) => void;
-  'terminal:resize': (data: ResizeData) => void;
-  'terminal:command': (data: CommandData) => void;
-  'terminal:history': (hostId: string) => void;
-  'terminal:execute': (data: CommandData) => void;
-  'terminal:error': (message: string) => void;
-  'terminal:ready': () => void;
-  'terminal:close': () => void;
-  disconnect: () => void;
 }
 
 export interface AuthenticatedSocket extends Socket {

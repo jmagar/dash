@@ -33,7 +33,7 @@ interface NetworkAnalyticsProps {
 export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) => {
   const [selectedInterface, setSelectedInterface] = useState<string>('');
   const [timeRange, setTimeRange] = useState<string>('1h');
-  const { metrics, loading, error } = useHostMetrics({ hostId });
+  const { metrics, loading, error } = useHostMetrics(hostId);
 
   useEffect(() => {
     // ... (rest of the code remains the same)
@@ -143,18 +143,20 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
                   <Typography variant="h6" gutterBottom>
                     Connections
                   </Typography>
-                  <Typography variant="body1">
-                    Total: {metrics.network.tcp_conns + metrics.network.udp_conns}
-                  </Typography>
-                  <Typography variant="body1">
-                    TCP: {metrics.network.tcp_conns}
-                  </Typography>
-                  <Typography variant="body1">
-                    UDP: {metrics.network.udp_conns}
-                  </Typography>
-                  <Typography variant="body1">
-                    Listening Ports: {metrics.network.listen_ports}
-                  </Typography>
+                  <Box>
+                    <Typography variant="body1">
+                      Total: {metrics.network.tcp_conns + metrics.network.udp_conns}
+                    </Typography>
+                    <Typography variant="body1">
+                      TCP: {metrics.network.tcp_conns}
+                    </Typography>
+                    <Typography variant="body1">
+                      UDP: {metrics.network.udp_conns}
+                    </Typography>
+                    <Typography variant="body1">
+                      Listening Ports: {metrics.network.listen_ports}
+                    </Typography>
+                  </Box>
                 </CardContent>
               </Card>
             </Grid>
@@ -165,15 +167,17 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
                   <Typography variant="h6" gutterBottom>
                     Network Health
                   </Typography>
-                  <Typography variant="body1">
-                    Errors (In/Out): {metrics.network.rx_errors}/{metrics.network.tx_errors}
-                  </Typography>
-                  <Typography variant="body1">
-                    Drops (In/Out): {metrics.network.rx_dropped}/{metrics.network.tx_dropped}
-                  </Typography>
-                  <Typography variant="body1">
-                    Interfaces: {metrics.network.interfaces}
-                  </Typography>
+                  <Box>
+                    <Typography variant="body1">
+                      Errors (In/Out): {metrics.network.rx_errors}/{metrics.network.tx_errors}
+                    </Typography>
+                    <Typography variant="body1">
+                      Drops (In/Out): {metrics.network.rx_dropped}/{metrics.network.tx_dropped}
+                    </Typography>
+                    <Typography variant="body1">
+                      Interfaces: {metrics.network.interfaces.length}
+                    </Typography>
+                  </Box>
                 </CardContent>
               </Card>
             </Grid>
@@ -219,10 +223,10 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
                 <TableRow>
                   <TableCell>Speed</TableCell>
                   <TableCell align="right" colSpan={2}>
-                    Average: {formatBytes(metrics.network.average_speed)}/s
+                    {formatBytes(metrics.network.average_speed)}/s
                   </TableCell>
                   <TableCell align="right">
-                    Peak: {formatBytes(metrics.network.total_speed)}/s
+                    {formatBytes(metrics.network.total_speed)}/s
                   </TableCell>
                 </TableRow>
               </TableBody>

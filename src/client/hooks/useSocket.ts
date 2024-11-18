@@ -1,55 +1,46 @@
-import { useEffect, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import io from 'socket.io-client';
-import { config } from '../config';
+import type { ServerToClientEvents, ClientToServerEvents } from '@/types/socket-events';
 import { logger } from '../utils/frontendLogger';
-import type { SocketClient } from '../../types/socket-events';
 
-type SocketType = SocketClient;
+type SocketType = ReturnType<typeof io>;
 
 export function useSocket(): SocketType {
   const socketRef = useRef<SocketType | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) {
-      try {
-        const socket = io(config.websocketUrl, {
-          reconnection: true,
-          reconnectionAttempts: Infinity,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          timeout: 20000,
-          transports: ['websocket'],
-          auth: {
-            token: localStorage.getItem('token') || '',
-          },
-        });
+      const socket = io(process.env.REACT_APP_WEBSOCKET_URL || 'ws://localhost:3001', {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+      });
 
-        socket.on('connect', () => {
-          logger.info('Socket connected');
-        });
+      socket.on('connect', (...args: unknown[]) => {
+        logger.info('Socket connected', { id: socket.id });
+      });
 
-        socket.on('disconnect', () => {
-          logger.info('Socket disconnected');
-        });
+      socket.on('disconnect', (...args: unknown[]) => {
+        const [reason] = args;
+        logger.warn('Socket disconnected', { reason });
+      });
 
-        socket.on('connect_error', (error: unknown) => {
-          logger.error('Socket connection error:', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
+      socket.on('error', (...args: unknown[]) => {
+        const [error] = args;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Socket error', { error: errorMessage });
+      });
 
-        socket.on('reconnect_attempt', (...args: unknown[]) => {
-          const attempt = typeof args[0] === 'number' ? args[0] : 0;
-          logger.info('Socket reconnection attempt:', { attempt });
-        });
+      socket.on('connect_error', (...args: unknown[]) => {
+        const [error] = args;
+        const errorObj = error as Error;
+        logger.error('Socket connection error', { error: errorObj.message });
+      });
 
-        // Cast the socket to our custom type
-        socketRef.current = socket as unknown as SocketType;
-      } catch (error) {
-        logger.error('Failed to initialize socket:', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      socketRef.current = socket;
     }
 
     return () => {
@@ -60,9 +51,6 @@ export function useSocket(): SocketType {
     };
   }, []);
 
-  if (!socketRef.current) {
-    throw new Error('Socket not initialized');
-  }
-
-  return socketRef.current;
+  // We know socketRef.current is not null here because it's initialized in the effect
+  return socketRef.current!;
 }

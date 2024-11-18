@@ -18,6 +18,10 @@ import type {
 class NotificationsService extends EventEmitter {
   private readonly DEFAULT_PREFERENCES: NotificationPreferences = {
     userId: '',
+    web: [],
+    gotify: [],
+    desktop: [],
+    muted: false,
     webEnabled: true,
     gotifyEnabled: true,
     desktopEnabled: true,
@@ -28,6 +32,8 @@ class NotificationsService extends EventEmitter {
       warning: true,
       error: true,
     },
+    createdAt: new Date(),
+    updatedAt: new Date()
   };
 
   private readonly GOTIFY_PRIORITIES = {
@@ -37,6 +43,60 @@ class NotificationsService extends EventEmitter {
     info: 3,
     success: 3,
   };
+
+  /**
+   * Convert Alert to database format
+   */
+  private alertToRecord(alert?: Alert): Record<string, unknown> | undefined {
+    if (!alert) return undefined;
+    return {
+      id: alert.id,
+      hostId: alert.hostId,
+      category: alert.category,
+      severity: alert.severity,
+      status: alert.status,
+      title: alert.title,
+      message: alert.message,
+      source: alert.source,
+      metric: alert.metric,
+      value: alert.value,
+      threshold: alert.threshold,
+      metadata: alert.metadata,
+      createdAt: alert.createdAt.toISOString(),
+      updatedAt: alert.updatedAt.toISOString(),
+      acknowledgedAt: alert.acknowledgedAt?.toISOString(),
+      acknowledgedBy: alert.acknowledgedBy,
+      resolvedAt: alert.resolvedAt?.toISOString(),
+      resolvedBy: alert.resolvedBy,
+    };
+  }
+
+  /**
+   * Convert database record back to Alert
+   */
+  private recordToAlert(record?: Record<string, unknown>): Alert | undefined {
+    if (!record) return undefined;
+    return {
+      id: record.id as string,
+      hostId: record.hostId as string,
+      category: record.category as Alert['category'],
+      severity: record.severity as Alert['severity'],
+      status: record.status as Alert['status'],
+      title: record.title as string,
+      message: record.message as string,
+      source: record.source as string,
+      metric: record.metric as string | undefined,
+      value: record.value as number | undefined,
+      threshold: record.threshold as number | undefined,
+      metadata: record.metadata as Record<string, unknown> | undefined,
+      createdAt: new Date(record.createdAt as string),
+      updatedAt: new Date(record.updatedAt as string),
+      acknowledgedAt: record.acknowledgedAt ? new Date(record.acknowledgedAt as string) : undefined,
+      acknowledgedBy: record.acknowledgedBy as string | undefined,
+      resolvedAt: record.resolvedAt ? new Date(record.resolvedAt as string) : undefined,
+      resolvedBy: record.resolvedBy as string | undefined,
+    };
+  }
 
   /**
    * Send notification to Gotify
@@ -92,22 +152,24 @@ class NotificationsService extends EventEmitter {
     } = {}
   ): Promise<Notification> {
     try {
-      const dbNotification: Omit<DBNotification, 'created_at' | 'read_at'> = {
+      const now = new Date();
+      const dbNotification: DBNotification = {
         id: crypto.randomUUID(),
         user_id: userId,
         type,
         title,
         message,
         metadata: options.metadata,
-        alert: options.alert,
+        alert: this.alertToRecord(options.alert),
         link: options.link,
         read: false,
+        created_at: now
       };
 
       const result = await db.query<DBNotification>(
         `INSERT INTO notifications (
-          id, user_id, type, title, message, metadata, alert, link, read
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          id, user_id, type, title, message, metadata, alert, link, read, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *`,
         [
           dbNotification.id,
@@ -119,6 +181,7 @@ class NotificationsService extends EventEmitter {
           dbNotification.alert,
           dbNotification.link,
           dbNotification.read,
+          dbNotification.created_at
         ]
       );
 
@@ -148,7 +211,7 @@ class NotificationsService extends EventEmitter {
       let paramIndex = 2;
 
       if (filter.type) {
-        conditions.push(`type = $${paramIndex}`);
+        conditions.push(`type = ANY($${paramIndex})`);
         params.push(filter.type);
         paramIndex++;
       }
@@ -375,9 +438,13 @@ class NotificationsService extends EventEmitter {
       // Send desktop notification
       if (preferences.desktopEnabled) {
         io.to(`user:${notification.userId}`).emit('notification:desktop', {
+          id: notification.id,
+          type: notification.type,
           title: notification.title,
           message: notification.message,
+          duration: 5000,
           link: notification.link,
+          timestamp: notification.timestamp
         });
       }
 
@@ -402,6 +469,7 @@ class NotificationsService extends EventEmitter {
    * Convert database notification to API notification
    */
   private dbToNotification(db: DBNotification): Notification {
+    const now = new Date();
     return {
       id: db.id,
       userId: db.user_id,
@@ -409,11 +477,13 @@ class NotificationsService extends EventEmitter {
       title: db.title,
       message: db.message,
       metadata: db.metadata,
-      alert: db.alert,
+      alert: db.alert ? this.recordToAlert(db.alert) : undefined,
       link: db.link,
       read: db.read,
-      readAt: db.read_at ?? undefined,
+      readAt: db.read_at,
+      timestamp: db.created_at,
       createdAt: db.created_at,
+      updatedAt: now
     };
   }
 }

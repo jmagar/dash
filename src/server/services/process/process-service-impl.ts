@@ -1,12 +1,11 @@
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
-import type { ProcessInfo } from '../../../types/process';
+import type { ProcessInfo } from '@/types/process';
 import type {
   ProcessService,
   ProcessMonitor,
   ProcessMonitorFactory,
   ProcessServiceOptions,
-  ProcessServiceEvents,
 } from './types';
 
 export class ProcessServiceImpl extends EventEmitter implements ProcessService {

@@ -83,13 +83,13 @@ func NewManager(uploadDir string, maxSize int64, logger *zap.Logger) (*Manager, 
 }
 
 // StartUpload begins a file upload
-func (m *Manager) StartUpload(ctx context.Context, id, filename string, size int64) (*Transfer, error) {
+func (m *Manager) StartUpload(parentCtx context.Context, id, filename string, size int64) (*Transfer, error) {
 	if size > m.maxSize {
 		return nil, fmt.Errorf("file size exceeds maximum allowed size")
 	}
 
 	destPath := filepath.Join(m.uploadDir, id)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(parentCtx)
 
 	transfer := &Transfer{
 		ID:           id,
@@ -106,6 +106,19 @@ func (m *Manager) StartUpload(ctx context.Context, id, filename string, size int
 	m.mu.Lock()
 	m.transfers[id] = transfer
 	m.mu.Unlock()
+
+	// Monitor context cancellation
+	go func() {
+		<-ctx.Done()
+		if transfer.State != StateComplete {
+			m.logger.Info("Upload cancelled by context",
+				zap.String("id", id),
+				zap.String("state", string(transfer.State)))
+			transfer.State = StateFailed
+			transfer.Error = "cancelled by context"
+			transfer.EndTime = time.Now()
+		}
+	}()
 
 	return transfer, nil
 }
@@ -284,7 +297,7 @@ func (m *Manager) Start(ctx context.Context) error {
 }
 
 // Shutdown stops the transfer manager
-func (m *Manager) Shutdown(ctx context.Context) error {
+func (m *Manager) Shutdown() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -295,6 +308,9 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 			transfer.State = StateFailed
 			transfer.Error = "shutdown"
 			transfer.EndTime = time.Now()
+			m.logger.Info("Transfer cancelled due to shutdown",
+				zap.String("id", id),
+				zap.String("state", string(transfer.State)))
 		}
 	}
 

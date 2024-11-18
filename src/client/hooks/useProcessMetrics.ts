@@ -24,30 +24,36 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
 
     socket.emit('process:monitor', { hostId });
 
-    socket.on('process:list', (data: { hostId: string; processes: ProcessInfo[] }) => {
-      if (data.hostId === hostId) {
-        setProcesses(data.processes);
+    socket.on('process:list', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; processes: ProcessInfo[] };
+      if (processData.hostId === hostId) {
+        setProcesses(processData.processes);
         setLoading(false);
       }
     });
 
-    socket.on('process:update', (data: { hostId: string; process: ProcessInfo }) => {
-      if (data.hostId === hostId) {
+    socket.on('process:update', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; process: ProcessInfo };
+      if (processData.hostId === hostId) {
         setProcesses(prev => {
-          const index = prev.findIndex(p => p.pid === data.process.pid);
+          const index = prev.findIndex(p => p.pid === processData.process.pid);
           if (index === -1) {
-            return [...prev, data.process];
+            return [...prev, processData.process];
           }
           const newProcesses = [...prev];
-          newProcesses[index] = data.process;
+          newProcesses[index] = processData.process;
           return newProcesses;
         });
       }
     });
 
-    socket.on('process:error', (data: { hostId: string; error: string }) => {
-      if (data.hostId === hostId) {
-        setError(data.error);
+    socket.on('process:error', (...args: unknown[]) => {
+      const [data] = args;
+      const errorData = data as { hostId: string; error: string };
+      if (errorData.hostId === hostId) {
+        setError(errorData.error);
         setLoading(false);
       }
     });

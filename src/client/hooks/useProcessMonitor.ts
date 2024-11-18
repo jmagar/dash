@@ -1,158 +1,126 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSocket } from './useSocket';
-import type { ProcessInfo } from '../../types/metrics';
+import { socket } from '../socket';
+import type { ProcessInfo } from '@/types/process';
+import { logger } from '../utils/frontendLogger';
 
 interface UseProcessMonitorOptions {
   hostId: string;
-  autoStart?: boolean;
-  onProcessStart?: (process: ProcessInfo) => void;
-  onProcessEnd?: (process: ProcessInfo) => void;
-  onProcessChange?: (process: ProcessInfo, oldStatus: string) => void;
-  onError?: (error: string) => void;
+  enabled?: boolean;
 }
 
-export function useProcessMonitor({
-  hostId,
-  autoStart = true,
-  onProcessStart,
-  onProcessEnd,
-  onProcessChange,
-  onError,
-}: UseProcessMonitorOptions) {
-  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
-  const [isMonitoring, setIsMonitoring] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
+interface UseProcessMonitorResult {
+  processes: ProcessInfo[];
+  selectedPid: number | null;
+  loading: boolean;
+  error: string | null;
+  setSelectedPid: (pid: number | null) => void;
+  killProcess: (pid: number, signal?: string) => void;
+  refresh: () => void;
+}
 
-  // Update processes when receiving a new list
+export function useProcessMonitor(options: UseProcessMonitorOptions | string): UseProcessMonitorResult {
+  const hostId = typeof options === 'string' ? options : options.hostId;
+  const enabled = typeof options === 'string' ? true : options.enabled ?? true;
+
+  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [selectedPid, setSelectedPid] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleProcessList = useCallback((data: { hostId: string; processes: ProcessInfo[] }) => {
     if (data.hostId === hostId) {
       setProcesses(data.processes);
     }
   }, [hostId]);
 
-  // Handle process start event
   const handleProcessStart = useCallback((data: { hostId: string; process: ProcessInfo }) => {
     if (data.hostId === hostId) {
       setProcesses(prev => [...prev, data.process]);
-      onProcessStart?.(data.process);
     }
-  }, [hostId, onProcessStart]);
+  }, [hostId]);
 
-  // Handle process end event
   const handleProcessEnd = useCallback((data: { hostId: string; process: ProcessInfo }) => {
     if (data.hostId === hostId) {
       setProcesses(prev => prev.filter(p => p.pid !== data.process.pid));
-      onProcessEnd?.(data.process);
     }
-  }, [hostId, onProcessEnd]);
+  }, [hostId]);
 
-  // Handle process change event
   const handleProcessChange = useCallback((data: { hostId: string; process: ProcessInfo; oldStatus: string }) => {
     if (data.hostId === hostId) {
-      setProcesses(prev =>
-        prev.map(p => (p.pid === data.process.pid ? data.process : p))
-      );
-      onProcessChange?.(data.process, data.oldStatus);
+      setProcesses(prev => prev.map(p => p.pid === data.process.pid ? data.process : p));
     }
-  }, [hostId, onProcessChange]);
+  }, [hostId]);
 
-  // Handle error event
-  const handleError = useCallback((data: { hostId: string; error: string }) => {
-    if (data.hostId === hostId) {
-      setError(data.error);
-      onError?.(data.error);
-    }
-  }, [hostId, onError]);
-
-  // Start monitoring processes
   const startMonitoring = useCallback(() => {
-    if (!socket) {
-      setError('Socket not connected');
-      return;
-    }
+    if (!enabled) return;
 
-    try {
-      socket.emit('process:monitor', { hostId });
-      setIsMonitoring(true);
-      setError(null);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to start monitoring';
-      setError(errorMsg);
-      onError?.(errorMsg);
-    }
-  }, [socket, hostId, onError]);
+    setLoading(true);
+    setError(null);
+    socket.emit('process:monitor', { hostId });
+  }, [hostId, enabled]);
 
-  // Stop monitoring processes
   const stopMonitoring = useCallback(() => {
-    if (!socket) return;
+    socket.emit('process:unmonitor', { hostId });
+  }, [hostId]);
 
-    try {
-      socket.emit('process:unmonitor', { hostId });
-      setIsMonitoring(false);
-      setError(null);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to stop monitoring';
-      setError(errorMsg);
-      onError?.(errorMsg);
-    }
-  }, [socket, hostId, onError]);
-
-  // Kill a process
   const killProcess = useCallback((pid: number, signal?: string) => {
-    if (!socket) {
-      setError('Socket not connected');
-      return;
-    }
-
-    try {
-      socket.emit('process:kill', { hostId, pid, signal });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to kill process';
-      setError(errorMsg);
-      onError?.(errorMsg);
-    }
-  }, [socket, hostId, onError]);
+    socket.emit('process:kill', { hostId, pid, signal });
+  }, [hostId]);
 
   useEffect(() => {
-    if (!socket) return;
+    startMonitoring();
 
-    socket.on('process:list', handleProcessList);
-    socket.on('process:started', handleProcessStart);
-    socket.on('process:ended', handleProcessEnd);
-    socket.on('process:changed', handleProcessChange);
-    socket.on('process:error', handleError);
+    socket.on('process:list', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; processes: ProcessInfo[] };
+      if (processData.hostId === hostId) {
+        setProcesses(processData.processes);
+      }
+    });
 
-    if (autoStart) {
-      startMonitoring();
-    }
+    socket.on('process:started', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; process: ProcessInfo };
+      handleProcessStart(processData);
+    });
+
+    socket.on('process:ended', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; process: ProcessInfo };
+      handleProcessEnd(processData);
+    });
+
+    socket.on('process:changed', (...args: unknown[]) => {
+      const [data] = args;
+      const processData = data as { hostId: string; process: ProcessInfo; oldStatus: string };
+      handleProcessChange(processData);
+    });
+
+    socket.on('process:error', (...args: unknown[]) => {
+      const [data] = args;
+      const errorData = data as { hostId: string; error: string };
+      if (errorData.hostId === hostId) {
+        setError(errorData.error);
+        logger.error('Process monitor error:', { error: errorData.error });
+      }
+    });
 
     return () => {
-      socket.off('process:list', handleProcessList);
-      socket.off('process:started', handleProcessStart);
-      socket.off('process:ended', handleProcessEnd);
-      socket.off('process:changed', handleProcessChange);
-      socket.off('process:error', handleError);
       stopMonitoring();
+      socket.off('process:list');
+      socket.off('process:started');
+      socket.off('process:ended');
+      socket.off('process:changed');
     };
-  }, [
-    socket,
-    autoStart,
-    startMonitoring,
-    stopMonitoring,
-    handleProcessList,
-    handleProcessStart,
-    handleProcessEnd,
-    handleProcessChange,
-    handleError,
-  ]);
+  }, [hostId, startMonitoring, stopMonitoring, handleProcessStart, handleProcessEnd, handleProcessChange]);
 
   return {
     processes,
-    isMonitoring,
+    selectedPid,
+    loading,
     error,
-    startMonitoring,
-    stopMonitoring,
+    setSelectedPid,
     killProcess,
+    refresh: startMonitoring,
   };
 }

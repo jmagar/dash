@@ -1,11 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import { Box, useTheme } from '@mui/material';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { SearchAddon } from '@xterm/addon-search';
+// Import addons from their index files
+import type { FitAddon } from '@xterm/addon-fit';
+import type { WebLinksAddon } from '@xterm/addon-web-links';
+import type { SearchAddon } from '@xterm/addon-search';
 import { useSocket } from '../hooks/useSocket';
 import { logger } from '../utils/frontendLogger';
+import type { TerminalData, TerminalExit } from '@/types/terminal';
+
+// Dynamic imports for the addons
+const importFitAddon = () => import('@xterm/addon-fit').then(m => m.FitAddon);
+const importWebLinksAddon = () => import('@xterm/addon-web-links').then(m => m.WebLinksAddon);
+const importSearchAddon = () => import('@xterm/addon-search').then(m => m.SearchAddon);
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -14,7 +21,7 @@ interface TerminalProps {
   sessionId: string;
   onResize?: (cols: number, rows: number) => void;
   onData?: (data: string) => void;
-  onExit?: () => void;
+  onExit?: (code: number) => void;
 }
 
 export function Terminal({
@@ -29,6 +36,7 @@ export function Terminal({
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const resizeHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -47,53 +55,75 @@ export function Terminal({
       },
     });
 
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-    const searchAddon = new SearchAddon();
+    // Initialize addons
+    Promise.all([
+      importFitAddon(),
+      importWebLinksAddon(),
+      importSearchAddon()
+    ]).then(([FitAddon, WebLinksAddon, SearchAddon]) => {
+      const fitAddon = new FitAddon();
+      const webLinksAddon = new WebLinksAddon();
+      const searchAddon = new SearchAddon();
 
-    xterm.loadAddon(fitAddon);
-    xterm.loadAddon(webLinksAddon);
-    xterm.loadAddon(searchAddon);
+      xterm.loadAddon(fitAddon);
+      xterm.loadAddon(webLinksAddon);
+      xterm.loadAddon(searchAddon);
 
-    xterm.open(terminalRef.current);
-    fitAddon.fit();
+      xterm.open(terminalRef.current!);
+      fitAddon.fit();
 
-    xtermRef.current = xterm;
-    fitAddonRef.current = fitAddon;
+      xtermRef.current = xterm;
+      fitAddonRef.current = fitAddon;
 
-    socket.emit('terminal:join', { hostId, sessionId });
+      socket.emit('terminal:join', { hostId, sessionId });
 
-    const handleResize = ({ cols, rows }: { cols: number; rows: number }) => {
-      socket.emit('terminal:resize', { hostId, sessionId, cols, rows });
-      onResize?.(cols, rows);
-    };
+      const handleResize = () => {
+        fitAddon.fit();
+        const { cols, rows } = xterm;
+        socket.emit('terminal:resize', { hostId, sessionId, cols, rows });
+        onResize?.(cols, rows);
+      };
 
-    xterm.onResize(handleResize);
-
-    const handleData = (data: { hostId: string; sessionId: string; data: string }) => {
-      xterm.write(data.data);
-    };
-
-    socket.on('terminal:data', handleData);
-    socket.on('terminal:exit', () => {
-      logger.info('Terminal session ended:', { hostId, sessionId });
-      onExit?.();
+      resizeHandlerRef.current = handleResize;
+      window.addEventListener('resize', handleResize);
     });
 
-    const handleWindowResize = () => {
-      fitAddon.fit();
+    const handleData = (data: string) => {
+      socket.emit('terminal:data', { hostId, sessionId, data });
+      onData?.(data);
     };
 
-    window.addEventListener('resize', handleWindowResize);
+    const handleTerminalData = (...args: unknown[]) => {
+      const [data] = args;
+      const terminalData = data as { hostId: string; sessionId: string; data: string };
+      if (terminalData.hostId === hostId && terminalData.sessionId === sessionId) {
+        xterm.write(terminalData.data);
+      }
+    };
+
+    const handleExit = (...args: unknown[]) => {
+      const [data] = args;
+      const exitData = data as { hostId: string; sessionId: string; code: number };
+      if (exitData.hostId === hostId && exitData.sessionId === sessionId) {
+        logger.info('Terminal session ended', { hostId, sessionId, code: exitData.code });
+        onExit?.(exitData.code);
+      }
+    };
+
+    xterm.onData(handleData);
+    socket.on('terminal:data', handleTerminalData);
+    socket.on('terminal:exit', handleExit);
 
     return () => {
+      socket.off('terminal:data', handleTerminalData);
+      socket.off('terminal:exit', handleExit);
+      if (resizeHandlerRef.current) {
+        window.removeEventListener('resize', resizeHandlerRef.current);
+      }
       socket.emit('terminal:leave', { hostId, sessionId });
-      socket.off('terminal:data', handleData);
-      socket.off('terminal:exit');
-      window.removeEventListener('resize', handleWindowResize);
       xterm.dispose();
     };
-  }, [hostId, sessionId, socket, theme, onResize, onExit]);
+  }, [hostId, sessionId, socket, theme, onResize, onData, onExit]);
 
   return (
     <Box

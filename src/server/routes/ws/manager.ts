@@ -1,14 +1,20 @@
 import { EventEmitter } from 'events';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
+import http from 'http';
 import { logger } from '../../utils/logger';
-import { AgentConnection } from './agent';
+import { AgentConnection, AgentInfo, HeartbeatInfo, Message } from './agent';
+
+interface ServerConfig {
+  server: http.Server;
+  path: string;
+}
 
 export class AgentManager extends EventEmitter {
   private agents: Map<string, AgentConnection> = new Map();
   private wss: WebSocketServer;
 
-  constructor(server: any) {
+  constructor(server: ServerConfig['server']) {
     super();
     this.wss = new WebSocketServer({ server, path: '/ws/agent' });
     this.setupWebSocketServer();
@@ -16,8 +22,14 @@ export class AgentManager extends EventEmitter {
 
   private setupWebSocketServer() {
     this.wss.on('connection', (ws, req) => {
+      if (!req.url || !req.headers.host) {
+        logger.warn('Connection attempt with invalid request');
+        ws.close();
+        return;
+      }
+
       // Extract agent ID from query parameters
-      const url = new URL(req.url!, `http://${req.headers.host}`);
+      const url = new URL(req.url, `http://${req.headers.host}`);
       const agentId = url.searchParams.get('agent_id');
 
       if (!agentId) {
@@ -27,11 +39,12 @@ export class AgentManager extends EventEmitter {
       }
 
       // Check if agent is already connected
-      if (this.agents.has(agentId)) {
+      const existingAgent = this.agents.get(agentId);
+      if (existingAgent) {
         logger.warn('Agent already connected, terminating old connection', {
           agentId,
         });
-        this.agents.get(agentId)!.terminate();
+        existingAgent.terminate();
       }
 
       // Create new agent connection
@@ -90,7 +103,7 @@ export class AgentManager extends EventEmitter {
   }
 
   // Broadcast message to all agents
-  public async broadcast(message: any): Promise<void> {
+  public async broadcast(message: z.infer<typeof Message>): Promise<void> {
     const promises = Array.from(this.agents.values()).map((agent) =>
       agent.send(message)
     );

@@ -1,6 +1,4 @@
-import { Server } from 'socket.io';
-import type { ProcessInfo } from '../../../types/process';
-import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket.io';
+import type { ProcessInfo } from '@/types/process';
 
 export interface ProcessCache {
   get(hostId: string): Map<number, ProcessInfo> | undefined;

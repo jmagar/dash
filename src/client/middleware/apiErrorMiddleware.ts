@@ -1,8 +1,8 @@
-import type { Middleware, MiddlewareAPI } from '@reduxjs/toolkit';
+import type { Middleware, MiddlewareAPI, Dispatch } from '@reduxjs/toolkit';
 import type { AxiosError } from 'axios';
 
 import type { LogMetadata } from '../../types/logger';
-import type { RootState, MiddlewareDispatch } from '../store/storeTypes';
+import type { RootState } from '../store/storeTypes';
 import { logger } from '../utils/frontendLogger';
 
 /**
@@ -22,8 +22,8 @@ function isAxiosError(error: unknown): error is AxiosError {
 export const apiErrorMiddleware: Middleware<
   Record<string, never>,
   RootState,
-  MiddlewareDispatch
-> = (_api: MiddlewareAPI<MiddlewareDispatch, RootState>) =>
+  Dispatch
+> = (_api: MiddlewareAPI<Dispatch, RootState>) =>
   (next) =>
     (action) => {
     // Check if the action has a payload that's an axios error

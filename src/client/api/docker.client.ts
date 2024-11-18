@@ -1,18 +1,21 @@
-import type { Container } from '../../types/models-shared';
-import type { DockerStats } from '../../types/docker';
-import { logger } from '../utils/frontendLogger';
-import { config } from '../config';
+import type { DockerContainer, DockerStats } from '@/types/docker';
+import { logger } from '@/client/utils/frontendLogger';
+import { config } from '@/client/config';
 
 const BASE_URL = `${config.apiUrl}/docker`;
 
-export async function listContainers(hostId: string): Promise<Container[]> {
+export async function listContainers(hostId: string): Promise<DockerContainer[]> {
   try {
     const response = await fetch(`${BASE_URL}/${hostId}/containers`);
     const data = await response.json();
     if (!data.success) {
       throw new Error(data.error || 'Failed to list containers');
     }
-    return data.data;
+    return data.data.map((container: any) => ({
+      ...container,
+      name: container.names ? container.names[0].replace(/^\//, '') : container.name || '',
+      created: new Date(container.created * 1000),
+    }));
   } catch (error) {
     logger.error('Failed to list containers:', {
       error: error instanceof Error ? error.message : String(error),

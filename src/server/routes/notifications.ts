@@ -16,7 +16,7 @@ const notificationTypeEnum = z.enum(['alert', 'info', 'success', 'warning', 'err
 const getNotificationsSchema = z.object({
   query: z.object({
     userId: z.string().uuid(),
-    type: notificationTypeEnum.optional(),
+    type: z.array(notificationTypeEnum).optional(),
     read: z.coerce.boolean().optional(),
     startDate: z.coerce.date().optional(),
     endDate: z.coerce.date().optional(),
@@ -37,7 +37,11 @@ router.get(
 
       const notifications = await notificationsService.getNotifications({
         userId: req.query.userId as string,
-        type: req.query.type as NotificationType | undefined,
+        type: Array.isArray(req.query.type)
+          ? (req.query.type as NotificationType[])
+          : req.query.type
+            ? [req.query.type as NotificationType]
+            : undefined,
         read: req.query.read as boolean | undefined,
         startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
         endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
@@ -243,13 +247,27 @@ router.put(
       }
 
       const preferences = updatePreferencesSchema.parse(req.body);
+      const now = new Date();
+
       await notificationsService.updatePreferences(req.user.id, {
         userId: req.user.id,
+        web: preferences.webEnabled ? Object.entries(preferences.alertTypes)
+          .filter(([_, enabled]) => enabled)
+          .map(([type]) => type as NotificationType) : [],
+        gotify: preferences.gotifyEnabled ? Object.entries(preferences.alertTypes)
+          .filter(([_, enabled]) => enabled)
+          .map(([type]) => type as NotificationType) : [],
+        desktop: preferences.desktopEnabled ? Object.entries(preferences.alertTypes)
+          .filter(([_, enabled]) => enabled)
+          .map(([type]) => type as NotificationType) : [],
+        muted: !!preferences.mutedUntil,
+        mutedUntil: preferences.mutedUntil ? new Date(preferences.mutedUntil) : undefined,
         webEnabled: preferences.webEnabled,
         gotifyEnabled: preferences.gotifyEnabled,
         desktopEnabled: preferences.desktopEnabled,
         alertTypes: preferences.alertTypes,
-        mutedUntil: preferences.mutedUntil ? new Date(preferences.mutedUntil) : undefined,
+        createdAt: now,
+        updatedAt: now
       });
       res.json({ success: true });
     } catch (error) {

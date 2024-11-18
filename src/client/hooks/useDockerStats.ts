@@ -1,89 +1,77 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from './useSocket';
+import { useState, useEffect, useCallback } from 'react';
+import { socket } from '../socket';
+import type { DockerStats } from '@/types/docker';
 import { logger } from '../utils/frontendLogger';
-import type { DockerStats, AgentCommand } from '../../types/socket.io';
 
 interface UseDockerStatsOptions {
   hostId: string;
-  interval?: number;
+  enabled?: boolean;
 }
 
 interface UseDockerStatsResult {
   stats: DockerStats | null;
-  error: Error | null;
+  loading: boolean;
+  error: string | null;
   refresh: () => void;
 }
 
-export function useDockerStats({ hostId, interval = 5000 }: UseDockerStatsOptions): UseDockerStatsResult {
-  const socket = useSocket();
+export function useDockerStats(options: UseDockerStatsOptions | string): UseDockerStatsResult {
+  const hostId = typeof options === 'string' ? options : options.hostId;
+  const enabled = typeof options === 'string' ? true : options.enabled ?? true;
+
   const [stats, setStats] = useState<DockerStats | null>(null);
-  const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
-    if (!socket) {
-      setError(new Error('Socket not connected'));
-      return;
-    }
+  const startMonitoring = useCallback(() => {
+    if (!enabled) return;
 
-    try {
-      socket.emit('command:execute', {
-        hostId,
-        command: {
-          command: 'docker stats',
-          args: ['--no-stream', '--format', 'json']
-        }
-      });
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch Docker stats');
-      setError(error);
-      logger.error('Failed to fetch Docker stats:', {
-        hostId,
-        error: error.message
-      });
-    }
-  }, [socket, hostId]);
+    setLoading(true);
+    setError(null);
+
+    socket.emit('docker:subscribe', { hostId });
+  }, [hostId, enabled]);
+
+  const stopMonitoring = useCallback(() => {
+    socket.emit('docker:unsubscribe', { hostId });
+  }, [hostId]);
 
   useEffect(() => {
-    if (!socket) return;
+    startMonitoring();
 
-    // Subscribe to Docker events
-    socket.emit('docker:subscribe', { hostId });
-
-    // Handle Docker stats updates
-    const handleStats = (data: { hostId: string; stats: DockerStats }) => {
-      if (data.hostId === hostId) {
-        setStats(data.stats);
-        setError(null);
+    const handleStats = (...args: unknown[]) => {
+      const [data] = args;
+      const statsData = data as { hostId: string; stats: DockerStats };
+      if (statsData.hostId === hostId) {
+        setStats(statsData.stats);
+        setLoading(false);
       }
     };
 
-    // Handle Docker errors
-    const handleError = (data: { hostId: string; error: string }) => {
-      if (data.hostId === hostId) {
-        setError(new Error(data.error));
+    const handleError = (...args: unknown[]) => {
+      const [data] = args;
+      const errorData = data as { hostId: string; error: string };
+      if (errorData.hostId === hostId) {
+        setError(errorData.error);
+        setLoading(false);
+        logger.error('Docker stats error:', { error: errorData.error });
       }
     };
 
     socket.on('docker:stats', handleStats);
     socket.on('docker:error', handleError);
 
-    // Initial fetch
-    refresh();
-
-    // Set up interval for refreshing stats
-    const intervalId = setInterval(refresh, interval);
-
     return () => {
+      stopMonitoring();
       socket.off('docker:stats', handleStats);
       socket.off('docker:error', handleError);
-      socket.emit('docker:unsubscribe', { hostId });
-      clearInterval(intervalId);
     };
-  }, [socket, hostId, interval, refresh]);
+  }, [hostId, startMonitoring, stopMonitoring]);
 
   return {
     stats,
+    loading,
     error,
-    refresh
+    refresh: startMonitoring,
   };
 }

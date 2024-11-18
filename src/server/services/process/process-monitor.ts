@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { logger } from '../../utils/logger';
 import type { Host } from '../../../types/models-shared';
-import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket.io';
+import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
 import type { ProcessInfo } from '../../../types/metrics';
 import type { ProcessCache } from './types';
 
@@ -133,20 +133,28 @@ export class ProcessMonitor {
       // Emit process metrics
       this.io.to(`host:${host.id}`).emit('process:metrics', {
         hostId: host.id,
-        metrics: processes.map(p => ({
+        processes: processes.map(p => ({
           pid: p.pid,
-          timestamp: now,
+          ppid: p.ppid,
           name: p.name,
           command: p.command,
+          args: p.args,
+          status: p.status,
+          user: p.user,
           username: p.username,
+          cpu: p.cpu,
           cpuUsage: p.cpuUsage,
+          memory: p.memory,
           memoryUsage: p.memoryUsage,
           memoryRss: p.memoryRss,
           memoryVms: p.memoryVms,
           threads: p.threads,
           fds: p.fds,
+          startTime: p.startTime,
+          children: p.children,
+          ioStats: p.ioStats,
           createdAt: now,
-          updatedAt: now,
+          updatedAt: now
         })),
       });
     } catch (error) {

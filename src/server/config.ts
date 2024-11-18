@@ -6,10 +6,9 @@ loadEnv();
 const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().default(4000),
-  HOST: z.string().default('localhost'),
+  PORT: z.coerce.number().default(3000),
+  HOST: z.string().default('0.0.0.0'),
   MAX_REQUEST_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
-  WEBSOCKET_URL: z.string().default('ws://localhost:4000'),
 
   // Database
   DB_HOST: z.string(),
@@ -25,19 +24,19 @@ const envSchema = z.object({
 
   // JWT
   JWT_SECRET: z.string(),
-  JWT_EXPIRES_IN: z.string().default('1h'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  JWT_EXPIRY: z.string().default('1h'),
+  JWT_REFRESH_EXPIRY: z.string().default('7d'),
 
   // CORS
-  ALLOWED_ORIGINS: z.string().default('*'),
-  ALLOWED_METHODS: z.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
-  ALLOWED_HEADERS: z.string().default('Content-Type,Authorization'),
-  EXPOSED_HEADERS: z.string().default(''),
-  CREDENTIALS: z.coerce.boolean().default(true),
-  MAX_AGE: z.coerce.number().default(86400),
+  CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  CORS_METHODS: z.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
+  CORS_ALLOWED_HEADERS: z.string().default('Content-Type,Authorization'),
+  CORS_EXPOSED_HEADERS: z.string().default(''),
+  CORS_CREDENTIALS: z.coerce.boolean().default(true),
+  CORS_MAX_AGE: z.coerce.number().default(86400),
 
   // Rate Limiting
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
+  RATE_LIMIT_WINDOW: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
   RATE_LIMIT_MAX: z.coerce.number().default(100),
 
   // Security
@@ -59,7 +58,7 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.string().default('info'),
-  LOG_FILE: z.string().default('logs/app.log'),
+  LOG_FILE: z.string().default('/var/log/shh/app.log'),
 
   // Gotify
   GOTIFY_URL: z.string().optional(),
@@ -67,31 +66,21 @@ const envSchema = z.object({
 
   // Prometheus
   PROMETHEUS_PORT: z.coerce.number().default(9090),
-
-  // Agent
-  AGENT_BINARY_PATH: z.string().default('bin/shh-agent'),
-  AGENT_CONFIG_PATH: z.string().default('etc/shh-agent/config.json'),
-  AGENT_IMAGE: z.string().default('ghcr.io/jmagar/shh-agent:latest'),
-  AGENT_VERSION: z.string().default('latest'),
-  AGENT_CHECK_INTERVAL: z.coerce.number().default(60 * 1000), // 1 minute
-  AGENT_TIMEOUT: z.coerce.number().default(5 * 60 * 1000), // 5 minutes
-
 });
 
 const env = envSchema.parse(process.env);
 
 export const config = {
-  env: env.NODE_ENV,
   server: {
+    env: env.NODE_ENV,
     port: env.PORT,
     host: env.HOST,
     maxRequestSize: env.MAX_REQUEST_SIZE,
-    websocketUrl: env.WEBSOCKET_URL,
   },
   db: {
     host: env.DB_HOST,
     port: env.DB_PORT,
-    database: env.DB_NAME,
+    name: env.DB_NAME,
     user: env.DB_USER,
     password: env.DB_PASSWORD,
   },
@@ -102,33 +91,28 @@ export const config = {
   },
   jwt: {
     secret: env.JWT_SECRET,
-    expiresIn: env.JWT_EXPIRES_IN,
-    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
+    expiry: env.JWT_EXPIRY,
+    refreshExpiry: env.JWT_REFRESH_EXPIRY,
   },
   cors: {
-    origin: env.ALLOWED_ORIGINS.split(','),
-    methods: env.ALLOWED_METHODS.split(','),
-    allowedHeaders: env.ALLOWED_HEADERS.split(','),
-    exposedHeaders: env.EXPOSED_HEADERS.split(','),
-    credentials: env.CREDENTIALS,
-    maxAge: env.MAX_AGE,
+    origin: env.CORS_ORIGIN,
+    methods: env.CORS_METHODS,
+    allowedHeaders: env.CORS_ALLOWED_HEADERS,
+    exposedHeaders: env.CORS_EXPOSED_HEADERS,
+    credentials: env.CORS_CREDENTIALS,
+    maxAge: env.CORS_MAX_AGE,
   },
   rateLimit: {
-    windowMs: env.RATE_LIMIT_WINDOW_MS,
+    windowMs: env.RATE_LIMIT_WINDOW,
     max: env.RATE_LIMIT_MAX,
   },
   security: {
     maxFileSize: env.MAX_FILE_SIZE,
-    allowedMethods: env.ALLOWED_METHODS.split(','),
-    allowedHeaders: env.ALLOWED_HEADERS.split(','),
-    exposedHeaders: env.EXPOSED_HEADERS.split(','),
-    credentials: env.CREDENTIALS,
-    maxAge: env.MAX_AGE,
   },
   openai: {
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_MODEL,
-    organization: env.OPENAI_ORG,
+    org: env.OPENAI_ORG,
     maxTokens: env.OPENAI_MAX_TOKENS,
     temperature: env.OPENAI_TEMPERATURE,
   },
@@ -149,13 +133,5 @@ export const config = {
   },
   prometheus: {
     port: env.PROMETHEUS_PORT,
-  },
-  agent: {
-    binaryPath: env.AGENT_BINARY_PATH,
-    configPath: env.AGENT_CONFIG_PATH,
-    image: env.AGENT_IMAGE,
-    version: env.AGENT_VERSION,
-    checkInterval: env.AGENT_CHECK_INTERVAL,
-    timeout: env.AGENT_TIMEOUT,
   },
 } as const;

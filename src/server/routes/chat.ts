@@ -1,5 +1,5 @@
 import express from 'express';
-import { generateChatResponse } from '../api/chat.server';
+import chatRouter from '../api/chat.server';
 import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
@@ -8,6 +8,6 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Main chat endpoint that handles both CopilotKit and mem0ai
-router.post('/', generateChatResponse);
+router.use('/', chatRouter);
 
 export default router;

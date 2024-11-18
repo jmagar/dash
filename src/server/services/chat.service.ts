@@ -1,69 +1,65 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
-import { HumanMessage, SystemMessage } from 'langchain/schema';
-import { Mem0Client } from 'mem0ai';
+import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
 interface ChatOptions {
-  useMem0?: boolean;
   systemPrompt?: string;
+}
+
+interface ChatResponse {
+  success: boolean;
+  data?: string;
+  error?: string;
 }
 
 class ChatService {
   private openai: ChatOpenAI;
-  private mem0: Mem0Client;
+  private defaultSystemPrompt = "You are a helpful assistant.";
 
   constructor() {
     this.openai = new ChatOpenAI({
       openAIApiKey: config.openai.apiKey,
       modelName: config.openai.model,
-      temperature: 0.7,
-    });
-
-    this.mem0 = new Mem0Client({
-      apiKey: config.mem0.apiKey,
+      temperature: config.openai.temperature,
     });
   }
 
-  async chat(message: string, options: ChatOptions = {}) {
+  private extractContent(message: AIMessage): string {
+    const content = message.content;
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      return content
+        .map(item => {
+          if (typeof item === 'string') {
+            return item;
+          }
+          // Handle other content types if needed
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    return '';
+  }
+
+  async chat(message: string, options: ChatOptions = {}): Promise<ChatResponse> {
     try {
-      // If mem0 is enabled, get context from it
-      let context = '';
-      if (options.useMem0) {
-        const memories = await this.mem0.search(message);
-        context = memories.map(m => m.content).join('\n');
-      }
-
       // Build messages array
-      const messages = [
-        new SystemMessage(options.systemPrompt || config.openai.systemPrompt),
+      const messages: BaseMessage[] = [
+        new SystemMessage(options.systemPrompt || this.defaultSystemPrompt),
+        new HumanMessage(message)
       ];
-
-      // Add context if we have it
-      if (context) {
-        messages.push(new SystemMessage(`Additional Context:\n${context}`));
-      }
-
-      // Add user message
-      messages.push(new HumanMessage(message));
 
       // Get response from OpenAI
       const response = await this.openai.call(messages);
-
-      // If mem0 is enabled, store the interaction
-      if (options.useMem0) {
-        await this.mem0.store({
-          content: `User: ${message}\nAssistant: ${response.content}`,
-          metadata: {
-            type: 'chat',
-            timestamp: new Date().toISOString(),
-          },
-        });
-      }
+      const content = this.extractContent(response);
 
       return {
         success: true,
-        data: response.content,
+        data: content,
       };
     } catch (error) {
       logger.error('Chat service error:', {

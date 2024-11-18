@@ -49,18 +49,22 @@ class MetricsService extends EventEmitter {
           net_errors_out,
           net_drops_in,
           net_drops_out,
-          net_connections,
           net_tcp_conns,
           net_udp_conns,
           net_listen_ports,
           net_interfaces,
           net_total_speed,
           net_average_speed,
-          uptime_seconds,
+          uptime,
           load_average_1,
           load_average_5,
-          load_average_15
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)`,
+          load_average_15,
+          created_at,
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
+          $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
+          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)`,
         [
           hostId,
           metrics.timestamp,
@@ -79,9 +83,9 @@ class MetricsService extends EventEmitter {
           metrics.memory.buffers,
           metrics.memory.cached,
           metrics.memory.available,
-          metrics.memory.swapTotal,
-          metrics.memory.swapUsed,
-          metrics.memory.swapFree,
+          metrics.memory.swap_total,
+          metrics.memory.swap_used,
+          metrics.memory.swap_free,
           metrics.memory.usage,
           metrics.storage.total,
           metrics.storage.used,
@@ -92,25 +96,26 @@ class MetricsService extends EventEmitter {
           metrics.storage.ioStats?.readBytes,
           metrics.storage.ioStats?.writeBytes,
           metrics.storage.ioStats?.ioTime,
-          metrics.network.rx_bytes,
-          metrics.network.tx_bytes,
-          metrics.network.rx_packets,
-          metrics.network.tx_packets,
-          metrics.network.rx_errors,
-          metrics.network.tx_errors,
-          metrics.network.rx_dropped,
-          metrics.network.tx_dropped,
-          metrics.network.connections,
+          metrics.network.bytesSent,
+          metrics.network.bytesRecv,
+          metrics.network.packetsSent,
+          metrics.network.packetsRecv,
+          metrics.network.errorsIn,
+          metrics.network.errorsOut,
+          metrics.network.dropsIn,
+          metrics.network.dropsOut,
           metrics.network.tcp_conns,
           metrics.network.udp_conns,
           metrics.network.listen_ports,
           metrics.network.interfaces,
           metrics.network.total_speed,
           metrics.network.average_speed,
-          metrics.uptimeSeconds,
+          metrics.uptime,
           metrics.loadAverage[0],
           metrics.loadAverage[1],
-          metrics.loadAverage[2]
+          metrics.loadAverage[2],
+          metrics.createdAt,
+          metrics.updatedAt
         ]
       );
 
@@ -126,46 +131,50 @@ class MetricsService extends EventEmitter {
   async storeProcessMetrics(hostId: string, processes: ProcessMetrics[]): Promise<void> {
     try {
       const values = processes.map(p => [
+        p.id,
         hostId,
         p.pid,
         p.timestamp,
-        p.name,
-        p.command,
-        p.username,
+        p.cpu,
         p.cpuUsage,
+        p.memory,
         p.memoryUsage,
         p.memoryRss,
         p.memoryVms,
+        p.diskRead,
+        p.diskWrite,
+        p.netRead,
+        p.netWrite,
         p.threads,
         p.fds,
-        p.ioStats?.readCount,
-        p.ioStats?.writeCount,
-        p.ioStats?.readBytes,
-        p.ioStats?.writeBytes,
+        p.createdAt,
+        p.updatedAt
       ]);
 
-      const placeholders = values.map((_, i) => 
-        `($${i * 16 + 1}, $${i * 16 + 2}, $${i * 16 + 3}, $${i * 16 + 4}, $${i * 16 + 5}, $${i * 16 + 6}, $${i * 16 + 7}, $${i * 16 + 8}, $${i * 16 + 9}, $${i * 16 + 10}, $${i * 16 + 11}, $${i * 16 + 12}, $${i * 16 + 13}, $${i * 16 + 14}, $${i * 16 + 15}, $${i * 16 + 16})`
+      const placeholders = values.map((_, i) =>
+        `($${i * 18 + 1}, $${i * 18 + 2}, $${i * 18 + 3}, $${i * 18 + 4}, $${i * 18 + 5}, $${i * 18 + 6}, $${i * 18 + 7}, $${i * 18 + 8}, $${i * 18 + 9}, $${i * 18 + 10}, $${i * 18 + 11}, $${i * 18 + 12}, $${i * 18 + 13}, $${i * 18 + 14}, $${i * 18 + 15}, $${i * 18 + 16}, $${i * 18 + 17}, $${i * 18 + 18})`
       ).join(',');
 
       await db.query(
         `INSERT INTO process_metrics (
+          id,
           host_id,
           pid,
           timestamp,
-          name,
-          command,
-          username,
+          cpu,
           cpu_usage,
+          memory,
           memory_usage,
           memory_rss,
           memory_vms,
+          disk_read,
+          disk_write,
+          net_read,
+          net_write,
           threads,
           fds,
-          io_read_count,
-          io_write_count,
-          io_read_bytes,
-          io_write_bytes
+          created_at,
+          updated_at
         ) VALUES ${placeholders}`,
         values.flat()
       );
@@ -180,27 +189,27 @@ class MetricsService extends EventEmitter {
   }
 
   async getMetrics(hostId: string, start: Date, end: Date): Promise<SystemMetrics[]> {
-    const result = await db.query(
-      `SELECT * FROM system_metrics 
-       WHERE host_id = $1 
-       AND timestamp BETWEEN $2 AND $3 
+    const result = await db.query<SystemMetrics>(
+      `SELECT * FROM system_metrics
+       WHERE host_id = $1
+       AND timestamp BETWEEN $2 AND $3
        ORDER BY timestamp ASC`,
       [hostId, start, end]
     );
 
-    return getSystemMetrics(result.rows);
+    return result.rows;
   }
 
   async getProcessMetrics(hostId: string, start: Date, end: Date): Promise<ProcessMetrics[]> {
-    const result = await db.query(
-      `SELECT * FROM process_metrics 
-       WHERE host_id = $1 
-       AND timestamp BETWEEN $2 AND $3 
+    const result = await db.query<ProcessMetrics>(
+      `SELECT * FROM process_metrics
+       WHERE host_id = $1
+       AND timestamp BETWEEN $2 AND $3
        ORDER BY timestamp ASC`,
       [hostId, start, end]
     );
 
-    return getProcessMetrics(result.rows);
+    return result.rows;
   }
 
   async cleanup(): Promise<void> {
@@ -208,88 +217,5 @@ class MetricsService extends EventEmitter {
   }
 }
 
-async function getSystemMetrics(rows: unknown[]): Promise<SystemMetrics[]> {
-  return rows.map((row: any) => ({
-    timestamp: new Date(row.timestamp),
-    cpu: {
-      user: row.cpu_user,
-      system: row.cpu_system,
-      idle: row.cpu_idle,
-      iowait: row.cpu_iowait,
-      steal: row.cpu_steal,
-      total: row.cpu_total,
-      cores: row.cpu_cores,
-      threads: row.cpu_threads,
-    },
-    memory: {
-      total: row.memory_total,
-      used: row.memory_used,
-      free: row.memory_free,
-      shared: row.memory_shared,
-      buffers: row.memory_buffers,
-      cached: row.memory_cached,
-      available: row.memory_available,
-      swapTotal: row.memory_swap_total,
-      swapUsed: row.memory_swap_used,
-      swapFree: row.memory_swap_free,
-      usage: row.memory_usage,
-    },
-    storage: {
-      total: row.storage_total,
-      used: row.storage_used,
-      free: row.storage_free,
-      usage: row.storage_usage,
-      ioStats: row.io_read_count ? {
-        readCount: row.io_read_count,
-        writeCount: row.io_write_count,
-        readBytes: row.io_read_bytes,
-        writeBytes: row.io_write_bytes,
-        ioTime: row.io_time,
-      } : undefined,
-    },
-    network: {
-      rx_bytes: row.net_bytes_sent,
-      tx_bytes: row.net_bytes_recv,
-      rx_packets: row.net_packets_sent,
-      tx_packets: row.net_packets_recv,
-      rx_errors: row.net_errors_in,
-      tx_errors: row.net_errors_out,
-      rx_dropped: row.net_drops_in,
-      tx_dropped: row.net_drops_out,
-      connections: row.net_connections,
-      tcp_conns: row.net_tcp_conns,
-      udp_conns: row.net_udp_conns,
-      listen_ports: row.net_listen_ports,
-      interfaces: row.net_interfaces,
-      total_speed: row.net_total_speed,
-      average_speed: row.net_average_speed,
-      health: row.net_health
-    },
-    uptimeSeconds: row.uptime_seconds,
-    loadAverage: [row.load_average_1, row.load_average_5, row.load_average_15],
-  }));
-}
-
-async function getProcessMetrics(rows: unknown[]): Promise<ProcessMetrics[]> {
-  return rows.map((row: any) => ({
-    pid: row.pid,
-    timestamp: new Date(row.timestamp),
-    name: row.name,
-    command: row.command,
-    username: row.username,
-    cpuUsage: row.cpu_usage,
-    memoryUsage: row.memory_usage,
-    memoryRss: row.memory_rss,
-    memoryVms: row.memory_vms,
-    threads: row.threads,
-    fds: row.fds,
-    ioStats: row.io_read_count ? {
-      readCount: row.io_read_count,
-      writeCount: row.io_write_count,
-      readBytes: row.io_read_bytes,
-      writeBytes: row.io_write_bytes,
-    } : undefined,
-  }));
-}
-
+// Export singleton instance
 export const metricsService = new MetricsService();

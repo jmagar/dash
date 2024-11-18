@@ -17,6 +17,9 @@ import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestTracer } from './middleware/requestTracer';
 import { securityHeaders } from './middleware/security';
 import { createProcessService } from './services/process';
+import { ProcessMonitorFactory } from './services/process/process-monitor-factory';
+import { ProcessCacheImpl } from './services/process/process-cache';
+import { hostService } from './services/host.service';
 
 // Create Express app
 const app = express();
@@ -34,8 +37,26 @@ export const io = new Server(server, {
   },
 });
 
-// Initialize services
-const processService = createProcessService(io);
+// Initialize process monitoring
+const processCache = new ProcessCacheImpl();
+const monitorFactory = new ProcessMonitorFactory(
+  io,
+  processCache,
+  hostService.listProcesses.bind(hostService),
+  hostService.getHost.bind(hostService)
+);
+
+// Initialize services with default monitoring settings
+const processService = createProcessService({
+  monitorFactory,
+  defaultInterval: 5000, // 5 seconds
+  maxMonitoredHosts: 100,
+  includeChildren: true,
+  excludeSystemProcesses: false,
+  sortBy: 'cpu',
+  sortOrder: 'desc',
+  maxProcesses: 100
+});
 
 // Configure Redis rate limiter
 const redisClient = createClient({
@@ -97,7 +118,9 @@ server.listen(port, () => {
 // Handle process termination
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received. Closing server...');
-  processService.stop();
+  processService.unmonitor('*').catch(err => {
+    logger.error('Error stopping process monitoring:', err);
+  });
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -105,4 +128,4 @@ process.on('SIGTERM', () => {
 });
 
 // Export server for use in bootstrap.ts
-export { server };
+export { server, processService };

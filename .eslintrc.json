@@ -53,10 +53,28 @@
             "caseInsensitive": true
           }
         }],
+        "import/no-unresolved": ["error", {
+          "ignore": ["^@xterm/"]
+        }],
         "react/react-in-jsx-scope": "off",
         "react/prop-types": "off",
         "react-hooks/rules-of-hooks": "error",
         "react-hooks/exhaustive-deps": "warn"
+      },
+      "settings": {
+        "import/parsers": {
+          "@typescript-eslint/parser": [".ts", ".tsx"]
+        },
+        "import/resolver": {
+          "typescript": {
+            "alwaysTryTypes": true,
+            "project": ["./tsconfig.json", "./tsconfig.server.json"]
+          },
+          "node": {
+            "extensions": [".js", ".jsx", ".ts", ".tsx"],
+            "moduleDirectory": ["node_modules", "src"]
+          }
+        }
       }
     },
     {

@@ -33,10 +33,38 @@ import { useNotifications } from '../hooks/useNotifications';
 import { useDesktopNotifications } from '../hooks/useDesktopNotifications';
 import type { Notification, NotificationType } from '../../types/notifications';
 import { logger } from '../utils/frontendLogger';
-import type { LogMetadata } from '../../types/logger';
 
 interface NotificationBellProps {
   userId: string;
+}
+
+type ErrorWithMessage = {
+  message: string;
+};
+
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  );
+}
+
+function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
+  if (isErrorWithMessage(maybeError)) return maybeError;
+
+  try {
+    return new Error(JSON.stringify(maybeError));
+  } catch {
+    // fallback in case there's an error stringifying the maybeError
+    // like with circular references for example.
+    return new Error(String(maybeError));
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return toErrorWithMessage(error).message;
 }
 
 export function NotificationBell({ userId }: NotificationBellProps) {
@@ -89,11 +117,10 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const formatTimestamp = (date: Date) => {
     try {
       return formatDistanceToNow(date, { addSuffix: true });
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
-      logger.error('Error formatting timestamp', metadata);
+    } catch (err) {
+      logger.error('Error formatting timestamp', {
+        error: getErrorMessage(err),
+      });
       return 'some time ago';
     }
   };
@@ -127,10 +154,9 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const id = open ? 'notifications-popover' : undefined;
 
   if (error) {
-    const metadata: LogMetadata = {
-      error: error instanceof Error ? error : new Error(String(error)),
-    };
-    logger.error('Failed to load notifications', metadata);
+    logger.error('Failed to load notifications', {
+      error: getErrorMessage(error),
+    });
   }
 
   return (
@@ -241,8 +267,8 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                 <ListItemButton
                   onClick={() => handleNotificationClick(notification)}
                   sx={{
-                    bgcolor: notification.read 
-                      ? 'transparent' 
+                    bgcolor: notification.read
+                      ? 'transparent'
                       : alpha(theme.palette.primary.main, 0.08),
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.12),

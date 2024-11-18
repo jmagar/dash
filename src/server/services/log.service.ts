@@ -2,7 +2,7 @@ import { Server as SocketServer } from 'socket.io';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { agentService } from './agent.service';
-import type { LogEntry, LogFilter, ServerToClientEvents, ClientToServerEvents } from '../../types/socket.io';
+import type { LogEntry, LogFilter , ServerToClientEvents, ClientToServerEvents } from '../../types/socket-events';
 
 class LogService extends EventEmitter {
   private io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
@@ -29,8 +29,7 @@ class LogService extends EventEmitter {
             // Check if agent is connected
             if (!agentService.isConnected(hostId)) {
               socket.emit('logs:error', {
-                hostId,
-                error: 'Agent not connected'
+                error: `Agent ${hostId} not connected`
               });
               continue;
             }
@@ -50,7 +49,6 @@ class LogService extends EventEmitter {
                 hostId
               });
               socket.emit('logs:error', {
-                hostId,
                 error: 'Failed to subscribe to logs'
               });
             }
@@ -119,25 +117,21 @@ class LogService extends EventEmitter {
 
   private setupAgentHandlers(): void {
     // Handle log entries from agents
-    agentService.on('agent:logs', ({ agentId, logs }) => {
-      const subscribers = this.subscribers.get(agentId);
+    agentService.on('agent:logs', ({ hostId, logs }) => {
+      const subscribers = this.subscribers.get(hostId);
       if (subscribers) {
         subscribers.forEach(socketId => {
-          this.io.to(socketId).emit('logs:stream', {
-            hostId: agentId,
-            logs
-          });
+          this.io.to(socketId).emit('logs:stream', { logs });
         });
       }
     });
 
     // Handle agent disconnection
-    agentService.on('agent:disconnected', (agentId) => {
-      const subscribers = this.subscribers.get(agentId);
+    agentService.on('agent:disconnected', ({ hostId }) => {
+      const subscribers = this.subscribers.get(hostId);
       if (subscribers) {
         subscribers.forEach(socketId => {
           this.io.to(socketId).emit('logs:error', {
-            hostId: agentId,
             error: 'Agent disconnected'
           });
         });

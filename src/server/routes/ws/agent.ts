@@ -1,11 +1,11 @@
 import WebSocket from 'ws';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { z } from 'zod';
 import { logger } from '../../utils/logger';
 
 // Message type validation
-const MessageType = z.enum([
+export const MessageType = z.enum([
   'ping',
   'pong',
   'handshake',
@@ -18,7 +18,7 @@ const MessageType = z.enum([
 ]);
 
 // Base message validation
-const Message = z.object({
+export const Message = z.object({
   type: MessageType,
   id: z.string(),
   timestamp: z.string().datetime(),
@@ -26,7 +26,7 @@ const Message = z.object({
 });
 
 // Agent info validation
-const AgentInfo = z.object({
+export const AgentInfo = z.object({
   id: z.string(),
   hostname: z.string(),
   ip_address: z.string(),
@@ -38,7 +38,7 @@ const AgentInfo = z.object({
 });
 
 // Heartbeat info validation
-const HeartbeatInfo = z.object({
+export const HeartbeatInfo = z.object({
   agent_id: z.string(),
   timestamp: z.string().datetime(),
   load_average: z.array(z.number()),
@@ -57,7 +57,7 @@ export class AgentConnection extends EventEmitter {
   private heartbeatTimeout?: NodeJS.Timeout;
   private agentInfo?: z.infer<typeof AgentInfo>;
   private lastHeartbeat?: z.infer<typeof HeartbeatInfo>;
-  private isAlive: boolean = true;
+  private isAlive = true;
 
   constructor(ws: WebSocket, private readonly agentId: string) {
     super();
@@ -102,6 +102,7 @@ export class AgentConnection extends EventEmitter {
     try {
       const raw = JSON.parse(data.toString());
       const message = Message.parse(raw);
+      let errorMessage: string;
 
       switch (message.type) {
         case 'register':
@@ -121,9 +122,16 @@ export class AgentConnection extends EventEmitter {
           break;
 
         case 'error':
+          errorMessage = 'Unknown error';
+          if (message.payload && typeof message.payload === 'object') {
+            if ('error' in message.payload && typeof message.payload.error === 'string') {
+              errorMessage = message.payload.error;
+            }
+          }
+
           logger.error('Agent error', {
             agentId: this.agentId,
-            error: message.payload,
+            error: errorMessage,
           });
           break;
 
@@ -134,8 +142,9 @@ export class AgentConnection extends EventEmitter {
           });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Error handling message', {
-        error,
+        error: errorMessage,
         agentId: this.agentId,
       });
     }
@@ -152,7 +161,7 @@ export class AgentConnection extends EventEmitter {
       // Send handshake response
       await this.send({
         type: 'handshake',
-        id: uuidv4(),
+        id: randomUUID(),
         timestamp: new Date().toISOString(),
         payload: {
           status: 'accepted',
@@ -165,8 +174,9 @@ export class AgentConnection extends EventEmitter {
         hostname: agentInfo.hostname,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid registration message';
       logger.error('Invalid registration message', {
-        error,
+        error: errorMessage,
         agentId: this.agentId,
       });
       this.terminate();
@@ -179,8 +189,9 @@ export class AgentConnection extends EventEmitter {
       this.lastHeartbeat = heartbeat;
       this.emit('heartbeat', heartbeat);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid heartbeat message';
       logger.error('Invalid heartbeat message', {
-        error,
+        error: errorMessage,
         agentId: this.agentId,
       });
     }
@@ -194,7 +205,7 @@ export class AgentConnection extends EventEmitter {
 
   private handleError(error: Error) {
     logger.error('WebSocket error', {
-      error,
+      error: error.message,
       agentId: this.agentId,
     });
     this.cleanup();
@@ -208,11 +219,12 @@ export class AgentConnection extends EventEmitter {
   private ping() {
     this.send({
       type: 'ping',
-      id: uuidv4(),
+      id: randomUUID(),
       timestamp: new Date().toISOString(),
     }).catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : 'Error sending ping';
       logger.error('Error sending ping', {
-        error,
+        error: errorMessage,
         agentId: this.agentId,
       });
     });
@@ -230,7 +242,7 @@ export class AgentConnection extends EventEmitter {
   public async executeCommand(command: string, args: string[] = []): Promise<void> {
     return this.send({
       type: 'command',
-      id: uuidv4(),
+      id: randomUUID(),
       timestamp: new Date().toISOString(),
       payload: {
         command,
@@ -256,3 +268,6 @@ export class AgentConnection extends EventEmitter {
     return this.ws.readyState === WebSocket.OPEN;
   }
 }
+
+// Export types for use in other files
+export type { z };

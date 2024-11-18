@@ -59,7 +59,7 @@ export const Dashboard: React.FC = () => {
   const theme = useTheme();
   const { hostId } = useParams<{ hostId: string }>();
   const [tabValue, setTabValue] = React.useState(0);
-  const { metrics, loading, error, refresh } = useHostMetrics({ hostId });
+  const { metrics, loading, error, refresh } = useHostMetrics(hostId || '');
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);

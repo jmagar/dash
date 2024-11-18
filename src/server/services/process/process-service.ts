@@ -7,7 +7,7 @@ import { db } from '../../db';
 import { parseProcessList } from './process-parser';
 import { ProcessMonitor } from './process-monitor';
 import type { Host } from '../../../types/models-shared';
-import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket.io';
+import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
 import type { ProcessInfo } from '../../../types/metrics';
 import type { ProcessCache } from './types';
 
@@ -193,7 +193,7 @@ export class ProcessService extends EventEmitter {
    */
   private async executeCommand(host: Host, command: string): Promise<string> {
     const result = await sshService.executeCommand(host.id, command);
-    if (result.code !== 0) {
+    if (result.exitCode !== 0) {
       throw new Error(`Command failed: ${result.stderr}`);
     }
     return result.stdout;

@@ -1,6 +1,6 @@
-import React from 'react';
-import { useNotificationPreferences } from '../hooks/useNotificationPreferencesV2';
-import type { NotificationType } from '../../types/notifications';
+import { useState } from 'react';
+import { useNotificationPreferencesV2 } from '../hooks/useNotificationPreferencesV2';
+import type { NotificationType } from '@/types/notifications';
 
 interface NotificationSettingsProps {
   userId: string;
@@ -70,9 +70,9 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     loading,
     error,
     updatePreferences,
-  } = useNotificationPreferences({ userId });
+  } = useNotificationPreferencesV2({ userId });
 
-  const [isSaving, setIsSaving] = React.useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (loading) {
     return (
@@ -100,15 +100,9 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
   const handleChannelToggle = async (channel: 'web' | 'gotify' | 'desktop') => {
     try {
       setIsSaving(true);
-      const channelKey = `${channel}Enabled` as const;
-      const success = await updatePreferences({
-        ...preferences,
-        [channelKey]: !preferences[channelKey],
-      });
-
-      if (!success) {
-        throw new Error('Failed to update preferences');
-      }
+      // If the channel is enabled, we want to keep all current types, otherwise clear them
+      const types = preferences[`${channel}Enabled`] ? [] : preferences[channel];
+      await updatePreferences(channel, types);
     } catch (error) {
       console.error('Failed to toggle notification channel:', error);
     } finally {
@@ -116,19 +110,21 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     }
   };
 
-  const handleEventToggle = async (type: NotificationType) => {
+  const handleEventToggle = async (eventType: NotificationType) => {
     try {
       setIsSaving(true);
-      const success = await updatePreferences({
-        ...preferences,
-        alertTypes: {
-          ...preferences.alertTypes,
-          [type]: !preferences.alertTypes[type],
-        },
-      });
+      // Update all enabled channels with the new event type
+      const channels: Array<'web' | 'gotify' | 'desktop'> = ['web', 'gotify', 'desktop'];
 
-      if (!success) {
-        throw new Error('Failed to update preferences');
+      for (const channel of channels) {
+        if (preferences[`${channel}Enabled`]) {
+          const currentTypes = preferences[channel];
+          const hasType = currentTypes.includes(eventType);
+          const updatedTypes = hasType
+            ? currentTypes.filter(t => t !== eventType)
+            : [...currentTypes, eventType];
+          await updatePreferences(channel, updatedTypes);
+        }
       }
     } catch (error) {
       console.error('Failed to toggle notification event:', error);

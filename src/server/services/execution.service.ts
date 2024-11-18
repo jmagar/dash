@@ -30,15 +30,15 @@ class ExecutionService extends EventEmitter {
     // Create base command object
     const command: Command = {
       id: Math.random().toString(36).substring(2, 15),
+      hostId: host.id,
       command: request.command,
       args: request.args,
       cwd: request.cwd,
       env: request.env,
+      request,
       status: 'running',
-      stdout: '',
-      stderr: '',
-      startedAt,
       createdAt: startedAt,
+      startedAt,
       updatedAt: startedAt,
     };
 
@@ -46,7 +46,7 @@ class ExecutionService extends EventEmitter {
       if (!agentService.isConnected(host.id)) {
         throw new ApiError('Agent not connected', null, 400);
       }
-      
+
       return await this.executeViaAgent(host.id, command, options);
     } catch (error) {
       logger.error('Command execution failed:', {
@@ -77,11 +77,7 @@ class ExecutionService extends EventEmitter {
       await this.storeCommand(hostId, command);
 
       // Execute command
-      await agentService.executeCommand(hostId, command.command, command.args || [], {
-        env: options.env,
-        cwd: options.cwd,
-        timeout: options.timeout,
-      });
+      await agentService.executeCommand(hostId, command.command, command.args);
 
       // Wait for command result via WebSocket
       const result = await new Promise<CommandResult>((resolve, reject) => {

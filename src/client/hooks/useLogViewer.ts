@@ -1,156 +1,118 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from './useSocket';
-import type { LogEntry, LogFilter } from '../../types/logs';
+import { useState, useEffect, useCallback } from 'react';
+import { socket } from '../socket';
+import type { LogEntry, LogFilter } from '../../types/logging';
 import { logger } from '../utils/frontendLogger';
 
 interface UseLogViewerOptions {
+  hostIds?: string[];
+  initialFilter?: LogFilter;
   maxLogs?: number;
   autoScroll?: boolean;
 }
 
 interface UseLogViewerResult {
   logs: LogEntry[];
+  filter: LogFilter | undefined;
   loading: boolean;
   error: string | null;
-  subscribe: (hostIds: string[], filter?: LogFilter) => void;
-  unsubscribe: (hostIds: string[]) => void;
+  updateFilter: (newFilter: LogFilter) => void;
+  refresh: () => void;
+  subscribe: (targetHostIds?: string[], targetFilter?: LogFilter) => void;
+  unsubscribe: (targetHostIds?: string[]) => void;
   clearLogs: () => void;
-  filterLogs: (filter: LogFilter) => void;
-  downloadLogs: () => void;
+  filterLogs: (newFilter: LogFilter) => void;
+  autoScroll: boolean | undefined;
 }
 
 export function useLogViewer({
+  hostIds = [],
+  initialFilter,
   maxLogs = 1000,
   autoScroll = true,
-}: UseLogViewerOptions = {}): UseLogViewerResult {
-  const socket = useSocket();
+}: UseLogViewerOptions): UseLogViewerResult {
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [filter, setFilter] = useState<LogFilter | undefined>(initialFilter);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentFilter, setCurrentFilter] = useState<LogFilter | undefined>();
 
-  const subscribe = useCallback((hostIds: string[], filter?: LogFilter) => {
-    if (!socket) {
-      setError('Socket not connected');
-      return;
-    }
+  const handleNewLog = useCallback((...args: unknown[]) => {
+    const log = args[0] as LogEntry;
+    setLogs(prevLogs => {
+      const newLogs = [log, ...prevLogs];
+      // Keep only the last maxLogs to prevent memory issues
+      return newLogs.slice(0, maxLogs);
+    });
+  }, [maxLogs]);
 
-    try {
-      setLoading(true);
-      setError(null);
-      setCurrentFilter(filter);
+  const handleLogStream = useCallback((...args: unknown[]) => {
+    const data = args[0] as { logs: LogEntry[] };
+    setLogs(prevLogs => {
+      const newLogs = [...data.logs, ...prevLogs];
+      // Keep only the last maxLogs to prevent memory issues
+      return newLogs.slice(0, maxLogs);
+    });
+  }, [maxLogs]);
 
-      socket.emit('logs:subscribe', { hostIds, filter });
-      logger.info('Subscribed to logs:', { hostIds, filter });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to subscribe to logs';
-      setError(errorMsg);
-      logger.error('Failed to subscribe to logs:', {
-        error: errorMsg,
-        hostIds,
-        filter,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [socket]);
+  const subscribe = useCallback((targetHostIds?: string[], targetFilter?: LogFilter) => {
+    setLoading(true);
+    setError(null);
 
-  const unsubscribe = useCallback((hostIds: string[]) => {
-    if (!socket) {
-      return;
-    }
+    socket.emit('logs:subscribe', {
+      hostIds: targetHostIds || hostIds,
+      filter: targetFilter || filter
+    });
+  }, [hostIds, filter]);
 
-    try {
-      socket.emit('logs:unsubscribe', { hostIds });
-      logger.info('Unsubscribed from logs:', { hostIds });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to unsubscribe from logs';
-      logger.error('Failed to unsubscribe from logs:', {
-        error: errorMsg,
-        hostIds,
-      });
-    }
-  }, [socket]);
+  const unsubscribe = useCallback((targetHostIds?: string[]) => {
+    socket.emit('logs:unsubscribe', {
+      hostIds: targetHostIds || hostIds
+    });
+  }, [hostIds]);
 
-  const filterLogs = useCallback((filter: LogFilter) => {
-    if (!socket) {
-      setError('Socket not connected');
-      return;
-    }
-
-    try {
-      setCurrentFilter(filter);
-      socket.emit('logs:filter', { filter });
-      logger.info('Applied log filter:', { filter });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to apply log filter';
-      setError(errorMsg);
-      logger.error('Failed to apply log filter:', {
-        error: errorMsg,
-        filter,
-      });
-    }
-  }, [socket]);
+  const updateFilter = useCallback((newFilter: LogFilter) => {
+    setFilter(newFilter);
+    socket.emit('logs:filter', { filter: newFilter });
+  }, []);
 
   const clearLogs = useCallback(() => {
     setLogs([]);
   }, []);
 
-  const downloadLogs = useCallback(() => {
-    try {
-      const content = logs.map(log => JSON.stringify(log)).join('\n');
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `logs-${new Date().toISOString()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to download logs';
-      setError(errorMsg);
-      logger.error('Failed to download logs:', {
-        error: errorMsg,
-      });
-    }
-  }, [logs]);
+  const filterLogs = useCallback((newFilter: LogFilter) => {
+    setFilter(newFilter);
+    socket.emit('logs:filter', { filter: newFilter });
+  }, []);
 
   useEffect(() => {
-    if (!socket) {
-      return;
-    }
+    subscribe();
 
-    socket.on('logs:new', (log: LogEntry) => {
-      setLogs(prev => {
-        const newLogs = [...prev, log];
-        if (maxLogs && newLogs.length > maxLogs) {
-          return newLogs.slice(-maxLogs);
-        }
-        return newLogs;
-      });
-    });
-
-    socket.on('logs:error', (data: { error: string }) => {
+    socket.on('logs:new', handleNewLog);
+    socket.on('logs:stream', handleLogStream);
+    socket.on('logs:error', (...args: unknown[]) => {
+      const data = args[0] as { error: string };
       setError(data.error);
       setLoading(false);
+      logger.error('Log viewer error:', { error: data.error });
     });
 
     return () => {
-      socket.off('logs:new');
-      socket.off('logs:error');
+      unsubscribe();
+      socket.off('logs:new', handleNewLog);
+      socket.off('logs:stream', handleLogStream);
     };
-  }, [socket, maxLogs]);
+  }, [hostIds, filter, subscribe, unsubscribe, handleNewLog, handleLogStream]);
 
   return {
     logs,
+    filter,
     loading,
     error,
+    updateFilter,
+    refresh: subscribe,
     subscribe,
     unsubscribe,
     clearLogs,
     filterLogs,
-    downloadLogs,
+    autoScroll,
   };
 }

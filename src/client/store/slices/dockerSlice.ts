@@ -1,8 +1,8 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { DockerContainer } from '../../../types/docker';
-import { listContainers, startContainer, stopContainer, removeContainer as removeContainerApi } from '../../api/docker.client';
-import { logger } from '../../utils/frontendLogger';
-import type { RootState } from '../storeTypes';
+import type { DockerContainer } from '@/types/docker';
+import type { RootState } from '@/client/store/storeTypes';
+import { listContainers, startContainer, stopContainer, removeContainer as removeContainerApi } from '@/client/api/docker.client';
+import { logger } from '@/client/utils/frontendLogger';
 
 interface DockerState {
   containers: DockerContainer[];
@@ -18,11 +18,16 @@ const initialState: DockerState = {
   selectedContainerId: null,
 };
 
-export const fetchContainers = createAsyncThunk<DockerContainer[], string>(
+export const fetchContainers = createAsyncThunk<
+  DockerContainer[],
+  string,
+  { state: RootState }
+>(
   'docker/fetchContainers',
   async (hostId: string) => {
     try {
-      return await listContainers(hostId);
+      const containers = await listContainers(hostId);
+      return containers;
     } catch (error) {
       logger.error('Failed to fetch containers:', {
         error: error instanceof Error ? error.message : String(error),
@@ -121,7 +126,7 @@ const dockerSlice = createSlice({
       })
       .addCase(fetchContainers.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch containers';
+        state.error = action.error.message ?? 'Failed to fetch containers';
       })
       .addCase(startContainerThunk.fulfilled, (state, action) => {
         const container = state.containers.find(c => c.id === action.payload);
@@ -158,19 +163,12 @@ export const {
 export default dockerSlice.reducer;
 
 // Selectors
-export const selectAllContainers = (state: RootState): DockerContainer[] =>
-  state.docker.containers;
-
-export const selectSelectedContainer = (state: RootState): DockerContainer | null =>
-  state.docker.selectedContainerId
-    ? state.docker.containers.find((container: DockerContainer) => container.id === state.docker.selectedContainerId) || null
+export const selectAllContainers = (state: RootState): DockerContainer[] => state.docker.containers;
+export const selectSelectedContainer = (state: RootState): DockerContainer | null => {
+  const { selectedContainerId, containers } = state.docker;
+  return selectedContainerId
+    ? containers.find(c => c.id === selectedContainerId) ?? null
     : null;
-
-export const selectContainerById = (state: RootState, containerId: string): DockerContainer | undefined =>
-  state.docker.containers.find((container: DockerContainer) => container.id === containerId);
-
-export const selectIsLoading = (state: RootState): boolean =>
-  state.docker.loading;
-
-export const selectError = (state: RootState): string | null =>
-  state.docker.error;
+};
+export const selectIsLoading = (state: RootState): boolean => state.docker.loading;
+export const selectError = (state: RootState): string | null => state.docker.error;

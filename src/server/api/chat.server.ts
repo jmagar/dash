@@ -1,52 +1,32 @@
-import { Request, Response } from 'express';
+import { Router } from 'express';
 import { chatService } from '../services/chat.service';
 import { logger } from '../utils/logger';
 
-interface ChatRequest {
-  message: string;
-  systemPrompt?: string;
-  useMem0?: boolean;
-}
+const router = Router();
 
-interface ChatResponse {
-  success: boolean;
-  data?: string;
-  error?: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
-
-export async function generateChatResponse(
-  req: Request<unknown, ChatResponse, ChatRequest>,
-  res: Response<ChatResponse>
-): Promise<void> {
+router.post('/chat', async (req, res) => {
   try {
-    const { message, systemPrompt, useMem0 } = req.body;
+    const { message, systemPrompt } = req.body;
 
     if (!message) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: 'Message is required',
       });
-      return;
     }
 
-    const response = await chatService.chat(message, {
-      systemPrompt,
-      useMem0,
-    });
+    const response = await chatService.chat(message, { systemPrompt });
 
     res.json(response);
   } catch (error) {
-    logger.error('Chat generation error:', {
+    logger.error('Chat API error:', {
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({
       success: false,
-      error: 'Failed to generate chat response',
+      error: 'Failed to process chat message',
     });
   }
-}
+});
+
+export default router;

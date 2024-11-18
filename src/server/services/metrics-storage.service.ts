@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { logger } from '../utils/logger';
-import type { SystemMetrics } from '../../types/process-metrics';
+import type { SystemMetrics } from '../../types/metrics';
 import type { DBMetric } from '../../types/db-models';
 import type { Host } from '../../types/models-shared';
 
@@ -9,9 +9,27 @@ class MetricsStorageService {
    * Convert DB metric to system metric
    */
   private dbToSystemMetric(row: DBMetric): SystemMetrics {
+    // Parse network interfaces from JSON string or default to empty array
+    const interfaces = Array.isArray(row.net_interfaces) ? row.net_interfaces :
+      (typeof row.net_interfaces === 'string' ?
+        JSON.parse(row.net_interfaces) :
+        [{
+          name: 'default',
+          bytesRecv: 0,
+          bytesSent: 0,
+          packetsRecv: 0,
+          packetsSent: 0,
+          errorsIn: 0,
+          errorsOut: 0,
+          dropsIn: 0,
+          dropsOut: 0
+        }]
+      );
+
     return {
       timestamp: row.timestamp,
       cpu: {
+        usage: row.cpu_total,
         total: row.cpu_total,
         user: row.cpu_user,
         system: row.cpu_system,
@@ -29,9 +47,9 @@ class MetricsStorageService {
         buffers: row.memory_buffers ?? 0,
         cached: row.memory_cached ?? 0,
         available: row.memory_available,
-        swapTotal: row.memory_swap_total,
-        swapUsed: row.memory_swap_used,
-        swapFree: row.memory_swap_free,
+        swap_total: row.memory_swap_total,
+        swap_used: row.memory_swap_used,
+        swap_free: row.memory_swap_free,
         usage: row.memory_usage,
       },
       storage: {
@@ -39,43 +57,54 @@ class MetricsStorageService {
         used: row.storage_used,
         free: row.storage_free,
         usage: row.storage_usage,
+        read_bytes: row.io_read_bytes ?? 0,
+        write_bytes: row.io_write_bytes ?? 0,
+        read_count: row.io_read_count ?? 0,
+        write_count: row.io_write_count ?? 0,
+        health: 'unknown',
         ioStats: {
-          readCount: row.io_read_count ?? 0,
-          writeCount: row.io_write_count ?? 0,
           readBytes: row.io_read_bytes ?? 0,
           writeBytes: row.io_write_bytes ?? 0,
+          readCount: row.io_read_count ?? 0,
+          writeCount: row.io_write_count ?? 0,
+          readTime: 0,
+          writeTime: 0,
           ioTime: row.io_time ?? 0,
         },
       },
       network: {
-        bytesSent: row.net_bytes_sent,
         bytesRecv: row.net_bytes_recv,
-        packetsSent: row.net_packets_sent,
+        bytesSent: row.net_bytes_sent,
         packetsRecv: row.net_packets_recv,
+        packetsSent: row.net_packets_sent,
         errorsIn: row.net_errors_in,
         errorsOut: row.net_errors_out,
         dropsIn: row.net_drops_in,
         dropsOut: row.net_drops_out,
-        connections: row.net_connections,
-        tcpConns: row.net_tcp_conns,
-        udpConns: row.net_udp_conns,
-        listenPorts: row.net_listen_ports,
-        interfaces: row.net_interfaces,
-        totalSpeed: row.net_total_speed,
-        averageSpeed: row.net_average_speed,
+        tx_bytes: row.net_bytes_sent,
+        rx_bytes: row.net_bytes_recv,
+        tx_packets: row.net_packets_sent,
+        rx_packets: row.net_packets_recv,
+        rx_errors: row.net_errors_in,
+        tx_errors: row.net_errors_out,
+        rx_dropped: row.net_drops_in,
+        tx_dropped: row.net_drops_out,
+        tcp_conns: row.net_tcp_conns,
+        udp_conns: row.net_udp_conns,
+        listen_ports: row.net_listen_ports,
+        average_speed: row.net_average_speed,
+        total_speed: row.net_total_speed,
+        health: 0,
+        interfaces,
       },
-      uptimeSeconds: row.uptime_seconds,
+      uptime: row.uptime_seconds,
       loadAverage: [
         row.load_average_1,
         row.load_average_5,
         row.load_average_15,
       ],
-      // Add required top-level fields
-      cpuUsage: row.cpu_total,
-      memoryTotal: row.memory_total,
-      memoryUsed: row.memory_used,
-      diskTotal: row.storage_total,
-      diskUsed: row.storage_used,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
   }
 
@@ -95,7 +124,7 @@ class MetricsStorageService {
           io_read_count, io_write_count, io_read_bytes, io_write_bytes,
           io_time, net_bytes_sent, net_bytes_recv, net_packets_sent,
           net_packets_recv, net_errors_in, net_errors_out, net_drops_in,
-          net_drops_out, net_connections, net_tcp_conns, net_udp_conns,
+          net_drops_out, net_tcp_conns, net_udp_conns,
           net_listen_ports, net_interfaces, net_total_speed,
           net_average_speed, uptime_seconds, load_average_1,
           load_average_5, load_average_15
@@ -103,7 +132,7 @@ class MetricsStorageService {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
           $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49
+          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48
         ) RETURNING *`,
         [
           host.id,
@@ -123,19 +152,19 @@ class MetricsStorageService {
           metrics.memory.buffers,
           metrics.memory.cached,
           metrics.memory.available,
-          metrics.memory.swapTotal,
-          metrics.memory.swapUsed,
-          metrics.memory.swapFree,
+          metrics.memory.swap_total,
+          metrics.memory.swap_used,
+          metrics.memory.swap_free,
           metrics.memory.usage,
           metrics.storage.total,
           metrics.storage.used,
           metrics.storage.free,
           metrics.storage.usage,
-          metrics.storage.ioStats?.readCount ?? 0,
-          metrics.storage.ioStats?.writeCount ?? 0,
-          metrics.storage.ioStats?.readBytes ?? 0,
-          metrics.storage.ioStats?.writeBytes ?? 0,
-          metrics.storage.ioStats?.ioTime ?? 0,
+          metrics.storage.ioStats.readCount,
+          metrics.storage.ioStats.writeCount,
+          metrics.storage.ioStats.readBytes,
+          metrics.storage.ioStats.writeBytes,
+          metrics.storage.ioStats.ioTime,
           metrics.network.bytesSent,
           metrics.network.bytesRecv,
           metrics.network.packetsSent,
@@ -144,14 +173,13 @@ class MetricsStorageService {
           metrics.network.errorsOut,
           metrics.network.dropsIn,
           metrics.network.dropsOut,
-          metrics.network.connections,
-          metrics.network.tcpConns,
-          metrics.network.udpConns,
-          metrics.network.listenPorts,
-          metrics.network.interfaces,
-          metrics.network.totalSpeed,
-          metrics.network.averageSpeed,
-          metrics.uptimeSeconds,
+          metrics.network.tcp_conns,
+          metrics.network.udp_conns,
+          metrics.network.listen_ports,
+          JSON.stringify(metrics.network.interfaces),
+          metrics.network.total_speed,
+          metrics.network.average_speed,
+          metrics.uptime,
           metrics.loadAverage[0],
           metrics.loadAverage[1],
           metrics.loadAverage[2],

@@ -66,7 +66,7 @@ export function DockerContainers({ hostId, containers, onRefresh }: DockerContai
     return containers.filter(container => {
       const searchString = searchTerm.toLowerCase();
       return (
-        container.names[0].toLowerCase().includes(searchString) ||
+        container.name.toLowerCase().includes(searchString) ||
         container.image.toLowerCase().includes(searchString) ||
         container.status.toLowerCase().includes(searchString)
       );
@@ -219,7 +219,7 @@ export function DockerContainers({ hostId, containers, onRefresh }: DockerContai
                 }}
               >
                 <TableCell component="th" scope="row">
-                  {container.names[0].replace(/^\//, '')}
+                  {container.name}
                 </TableCell>
                 <TableCell>{container.image}</TableCell>
                 <TableCell>
@@ -302,7 +302,7 @@ export function DockerContainers({ hostId, containers, onRefresh }: DockerContai
         <DialogContent>
           <Typography>
             Are you sure you want to remove container{' '}
-            <strong>{selectedContainer?.names[0]}</strong>?
+            <strong>{selectedContainer?.name}</strong>?
           </Typography>
         </DialogContent>
         <DialogActions>

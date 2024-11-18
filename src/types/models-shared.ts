@@ -2,8 +2,6 @@ import type { DockerContainer, DockerNetwork, DockerVolume, DockerStats, DockerP
 
 export { DockerContainer, DockerNetwork, DockerVolume, DockerStats };
 
-// Previous interfaces remain the same until Command...
-
 export interface CommandRequest {
   command: string;
   args?: string[];
@@ -250,11 +248,4 @@ export interface User {
   permissions: string[];
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface CommandResult {
-  code: number;
-  signal: string | null;
-  stdout: string;
-  stderr: string;
 }

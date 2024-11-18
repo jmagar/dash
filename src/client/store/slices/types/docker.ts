@@ -1,4 +1,4 @@
-import type { Container as DockerContainer } from '../../../../types';
+import type { DockerContainer } from '@/types/docker';
 
 export type ContainerState =
   | 'created'
@@ -12,18 +12,14 @@ export type ContainerState =
   | 'stopping'
   | 'error';
 
-export interface Container extends Omit<DockerContainer, 'state'> {
-  state: ContainerState;
+export interface DockerState {
+  containers: DockerContainer[];
+  loading: boolean;
+  error: string | null;
+  selectedContainerId: string | null;
 }
 
 export interface ContainerUpdate {
   containerId: string;
-  updates: Partial<Container>;
-}
-
-export interface DockerState {
-  containers: Record<string, Container>;
-  loading: boolean;
-  error: string | null;
-  selectedContainerId: string | null;
+  updates: Partial<DockerContainer>;
 }

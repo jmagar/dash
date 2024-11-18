@@ -26,10 +26,7 @@ interface HostManagerProps {
 export function HostManager({ hostId }: HostManagerProps) {
   const theme = useTheme();
   const { host, loading: hostLoading } = useHost({ hostId });
-  const { metrics, loading: metricsLoading } = useHostMetrics({
-    hostId,
-    enabled: true,
-  });
+  const { metrics, loading: metricsLoading } = useHostMetrics(hostId);
 
   if (hostLoading || metricsLoading) {
     return (

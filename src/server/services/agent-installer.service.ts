@@ -119,7 +119,7 @@ EOL
   public async executeCommand(host: Host, command: string, options?: { sudo?: boolean }): Promise<void> {
     const fullCommand = options?.sudo ? `sudo ${command}` : command;
     const result = await sshService.executeCommand(host.id, fullCommand);
-    if (result.code !== 0) {
+    if (result.exitCode !== 0) {
       throw new Error(`Command failed: ${result.stderr}`);
     }
   }
@@ -167,7 +167,7 @@ EOL
     try {
       await this.setupLogging(host);
       await this.installAgent(host, {
-        server_url: config.server.url,
+        server_url: config.server.websocketUrl,
         agent_id: host.id,
         labels: {
           environment: host.environment || 'production',

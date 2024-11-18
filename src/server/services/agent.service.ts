@@ -3,17 +3,18 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { AgentStatus } from '../../types/agent-config';
 import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
   AgentInfo,
   AgentMetrics,
   AgentCommandResult,
-  ServerToAgentEvents,
-  AgentToServerEvents,
   LogFilter,
   LogEntry
-} from '../../types/socket.io';
+} from '../../types/socket-events';
 
 interface ConnectedAgent {
-  socket: Socket<AgentToServerEvents, ServerToAgentEvents>;
+  socket: Socket<ClientToServerEvents, ServerToClientEvents>;
   info: AgentInfo;
   lastSeen: Date;
   metrics?: AgentMetrics;
@@ -21,7 +22,7 @@ interface ConnectedAgent {
 
 class AgentService extends EventEmitter {
   private agents: Map<string, ConnectedAgent> = new Map();
-  private namespace: Namespace<AgentToServerEvents, ServerToAgentEvents>;
+  private namespace: Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents>;
 
   constructor(io: SocketServer) {
     super();
@@ -30,12 +31,12 @@ class AgentService extends EventEmitter {
   }
 
   private setupSocketServer(): void {
-    this.namespace.on('connection', (socket: Socket<AgentToServerEvents, ServerToAgentEvents>) => {
+    this.namespace.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
       logger.debug('Agent attempting to connect');
 
       // Handle registration
-      socket.once('register', (info: AgentInfo) => {
-        this.handleRegistration(socket, info);
+      socket.once('agent:connected', (data: { info: AgentInfo }) => {
+        this.handleRegistration(socket, data.info);
       });
 
       // Set connection timeout
@@ -56,7 +57,7 @@ class AgentService extends EventEmitter {
   }
 
   private handleRegistration(
-    socket: Socket<AgentToServerEvents, ServerToAgentEvents>,
+    socket: Socket<ClientToServerEvents, ServerToClientEvents>,
     info: AgentInfo
   ): void {
     const { id } = info;
@@ -84,57 +85,66 @@ class AgentService extends EventEmitter {
     logger.info('Agent registered', {
       agentId: id,
       hostname: info.hostname,
-      version: info.agentVersion,
+      version: info.version,
     });
 
     // Emit registration event
     this.emit('agent:registered', info);
 
     // Send command to acknowledge registration
-    socket.emit('command', 'acknowledge');
+    socket.emit('agent:command', {
+      command: 'acknowledge'
+    });
   }
 
   private setupAgentHandlers(
-    socket: Socket<AgentToServerEvents, ServerToAgentEvents>,
+    socket: Socket<ClientToServerEvents, ServerToClientEvents>,
     agentId: string
   ): void {
     // Handle metrics updates
-    socket.on('metrics', (metrics: AgentMetrics) => {
+    socket.on('agent:metrics', (data: { metrics: AgentMetrics }) => {
       const agent = this.agents.get(agentId);
       if (agent) {
-        agent.metrics = metrics;
+        agent.metrics = data.metrics;
         agent.lastSeen = new Date();
-        this.emit('agent:metrics', { agentId, metrics });
+        this.emit('agent:metrics', { hostId: agentId, metrics: data.metrics });
       }
     });
 
     // Handle command responses
-    socket.on('commandResult', (result: AgentCommandResult) => {
-      this.emit('agent:commandResult', { agentId, result });
+    socket.on('agent:command', (data: { command: string; args?: string[] }) => {
+      this.emit('agent:commandResult', { agentId, result: { success: true, output: JSON.stringify(data) } });
     });
 
     // Handle errors
-    socket.on('error', (err: Error) => {
+    socket.on('error', (error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Agent error', {
         agentId,
-        error: err.message,
-        stack: err.stack,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
       });
-      this.emit('agent:error', { agentId, error: err });
+      this.emit('agent:error', { hostId: agentId, error: errorMessage });
     });
 
     // Handle heartbeat
-    socket.on('heartbeat', (data: { timestamp: string; load: number[] }) => {
+    socket.on('agent:heartbeat', (data: { timestamp: Date; load: number[] }) => {
       const agent = this.agents.get(agentId);
       if (agent) {
         agent.lastSeen = new Date();
-        this.emit('agent:heartbeat', { agentId, heartbeat: data });
+        this.emit('agent:heartbeat', {
+          hostId: agentId,
+          info: {
+            timestamp: data.timestamp,
+            status: 'healthy'
+          }
+        });
       }
     });
 
     // Handle logs
-    socket.on('logs', (logs: LogEntry[]) => {
-      this.emit('agent:logs', { agentId, logs });
+    socket.on('logs:stream', (data: { logs: LogEntry[] }) => {
+      this.emit('agent:logs', { hostId: agentId, logs: data.logs });
     });
   }
 
@@ -143,7 +153,7 @@ class AgentService extends EventEmitter {
     if (agent) {
       logger.info('Agent disconnected', { agentId });
       this.agents.delete(agentId);
-      this.emit('agent:disconnected', agentId);
+      this.emit('agent:disconnected', { hostId: agentId });
     }
   }
 
@@ -156,7 +166,13 @@ class AgentService extends EventEmitter {
       throw new Error(`Agent ${agentId} not connected`);
     }
 
-    agent.socket.emit('logs:subscribe', filter);
+    agent.socket.emit('logs:new', {
+      id: '',
+      timestamp: new Date(),
+      level: 'info',
+      message: 'Log subscription started',
+      metadata: { filter }
+    });
   }
 
   /**
@@ -168,7 +184,9 @@ class AgentService extends EventEmitter {
       throw new Error(`Agent ${agentId} not connected`);
     }
 
-    agent.socket.emit('logs:unsubscribe');
+    agent.socket.emit('logs:error', {
+      error: 'Log subscription ended'
+    });
   }
 
   /**
@@ -203,7 +221,10 @@ class AgentService extends EventEmitter {
         reject(new Error('Command acknowledgment timeout'));
       }, 5000);
 
-      agent.socket.emit('command', command, args);
+      agent.socket.emit('agent:command', {
+        command,
+        args
+      });
       resolve();
     });
   }

@@ -22,7 +22,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import type { LogEntry, LogFilter } from '../../types/logs';
+import type { LogEntry, LogFilter } from '@/types/logging';
 import { useLogViewer } from '../hooks/useLogViewer';
 import { ErrorBoundary } from './ErrorBoundary';
 

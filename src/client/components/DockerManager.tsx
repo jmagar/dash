@@ -35,9 +35,10 @@ import DockerCompose from './DockerCompose';
 import { LogViewer } from './LogViewer';
 import { useDockerStats } from '../hooks/useDockerStats';
 import { useDispatch, useSelector } from 'react-redux';
-import { Container } from '../../types/models-shared';
-import { fetchContainers, selectAllContainers, selectIsLoading, selectError } from '../store/slices/dockerSlice';
-import { logger } from '../utils/frontendLogger';
+import type { AppDispatch } from '@/client/store/storeTypes';
+import { fetchContainers, selectAllContainers, selectIsLoading, selectError } from '@/client/store/slices/dockerSlice';
+import { logger } from '@/client/utils/frontendLogger';
+import type { DockerStats } from '@/types/docker';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -77,7 +78,7 @@ interface DockerManagerProps {
 
 export function DockerManager({ hostId, userId }: DockerManagerProps) {
   const theme = useTheme();
-  const dispatch = useDispatch();
+  const dispatch: AppDispatch = useDispatch();
   const containers = useSelector(selectAllContainers);
   const loading = useSelector(selectIsLoading);
   const error = useSelector(selectError);
@@ -94,7 +95,7 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
     setRefreshing(true);
     await refresh();
     setTimeout(() => setRefreshing(false), 1000); // Minimum animation time
-    dispatch(fetchContainers(hostId));
+    void dispatch(fetchContainers(hostId));
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -117,6 +118,23 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
   if (error) {
     return <div>Error: {error}</div>;
   }
+
+  // Format percentages for display
+  const formatPercentage = (value: number): string => {
+    return `${Math.round(value)}%`;
+  };
+
+  // Ensure values are within 0-100 range for LinearProgress
+  const clampValue = (value: number): number => {
+    return Math.min(Math.max(value, 0), 100);
+  };
+
+  // Get stats values safely
+  const getStatsValue = (key: keyof DockerStats): number => {
+    if (!stats) return 0;
+    const value = stats[key];
+    return typeof value === 'number' ? value : 0;
+  };
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -190,11 +208,11 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
               <Typography variant="subtitle2" color="primary">Memory Usage</Typography>
             </Box>
             <Typography variant="h6">
-              {stats?.memoryUsage || '0%'}
+              {formatPercentage(getStatsValue('memoryUsage'))}
             </Typography>
             <LinearProgress
               variant="determinate"
-              value={parseFloat(stats?.memoryUsage || '0')}
+              value={clampValue(getStatsValue('memoryUsage'))}
               sx={{
                 mt: 1,
                 height: 6,
@@ -221,11 +239,11 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
               <Typography variant="subtitle2" color="primary">CPU Usage</Typography>
             </Box>
             <Typography variant="h6">
-              {stats?.cpuUsage || '0%'}
+              {formatPercentage(getStatsValue('cpuUsage'))}
             </Typography>
             <LinearProgress
               variant="determinate"
-              value={parseFloat(stats?.cpuUsage || '0')}
+              value={clampValue(getStatsValue('cpuUsage'))}
               sx={{
                 mt: 1,
                 height: 6,
@@ -252,11 +270,11 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
               <Typography variant="subtitle2" color="primary">Storage</Typography>
             </Box>
             <Typography variant="h6">
-              {stats?.diskUsage || '0%'}
+              {formatPercentage(getStatsValue('diskUsage'))}
             </Typography>
             <LinearProgress
               variant="determinate"
-              value={parseFloat(stats?.diskUsage || '0')}
+              value={clampValue(getStatsValue('diskUsage'))}
               sx={{
                 mt: 1,
                 height: 6,
@@ -295,7 +313,7 @@ export function DockerManager({ hostId, userId }: DockerManagerProps) {
           <Tab
             icon={
               <Badge
-                badgeContent={stats?.containers || 0}
+                badgeContent={getStatsValue('containers')}
                 color="primary"
                 sx={{
                   '& .MuiBadge-badge': {

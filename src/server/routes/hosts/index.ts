@@ -28,15 +28,15 @@ router.get('/', async (req: Request, res: Response<HostListResponse>) => {
     }
 
     const result = await db.query<Host>(
-      'SELECT * FROM hosts WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT *, agent_status as "agentStatus" FROM hosts WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
 
     // Enrich with agent status
     const hosts = result.rows.map(host => ({
       ...host,
-      agent_connected: agentService.isConnected(host.id),
-      agent_metrics: agentService.getAgentMetrics(host.id),
+      agentConnected: agentService.isConnected(host.id),
+      agentMetrics: agentService.getAgentMetrics(host.id),
     }));
 
     res.json({
@@ -63,7 +63,7 @@ router.get('/:id', async (req: Request<HostParams>, res: Response<HostResponse>)
     }
 
     const result = await db.query<Host>(
-      'SELECT * FROM hosts WHERE id = $1 AND user_id = $2',
+      'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -76,8 +76,8 @@ router.get('/:id', async (req: Request<HostParams>, res: Response<HostResponse>)
     // Enrich with agent status
     const enrichedHost = {
       ...host,
-      agent_connected: agentService.isConnected(host.id),
-      agent_metrics: agentService.getAgentMetrics(host.id),
+      agentConnected: agentService.isConnected(host.id),
+      agentMetrics: agentService.getAgentMetrics(host.id),
     };
 
     res.json({
@@ -109,7 +109,7 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
         user_id, name, hostname, port, username, password,
         status, agent_status, created_at, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-      RETURNING *`,
+      RETURNING *, agent_status as "agentStatus"`,
       [
         req.user.id,
         req.body.name,
@@ -118,7 +118,7 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
         req.body.username,
         req.body.password,
         'offline',
-        'unknown',
+        null,
       ]
     );
 
@@ -176,7 +176,7 @@ router.put('/:id', async (req: Request<HostParams, HostResponse, UpdateHostReque
         password = COALESCE($5, password),
         updated_at = NOW()
       WHERE id = $6 AND user_id = $7
-      RETURNING *`,
+      RETURNING *, agent_status as "agentStatus"`,
       [
         req.body.name,
         req.body.hostname,
@@ -218,7 +218,7 @@ router.delete('/:id', async (req: Request<HostParams>, res: Response<ApiResponse
 
     // Get host first to check ownership
     const hostResult = await db.query<Host>(
-      'SELECT * FROM hosts WHERE id = $1 AND user_id = $2',
+      'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -229,7 +229,7 @@ router.delete('/:id', async (req: Request<HostParams>, res: Response<ApiResponse
     const host = hostResult.rows[0];
 
     // Uninstall agent if installed
-    if (host.agent_status === 'installed') {
+    if (host.agentStatus === 'installed') {
       try {
         await agentInstallerService.uninstallAgent(host);
       } catch (error) {
@@ -271,7 +271,7 @@ router.post('/:id/agent/install', async (req: Request<HostParams>, res: Response
     }
 
     const result = await db.query<Host>(
-      'SELECT * FROM hosts WHERE id = $1 AND user_id = $2',
+      'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -315,7 +315,7 @@ router.post('/:id/agent/uninstall', async (req: Request<HostParams>, res: Respon
     }
 
     const result = await db.query<Host>(
-      'SELECT * FROM hosts WHERE id = $1 AND user_id = $2',
+      'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 

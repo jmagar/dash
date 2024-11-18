@@ -72,13 +72,14 @@ export interface DBMetric {
 export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
   return {
     timestamp: dbMetric.timestamp,
+    cpuUsage: dbMetric.cpu_total,
     cpu: {
       total: dbMetric.cpu_total,
       user: dbMetric.cpu_user,
       system: dbMetric.cpu_system,
       idle: dbMetric.cpu_idle,
-      iowait: dbMetric.cpu_iowait,
-      steal: dbMetric.cpu_steal,
+      iowait: dbMetric.cpu_iowait ?? 0,
+      steal: dbMetric.cpu_steal ?? 0,
       cores: dbMetric.cpu_cores,
       threads: dbMetric.cpu_threads,
     },
@@ -87,8 +88,8 @@ export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
       used: dbMetric.memory_used,
       free: dbMetric.memory_free,
       shared: dbMetric.memory_shared,
-      buffers: dbMetric.memory_buffers,
-      cached: dbMetric.memory_cached,
+      buffers: dbMetric.memory_buffers ?? 0,
+      cached: dbMetric.memory_cached ?? 0,
       available: dbMetric.memory_available,
       swapTotal: dbMetric.memory_swap_total,
       swapUsed: dbMetric.memory_swap_used,
@@ -102,10 +103,10 @@ export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
       usage: dbMetric.storage_usage,
       ioStats: dbMetric.io_read_count ? {
         readCount: dbMetric.io_read_count,
-        writeCount: dbMetric.io_write_count!,
-        readBytes: dbMetric.io_read_bytes!,
-        writeBytes: dbMetric.io_write_bytes!,
-        ioTime: dbMetric.io_time,
+        writeCount: dbMetric.io_write_count ?? 0,
+        readBytes: dbMetric.io_read_bytes ?? 0,
+        writeBytes: dbMetric.io_write_bytes ?? 0,
+        ioTime: dbMetric.io_time ?? 0,
       } : undefined,
     },
     network: {
@@ -131,11 +132,9 @@ export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
       dbMetric.load_average_5,
       dbMetric.load_average_15,
     ],
-    cpuUsage: dbMetric.cpu_total,
-    memoryTotal: dbMetric.memory_total,
-    memoryUsed: dbMetric.memory_used,
     diskTotal: dbMetric.storage_total,
     diskUsed: dbMetric.storage_used,
+    diskFree: dbMetric.storage_free,
   };
 }
 

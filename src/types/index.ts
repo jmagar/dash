@@ -16,9 +16,11 @@ export type {
   UserRegistration,
   SSHConfig,
   SystemStats,
-  ContainerStats,
   ApiResponse,
 } from './models-shared';
+
+// Export docker types
+export type { DockerStats as ContainerStats } from './docker';
 
 // Export auth types
 export type {

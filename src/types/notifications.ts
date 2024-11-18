@@ -1,81 +1,10 @@
 import type { Alert } from './metrics-alerts';
 
-export type NotificationType = 'alert' | 'error' | 'warning' | 'info' | 'success';
-export type NotificationChannel = 'web' | 'gotify' | 'desktop';
+export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'alert';
 
-export interface NotificationBase {
+export interface Notification {
   id: string;
   userId: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  timestamp: Date;
-  read: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-export interface WebNotification extends NotificationBase {
-  channel: 'web';
-  link?: string;
-}
-
-export interface GotifyNotification extends NotificationBase {
-  channel: 'gotify';
-  priority: number;
-  link?: string;
-}
-
-export interface DesktopNotification extends NotificationBase {
-  channel: 'desktop';
-  type: NotificationType;
-  icon?: string;
-  duration?: number;
-  link?: string;
-}
-
-export type Notification = WebNotification | GotifyNotification | DesktopNotification;
-
-export interface NotificationPreferencesV2 {
-  webEnabled: boolean;
-  gotifyEnabled: boolean;
-  desktopEnabled: boolean;
-  alertTypes: {
-    [K in NotificationType]: boolean;
-  };
-}
-
-export interface NotificationPreferencesV1 {
-  web: NotificationType[];
-  gotify: NotificationType[];
-  desktop: NotificationType[];
-}
-
-export interface NotificationPreferences {
-  userId: string;
-  preferences: NotificationPreferencesV2;
-}
-
-export interface NotificationFilter {
-  userId: string;
-  type?: NotificationType;
-  read?: boolean;
-  startDate?: Date;
-  endDate?: Date;
-  limit?: number;
-  offset?: number;
-}
-
-export interface NotificationCount {
-  total: number;
-  unread: number;
-  byType: {
-    [K in NotificationType]: number;
-  };
-}
-
-export interface DBNotification {
-  id: string;
-  user_id: string;
   type: NotificationType;
   title: string;
   message: string;
@@ -83,53 +12,114 @@ export interface DBNotification {
   alert?: Alert;
   link?: string;
   read: boolean;
-  read_at: Date | null;
-  created_at: Date;
-}
-
-// Event types for different notification channels
-export interface NotificationEvent {
-  type: 'new' | 'updated' | 'deleted';
-  notification: Notification;
-}
-
-export interface NotificationResponse {
-  success: boolean;
-  error?: string;
-  data?: {
-    notification?: Notification;
-    notifications?: Notification[];
-    count?: NotificationCount;
-    preferences?: NotificationPreferences;
-  };
-}
-
-export interface NotificationSubscription {
-  userId: string;
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
+  readAt?: Date;
+  timestamp: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Utility type for converting between V1 and V2 formats
-export interface NotificationPreferencesConverter {
-  toV2(v1: NotificationPreferencesV1): NotificationPreferencesV2;
-  toV1(v2: NotificationPreferencesV2): NotificationPreferencesV1;
+// Database representation of a notification
+export interface DBNotification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  alert?: Record<string, unknown>;
+  link?: string;
+  read: boolean;
+  read_at?: Date;
+  created_at: Date;
 }
 
-// Response types
+// Gotify notification event
+export interface NotificationGotifyEvent {
+  title: string;
+  message: string;
+  priority: number;
+  link?: string;
+}
+
+export interface DesktopNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  duration: number;
+  icon?: string;
+  link?: string;
+  timestamp: Date;
+}
+
+export interface NotificationPreferences {
+  userId: string;
+  web: NotificationType[];
+  gotify: NotificationType[];
+  desktop: NotificationType[];
+  muted: boolean;
+  mutedUntil?: Date;
+  alertTypes: {
+    alert: boolean;
+    info: boolean;
+    success: boolean;
+    warning: boolean;
+    error: boolean;
+  };
+  webEnabled: boolean;
+  gotifyEnabled: boolean;
+  desktopEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NotificationEvent {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  timestamp: Date;
+}
+
+export interface NotificationChannel {
+  id: string;
+  name: string;
+  type: 'web' | 'gotify' | 'desktop';
+  enabled: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface NotificationFilter {
+  type?: NotificationType[];
+  read?: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+  limit?: number;
+  offset?: number;
+  userId?: string;
+}
+
+export interface NotificationStats {
+  total: number;
+  unread: number;
+  byType: Record<NotificationType, number>;
+}
+
+export interface NotificationCount {
+  total: number;
+  unread: number;
+  byType: Record<NotificationType, number>;
+}
+
 export interface NotificationPreferencesResponse {
   success: boolean;
   error?: string;
-  data?: NotificationPreferencesV1;
+  data?: NotificationPreferences;
 }
 
-export interface NotificationPreferencesV2Response {
-  success: boolean;
-  error?: string;
-  data?: NotificationPreferencesV2;
-}
+// For backward compatibility
+export type NotificationPreferencesV1 = NotificationPreferences;
+export type NotificationPreferencesV2 = NotificationPreferences;
+export type NotificationPreferencesConverter = (prefs: NotificationPreferencesV1) => NotificationPreferencesV2;

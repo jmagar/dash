@@ -1,123 +1,77 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSocket } from './useSocket';
-import type { SystemMetrics, ProcessMetrics } from '../../types/metrics';
+import { socket } from '../socket';
+import type { SystemMetrics } from '../../types/metrics';
+import type { ProcessInfo } from '../../types/process';
 import { logger } from '../utils/frontendLogger';
 
 interface UseHostMetricsOptions {
-  hostId?: string;
-  interval?: number;
+  hostId: string;
   enabled?: boolean;
 }
 
-interface UseHostMetricsResult {
-  metrics: SystemMetrics | null;
-  processMetrics: ProcessMetrics[];
-  loading: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
-}
+export function useHostMetrics(options: UseHostMetricsOptions | string) {
+  const hostId = typeof options === 'string' ? options : options.hostId;
+  const enabled = typeof options === 'string' ? true : options.enabled ?? true;
 
-export function useHostMetrics({
-  hostId,
-  interval = 5000,
-  enabled = true,
-}: UseHostMetricsOptions): UseHostMetricsResult {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
-  const [processMetrics, setProcessMetrics] = useState<ProcessMetrics[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
 
-  const fetchMetrics = useCallback(async () => {
-    if (!hostId) {
-      setMetrics(null);
-      setProcessMetrics([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [metricsResponse, processResponse] = await Promise.all([
-        fetch(`/api/hosts/${hostId}/metrics`),
-        fetch(`/api/hosts/${hostId}/processes`),
-      ]);
-
-      const [metricsData, processData] = await Promise.all([
-        metricsResponse.json(),
-        processResponse.json(),
-      ]);
-
-      if (!metricsData.success) {
-        throw new Error(metricsData.error || 'Failed to fetch system metrics');
-      }
-
-      if (!processData.success) {
-        throw new Error(processData.error || 'Failed to fetch process metrics');
-      }
-
-      setMetrics(metricsData.data);
-      setProcessMetrics(processData.data);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch metrics';
-      logger.error('Error fetching metrics:', { error: errorMsg, hostId });
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
+  const handleMetricsUpdate = useCallback((...args: unknown[]) => {
+    const data = args[0] as { hostId: string; metrics: SystemMetrics };
+    if (data.hostId === hostId) {
+      setMetrics(data.metrics);
     }
   }, [hostId]);
 
-  useEffect(() => {
-    if (!socket || !enabled || !hostId) return;
+  const handleProcessUpdate = useCallback((...args: unknown[]) => {
+    const data = args[0] as { hostId: string; processes: ProcessInfo[] };
+    if (data.hostId === hostId) {
+      setProcesses(data.processes);
+    }
+  }, [hostId]);
 
-    // Subscribe to metrics updates
+  const startMonitoring = useCallback(() => {
+    if (!enabled) return;
+
+    setLoading(true);
+    setError(null);
+
     socket.emit('metrics:subscribe', { hostId });
+    socket.emit('process:monitor', { hostId });
+  }, [hostId, enabled]);
 
-    // Handle metrics updates
-    const handleMetricsUpdate = (data: { hostId: string; metrics: SystemMetrics }) => {
-      if (data.hostId === hostId) {
-        setMetrics(data.metrics);
-        setError(null);
-      }
-    };
+  const stopMonitoring = useCallback(() => {
+    socket.emit('metrics:unsubscribe', { hostId });
+    socket.emit('process:unmonitor', { hostId });
+  }, [hostId]);
 
-    // Handle process metrics updates
-    const handleProcessUpdate = (data: { hostId: string; metrics: ProcessMetrics[] }) => {
-      if (data.hostId === hostId) {
-        setProcessMetrics(data.metrics);
-        setError(null);
-      }
-    };
+  useEffect(() => {
+    startMonitoring();
 
     socket.on('metrics:update', handleMetricsUpdate);
     socket.on('process:metrics', handleProcessUpdate);
-
-    // Initial fetch
-    void fetchMetrics();
-
-    // Set up polling interval
-    let timeoutId: NodeJS.Timeout;
-    if (interval > 0) {
-      timeoutId = setInterval(fetchMetrics, interval);
-    }
+    socket.on('metrics:error', (...args: unknown[]) => {
+      const data = args[0] as { hostId: string; error: string };
+      if (data.hostId === hostId) {
+        setError(data.error);
+        logger.error('Host metrics error:', { error: data.error });
+      }
+    });
 
     return () => {
+      stopMonitoring();
       socket.off('metrics:update', handleMetricsUpdate);
       socket.off('process:metrics', handleProcessUpdate);
-      socket.emit('metrics:unsubscribe', { hostId });
-      if (timeoutId) {
-        clearInterval(timeoutId);
-      }
     };
-  }, [socket, hostId, interval, enabled, fetchMetrics]);
+  }, [hostId, startMonitoring, stopMonitoring, handleMetricsUpdate, handleProcessUpdate]);
 
   return {
     metrics,
-    processMetrics,
+    processes,
     loading,
     error,
-    refresh: fetchMetrics,
+    refresh: startMonitoring,
   };
 }

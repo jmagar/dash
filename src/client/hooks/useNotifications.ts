@@ -129,13 +129,17 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('notification:created', (notification: Notification) => {
+    socket.on('notification:created', (...args: unknown[]) => {
+      const [data] = args;
+      const notification = data as Notification;
       if (notification.userId === userId) {
         setNotifications(prev => [notification, ...prev].slice(0, limit));
       }
     });
 
-    socket.on('notification:updated', (notification: Notification) => {
+    socket.on('notification:updated', (...args: unknown[]) => {
+      const [data] = args;
+      const notification = data as Notification;
       if (notification.userId === userId) {
         setNotifications(prev =>
           prev.map(n => (n.id === notification.id ? notification : n))
@@ -143,7 +147,9 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
       }
     });
 
-    socket.on('notification:deleted', (notificationId: string) => {
+    socket.on('notification:deleted', (...args: unknown[]) => {
+      const [data] = args;
+      const notificationId = data as string;
       setNotifications(prev =>
         prev.filter(n => n.id !== notificationId)
       );

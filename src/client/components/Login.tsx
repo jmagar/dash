@@ -131,6 +131,7 @@ export default function Login(): JSX.Element {
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={loading}
                 required
+                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 InputProps={{
                   startAdornment: (

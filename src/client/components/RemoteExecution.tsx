@@ -29,6 +29,8 @@ import {
   Terminal,
   ContentCopy,
   NavigateNext,
+  ContentCopy as ContentCopyIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
 import { useHost } from '../hooks/useHost';
 import { executeCommand } from '../api/remoteExecution.client';
@@ -86,6 +88,18 @@ export function RemoteExecution() {
     navigator.clipboard.writeText(text);
   };
 
+  const handleNavigateToHosts = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // TODO: Implement navigation to hosts page
+    logger.info('Navigate to hosts page');
+  };
+
+  const handleNavigateToHost = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // TODO: Implement navigation to host details page
+    logger.info('Navigate to host details page');
+  };
+
   if (!selectedHost) {
     return (
       <Box p={3}>
@@ -100,10 +114,10 @@ export function RemoteExecution() {
         separator={<NavigateNext fontSize="small" />}
         sx={{ mb: 3 }}
       >
-        <Link color="inherit" href="#" onClick={() => {}}>
+        <Link color="inherit" href="#" onClick={handleNavigateToHosts}>
           Hosts
         </Link>
-        <Link color="inherit" href="#" onClick={() => {}}>
+        <Link color="inherit" href="#" onClick={handleNavigateToHost}>
           {selectedHost.name}
         </Link>
         <Typography color="text.primary">Execute Command</Typography>
@@ -251,6 +265,26 @@ export function RemoteExecution() {
                             <ContentCopy fontSize="small" />
                           </IconButton>
                         </Tooltip>
+                        <IconButton
+                          onClick={() => {
+                            logger.info('Copy functionality not implemented yet');
+                          }}
+                          size="small"
+                          title="Copy to clipboard"
+                          disabled
+                        >
+                          <ContentCopyIcon />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => {
+                            logger.info('Download functionality not implemented yet');
+                          }}
+                          size="small"
+                          title="Download output"
+                          disabled
+                        >
+                          <DownloadIcon />
+                        </IconButton>
                       </Box>
                       <Paper variant="outlined">
                         <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
