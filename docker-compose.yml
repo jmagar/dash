@@ -11,6 +11,12 @@ services:
       - "1514:1514"
       - "9090:9090"
     environment:
+      # Build Configuration
+      - DOCKER_BUILD=1
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - SKIP_PREFLIGHT_CHECK=true
+      - DISABLE_ESLINT_PLUGIN=true
+
       # Server
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000

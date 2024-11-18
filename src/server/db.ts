@@ -8,7 +8,7 @@ const poolConfig: PoolConfig = {
   password: config.db.password,
   host: config.db.host,
   port: config.db.port,
-  database: config.db.database,
+  database: config.db.name,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

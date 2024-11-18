@@ -14,7 +14,7 @@ export function generateToken(user: User): string {
   };
 
   return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+    expiresIn: config.jwt.expiry,
   });
 }
 
@@ -28,7 +28,7 @@ export function generateRefreshToken(user: User): string {
   };
 
   return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
-    expiresIn: config.jwt.refreshExpiresIn,
+    expiresIn: config.jwt.refreshExpiry,
   });
 }
 
@@ -54,10 +54,12 @@ export function verifyToken(token: string): TokenPayload | null {
       return decoded as TokenPayload;
     }
 
-    logger.error('Invalid token payload structure');
+    logger.warn('Invalid token structure', {
+      decoded,
+    });
     return null;
   } catch (error) {
-    logger.error('Token verification failed:', {
+    logger.warn('Token verification failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return null;

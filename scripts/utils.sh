@@ -17,6 +17,10 @@ print_status() {
     echo -e "${GREEN}==>${NC} $1"
 }
 
+print_success() {
+    echo -e "${GREEN}Success:${NC} $1"
+}
+
 print_error() {
     echo -e "${RED}Error:${NC} $1"
     if [ -n "${2:-}" ]; then
@@ -36,6 +40,10 @@ print_substep() {
     echo -e "${MAGENTA}  >${NC} $1"
 }
 
+print_header() {
+    echo -e "\n${CYAN}=== $1 ===${NC}\n"
+}
+
 # Check if Docker is installed and running
 check_docker() {
     print_substep "Checking Docker installation..."
@@ -49,58 +57,35 @@ check_docker() {
         print_error "Docker daemon is not running" "Please start the Docker service"
         return 1
     fi
-
-    print_substep "Checking Docker version..."
-    local version=$(docker version --format '{{.Server.Version}}' 2>/dev/null)
-    if [[ "${version}" < "20.10.0" ]]; then
-        print_warning "Docker version ${version} is older than recommended (20.10.0+)"
-    else
-        print_substep "Docker ${version} "
-    fi
-
-    return 0
 }
 
 # Check if Docker Compose is installed
 check_docker_compose() {
     print_substep "Checking Docker Compose installation..."
-    
-    # Check for the new docker compose command
-    if docker compose version &> /dev/null; then
-        local version=$(docker compose version --short)
-        print_substep "Docker Compose ${version}"
-        export DOCKER_COMPOSE="docker compose"
-        return 0
+    if ! docker compose version &> /dev/null; then
+        print_error "Docker Compose V2 is not installed" "Visit https://docs.docker.com/compose/install/ for installation instructions"
+        return 1
     fi
-
-    print_error "Docker Compose is not installed or not properly configured" "Please install the latest version of Docker Compose V2: https://docs.docker.com/compose/install/"
-    return 1
 }
 
 # Check system resources
 check_system_resources() {
-    print_substep "Checking system resources..."
-    
-    # Check available disk space
+    print_substep "Checking system memory..."
+    local total_memory=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "${total_memory}" -lt 4096 ]; then
+        print_warning "Low memory detected (${total_memory}MB). Recommended minimum is 4096MB."
+    fi
+
+    print_substep "Checking disk space..."
     local available_space=$(df -k . | awk 'NR==2 {print $4}')
-    local min_space=$((10 * 1024 * 1024)) # 10GB in KB
-    if [ "${available_space}" -lt "${min_space}" ]; then
-        print_warning "Low disk space: Less than 10GB available"
+    if [ "${available_space}" -lt 10485760 ]; then # 10GB
+        print_warning "Low disk space detected ($(( available_space / 1024 ))MB). Recommended minimum is 10GB."
     fi
 
-    # Check available memory
-    if command -v free &> /dev/null; then
-        local available_mem=$(free -m | awk 'NR==2 {print $7}')
-        local min_mem=2048 # 2GB in MB
-        if [ "${available_mem}" -lt "${min_mem}" ]; then
-            print_warning "Low memory: Less than 2GB available"
-        fi
-    fi
-
-    # Check CPU cores
+    print_substep "Checking CPU cores..."
     local cpu_cores=$(nproc)
     if [ "${cpu_cores}" -lt 2 ]; then
-        print_warning "Limited CPU: Only ${cpu_cores} core(s) available"
+        print_warning "Low CPU cores detected (${cpu_cores}). Recommended minimum is 2 cores."
     fi
 }
 
@@ -108,217 +93,168 @@ check_system_resources() {
 check_system_requirements() {
     print_step "Checking system requirements"
     
-    local failed=0
-    check_docker || failed=1
-    check_docker_compose || failed=1
+    # Check Docker and Docker Compose
+    check_docker || return 1
+    check_docker_compose || return 1
+    
+    # Check system resources
     check_system_resources
-
-    if [ "${failed}" -eq 1 ]; then
-        print_error "System requirements check failed"
-        return 1
-    fi
-
-    print_status "System requirements check passed "
+    
+    print_status "System requirements check completed"
     return 0
 }
 
 # Create and set up directories
 create_directories() {
-    print_step "Setting up directories"
-
+    print_step "Creating required directories"
+    
     local dirs=(
-        "logs"
-        "logs/app"
-        "logs/nginx"
-        "logs/postgres"
-        "data/postgres"
-        "data/redis"
-        "data/prometheus"
-        "data/uploads"
+        "${SHH_DATA_DIR}"
+        "${SHH_DATA_DIR}/logs"
+        "${SHH_DATA_DIR}/data"
     )
-
+    
     for dir in "${dirs[@]}"; do
-        print_substep "Creating ${dir}..."
-        mkdir -p "${dir}"
-        chmod 777 "${dir}"
+        if [ ! -d "${dir}" ]; then
+            print_substep "Creating directory: ${dir}"
+            sudo mkdir -p "${dir}"
+            sudo chown -R "${USER}:${USER}" "${dir}"
+            sudo chmod -R 755 "${dir}"
+        else
+            print_substep "Directory exists: ${dir}"
+        fi
     done
-
-    print_status "Directory setup complete "
+    
+    print_success "Created required directories in ${SHH_DATA_DIR}"
 }
 
 # Setup environment file
 setup_env() {
     print_step "Setting up environment"
-
-    # Get the project root directory (one level up from scripts)
-    local PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-    cd "${PROJECT_ROOT}"
-
+    
+    # Check if .env exists
     if [ ! -f .env ]; then
-        if [ ! -f env.example ]; then
-            print_error "No env.example file found in ${PROJECT_ROOT}"
+        if [ ! -f .env.example ]; then
+            print_error "No .env.example file found" "Cannot create .env file"
             return 1
         fi
-
-        print_substep "Creating .env from env.example..."
-        cp env.example .env
-    fi
         
-    # Generate random secrets if not set
-    local secrets=("JWT_SECRET" "SESSION_SECRET" "COOKIE_SECRET" "AGENT_INSTALL_KEY")
-    for secret in "${secrets[@]}"; do
-        if ! grep -q "^${secret}=" .env || grep -q "^${secret}=\$" .env || grep -q "^${secret}=your-.*-key" .env; then
-            print_substep "Generating secure ${secret}..."
-            local new_secret=$(openssl rand -hex 32)
-            if grep -q "^${secret}=" .env; then
-                sed -i "s|^${secret}=.*|${secret}=${new_secret}|" .env
-            else
-                echo "${secret}=${new_secret}" >> .env
-            fi
-        fi
-    done
-
-    # Ensure required variables are set with default values if missing
-    local defaults=(
-        "NODE_ENV=development"
-        "SERVER_PORT=4000"
-        "SERVER_HOST=localhost"
-        "POSTGRES_HOST=localhost"
-        "POSTGRES_PORT=5432"
-        "POSTGRES_USER=postgres"
-        "POSTGRES_PASSWORD=postgres"
-        "POSTGRES_DB=shh"
-    )
-
-    for default in "${defaults[@]}"; do
-        local var_name="${default%%=*}"
-        local var_value="${default#*=}"
-        if ! grep -q "^${var_name}=" .env || grep -q "^${var_name}=\$" .env; then
-            print_substep "Setting default value for ${var_name}..."
-            if grep -q "^${var_name}=" .env; then
-                sed -i "s|^${var_name}=.*|${var_name}=${var_value}|" .env
-            else
-                echo "${var_name}=${var_value}" >> .env
-            fi
-        fi
-    done
+        print_substep "Creating .env from .env.example"
+        cp .env.example .env
         
-    # Validate required environment variables
-    local required_vars=(
-        "NODE_ENV"
-        "SERVER_PORT"
-        "SERVER_HOST"
-        "POSTGRES_HOST"
-        "POSTGRES_PORT"
-        "POSTGRES_USER"
-        "POSTGRES_PASSWORD"
-        "POSTGRES_DB"
-        "JWT_SECRET"
-        "SESSION_SECRET"
-        "COOKIE_SECRET"
-    )
-
-    local missing_vars=()
-    for var in "${required_vars[@]}"; do
-        if ! grep -q "^${var}=" .env || grep -q "^${var}=\$" .env || grep -q "^${var}=your-.*-key" .env; then
-            missing_vars+=("${var}")
+        # Generate random secrets
+        local jwt_secret=$(openssl rand -hex 32)
+        local session_secret=$(openssl rand -hex 32)
+        local cookie_secret=$(openssl rand -hex 32)
+        
+        # Update secrets in .env
+        sed -i "s/JWT_SECRET=.*/JWT_SECRET=${jwt_secret}/" .env
+        sed -i "s/SESSION_SECRET=.*/SESSION_SECRET=${session_secret}/" .env
+        sed -i "s/COOKIE_SECRET=.*/COOKIE_SECRET=${cookie_secret}/" .env
+        
+        print_warning "Please update the following in your .env file:"
+        echo "  - Database credentials"
+        echo "  - API keys"
+        echo "  - External service URLs"
+        echo "  - Other environment-specific settings"
+    else
+        print_substep ".env file exists"
+        
+        # Check for missing variables
+        local missing=false
+        while IFS= read -r line; do
+            if [[ "${line}" =~ ^[A-Z_]+=$ ]]; then
+                print_warning "Empty value for ${line%=}"
+                missing=true
+            fi
+        done < .env
+        
+        if [ "${missing}" = true ]; then
+            print_warning "Please set values for empty variables in .env"
         fi
-    done
-
-    if [ ${#missing_vars[@]} -ne 0 ]; then
-        print_error "Missing required environment variables" "${missing_vars[*]}"
-        print_warning "Please update these variables in your .env file"
-        return 1
     fi
-
-    print_status "Environment setup complete"
+    
+    print_success "Environment setup completed"
     return 0
 }
 
 # Set permissions
 setup_permissions() {
     print_step "Setting up permissions"
-
-    # Database initialization script
-    if [ -f db/init.sql ]; then
-        print_substep "Setting database init script permissions..."
-        chmod 644 db/init.sql
+    
+    # Ensure script files are executable
+    find scripts -type f -name "*.sh" -exec chmod +x {} \;
+    
+    # Set proper ownership for data directories
+    if [ -d "${SHH_DATA_DIR}" ]; then
+        sudo chown -R "${USER}:${USER}" "${SHH_DATA_DIR}"
+        sudo chmod -R 755 "${SHH_DATA_DIR}"
     fi
-
-    # Ensure node_modules is writable
-    if [ -d node_modules ]; then
-        print_substep "Setting node_modules permissions..."
-        chmod -R 777 node_modules
-    fi
-
-    print_status "Permissions setup complete "
+    
+    print_success "Permissions setup completed"
 }
 
 # Check service health
 check_health() {
     local timeout=${1:-300}
-    local service=${2:-}
-    local wait_time=5
+    local interval=5
     local elapsed=0
-    local start_time=$(date +%s)
-
-    print_step "Checking service health"
-    print_substep "Timeout: ${timeout}s"
-    if [ -n "${service}" ]; then
-        print_substep "Monitoring service: ${service}"
-    fi
-
-    while [ $elapsed -lt $timeout ]; do
-        if [ -n "${service}" ]; then
-            if docker compose ps "${service}" | grep -q "healthy"; then
-                local end_time=$(date +%s)
-                local duration=$((end_time - start_time))
-                print_status "Service ${service} is healthy (took ${duration}s) "
-                return 0
+    local healthy=false
+    
+    print_substep "Checking service health (timeout: ${timeout}s)..."
+    
+    while [ ${elapsed} -lt ${timeout} ]; do
+        local unhealthy=false
+        
+        # Check each service
+        while IFS= read -r container; do
+            local health=$(docker inspect --format='{{.State.Health.Status}}' "${container}" 2>/dev/null)
+            local running=$(docker inspect --format='{{.State.Running}}' "${container}" 2>/dev/null)
+            
+            if [ "${health}" = "unhealthy" ] || [ "${running}" != "true" ]; then
+                unhealthy=true
+                break
             fi
-        else
-            if docker compose ps | grep -q "healthy"; then
-                local end_time=$(date +%s)
-                local duration=$((end_time - start_time))
-                print_status "All services are healthy (took ${duration}s) "
-                return 0
-            fi
+        done < <(${DOCKER_COMPOSE} ps -q)
+        
+        if [ "${unhealthy}" = false ]; then
+            healthy=true
+            break
         fi
-
-        local remaining=$((timeout - elapsed))
-        print_substep "Waiting for services... ${remaining}s remaining"
-        sleep $wait_time
-        elapsed=$((elapsed + wait_time))
+        
+        sleep ${interval}
+        elapsed=$((elapsed + interval))
+        
+        print_substep "Still waiting... (${elapsed}/${timeout}s)"
     done
-
-    print_error "Health check failed" "Services did not become healthy within ${timeout}s"
-    docker compose logs
-    return 1
+    
+    if [ "${healthy}" = true ]; then
+        print_success "All services are healthy"
+        return 0
+    else
+        print_error "Health check timeout" "Services did not become healthy within ${timeout}s"
+        return 1
+    fi
 }
 
 # Parse command line arguments
 parse_args() {
-    NO_CACHE=""
-    FORCE_RECREATE=""
-    SKIP_PULL=""
-    VERBOSE=""
-
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --skip-pull)
+                SKIP_PULL=true
+                shift
+                ;;
             --no-cache)
-                NO_CACHE="--no-cache"
+                NO_CACHE=true
                 shift
                 ;;
             --force-recreate)
-                FORCE_RECREATE="--force-recreate"
-                shift
-                ;;
-            --skip-pull)
-                SKIP_PULL="true"
+                FORCE_RECREATE=true
                 shift
                 ;;
             --verbose)
-                VERBOSE="true"
+                VERBOSE=true
                 shift
                 ;;
             *)
@@ -327,18 +263,17 @@ parse_args() {
                 ;;
         esac
     done
-
-    export NO_CACHE FORCE_RECREATE SKIP_PULL VERBOSE
 }
 
 # Print banner
 print_banner() {
     echo -e "${CYAN}"
-    echo "  ____  ____  _   _ "
-    echo " / ___|| ___|| | | |"
-    echo " \___ \|___ \| |_| |"
-    echo "  ___) |___) |  _  |"
-    echo " |____/|____/|_| |_|"
+    echo "  ____  _   _ _   _ "
+    echo " / ___|| | | | | | |"
+    echo " \___ \| |_| | |_| |"
+    echo "  ___) |  _  |  _  |"
+    echo " |____/|_| |_|_| |_|"
     echo -e "${NC}"
-    echo -e "${BLUE}SSH Host Hub - Deployment Script${NC}\n"
+    echo "Secure Shell/Hosting"
+    echo
 }

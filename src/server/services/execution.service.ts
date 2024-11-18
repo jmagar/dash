@@ -1,9 +1,12 @@
 import { EventEmitter } from 'events';
-import type { Host, Command, CommandRequest, CommandResult } from '../../types/models-shared';
-import { agentService } from './agent.service';
+import { Server } from 'socket.io';
 import { logger } from '../utils/logger';
-import { ApiError } from '../../types/error';
+import { getAgentService } from './agent.service';
+import { sshService } from './ssh.service';
 import { db } from '../db';
+import type { Host } from '../../types/host';
+import type { Command, CommandResult } from '../../types/models-shared';
+import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../types/socket-events';
 
 export enum ExecutionMode {
   AGENT = 'agent'
@@ -17,12 +20,16 @@ interface ExecutionOptions {
 }
 
 class ExecutionService extends EventEmitter {
+  constructor(private readonly io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents>) {
+    super();
+  }
+
   /**
    * Execute a command on a host
    */
   async executeCommand(
     host: Host,
-    request: CommandRequest,
+    request: Command,
     options: ExecutionOptions = {}
   ): Promise<CommandResult> {
     const startedAt = new Date();
@@ -43,8 +50,9 @@ class ExecutionService extends EventEmitter {
     };
 
     try {
+      const agentService = getAgentService();
       if (!agentService.isConnected(host.id)) {
-        throw new ApiError('Agent not connected', null, 400);
+        return await this.executeViaSSH(host, command);
       }
 
       return await this.executeViaAgent(host.id, command, options);
@@ -75,41 +83,63 @@ class ExecutionService extends EventEmitter {
     try {
       // Store command in database
       await this.storeCommand(hostId, command);
+      const startTime = Date.now();
 
-      // Execute command
-      await agentService.executeCommand(hostId, command.command, command.args);
-
-      // Wait for command result via WebSocket
-      const result = await new Promise<CommandResult>((resolve, reject) => {
+      return new Promise((resolve, reject) => {
+        const agentService = getAgentService();
         const timeout = setTimeout(() => {
           reject(new Error('Command execution timeout'));
         }, options.timeout || 30000);
 
-        const handler = (data: { agentId: string; result: CommandResult }) => {
-          if (data.agentId === hostId) {
+        const handler = ({ hostId: resultHostId, command: resultCommand, result }: { hostId: string; command: string; result: string }) => {
+          if (resultHostId === hostId && resultCommand === command.command) {
             clearTimeout(timeout);
-            agentService.removeListener('agent:commandResult', handler);
-            resolve(data.result);
+            agentService.removeListener('agent:command', handler);
+            const endTime = Date.now();
+            resolve({
+              stdout: result,
+              stderr: '',
+              exitCode: 0,
+              duration: endTime - startTime,
+              status: 'completed'
+            });
           }
         };
 
-        agentService.on('agent:commandResult', handler);
-      });
+        agentService.on('agent:command', handler);
 
-      // Update command status in database
-      await this.updateCommandStatus(hostId, command.id, result.status, {
-        exitCode: result.exitCode,
+        agentService.executeCommand(hostId, command.command, command.args).catch(error => {
+          clearTimeout(timeout);
+          agentService.removeListener('agent:command', handler);
+          reject(error);
+        });
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Agent command execution failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Execute command via SSH
+   */
+  private async executeViaSSH(host: Host, command: Command): Promise<CommandResult> {
+    try {
+      const startTime = Date.now();
+      const fullCommand = command.args ? `${command.command} ${command.args.join(' ')}` : command.command;
+      const result = await sshService.executeCommand(host.id, fullCommand);
+      const endTime = Date.now();
+
+      return {
         stdout: result.stdout,
         stderr: result.stderr,
-        completedAt: result.completedAt,
-      });
-
-      return result;
+        exitCode: result.exitCode,
+        duration: endTime - startTime,
+        status: result.exitCode === 0 ? 'completed' : 'failed'
+      };
     } catch (error) {
-      throw new ApiError(
-        `Agent command execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        error
-      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`SSH command execution failed: ${errorMessage}`);
     }
   }
 
@@ -182,5 +212,5 @@ class ExecutionService extends EventEmitter {
   }
 }
 
-// Export singleton instance
-export const executionService = new ExecutionService();
+// Export singleton instance with global.io from socket setup
+export const executionService = new ExecutionService(global.io);

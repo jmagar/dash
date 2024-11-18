@@ -13,7 +13,7 @@ export const securityHeaders = helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", ...config.cors.origin],
+      connectSrc: ["'self'", ...config.cors.origin.split(',')],
       fontSrc: ["'self'", 'https:', 'data:'],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
@@ -35,17 +35,18 @@ export const securityHeaders = helmet({
 // CORS configuration
 export const corsConfig = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || config.cors.origin.includes(origin)) {
+    const allowedOrigins = config.cors.origin.split(',').map(o => o.trim());
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: config.security.allowedMethods,
-  allowedHeaders: config.security.allowedHeaders,
-  exposedHeaders: config.security.exposedHeaders,
-  credentials: config.security.credentials,
-  maxAge: config.security.maxAge,
+  methods: config.cors.methods,
+  allowedHeaders: config.cors.allowedHeaders,
+  exposedHeaders: config.cors.exposedHeaders,
+  credentials: config.cors.credentials,
+  maxAge: config.cors.maxAge,
 };
 
 // Rate limiting middleware
@@ -53,17 +54,17 @@ export const rateLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.max,
   message: 'Too many requests, please try again later.',
-  handler: (req: Request, res: Response) => {
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler(req: Request, res: Response) {
     logger.warn('Rate limit exceeded', {
       ip: req.ip,
       path: req.path,
-      method: req.method,
-      requestId: req.requestId,
-      userId: req.user?.id,
+      headers: req.headers,
     });
     res.status(429).json({
-      success: false,
-      error: 'Too many requests, please try again later.',
+      error: 'Too many requests',
+      retryAfter: res.getHeader('Retry-After'),
     });
   },
 });
@@ -76,32 +77,46 @@ export const fileUploadConfig = fileUpload({
   abortOnLimit: true,
   useTempFiles: true,
   tempFileDir: '/tmp/',
-  debug: process.env.NODE_ENV === 'development',
+  debug: config.server.env === 'development',
   safeFileNames: true,
   preserveExtension: true,
-  createParentPath: true,
 });
 
-/**
- * Content type validation middleware
- * Ensures requests have appropriate content type headers
- */
+// Content type validation middleware
 export function validateContentType(req: Request, res: Response, next: NextFunction): void {
   const contentType = req.headers['content-type'];
-  const acceptedTypes = ['application/json', 'multipart/form-data'];
+  
+  // Skip validation for GET and HEAD requests
+  if (['GET', 'HEAD'].includes(req.method)) {
+    return next();
+  }
 
+  // Require content-type header for requests with body
   if (req.method !== 'GET' && !contentType) {
+    logger.warn('Missing content-type header', {
+      method: req.method,
+      path: req.path,
+    });
     res.status(400).json({
-      success: false,
       error: 'Content-Type header is required',
     });
     return;
   }
 
-  if (contentType && !acceptedTypes.some(type => contentType.includes(type))) {
+  // Allow multipart/form-data for file uploads
+  if (req.is('multipart/form-data')) {
+    return next();
+  }
+
+  // Validate JSON content type
+  if (!req.is('application/json')) {
+    logger.warn('Invalid content type', {
+      contentType,
+      method: req.method,
+      path: req.path,
+    });
     res.status(415).json({
-      success: false,
-      error: `Unsupported Content-Type. Accepted types: ${acceptedTypes.join(', ')}`,
+      error: 'Content type must be application/json',
     });
     return;
   }
@@ -109,17 +124,19 @@ export function validateContentType(req: Request, res: Response, next: NextFunct
   next();
 }
 
-/**
- * Request size validation middleware
- * Ensures requests don't exceed configured size limits
- */
+// Request size validation middleware
 export function validateRequestSize(req: Request, res: Response, next: NextFunction): void {
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
-
+  
   if (contentLength > config.server.maxRequestSize) {
+    logger.warn('Request too large', {
+      size: contentLength,
+      maxSize: config.server.maxRequestSize,
+      path: req.path,
+    });
     res.status(413).json({
-      success: false,
       error: 'Request entity too large',
+      maxSize: config.server.maxRequestSize,
     });
     return;
   }
@@ -130,8 +147,9 @@ export function validateRequestSize(req: Request, res: Response, next: NextFunct
 // Combine all security middleware
 export const security = [
   securityHeaders,
+  corsConfig,
   rateLimiter,
+  fileUploadConfig,
   validateContentType,
   validateRequestSize,
-  fileUploadConfig,
 ];

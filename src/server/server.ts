@@ -16,10 +16,11 @@ import { setupMetrics } from './metrics';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestTracer } from './middleware/requestTracer';
 import { securityHeaders } from './middleware/security';
-import { createProcessService } from './services/process';
 import { ProcessMonitorFactory } from './services/process/process-monitor-factory';
 import { ProcessCacheImpl } from './services/process/process-cache';
 import { hostService } from './services/host.service';
+import { initializeAgentService } from './services/agent.service';
+import { createProcessService } from './services/process';
 
 // Create Express app
 const app = express();
@@ -37,6 +38,9 @@ export const io = new Server(server, {
   },
 });
 
+// Initialize agent service
+initializeAgentService(io);
+
 // Initialize process monitoring
 const processCache = new ProcessCacheImpl();
 const monitorFactory = new ProcessMonitorFactory(
@@ -46,16 +50,16 @@ const monitorFactory = new ProcessMonitorFactory(
   hostService.getHost.bind(hostService)
 );
 
-// Initialize services with default monitoring settings
-const processService = createProcessService({
+// Initialize process service with configuration
+const processService = createProcessService(io, {
   monitorFactory,
-  defaultInterval: 5000, // 5 seconds
-  maxMonitoredHosts: 100,
-  includeChildren: true,
-  excludeSystemProcesses: false,
-  sortBy: 'cpu',
-  sortOrder: 'desc',
-  maxProcesses: 100
+  defaultInterval: config.process?.monitorInterval || 5000,
+  maxMonitoredHosts: config.process?.maxMonitoredHosts || 100,
+  includeChildren: config.process?.includeChildren ?? true,
+  excludeSystemProcesses: config.process?.excludeSystemProcesses ?? false,
+  sortBy: config.process?.sortBy || 'cpu',
+  sortOrder: config.process?.sortOrder || 'desc',
+  maxProcesses: config.process?.maxProcesses || 100
 });
 
 // Configure Redis rate limiter
@@ -74,7 +78,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
-    sendCommand: (...args: string[]) => redisClient.sendCommand(args),
+    sendCommand: async (command: string, ...args: string[]) => redisClient.sendCommand([command, ...args]),
   }),
 });
 
@@ -116,11 +120,20 @@ server.listen(port, () => {
 });
 
 // Handle process termination
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received. Closing server...');
-  processService.unmonitor('*').catch(err => {
-    logger.error('Error stopping process monitoring:', err);
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received. Cleaning up...');
+  processService.stop();
+  await redisClient.quit();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
   });
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received. Cleaning up...');
+  processService.stop();
+  await redisClient.quit();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

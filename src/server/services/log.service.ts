@@ -1,12 +1,12 @@
 import { Server as SocketServer } from 'socket.io';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import { agentService } from './agent.service';
-import type { LogEntry, LogFilter , ServerToClientEvents, ClientToServerEvents } from '../../types/socket-events';
+import { getAgentService } from './agent.service';
+import type { ServerToClientEvents, ClientToServerEvents } from '../../types/socket-events';
 
 class LogService extends EventEmitter {
   private io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
-  private subscribers: Map<string, Set<string>> = new Map(); // hostId -> Set of socketIds
+  private subscriptions: Map<string, Set<string>> = new Map(); // hostId -> Set of socketIds
 
   constructor(io: SocketServer<ClientToServerEvents, ServerToClientEvents>) {
     super();
@@ -21,12 +21,13 @@ class LogService extends EventEmitter {
         try {
           for (const hostId of hostIds) {
             // Create or get subscriber set for this host
-            if (!this.subscribers.has(hostId)) {
-              this.subscribers.set(hostId, new Set());
+            if (!this.subscriptions.has(hostId)) {
+              this.subscriptions.set(hostId, new Set());
             }
-            this.subscribers.get(hostId)?.add(socket.id);
+            this.subscriptions.get(hostId)?.add(socket.id);
 
             // Check if agent is connected
+            const agentService = getAgentService();
             if (!agentService.isConnected(hostId)) {
               socket.emit('logs:error', {
                 error: `Agent ${hostId} not connected`
@@ -66,11 +67,12 @@ class LogService extends EventEmitter {
         try {
           for (const hostId of hostIds) {
             // Remove socket from subscribers
-            this.subscribers.get(hostId)?.delete(socket.id);
+            this.subscriptions.get(hostId)?.delete(socket.id);
 
             // If no more subscribers for this host, unsubscribe from agent
-            if (this.subscribers.get(hostId)?.size === 0) {
-              this.subscribers.delete(hostId);
+            if (this.subscriptions.get(hostId)?.size === 0) {
+              this.subscriptions.delete(hostId);
+              const agentService = getAgentService();
               if (agentService.isConnected(hostId)) {
                 agentService.unsubscribeFromLogs(hostId).catch(error => {
                   logger.error('Failed to unsubscribe from agent logs', {
@@ -97,10 +99,11 @@ class LogService extends EventEmitter {
 
       socket.on('disconnect', () => {
         // Remove socket from all subscriptions
-        this.subscribers.forEach((subscribers, hostId) => {
+        this.subscriptions.forEach((subscribers, hostId) => {
           subscribers.delete(socket.id);
           if (subscribers.size === 0) {
-            this.subscribers.delete(hostId);
+            this.subscriptions.delete(hostId);
+            const agentService = getAgentService();
             if (agentService.isConnected(hostId)) {
               agentService.unsubscribeFromLogs(hostId).catch(error => {
                 logger.error('Failed to unsubscribe from agent logs on disconnect', {
@@ -117,8 +120,9 @@ class LogService extends EventEmitter {
 
   private setupAgentHandlers(): void {
     // Handle log entries from agents
+    const agentService = getAgentService();
     agentService.on('agent:logs', ({ hostId, logs }) => {
-      const subscribers = this.subscribers.get(hostId);
+      const subscribers = this.subscriptions.get(hostId);
       if (subscribers) {
         subscribers.forEach(socketId => {
           this.io.to(socketId).emit('logs:stream', { logs });
@@ -128,7 +132,7 @@ class LogService extends EventEmitter {
 
     // Handle agent disconnection
     agentService.on('agent:disconnected', ({ hostId }) => {
-      const subscribers = this.subscribers.get(hostId);
+      const subscribers = this.subscriptions.get(hostId);
       if (subscribers) {
         subscribers.forEach(socketId => {
           this.io.to(socketId).emit('logs:error', {

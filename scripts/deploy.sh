@@ -150,10 +150,9 @@ verify_dependencies() {
 create_directories() {
     print_step "Creating required directories..."
 
-    # Create app data directories
-    sudo mkdir -p "${SHH_DATA_DIR}"/{logs,data}
-    sudo chown -R "${USER}:${USER}" "${SHH_DATA_DIR}"
-    sudo chmod -R 755 "${SHH_DATA_DIR}"
+    # Create app data directories with current user
+    mkdir -p "${SHH_DATA_DIR}"/{logs,data}
+    chmod -R 755 "${SHH_DATA_DIR}"
 
     print_success "Created required directories in ${SHH_DATA_DIR}"
 }

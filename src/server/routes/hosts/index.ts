@@ -4,7 +4,7 @@ import type { Host, CreateHostRequest, UpdateHostRequest, ApiResponse } from '..
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
 import { agentInstallerService } from '../../services/agent-installer.service';
-import { agentService } from '../../services/agent.service';
+import { getAgentService } from '../../services/agent.service';
 import { config } from '../../config';
 import { db } from '../../db';
 
@@ -31,6 +31,8 @@ router.get('/', async (req: Request, res: Response<HostListResponse>) => {
       'SELECT *, agent_status as "agentStatus" FROM hosts WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
+
+    const agentService = getAgentService();
 
     // Enrich with agent status
     const hosts = result.rows.map(host => ({
@@ -72,6 +74,8 @@ router.get('/:id', async (req: Request<HostParams>, res: Response<HostResponse>)
     }
 
     const host = result.rows[0];
+
+    const agentService = getAgentService();
 
     // Enrich with agent status
     const enrichedHost = {
@@ -127,6 +131,7 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
     // Install agent if requested
     if (req.body.install_agent) {
       try {
+        const agentService = getAgentService();
         await agentInstallerService.installAgent(host, {
           server_url: config.server.websocketUrl,
           agent_id: host.id,
@@ -281,6 +286,7 @@ router.post('/:id/agent/install', async (req: Request<HostParams>, res: Response
 
     const host = result.rows[0];
 
+    const agentService = getAgentService();
     await agentInstallerService.installAgent(host, {
       server_url: config.server.websocketUrl,
       agent_id: host.id,

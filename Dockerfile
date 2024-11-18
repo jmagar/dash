@@ -19,13 +19,14 @@ RUN pip install mem0ai
 
 # Install dependencies with increased memory limit for CopilotKit
 COPY package*.json ./
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm install --legacy-peer-deps -D @types/jsonwebtoken
 
 # Copy source code
 COPY . .
 
 # Build client with increased memory limit
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build:client
+RUN NODE_OPTIONS="--max-old-space-size=4096" DOCKER_BUILD=1 SKIP_PREFLIGHT_CHECK=true DISABLE_ESLINT_PLUGIN=true npm run build:client
 
 # Build server
 RUN npm run build:server

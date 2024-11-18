@@ -9,6 +9,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   MAX_REQUEST_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
+  WEBSOCKET_URL: z.string().default('ws://localhost:3000'),
 
   // Database
   DB_HOST: z.string(),
@@ -49,6 +50,15 @@ const envSchema = z.object({
   OPENAI_MAX_TOKENS: z.coerce.number().default(2000),
   OPENAI_TEMPERATURE: z.coerce.number().default(0.7),
 
+  // Process Monitoring
+  PROCESS_MONITOR_INTERVAL: z.coerce.number().default(5000),
+  PROCESS_MAX_MONITORED_HOSTS: z.coerce.number().default(100),
+  PROCESS_INCLUDE_CHILDREN: z.coerce.boolean().default(true),
+  PROCESS_EXCLUDE_SYSTEM: z.coerce.boolean().default(false),
+  PROCESS_SORT_BY: z.enum(['cpu', 'memory', 'pid', 'name']).default('cpu'),
+  PROCESS_SORT_ORDER: z.enum(['asc', 'desc']).default('desc'),
+  PROCESS_MAX_PROCESSES: z.coerce.number().default(100),
+
   // OpenRouter
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-2'),
@@ -70,12 +80,92 @@ const envSchema = z.object({
 
 const env = envSchema.parse(process.env);
 
-export const config = {
+// Server config interface
+export interface ServerConfig {
+  env: 'development' | 'production' | 'test';
+  port: number;
+  host: string;
+  maxRequestSize: number;
+  websocketUrl: string;
+}
+
+export interface Config {
+  server: ServerConfig;
+  db: {
+    host: string;
+    port: number;
+    name: string;
+    user: string;
+    password: string;
+  };
+  redis: {
+    host: string;
+    port: number;
+    password: string | undefined;
+  };
+  jwt: {
+    secret: string;
+    expiry: string;
+    refreshExpiry: string;
+  };
+  cors: {
+    origin: string;
+    methods: string;
+    allowedHeaders: string;
+    exposedHeaders: string;
+    credentials: boolean;
+    maxAge: number;
+  };
+  rateLimit: {
+    windowMs: number;
+    max: number;
+  };
+  security: {
+    maxFileSize: number;
+  };
+  openai: {
+    apiKey: string | undefined;
+    model: string;
+    org: string | undefined;
+    maxTokens: number;
+    temperature: number;
+  };
+  process: {
+    monitorInterval: number;
+    maxMonitoredHosts: number;
+    includeChildren: boolean;
+    excludeSystemProcesses: boolean;
+    sortBy: 'cpu' | 'memory' | 'pid' | 'name';
+    sortOrder: 'asc' | 'desc';
+    maxProcesses: number;
+  };
+  openrouter: {
+    apiKey: string | undefined;
+    model: string;
+    baseUrl: string;
+    maxTokens: number;
+    temperature: number;
+  };
+  logging: {
+    level: string;
+    file: string;
+  };
+  gotify: {
+    url: string | undefined;
+    token: string | undefined;
+  };
+  prometheus: {
+    port: number;
+  };
+}
+
+export const config: Config = {
   server: {
     env: env.NODE_ENV,
     port: env.PORT,
     host: env.HOST,
     maxRequestSize: env.MAX_REQUEST_SIZE,
+    websocketUrl: env.WEBSOCKET_URL,
   },
   db: {
     host: env.DB_HOST,
@@ -116,6 +206,15 @@ export const config = {
     maxTokens: env.OPENAI_MAX_TOKENS,
     temperature: env.OPENAI_TEMPERATURE,
   },
+  process: {
+    monitorInterval: env.PROCESS_MONITOR_INTERVAL,
+    maxMonitoredHosts: env.PROCESS_MAX_MONITORED_HOSTS,
+    includeChildren: env.PROCESS_INCLUDE_CHILDREN,
+    excludeSystemProcesses: env.PROCESS_EXCLUDE_SYSTEM,
+    sortBy: env.PROCESS_SORT_BY,
+    sortOrder: env.PROCESS_SORT_ORDER,
+    maxProcesses: env.PROCESS_MAX_PROCESSES,
+  },
   openrouter: {
     apiKey: env.OPENROUTER_API_KEY,
     model: env.OPENROUTER_MODEL,
@@ -134,4 +233,4 @@ export const config = {
   prometheus: {
     port: env.PROMETHEUS_PORT,
   },
-} as const;
+};

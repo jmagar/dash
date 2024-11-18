@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 // Initialize OpenAI client
 export const openai = new OpenAI({
   apiKey: config.openai.apiKey,
-  organization: config.openai.organization,
+  organization: config.openai.org,
 });
 
 interface OpenRouterMessage {
@@ -50,15 +50,15 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       provider: 'OpenAI',
       model: 'text-embedding-ada-002',
     };
-    logger.error('Failed to generate embedding:', metadata);
+    logger.error('Failed to generate embedding', metadata);
     throw error;
   }
 }
 
 export async function generateCompletion(prompt: string, useOpenRouter = false): Promise<string> {
   try {
-    if (useOpenRouter) {
-      const requestBody: OpenRouterRequestBody = {
+    if (useOpenRouter && config.openrouter.apiKey) {
+      const body: OpenRouterRequestBody = {
         model: config.openrouter.model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: config.openrouter.maxTokens,
@@ -68,55 +68,45 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
       const response = await fetch(config.openrouter.baseUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${config.openrouter.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': config.server.host,
+          'Authorization': `Bearer ${config.openrouter.apiKey}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         throw new Error(`OpenRouter API error: ${response.statusText}`);
       }
 
-      const data = await response.json() as OpenRouterResponse;
-      const content = data.choices[0]?.message?.content;
+      const data: OpenRouterResponse = await response.json();
+      return data.choices[0]?.message?.content || '';
 
-      if (!content) {
-        throw new Error('No response generated from OpenRouter');
-      }
+    } else if (config.openai.apiKey) {
+      const response = await openai.chat.completions.create({
+        model: config.openai.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: config.openai.maxTokens,
+        temperature: config.openai.temperature,
+      });
 
-      return content;
+      return response.choices[0]?.message?.content || '';
+
+    } else {
+      throw new Error('No API key configured for OpenAI or OpenRouter');
     }
 
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      model: config.openai.model,
-      max_tokens: config.openai.maxTokens,
-      temperature: config.openai.temperature,
-    });
-
-    const response = completion.choices[0]?.message?.content;
-
-    if (!response) {
-      throw new Error('No response generated from OpenAI');
-    }
-
-    return response;
   } catch (error) {
     const metadata: ErrorMetadata = {
       error: error instanceof Error ? error.message : 'Unknown error',
       provider: useOpenRouter ? 'OpenRouter' : 'OpenAI',
       model: useOpenRouter ? config.openrouter.model : config.openai.model,
     };
-    logger.error('Failed to generate completion:', metadata);
+    logger.error('Failed to generate completion', metadata);
     throw error;
   }
 }
 
 // Helper function to determine which service to use
-export function shouldUseOpenRouter(): boolean {
-  // Add your logic here to determine when to use OpenRouter vs OpenAI
-  // For example, based on config, load balancing, cost, etc.
-  return false;
+function shouldUseOpenRouter(): boolean {
+  return !!(config.openrouter.apiKey && !config.openai.apiKey);
 }

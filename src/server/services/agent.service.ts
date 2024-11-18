@@ -293,5 +293,18 @@ class AgentService extends EventEmitter {
   }
 }
 
-// Export singleton instance
-export const agentService = new AgentService(global.io);
+let agentServiceInstance: AgentService | null = null;
+
+export function initializeAgentService(io: SocketServer): AgentService {
+  if (!agentServiceInstance) {
+    agentServiceInstance = new AgentService(io);
+  }
+  return agentServiceInstance;
+}
+
+export const getAgentService = (): AgentService => {
+  if (!agentServiceInstance) {
+    throw new Error('AgentService not initialized');
+  }
+  return agentServiceInstance;
+};

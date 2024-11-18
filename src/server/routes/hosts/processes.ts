@@ -20,7 +20,7 @@ const monitorFactory = new ProcessMonitorFactory(
   hostService.getHost.bind(hostService)
 );
 
-const processService = createProcessService({
+const processService = createProcessService(io, {
   monitorFactory,
   defaultInterval: 5000, // 5 seconds
   maxMonitoredHosts: 100,
