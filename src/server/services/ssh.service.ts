@@ -18,7 +18,7 @@ interface SSHError extends Error {
   code?: string;
 }
 
-class SSHService extends EventEmitter {
+export class SSHService extends EventEmitter {
   private connections: Map<string, SSHConnection> = new Map();
   private readonly connectionTimeout = 30000; // 30 seconds
   private readonly maxIdleTime = 5 * 60 * 1000; // 5 minutes

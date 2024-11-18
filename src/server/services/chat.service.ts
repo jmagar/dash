@@ -1,6 +1,6 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
-import { config } from '../config';
+import config from '../config';
 import { logger } from '../utils/logger';
 
 interface ChatOptions {

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import { db } from '../db';
-import { config } from '../config';
+import config from '../config';
 import { logger } from '../utils/logger';
 import { io } from '../server';
 import type { Alert } from '../../types/metrics-alerts';
@@ -14,6 +14,12 @@ import type {
   DBNotification,
   NotificationGotifyEvent,
 } from '../../types/notifications';
+
+interface NotificationCountRow {
+  type: NotificationType;
+  total: string;
+  unread: string;
+}
 
 class NotificationsService extends EventEmitter {
   private readonly DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -36,13 +42,22 @@ class NotificationsService extends EventEmitter {
     updatedAt: new Date()
   };
 
-  private readonly GOTIFY_PRIORITIES = {
+  private readonly GOTIFY_PRIORITIES: Record<NotificationType, number> = {
     error: 8,
     alert: 7,
     warning: 5,
     info: 3,
     success: 3,
   };
+
+  private readonly gotifyUrl: string | undefined;
+  private readonly gotifyToken: string | undefined;
+
+  constructor() {
+    super();
+    this.gotifyUrl = config.gotify?.url;
+    this.gotifyToken = config.gotify?.token;
+  }
 
   /**
    * Convert Alert to database format
@@ -102,12 +117,12 @@ class NotificationsService extends EventEmitter {
    * Send notification to Gotify
    */
   private async sendGotifyNotification(event: NotificationGotifyEvent): Promise<boolean> {
-    if (!config.gotify.url || !config.gotify.token) {
+    if (!this.gotifyUrl || !this.gotifyToken) {
       return false;
     }
 
     try {
-      const url = `${config.gotify.url.replace(/\/$/, '')}/message`;
+      const url = `${this.gotifyUrl.replace(/\/$/, '')}/message`;
       const message = {
         title: event.title,
         message: event.message,
@@ -123,7 +138,7 @@ class NotificationsService extends EventEmitter {
 
       await axios.post(url, message, {
         headers: {
-          'X-Gotify-Key': config.gotify.token,
+          'X-Gotify-Key': this.gotifyToken,
         },
       });
 
@@ -267,11 +282,7 @@ class NotificationsService extends EventEmitter {
    */
   async getNotificationCount(userId: string): Promise<NotificationCount> {
     try {
-      const result = await db.query<{
-        type: NotificationType;
-        total: number;
-        unread: number;
-      }>(
+      const result = await db.query<NotificationCountRow>(
         `SELECT
           type,
           COUNT(*) as total,

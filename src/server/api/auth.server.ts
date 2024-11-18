@@ -11,7 +11,7 @@ import type {
   RefreshTokenResponse,
   TokenPayload,
 } from '../../types/auth';
-import { config } from '../config';
+import config from '../config';
 import { db } from '../db';
 import { logger } from '../utils/logger';
 

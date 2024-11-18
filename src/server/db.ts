@@ -1,14 +1,14 @@
-import { Pool, type PoolConfig, type QueryResult } from 'pg';
-import { config } from './config';
+import { Pool, QueryResult } from 'pg';
+import config from './config';
 import { logger } from './utils/logger';
 
 // Database configuration
-const poolConfig: PoolConfig = {
-  user: config.db.user,
-  password: config.db.password,
+const poolConfig = {
   host: config.db.host,
   port: config.db.port,
   database: config.db.name,
+  user: config.db.user,
+  password: config.db.password,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -29,10 +29,17 @@ const pool = new Pool(poolConfig);
 
 // Log pool events
 pool.on('error', (...args: unknown[]) => {
-  const error = args[0];
-  logger.error('Unexpected error on idle client', {
-    error: error instanceof Error ? error.message : 'Unknown error',
-  });
+  const err = args[0];
+  if (err instanceof Error) {
+    logger.error('Unexpected error on idle client', {
+      error: err.message,
+      stack: err.stack,
+    });
+  } else {
+    logger.error('Unexpected error on idle client', {
+      error: String(err),
+    });
+  }
 });
 
 pool.on('connect', () => {

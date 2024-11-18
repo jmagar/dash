@@ -1,4 +1,4 @@
-import type { DockerContainer, DockerNetwork, DockerVolume, DockerStats, DockerPort } from './docker';
+import type { DockerContainer, DockerNetwork, DockerVolume, DockerStats } from './docker';
 
 export { DockerContainer, DockerNetwork, DockerVolume, DockerStats };
 
@@ -49,6 +49,7 @@ export interface CreateHostRequest {
   environment?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  os_type: 'windows' | 'linux';
 }
 
 export type UpdateHostRequest = Partial<CreateHostRequest>
@@ -69,6 +70,7 @@ export interface Host {
   agentStatus?: 'installed' | 'error' | null;
   agentVersion?: string;
   metadata?: Record<string, unknown>;
+  os_type: 'windows' | 'linux';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -143,7 +145,7 @@ export interface FileItem {
   path: string;
   type: 'file' | 'directory' | 'symlink';
   size?: number;
-  permissions?: string;
+  permissions?: string | number;
   owner?: string;
   group?: string;
   modifiedTime?: Date;

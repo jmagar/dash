@@ -1,10 +1,12 @@
 import winston from 'winston';
 import 'winston-daily-rotate-file';
-
-import type { LogMetadata } from '../types/logger';
-import { config } from '../server/config';
+import config from '../server/config';
 
 const { format } = winston;
+
+interface LogMetadata {
+  [key: string]: any;
+}
 
 const logFormat = format.printf(({ level, message, timestamp, ...metadata }) => {
   const metaString = Object.keys(metadata).length
@@ -57,18 +59,20 @@ const serverLogger = winston.createLogger({
 });
 
 // Add request context to logs
-export const withContext = (metadata: LogMetadata) => {
+function withContext(metadata: LogMetadata) {
   return {
-    info: (message: string, meta: LogMetadata = {}) =>
-      serverLogger.info(message, { ...metadata, ...meta }),
-    warn: (message: string, meta: LogMetadata = {}) =>
-      serverLogger.warn(message, { ...metadata, ...meta }),
-    error: (message: string, meta: LogMetadata = {}) =>
+    error: (message: string, meta?: LogMetadata) =>
       serverLogger.error(message, { ...metadata, ...meta }),
-    debug: (message: string, meta: LogMetadata = {}) =>
+    warn: (message: string, meta?: LogMetadata) =>
+      serverLogger.warn(message, { ...metadata, ...meta }),
+    info: (message: string, meta?: LogMetadata) =>
+      serverLogger.info(message, { ...metadata, ...meta }),
+    debug: (message: string, meta?: LogMetadata) =>
       serverLogger.debug(message, { ...metadata, ...meta }),
+    verbose: (message: string, meta?: LogMetadata) =>
+      serverLogger.verbose(message, { ...metadata, ...meta }),
   };
-};
+}
 
 // Add shutdown handler
 process.on('SIGTERM', () => {
@@ -81,4 +85,4 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-export { serverLogger };
+export { serverLogger, withContext };

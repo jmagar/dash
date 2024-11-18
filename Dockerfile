@@ -20,15 +20,18 @@ RUN pip install mem0ai
 # Install dependencies with increased memory limit for CopilotKit
 COPY package*.json ./
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps && \
-    NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps -D @types/jsonwebtoken
+    NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps --also=dev
 
 # Copy source code
 COPY . .
 
+# Generate Prisma client
+RUN npx prisma generate
+
 # Build client with increased memory limit
 RUN NODE_OPTIONS="--max-old-space-size=4096" DOCKER_BUILD=1 SKIP_PREFLIGHT_CHECK=true DISABLE_ESLINT_PLUGIN=true npm run build:client
 
-# Build server
+# Build server with TypeScript
 RUN npm run build:server
 
 # Go build stage for agent

@@ -12,6 +12,7 @@ export interface User {
 // Base token payload contains common fields
 export interface TokenPayload {
   id: string;
+  userId: string;
   username: string;
   role: 'admin' | 'user';
   is_active: boolean;

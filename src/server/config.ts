@@ -1,236 +1,112 @@
-import { config as loadEnv } from 'dotenv';
-import { z } from 'zod';
+import dotenv from 'dotenv';
+import type { Config } from '../types/config';
 
-loadEnv();
+dotenv.config();
 
-const envSchema = z.object({
-  // Server
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().default(3000),
-  HOST: z.string().default('0.0.0.0'),
-  MAX_REQUEST_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
-  WEBSOCKET_URL: z.string().default('ws://localhost:3000'),
-
-  // Database
-  DB_HOST: z.string(),
-  DB_PORT: z.coerce.number().default(5432),
-  DB_NAME: z.string(),
-  DB_USER: z.string(),
-  DB_PASSWORD: z.string(),
-
-  // Redis
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.coerce.number().default(6379),
-  REDIS_PASSWORD: z.string().optional(),
-
-  // JWT
-  JWT_SECRET: z.string(),
-  JWT_EXPIRY: z.string().default('1h'),
-  JWT_REFRESH_EXPIRY: z.string().default('7d'),
-
-  // CORS
-  CORS_ORIGIN: z.string().default('http://localhost:3000'),
-  CORS_METHODS: z.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
-  CORS_ALLOWED_HEADERS: z.string().default('Content-Type,Authorization'),
-  CORS_EXPOSED_HEADERS: z.string().default(''),
-  CORS_CREDENTIALS: z.coerce.boolean().default(true),
-  CORS_MAX_AGE: z.coerce.number().default(86400),
-
-  // Rate Limiting
-  RATE_LIMIT_WINDOW: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
-  RATE_LIMIT_MAX: z.coerce.number().default(100),
-
-  // Security
-  MAX_FILE_SIZE: z.coerce.number().default(50 * 1024 * 1024), // 50MB
-
-  // OpenAI
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default('gpt-4'),
-  OPENAI_ORG: z.string().optional(),
-  OPENAI_MAX_TOKENS: z.coerce.number().default(2000),
-  OPENAI_TEMPERATURE: z.coerce.number().default(0.7),
-
-  // Process Monitoring
-  PROCESS_MONITOR_INTERVAL: z.coerce.number().default(5000),
-  PROCESS_MAX_MONITORED_HOSTS: z.coerce.number().default(100),
-  PROCESS_INCLUDE_CHILDREN: z.coerce.boolean().default(true),
-  PROCESS_EXCLUDE_SYSTEM: z.coerce.boolean().default(false),
-  PROCESS_SORT_BY: z.enum(['cpu', 'memory', 'pid', 'name']).default('cpu'),
-  PROCESS_SORT_ORDER: z.enum(['asc', 'desc']).default('desc'),
-  PROCESS_MAX_PROCESSES: z.coerce.number().default(100),
-
-  // OpenRouter
-  OPENROUTER_API_KEY: z.string().optional(),
-  OPENROUTER_MODEL: z.string().default('anthropic/claude-2'),
-  OPENROUTER_BASE_URL: z.string().default('https://openrouter.ai/api/v1/chat/completions'),
-  OPENROUTER_MAX_TOKENS: z.coerce.number().default(2000),
-  OPENROUTER_TEMPERATURE: z.coerce.number().default(0.7),
-
-  // Logging
-  LOG_LEVEL: z.string().default('info'),
-  LOG_FILE: z.string().default('/var/log/shh/app.log'),
-
-  // Gotify
-  GOTIFY_URL: z.string().optional(),
-  GOTIFY_TOKEN: z.string().optional(),
-
-  // Prometheus
-  PROMETHEUS_PORT: z.coerce.number().default(9090),
-});
-
-const env = envSchema.parse(process.env);
-
-// Server config interface
-export interface ServerConfig {
-  env: 'development' | 'production' | 'test';
-  port: number;
-  host: string;
-  maxRequestSize: number;
-  websocketUrl: string;
-}
-
-export interface Config {
-  server: ServerConfig;
-  db: {
-    host: string;
-    port: number;
-    name: string;
-    user: string;
-    password: string;
-  };
-  redis: {
-    host: string;
-    port: number;
-    password: string | undefined;
-  };
-  jwt: {
-    secret: string;
-    expiry: string;
-    refreshExpiry: string;
-  };
-  cors: {
-    origin: string;
-    methods: string;
-    allowedHeaders: string;
-    exposedHeaders: string;
-    credentials: boolean;
-    maxAge: number;
-  };
-  rateLimit: {
-    windowMs: number;
-    max: number;
-  };
-  security: {
-    maxFileSize: number;
-  };
-  openai: {
-    apiKey: string | undefined;
-    model: string;
-    org: string | undefined;
-    maxTokens: number;
-    temperature: number;
-  };
-  process: {
-    monitorInterval: number;
-    maxMonitoredHosts: number;
-    includeChildren: boolean;
-    excludeSystemProcesses: boolean;
-    sortBy: 'cpu' | 'memory' | 'pid' | 'name';
-    sortOrder: 'asc' | 'desc';
-    maxProcesses: number;
-  };
-  openrouter: {
-    apiKey: string | undefined;
-    model: string;
-    baseUrl: string;
-    maxTokens: number;
-    temperature: number;
-  };
-  logging: {
-    level: string;
-    file: string;
-  };
-  gotify: {
-    url: string | undefined;
-    token: string | undefined;
-  };
-  prometheus: {
-    port: number;
-  };
-}
-
-export const config: Config = {
+const config: Config = {
   server: {
-    env: env.NODE_ENV,
-    port: env.PORT,
-    host: env.HOST,
-    maxRequestSize: env.MAX_REQUEST_SIZE,
-    websocketUrl: env.WEBSOCKET_URL,
-  },
-  db: {
-    host: env.DB_HOST,
-    port: env.DB_PORT,
-    name: env.DB_NAME,
-    user: env.DB_USER,
-    password: env.DB_PASSWORD,
-  },
-  redis: {
-    host: env.REDIS_HOST,
-    port: env.REDIS_PORT,
-    password: env.REDIS_PASSWORD,
-  },
-  jwt: {
-    secret: env.JWT_SECRET,
-    expiry: env.JWT_EXPIRY,
-    refreshExpiry: env.JWT_REFRESH_EXPIRY,
-  },
-  cors: {
-    origin: env.CORS_ORIGIN,
-    methods: env.CORS_METHODS,
-    allowedHeaders: env.CORS_ALLOWED_HEADERS,
-    exposedHeaders: env.CORS_EXPOSED_HEADERS,
-    credentials: env.CORS_CREDENTIALS,
-    maxAge: env.CORS_MAX_AGE,
-  },
-  rateLimit: {
-    windowMs: env.RATE_LIMIT_WINDOW,
-    max: env.RATE_LIMIT_MAX,
-  },
-  security: {
-    maxFileSize: env.MAX_FILE_SIZE,
-  },
-  openai: {
-    apiKey: env.OPENAI_API_KEY,
-    model: env.OPENAI_MODEL,
-    org: env.OPENAI_ORG,
-    maxTokens: env.OPENAI_MAX_TOKENS,
-    temperature: env.OPENAI_TEMPERATURE,
-  },
-  process: {
-    monitorInterval: env.PROCESS_MONITOR_INTERVAL,
-    maxMonitoredHosts: env.PROCESS_MAX_MONITORED_HOSTS,
-    includeChildren: env.PROCESS_INCLUDE_CHILDREN,
-    excludeSystemProcesses: env.PROCESS_EXCLUDE_SYSTEM,
-    sortBy: env.PROCESS_SORT_BY,
-    sortOrder: env.PROCESS_SORT_ORDER,
-    maxProcesses: env.PROCESS_MAX_PROCESSES,
-  },
-  openrouter: {
-    apiKey: env.OPENROUTER_API_KEY,
-    model: env.OPENROUTER_MODEL,
-    baseUrl: env.OPENROUTER_BASE_URL,
-    maxTokens: env.OPENROUTER_MAX_TOKENS,
-    temperature: env.OPENROUTER_TEMPERATURE,
+    env: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
+    host: process.env.HOST || 'localhost',
+    port: parseInt(process.env.PORT || '3000', 10),
+    baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+    maxRequestSize: parseInt(process.env.MAX_REQUEST_SIZE || '10485760', 10), // 10MB
+    cors: {
+      origin: process.env.CORS_ORIGIN || '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: process.env.CORS_ALLOWED_HEADERS || 'Content-Type,Authorization',
+      exposedHeaders: process.env.CORS_EXPOSED_HEADERS || '',
+      credentials: true,
+      maxAge: parseInt(process.env.CORS_MAX_AGE || '86400', 10),
+    },
+    rateLimit: {
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // limit each IP to 100 requests per windowMs
+    },
+    security: {
+      jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+      refreshSecret: process.env.REFRESH_SECRET || 'your-refresh-secret',
+      tokenExpiration: process.env.TOKEN_EXPIRATION || '1h',
+      refreshExpiration: process.env.REFRESH_EXPIRATION || '7d',
+      sessionMaxAge: parseInt(process.env.SESSION_MAX_AGE || '3600000'),
+      maxFileSize: 50 * 1024 * 1024, // 50MB
+    },
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      password: process.env.REDIS_PASSWORD,
+      db: parseInt(process.env.REDIS_DB || '0', 10),
+    },
+    logging: {
+      level: (process.env.LOG_LEVEL || 'info') as 'error' | 'warn' | 'info' | 'debug' | 'trace',
+      format: process.env.LOG_FORMAT || 'json',
+      dir: process.env.LOG_DIR || 'logs',
+      maxFiles: parseInt(process.env.LOG_MAX_FILES || '5', 10),
+      maxSize: process.env.LOG_MAX_SIZE || '10m'
+    },
+    monitoring: {
+      enabled: process.env.MONITORING_ENABLED === 'true',
+      interval: parseInt(process.env.MONITORING_INTERVAL || '5000', 10),
+      metricsPath: process.env.METRICS_PATH || '/metrics',
+    },
+    process: {
+      monitorInterval: parseInt(process.env.PROCESS_MONITOR_INTERVAL || '5000', 10),
+      maxMonitoredHosts: parseInt(process.env.PROCESS_MAX_MONITORED_HOSTS || '100', 10),
+      includeChildren: process.env.PROCESS_INCLUDE_CHILDREN !== 'false',
+      excludeSystemProcesses: process.env.PROCESS_EXCLUDE_SYSTEM === 'true',
+      sortBy: (process.env.PROCESS_SORT_BY || 'cpu') as 'cpu' | 'memory' | 'pid' | 'name',
+      sortOrder: (process.env.PROCESS_SORT_ORDER || 'desc') as 'asc' | 'desc',
+      maxProcesses: parseInt(process.env.PROCESS_MAX_PROCESSES || '100', 10),
+    },
   },
   logging: {
-    level: env.LOG_LEVEL,
-    file: env.LOG_FILE,
+    level: process.env.LOG_LEVEL || 'info',
+    format: process.env.LOG_FORMAT || 'combined',
+    dir: process.env.LOG_DIR || 'logs',
+    maxFiles: parseInt(process.env.LOG_MAX_FILES || '5', 10),
+    maxSize: process.env.LOG_MAX_SIZE || '10m',
+  },
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD,
+    db: parseInt(process.env.REDIS_DB || '0', 10),
+  },
+  paths: {
+    binaries: process.env.BINARIES_PATH || './binaries',
+  },
+  process: {
+    env: process.env.NODE_ENV || 'development',
+  },
+  db: {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    name: process.env.DB_NAME || 'shh',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'your-secret-key',
+    expiry: process.env.JWT_EXPIRY || '1h',
+    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+  },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-4',
+    org: process.env.OPENAI_ORG,
+    maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '2000', 10),
+    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+  },
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL || 'anthropic/claude-2',
+    baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1/chat/completions',
+    maxTokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '2000', 10),
+    temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
   },
   gotify: {
-    url: env.GOTIFY_URL,
-    token: env.GOTIFY_TOKEN,
-  },
-  prometheus: {
-    port: env.PROMETHEUS_PORT,
+    url: process.env.GOTIFY_URL,
+    token: process.env.GOTIFY_TOKEN,
   },
 };
+
+export default config;

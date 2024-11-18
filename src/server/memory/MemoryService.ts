@@ -1,27 +1,57 @@
-import { spawn, ChildProcess } from 'child_process';
-
-import { config } from '../config';
+import os from 'os';
+import { EventEmitter } from 'events';
+import { spawn, type ChildProcess } from 'child_process';
+import config from '../config';
 import { logger } from '../utils/logger';
 
 interface Memory {
   id: string;
   content: string;
-  embedding: number[];
+  type: string;
   metadata?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
 
-export class MemoryService {
+interface MemoryStats {
+  total: number;
+  used: number;
+  free: number;
+  cached: number;
+  available: number;
+  swapTotal: number;
+  swapUsed: number;
+  swapFree: number;
+}
+
+export class MemoryService extends EventEmitter {
   private pythonProcess: ChildProcess | null = null;
   private isInitialized = false;
+  private stats: MemoryStats | null = null;
+  private updateInterval: NodeJS.Timeout | null = null;
 
   constructor() {
+    super();
+    this.startMonitoring();
     this.initializePython().catch(error => {
       logger.error('Failed to initialize MemoryService:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     });
+  }
+
+  private startMonitoring(): void {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+    }
+
+    this.updateInterval = setInterval(
+      () => this.updateStats(),
+      config.server.process.monitorInterval
+    );
+
+    // Initial update
+    this.updateStats();
   }
 
   private async initializePython(): Promise<void> {
@@ -102,6 +132,64 @@ export class MemoryService {
     });
   }
 
+  private async updateStats(): Promise<void> {
+    try {
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
+
+      // Get swap memory info (platform specific)
+      let swapTotal = 0;
+      let swapUsed = 0;
+      let swapFree = 0;
+
+      if (os.platform() === 'linux') {
+        // Read from /proc/meminfo for Linux
+        const meminfo = await this.readMemInfo();
+        swapTotal = meminfo.SwapTotal || 0;
+        swapFree = meminfo.SwapFree || 0;
+        swapUsed = swapTotal - swapFree;
+      }
+
+      this.stats = {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        cached: 0, // Not available on all platforms
+        available: freeMem,
+        swapTotal,
+        swapUsed,
+        swapFree,
+      };
+
+      this.emit('stats', this.stats);
+    } catch (error) {
+      logger.error('Failed to update memory stats:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  private async readMemInfo(): Promise<Record<string, number>> {
+    // Implementation for reading /proc/meminfo on Linux
+    // This is a placeholder - actual implementation would read the file
+    return {
+      SwapTotal: 0,
+      SwapFree: 0,
+    };
+  }
+
+  public getStats(): MemoryStats | null {
+    return this.stats;
+  }
+
+  public stop(): void {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+  }
+
   async addMemory(userId: string, message: string, response: string): Promise<void> {
     try {
       const sanitizedMessage = message.replace(/"/g, '\\"');
@@ -176,3 +264,5 @@ export class MemoryService {
     }
   }
 }
+
+export const memoryService = new MemoryService();

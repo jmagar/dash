@@ -1,67 +1,62 @@
-import { sign, verify } from 'jsonwebtoken';
-
-import type { TokenPayload, AccessTokenPayload, RefreshTokenPayload, User } from '../../types/auth';
-import { config } from '../config';
+import jwt from 'jsonwebtoken';
+import { promisify } from 'util';
+import ms from 'ms';
+import config from '../config';
 import { logger } from './logger';
+import type { TokenPayload as AuthTokenPayload } from '../../types/auth';
 
-export function generateToken(user: User): string {
-  const payload: AccessTokenPayload = {
-    id: user.id,
-    username: user.username,
-    role: user.role,
-    is_active: user.is_active,
-    type: 'access',
-  };
+export type TokenPayload = AuthTokenPayload & {
+  iat?: number;
+  exp?: number;
+};
 
-  return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
-    expiresIn: config.jwt.expiry,
-  });
-}
+const signAsync = promisify<Record<string, unknown>, string, jwt.SignOptions, string>(jwt.sign);
+const verifyAsync = promisify<string, string, jwt.VerifyOptions, object>(jwt.verify);
 
-export function generateRefreshToken(user: User): string {
-  const payload: RefreshTokenPayload = {
-    id: user.id,
-    username: user.username,
-    role: user.role,
-    is_active: user.is_active,
-    type: 'refresh',
-  };
-
-  return sign(payload as unknown as Record<string, unknown>, config.jwt.secret, {
-    expiresIn: config.jwt.refreshExpiry,
-  });
-}
-
-export function verifyToken(token: string): TokenPayload | null {
+export async function generateToken(
+  payload: Omit<TokenPayload, 'iat' | 'exp'>,
+  options?: { expiresIn: string }
+): Promise<string> {
   try {
-    const decoded = verify(token, config.jwt.secret) as unknown;
-
-    // Type guard to verify the decoded token has the required properties
-    if (
-      typeof decoded === 'object' &&
-      decoded !== null &&
-      'id' in decoded &&
-      'username' in decoded &&
-      'role' in decoded &&
-      'is_active' in decoded &&
-      'type' in decoded &&
-      (decoded.type === 'access' || decoded.type === 'refresh') &&
-      typeof decoded.id === 'string' &&
-      typeof decoded.username === 'string' &&
-      (decoded.role === 'admin' || decoded.role === 'user') &&
-      typeof decoded.is_active === 'boolean'
-    ) {
-      return decoded as TokenPayload;
-    }
-
-    logger.warn('Invalid token structure', {
-      decoded,
+    const expiresIn = options?.expiresIn || (payload.type === 'access' ? config.jwt.expiry : config.jwt.refreshExpiry);
+    return await signAsync(payload as Record<string, unknown>, config.jwt.secret, {
+      expiresIn,
     });
-    return null;
   } catch (error) {
-    logger.warn('Token verification failed', {
+    logger.error('Failed to generate token:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      payload,
+    });
+    throw error;
+  }
+}
+
+export async function generateRefreshToken(
+  payload: Omit<TokenPayload, 'iat' | 'exp' | 'type'>,
+): Promise<string> {
+  return generateToken(
+    { ...payload, type: 'refresh' }
+  );
+}
+
+export async function verifyToken(token: string): Promise<TokenPayload> {
+  try {
+    const decoded = await verifyAsync(token, config.jwt.secret, {
+      complete: false,
+    });
+    return decoded as TokenPayload;
+  } catch (error) {
+    logger.error('Failed to verify token:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    return null;
+    throw error;
   }
+}
+
+export function getTokenExpiry(type: 'access' | 'refresh'): string {
+  return type === 'access' ? config.jwt.expiry : config.jwt.refreshExpiry;
+}
+
+export function getTokenExpiryMs(type: 'access' | 'refresh'): number {
+  return ms(getTokenExpiry(type));
 }

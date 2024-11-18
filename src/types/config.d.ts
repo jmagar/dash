@@ -1,68 +1,121 @@
-export interface Config {
-  env: string;
-  port: number;
+export interface ServerConfig {
+  env: 'development' | 'production' | 'test';
   host: string;
-  server: {
-    port: number;
-    maxRequestSize: string;
-  };
-  paths?: {
-    binaries: string;
-  };
-  db: {
-    host: string;
-    port: number;
-    user: string;
-    password: string;
-    database: string;
-  };
-  jwt: {
-    secret: string;
-    expiresIn: string;
-    refreshExpiresIn: string;
-  };
-  openai: {
-    apiKey: string;
-    model: string;
-    organization?: string;
-    maxTokens?: number;
-    temperature?: number;
-  };
-  openrouter: {
-    apiKey: string;
-    model: string;
-    baseUrl: string;
-    maxTokens?: number;
-    temperature?: number;
-  };
-  logging: {
-    level: string;
-    file: string;
-  };
+  port: number;
+  baseUrl: string;
+  maxRequestSize: number;
   cors: {
-    origin: string | string[];
+    origin: string;
+    methods: string[];
+    allowedHeaders: string;
+    exposedHeaders: string;
     credentials: boolean;
+    maxAge: number;
+  };
+  rateLimit: {
+    windowMs: number;
+    max: number;
+  };
+  security: {
+    jwtSecret: string;
+    refreshSecret: string;
+    tokenExpiration: string;
+    refreshExpiration: string;
+    sessionMaxAge: number;
+    maxFileSize: number;
   };
   redis: {
     host: string;
     port: number;
     password?: string;
+    db: number;
   };
-  prometheus: {
-    port: number;
+  logging: {
+    level: string;
+    format: string;
+    dir: string;
+    maxFiles: number;
+    maxSize: string;
   };
-  security: {
-    allowedOrigins: string[];
-    allowedHeaders: string[];
-    allowedMethods: string[];
-    exposedHeaders: string[];
-    maxAge: number;
-    credentials: boolean;
-    maxFileSize: number;
-    maxRequestSize: number;
+  monitoring: {
+    enabled: boolean;
+    interval: number;
+    metricsPath: string;
   };
-  rateLimit: {
-    windowMs: number;
-    max: number;
+  process: {
+    monitorInterval: number;
+    maxMonitoredHosts: number;
+    includeChildren: boolean;
+    excludeSystemProcesses: boolean;
+    sortBy: 'cpu' | 'memory' | 'pid' | 'name';
+    sortOrder: 'asc' | 'desc';
+    maxProcesses: number;
+  };
+}
+
+export interface DatabaseConfig {
+  host: string;
+  port: number;
+  name: string;
+  user: string;
+  password: string;
+}
+
+export interface JwtConfig {
+  secret: string;
+  expiry: string;
+  refreshExpiry: string;
+}
+
+export interface OpenAIConfig {
+  apiKey?: string;
+  model: string;
+  org?: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+export interface OpenRouterConfig {
+  apiKey?: string;
+  model: string;
+  baseUrl: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+export interface GotifyConfig {
+  url?: string;
+  token?: string;
+}
+
+export interface LoggingConfig {
+  level: string;
+  format: string;
+  dir: string;
+  maxFiles: number;
+  maxSize: string;
+}
+
+export interface RedisConfig {
+  host: string;
+  port: number;
+  password?: string;
+  db: number;
+}
+
+export interface Config {
+  server: ServerConfig;
+  db: DatabaseConfig;
+  jwt: JwtConfig;
+  openai: OpenAIConfig;
+  openrouter: OpenRouterConfig;
+  gotify: GotifyConfig;
+  logging: LoggingConfig;
+  paths: {
+    binaries: string;
+  };
+  redis: RedisConfig;
+  process: {
+    env: string;
   };
 }

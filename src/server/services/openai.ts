@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
-
-import { config } from '../config';
+import config from '../config';
 import { logger } from '../utils/logger';
 
 if (!config.openai.apiKey) {
@@ -10,6 +9,7 @@ if (!config.openai.apiKey) {
 
 export const openai = new OpenAI({
   apiKey: config.openai.apiKey,
+  organization: config.openai.org,
 });
 
 export async function generateEmbedding(text: string): Promise<number[]> {
@@ -33,6 +33,8 @@ export async function generateCompletion(prompt: string): Promise<string> {
     const completion = await openai.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: config.openai.model || 'gpt-4',
+      max_tokens: config.openai.maxTokens,
+      temperature: config.openai.temperature,
     });
 
     const response = completion.choices[0]?.message?.content;

@@ -3,12 +3,18 @@ import type { Request, Response } from '../../../types/express';
 import type { Host, CreateHostRequest, UpdateHostRequest, ApiResponse } from '../../../types/models-shared';
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
-import { agentInstallerService } from '../../services/agent-installer.service';
+import { sshService } from '../../services/ssh.service';
+import { AgentInstaller } from '../../services/agent-installer';
+import { LinuxHandler } from '../../services/agent-installer/linux-handler';
+import { WindowsHandler } from '../../services/agent-installer/windows-handler';
 import { getAgentService } from '../../services/agent.service';
-import { config } from '../../config';
 import { db } from '../../db';
 
 const router = Router();
+const agentInstaller = new AgentInstaller(
+  new LinuxHandler(sshService),
+  new WindowsHandler(sshService)
+);
 
 interface HostParams {
   id: string;
@@ -35,7 +41,7 @@ router.get('/', async (req: Request, res: Response<HostListResponse>) => {
     const agentService = getAgentService();
 
     // Enrich with agent status
-    const hosts = result.rows.map(host => ({
+    const hosts = result.rows.map((host: Host) => ({
       ...host,
       agentConnected: agentService.isConnected(host.id),
       agentMetrics: agentService.getAgentMetrics(host.id),
@@ -131,10 +137,8 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
     // Install agent if requested
     if (req.body.install_agent) {
       try {
-        const agentService = getAgentService();
-        await agentInstallerService.installAgent(host, {
-          server_url: config.server.websocketUrl,
-          agent_id: host.id,
+        await agentInstaller.installAgent(host, {
+          installInContainer: false,
           labels: {
             created_by: req.user.id,
             environment: req.body.environment || 'production',
@@ -236,7 +240,7 @@ router.delete('/:id', async (req: Request<HostParams>, res: Response<ApiResponse
     // Uninstall agent if installed
     if (host.agentStatus === 'installed') {
       try {
-        await agentInstallerService.uninstallAgent(host);
+        await agentInstaller.uninstallAgent(host);
       } catch (error) {
         logger.error('Failed to uninstall agent:', {
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -286,10 +290,8 @@ router.post('/:id/agent/install', async (req: Request<HostParams>, res: Response
 
     const host = result.rows[0];
 
-    const agentService = getAgentService();
-    await agentInstallerService.installAgent(host, {
-      server_url: config.server.websocketUrl,
-      agent_id: host.id,
+    await agentInstaller.installAgent(host, {
+      installInContainer: false,
       labels: {
         installed_by: req.user.id,
         environment: host.environment || 'production',
@@ -331,7 +333,7 @@ router.post('/:id/agent/uninstall', async (req: Request<HostParams>, res: Respon
 
     const host = result.rows[0];
 
-    await agentInstallerService.uninstallAgent(host);
+    await agentInstaller.uninstallAgent(host);
 
     res.json({
       success: true,

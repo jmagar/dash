@@ -7,7 +7,7 @@ class HostService {
     try {
       // This would typically query your database
       // For now, return a mock host
-      return {
+      const mockHost: Host = {
         id: hostId,
         name: `Host ${hostId}`,
         hostname: `host-${hostId}`,
@@ -19,9 +19,11 @@ class HostService {
         environment: 'production',
         tags: ['production'],
         metadata: {},
+        os_type: 'linux',
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      return mockHost;
     } catch (error) {
       logger.error('Failed to get host:', {
         error: error instanceof Error ? error.message : 'Unknown error',

@@ -1,61 +1,68 @@
 import Transport from 'winston-transport';
 import axios from 'axios';
-import type { LogEntry } from '../../types/logger';
-import { config } from '../config';
-
-interface GotifyOptions {
-  url: string;
-  token: string;
-  level?: string;
-}
+import { LogEntry } from 'winston';
+import config from '../config';
 
 /**
- * Winston transport for critical Gotify notifications
+ * Winston transport for Gotify notifications
  */
 export class GotifyTransport extends Transport {
-  private url: string;
-  private token: string;
+  protected readonly transportName: string;
+  public level: string;
 
-  constructor(opts: GotifyOptions) {
+  constructor(opts?: Transport.TransportStreamOptions) {
     super(opts);
-    this.url = opts.url;
-    this.token = opts.token;
+    this.transportName = 'gotify';
+    this.level = opts?.level || 'error';
   }
 
-  private formatMessage(info: LogEntry): string {
-    const metadata = info.metadata ? JSON.stringify(info.metadata, null, 2) : '';
-    return `${info.message}\n\n${metadata}`;
-  }
-
-  async log(info: LogEntry & { notify?: boolean }, callback: () => void): Promise<void> {
+  log(info: LogEntry, callback: () => void): void {
     setImmediate(() => {
       this.emit('logged', info);
     });
 
-    // Only send notification if notify flag is true
-    if (!info.notify) {
+    if (!config.gotify?.url || !config.gotify?.token || info.level !== this.level) {
       callback();
       return;
     }
 
+    void this.sendNotification(info).then(() => callback());
+  }
+
+  private async sendNotification(info: LogEntry): Promise<void> {
     try {
+      const { level, message, ...meta } = info;
+      const priority = this.getPriority(level);
+
       await axios.post(
-        `${this.url}/message`,
+        `${config.gotify.url}/message`,
         {
-          title: `[CRITICAL] ${info.message.split('\n')[0]}`,
-          message: this.formatMessage(info),
-          priority: 8 // Highest priority
+          title: `[${level.toUpperCase()}] Server Alert`,
+          message: message,
+          priority: priority,
+          extras: meta,
         },
         {
           headers: {
-            'X-Gotify-Key': this.token
-          }
+            'X-Gotify-Key': config.gotify.token,
+          },
         }
       );
     } catch (error) {
-      console.error('Failed to send Gotify notification:', error);
+      console.error('Failed to send notification to Gotify:', error);
     }
+  }
 
-    callback();
+  private getPriority(level: string): number {
+    switch (level) {
+      case 'error':
+        return 8;
+      case 'warn':
+        return 5;
+      case 'info':
+        return 3;
+      default:
+        return 1;
+    }
   }
 }

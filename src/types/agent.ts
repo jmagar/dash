@@ -17,6 +17,7 @@ export interface InstallOptions {
   containerName?: string;
   useHostNetwork?: boolean;
   mountHostPaths?: boolean;
+  labels?: Record<string, string>;
 }
 
 export interface WindowsServiceConfig {

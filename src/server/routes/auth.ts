@@ -1,217 +1,275 @@
-import express from 'express';
-import type { Response } from 'express';
-import { ApiError } from '../../types/error';
-import type { RequestHandler } from '../../types/express';
-import type { LogMetadata } from '../../types/logger';
-import type {
-  LoginRequest,
-  LoginResponse,
-  ValidateResponse,
-  LogoutResponse,
-  RefreshTokenRequest,
-  RefreshTokenResponse,
-  User,
-  AuthenticatedUser,
-} from '../../types/auth';
-import { cacheService } from '../cache/CacheService';
+import { Router } from 'express';
+import bcrypt from 'bcrypt';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
+import { cacheService } from '../cache/CacheService';
 import { logger } from '../utils/logger';
+import config from '../config';
+import type { 
+  User, 
+  AuthenticatedUser, 
+  TokenPayload 
+} from '../../types/auth';
+import type { LogMetadata } from '../../types/logger';
 
-const router = express.Router();
+const router = Router();
 
-const loginHandler: RequestHandler<unknown, LoginResponse, LoginRequest> = async (req, res: Response) => {
+router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) {
-      const metadata: LogMetadata = { body: req.body };
-      throw new ApiError('Invalid request format', undefined, 400, metadata);
+
+    // Mock user lookup - replace with actual DB lookup
+    const user: User = {
+      id: '1',
+      username,
+      email: 'user@example.com',
+      role: 'user',
+      is_active: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Mock password check - replace with actual password verification
+    const validPassword = await bcrypt.compare(password, user.password_hash || '');
+    if (!validPassword) {
+      return res.status(401).json({
+        success: false,
+        user: null,
+        error: 'Invalid credentials'
+      });
     }
 
-    // Validate credentials
-    const user = await validateCredentials(username, password);
-    if (!user) {
-      const metadata: LogMetadata = { username };
-      throw new ApiError('Invalid credentials', undefined, 401, metadata);
-    }
+    // Generate tokens
+    const tokenPayload: Omit<TokenPayload, 'iat' | 'exp'> = {
+      id: user.id,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+      type: 'access'
+    };
+    const token = await generateToken(tokenPayload);
 
-    // Generate session token and refresh token
-    const token = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const refreshPayload: Omit<TokenPayload, 'type' | 'iat' | 'exp'> = {
+      id: user.id,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active
+    };
+    const refreshToken = await generateRefreshToken(refreshPayload);
 
-    // Cache session
+    const expiresAt = new Date(Date.now() + config.server.security.sessionMaxAge);
+
+    // Store session
+    const sessionData = {
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+      refreshToken,
+      expiresAt: expiresAt.toISOString()
+    };
+
     await cacheService.setSession(token, user, refreshToken);
 
-    logger.info('User logged in successfully', { username });
-
-    const authenticatedUser: AuthenticatedUser = {
+    const authenticatedUser = {
       ...user,
       token,
       refreshToken,
+      expiresAt: expiresAt.toISOString()
     };
 
     return res.json({
       success: true,
-      token,
-      refreshToken,
-      user: authenticatedUser,
+      user: authenticatedUser
     });
   } catch (error) {
-    logger.error('Login failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : String(error)
+    };
+    logger.error('Login error:', metadata);
+    return res.status(500).json({
+      success: false,
+      user: null,
+      error: 'Internal server error'
     });
+  }
+});
 
-    if (error instanceof ApiError) {
-      return res.status(error.status).json({
+router.post('/logout', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({
         success: false,
-        error: error.message,
+        error: 'No token provided'
       });
     }
 
+    await cacheService.removeSession(token);
+    return res.json({
+      success: true
+    });
+  } catch (error) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : String(error)
+    };
+    logger.error('Logout error:', metadata);
     return res.status(500).json({
       success: false,
-      error: 'An unexpected error occurred',
+      error: 'Internal server error'
     });
   }
-};
+});
 
-const validateHandler: RequestHandler<unknown, ValidateResponse> = async (req, res: Response) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-
-  if (!token) {
-    const metadata: LogMetadata = {};
-    const error = new ApiError('No token provided', undefined, 401, metadata);
-    return res.status(error.status).json({
-      success: false,
-      error: error.message,
-    });
-  }
-
+router.get('/validate', async (req, res) => {
   try {
-    const session = await cacheService.getSession(token);
-    if (!session) {
-      const metadata: LogMetadata = { token };
-      throw new ApiError('Invalid or expired session', undefined, 401, metadata);
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        user: null,
+        error: 'No token provided'
+      });
     }
 
-    const { user, refreshToken } = JSON.parse(session);
+    const rawSessionData = await cacheService.getSession(token);
+    if (!rawSessionData || typeof rawSessionData !== 'object') {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session'
+      });
+    }
 
-    const authenticatedUser: AuthenticatedUser = {
+    const sessionData = rawSessionData as {
+      userId: string;
+      username: string;
+      role: 'admin' | 'user';
+      is_active: boolean;
+      refreshToken: string;
+      expiresAt: string;
+    };
+
+    const user: User = {
+      id: sessionData.userId,
+      username: sessionData.username,
+      email: 'user@example.com',
+      role: sessionData.role,
+      is_active: sessionData.is_active,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const authenticatedUser = {
       ...user,
       token,
-      refreshToken,
+      refreshToken: sessionData.refreshToken,
+      expiresAt: sessionData.expiresAt
     };
 
     return res.json({
       success: true,
       valid: true,
-      user: authenticatedUser,
+      user: authenticatedUser
     });
   } catch (error) {
-    logger.error('Token validation failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    if (error instanceof ApiError) {
-      return res.status(error.status).json({
-        success: false,
-        error: error.message,
-      });
-    }
-
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : String(error)
+    };
+    logger.error('Validate error:', metadata);
     return res.status(500).json({
       success: false,
-      error: 'An unexpected error occurred',
+      valid: false,
+      user: null,
+      error: 'Internal server error'
     });
   }
-};
+});
 
-const logoutHandler: RequestHandler<unknown, LogoutResponse> = async (req, res: Response) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (token) {
-      await cacheService.removeSession(token);
-    }
-    return res.json({ success: true });
-  } catch (error) {
-    logger.error('Logout failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    // Don't expose errors during logout
-    return res.json({ success: true });
-  }
-};
-
-const refreshHandler: RequestHandler<unknown, RefreshTokenResponse, RefreshTokenRequest> = async (req, res: Response) => {
+router.post('/refresh', async (req, res) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) {
-      throw new ApiError('No refresh token provided', undefined, 400);
+      return res.status(401).json({
+        success: false,
+        token: '',
+        refreshToken: '',
+        error: 'No refresh token provided'
+      });
     }
 
-    const decoded = verifyToken(refreshToken);
+    const decoded = await verifyToken(refreshToken) as TokenPayload;
     if (!decoded || decoded.type !== 'refresh') {
-      throw new ApiError('Invalid refresh token', undefined, 401);
+      return res.status(401).json({
+        success: false,
+        token: '',
+        refreshToken: '',
+        error: 'Invalid refresh token'
+      });
     }
 
-    const session = await cacheService.getSession(refreshToken);
-    if (!session) {
-      throw new ApiError('Invalid or expired session', undefined, 401);
-    }
-
-    const { user } = JSON.parse(session);
+    // Mock user lookup - replace with actual DB lookup
+    const user: User = {
+      id: decoded.id,
+      username: decoded.username,
+      email: 'user@example.com',
+      role: decoded.role,
+      is_active: decoded.is_active,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
     // Generate new tokens
-    const newToken = generateToken(user);
-    const newRefreshToken = generateRefreshToken(user);
+    const tokenPayload: Omit<TokenPayload, 'iat' | 'exp'> = {
+      id: user.id,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+      type: 'access'
+    };
+    const newToken = await generateToken(tokenPayload);
+
+    const refreshPayload: Omit<TokenPayload, 'type' | 'iat' | 'exp'> = {
+      id: user.id,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active
+    };
+    const newRefreshToken = await generateRefreshToken(refreshPayload);
+
+    const expiresAt = new Date(Date.now() + config.server.security.sessionMaxAge);
 
     // Update session
+    const sessionData = {
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+      refreshToken: newRefreshToken,
+      expiresAt: expiresAt.toISOString()
+    };
+
     await cacheService.setSession(newToken, user, newRefreshToken);
-    await cacheService.removeSession(refreshToken);
 
     return res.json({
       success: true,
       token: newToken,
-      refreshToken: newRefreshToken,
+      refreshToken: newRefreshToken
     });
   } catch (error) {
-    logger.error('Token refresh failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    if (error instanceof ApiError) {
-      return res.status(error.status).json({
-        success: false,
-        error: error.message,
-      });
-    }
-
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : String(error)
+    };
+    logger.error('Refresh token error:', metadata);
     return res.status(500).json({
       success: false,
-      error: 'An unexpected error occurred',
+      token: '',
+      refreshToken: '',
+      error: 'Internal server error'
     });
   }
-};
-
-// Mock function for development
-async function validateCredentials(username: string, password: string): Promise<User | null> {
-  if (process.env.NODE_ENV === 'development') {
-    const user: User = {
-      id: '1',
-      username: 'admin',
-      role: 'admin' as const,
-      is_active: true,
-      email: 'admin@example.com',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    return user;
-  }
-  return null;
-}
-
-router.post('/login', loginHandler);
-router.get('/validate', validateHandler);
-router.post('/logout', logoutHandler);
-router.post('/refresh', refreshHandler);
+});
 
 export default router;
