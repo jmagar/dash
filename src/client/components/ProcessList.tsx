@@ -1,36 +1,36 @@
 import React, { useState } from 'react';
+
 import {
+  Memory as MemoryIcon,
+  MoreVert as MoreVertIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import {
+  Alert,
+  alpha,
   Box,
+  Chip,
+  IconButton,
+  InputAdornment,
+  LinearProgress,
+  Menu,
+  MenuItem,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
   TablePagination,
+  TableRow,
   TableSortLabel,
-  Typography,
-  IconButton,
-  Chip,
   TextField,
-  InputAdornment,
-  LinearProgress,
-  Menu,
-  MenuItem,
-  Alert,
+  Typography,
+  useTheme,
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  MoreVert as MoreVertIcon,
-  Memory as MemoryIcon,
-  Timer as TimerIcon,
-  Storage as StorageIcon,
-} from '@mui/icons-material';
-import { useTheme } from '@mui/material/styles';
+
 import { useProcessMetrics } from '../hooks/useProcessMetrics';
 import { formatBytes } from '../utils/formatters';
-import { alpha } from '@mui/material/styles';
 
 type Order = 'asc' | 'desc';
 type OrderBy = 'cpuUsage' | 'memoryUsage' | 'memoryRss' | 'threads' | 'name';

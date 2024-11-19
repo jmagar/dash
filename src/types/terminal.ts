@@ -1,7 +1,10 @@
-import type { Socket } from 'socket.io-client';
-import type { TokenPayload } from './auth';
 import { CacheCommand } from './cache';
 import { SSHClient, SSHStream } from './ssh';
+
+import type { TokenPayload } from './auth';
+import type { Socket } from 'socket.io-client';
+
+
 
 export interface TerminalOptions extends TerminalSize {
   hostId: string;

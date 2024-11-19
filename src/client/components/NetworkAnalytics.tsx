@@ -1,28 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import {
   Box,
+  Card,
+  CardContent,
   Grid,
+  LinearProgress,
   Paper,
-  Typography,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  LinearProgress,
-  Card,
-  CardContent,
+  Typography,
 } from '@mui/material';
 import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from 'recharts';
+
 import { useHostMetrics } from '../hooks/useHostMetrics';
 import { formatBytes } from '../utils/formatters';
 
@@ -31,8 +33,6 @@ interface NetworkAnalyticsProps {
 }
 
 export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) => {
-  const [selectedInterface, setSelectedInterface] = useState<string>('');
-  const [timeRange, setTimeRange] = useState<string>('1h');
   const { metrics, loading, error } = useHostMetrics(hostId);
 
   useEffect(() => {

@@ -158,7 +158,7 @@
     "start": "node dist/server/server.js",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "craco start",
-    "dev:server": "NODE_OPTIONS='--loader ts-node/esm' ts-node-dev --respawn --transpile-only src/server/server.ts",
+    "dev:server": "ts-node-dev --respawn --transpile-only src/server/server.ts",
     "build": "npm run build:client && npm run build:server",
     "build:client": "NODE_ENV=production craco build",
     "build:server": "NODE_ENV=production tsc -p tsconfig.server.json",

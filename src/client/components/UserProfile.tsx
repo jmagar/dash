@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
+
 import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  Button,
   Avatar,
-  IconButton,
-  Divider,
-  Alert,
+  Box,
+  Button,
+  Paper,
+  TextField,
+  Typography,
   useTheme,
   alpha,
   Tooltip,
   Fade,
   CircularProgress,
   Zoom,
+  Divider,
+  Alert,
+  IconButton,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -25,6 +26,7 @@ import {
   VpnKey as KeyIcon,
   CheckCircle as SuccessIcon,
 } from '@mui/icons-material';
+
 import { useAuth } from '../hooks/useAuth';
 import { logger } from '../utils/frontendLogger';
 

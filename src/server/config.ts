@@ -78,11 +78,11 @@ const config: Config = {
     env: process.env.NODE_ENV || 'development',
   },
   db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    name: process.env.DB_NAME || 'shh',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+    name: process.env.POSTGRES_DB || 'shh',
+    user: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || 'postgres',
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key',

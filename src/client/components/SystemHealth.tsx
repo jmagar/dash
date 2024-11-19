@@ -1,48 +1,28 @@
 import React, { useState } from 'react';
+
 import {
-  Box,
-  Grid,
-  Paper,
-  Typography,
-  LinearProgress,
-  Card,
-  CardContent,
-  Alert,
-  AlertTitle,
-  useTheme,
-  Tooltip,
-  IconButton,
-  Fade,
-  Collapse,
-  Divider,
-  Chip,
-  alpha,
-  Button,
-} from '@mui/material';
-import {
-  Timeline as TimelineIcon,
-  Memory as MemoryIcon,
-  Storage as StorageIcon,
-  Router as NetworkIcon,
-  Refresh as RefreshIcon,
-  Info as InfoIcon,
-  Warning as WarningIcon,
   Error as ErrorIcon,
-  CheckCircle as CheckCircleIcon,
-  Speed as SpeedIcon,
-  ExpandMore as ExpandMoreIcon,
+  Info as InfoIcon,
+  Refresh as RefreshIcon,
+  Timeline as TimelineIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  ResponsiveContainer,
-} from 'recharts';
+  Alert,
+  AlertTitle,
+  alpha,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  IconButton,
+  LinearProgress,
+  Paper,
+  Typography,
+  useTheme,
+} from '@mui/material';
+
 import { useHostMetrics } from '../hooks/useHostMetrics';
-import { formatBytes, formatUptime } from '../utils/formatters';
 
 interface HealthIndicator {
   name: string;
@@ -60,22 +40,13 @@ interface SystemHealthProps {
 
 export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState<string[]>([]);
   const { metrics, loading, error, refresh } = useHostMetrics(hostId);
   const [refreshing, setRefreshing] = useState(false);
 
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     setRefreshing(true);
-    await refresh();
+    refresh();
     setTimeout(() => setRefreshing(false), 1000);
-  };
-
-  const toggleExpand = (section: string) => {
-    setExpanded(prev =>
-      prev.includes(section)
-        ? prev.filter(s => s !== section)
-        : [...prev, section]
-    );
   };
 
   if (loading) {
@@ -144,7 +115,7 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
       unit: '%',
       status: metrics.cpu.total > 90 ? 'error' : metrics.cpu.total > 70 ? 'warning' : 'success',
       message: metrics.cpu.total > 90 ? 'Critical CPU usage' : metrics.cpu.total > 70 ? 'High CPU usage' : 'Normal',
-      icon: <SpeedIcon />,
+      icon: <TimelineIcon />,
     },
     {
       name: 'Memory Usage',
@@ -153,7 +124,7 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
       unit: '%',
       status: metrics.memory.usage > 90 ? 'error' : metrics.memory.usage > 80 ? 'warning' : 'success',
       message: metrics.memory.usage > 90 ? 'Critical memory usage' : metrics.memory.usage > 80 ? 'High memory usage' : 'Normal',
-      icon: <MemoryIcon />,
+      icon: <InfoIcon />,
     },
     {
       name: 'Storage Usage',
@@ -162,7 +133,7 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
       unit: '%',
       status: metrics.storage.usage > 95 ? 'error' : metrics.storage.usage > 85 ? 'warning' : 'success',
       message: metrics.storage.usage > 95 ? 'Critical storage usage' : metrics.storage.usage > 85 ? 'Low storage space' : 'Normal',
-      icon: <StorageIcon />,
+      icon: <WarningIcon />,
     },
     {
       name: 'Network Health',
@@ -171,7 +142,7 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
       unit: '%',
       status: metrics.network.health < 60 ? 'error' : metrics.network.health < 80 ? 'warning' : 'success',
       message: metrics.network.health < 60 ? 'Poor network health' : metrics.network.health < 80 ? 'Degraded network performance' : 'Normal',
-      icon: <NetworkIcon />,
+      icon: <ErrorIcon />,
     },
   ];
 
@@ -205,21 +176,19 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
           System Health
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
-        <Tooltip title="Refresh metrics">
-          <IconButton
-            onClick={handleRefresh}
-            disabled={refreshing}
-            sx={{
-              transition: 'transform 0.2s',
-              '&:hover': {
-                transform: 'rotate(180deg)',
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-              },
-            }}
-          >
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <IconButton
+          onClick={handleRefresh}
+          disabled={refreshing}
+          sx={{
+            transition: 'transform 0.2s',
+            '&:hover': {
+              transform: 'rotate(180deg)',
+              bgcolor: alpha(theme.palette.primary.main, 0.1),
+            },
+          }}
+        >
+          <RefreshIcon />
+        </IconButton>
       </Box>
 
       <Grid container spacing={3}>
@@ -299,71 +268,6 @@ export const SystemHealth: React.FC<SystemHealthProps> = ({ hostId }) => {
             </Paper>
           </Grid>
         ))}
-
-        <Grid item xs={12}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              bgcolor: theme.palette.mode === 'dark'
-                ? alpha(theme.palette.background.paper, 0.8)
-                : theme.palette.background.paper,
-              borderRadius: 2,
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 2 }}>Performance History</Typography>
-            <Box sx={{ height: 300 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={metrics.history}
-                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="cpu" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={theme.palette.primary.main} stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor={theme.palette.primary.main} stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="memory" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={theme.palette.success.main} stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor={theme.palette.success.main} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.text.primary, 0.1)} />
-                  <XAxis
-                    dataKey="timestamp"
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fill: theme.palette.text.secondary }}
-                  />
-                  <YAxis
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fill: theme.palette.text.secondary }}
-                  />
-                  <ChartTooltip
-                    contentStyle={{
-                      backgroundColor: theme.palette.background.paper,
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderRadius: 8,
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="cpu"
-                    stroke={theme.palette.primary.main}
-                    fillOpacity={1}
-                    fill="url(#cpu)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="memory"
-                    stroke={theme.palette.success.main}
-                    fillOpacity={1}
-                    fill="url(#memory)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
-          </Paper>
-        </Grid>
       </Grid>
     </Box>
   );

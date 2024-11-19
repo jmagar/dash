@@ -268,7 +268,7 @@ verify_deployment() {
         local all_healthy=true
         
         for service in "${services[@]}"; do
-            local status=$(${DOCKER_COMPOSE} ps --format json ${service} | jq -r '.[0].Health // "none"')
+            local status=$(${DOCKER_COMPOSE} ps --format json ${service} | jq -r '.Health.Status // "none"')
             
             if [ "${status}" != "healthy" ] && [ "${status}" != "none" ]; then
                 all_healthy=false
