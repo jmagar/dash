@@ -8,15 +8,20 @@ module.exports = {
       jsx: true,
     },
     project: './tsconfig.json',
+    tsconfigRootDir: __dirname,
   },
   settings: {
     react: {
       version: 'detect',
     },
     'import/resolver': {
-      typescript: {},
+      typescript: {
+        alwaysTryTypes: true,
+        project: './tsconfig.json',
+      },
       node: {
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        moduleDirectory: ['node_modules', 'src/'],
       },
     },
   },
@@ -54,6 +59,9 @@ module.exports = {
     'import/default': 'error',
     'import/namespace': 'error',
     'import/export': 'error',
+    'import/no-named-as-default': 'warn',
+    'import/no-named-as-default-member': 'warn',
+    'import/no-duplicates': 'warn',
   },
-  ignorePatterns: ['build/', 'dist/', 'node_modules/', '*.js'],
+  ignorePatterns: ['build/', 'dist/', 'node_modules/', '*.config.js', '.eslintrc.js'],
 };

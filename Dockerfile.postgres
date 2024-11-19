@@ -1,6 +1,5 @@
 FROM postgres:16
 
-# Install build dependencies and pgvector
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -18,5 +17,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Add vector extension to default database
 RUN echo "CREATE EXTENSION vector;" > /docker-entrypoint-initdb.d/01_vector.sql
+
+# Copy initialization scripts
+COPY init.sql /docker-entrypoint-initdb.d/02_init.sql

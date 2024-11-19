@@ -15,7 +15,6 @@ export abstract class BaseRedisService {
     this._redis = new Redis({
       host: config.connection.host,
       port: config.connection.port,
-      password: config.connection.password,
       db: config.connection.db,
       maxRetriesPerRequest: config.connection.maxRetriesPerRequest,
       retryStrategy: (times: number): number | null => {

@@ -8,6 +8,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/utils.sh"
 
+# Required environment variables
+REQUIRED_ENV_VARS=(
+    "POSTGRES_USER"
+    "POSTGRES_PASSWORD"
+    "POSTGRES_DB"
+    "JWT_SECRET"
+)
+
+# Function to validate environment variables
+validate_env_variables() {
+    print_step "Validating environment variables..."
+    local missing_vars=()
+    
+    for var in "${REQUIRED_ENV_VARS[@]}"; do
+        if [[ -z "${!var:-}" ]]; then
+            missing_vars+=("$var")
+        fi
+    done
+    
+    if [[ ${#missing_vars[@]} -gt 0 ]]; then
+        print_error "Missing required environment variables" "${missing_vars[*]}"
+        exit 1
+    fi
+}
+
+# Load environment variables from .env file
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+    set -a
+    source "${PROJECT_ROOT}/.env"
+    set +a
+fi
+
 # Environment variables
 export SHH_DATA_DIR=${SHH_DATA_DIR:-/var/lib/shh}
 export NODE_ENV=${NODE_ENV:-production}
@@ -158,7 +190,7 @@ verify_config() {
     fi
 
     # Check required environment variables
-    local required_vars=("POSTGRES_PASSWORD" "REDIS_PASSWORD" "JWT_SECRET")
+    local required_vars=("POSTGRES_PASSWORD" "JWT_SECRET")
     for var in "${required_vars[@]}"; do
         if [ -z "${!var:-}" ]; then
             print_error "Missing environment variable" "$var is required"
@@ -175,10 +207,10 @@ create_directories() {
     save_state "creating_directories"
 
     # Create app data directories with proper permissions
-    mkdir -p "${SHH_DATA_DIR}"/{logs,data}
+    mkdir -p "${SHH_DATA_DIR}"/{logs,data,backups}
     mkdir -p "${PROJECT_ROOT}/config"
     chmod -R 755 "${SHH_DATA_DIR}"
-    chmod 600 "${PROJECT_ROOT}/config/config.yaml"
+    chmod 600 "${PROJECT_ROOT}/config/config.yaml" 2>/dev/null || true
 
     print_success "Created required directories in ${SHH_DATA_DIR}"
 }
@@ -405,14 +437,18 @@ cleanup_resources() {
     print_step "Cleaning up resources..."
     save_state "cleaning_resources"
     
-    # Remove old logs
-    find "${SHH_DATA_DIR}/logs" -type f -name "*.log" -mtime +30 -exec rm {} \;
+    # Remove old logs if directory exists
+    if [ -d "${SHH_DATA_DIR}/logs" ]; then
+        find "${SHH_DATA_DIR}/logs" -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
+    fi
     
-    # Remove old backups
-    find "${SHH_DATA_DIR}/backups" -type f -mtime +7 -exec rm {} \;
+    # Remove old backups if directory exists
+    if [ -d "${SHH_DATA_DIR}/backups" ]; then
+        find "${SHH_DATA_DIR}/backups" -type f -mtime +7 -delete 2>/dev/null || true
+    fi
     
-    # Clean Docker resources
-    docker system prune -f --filter "until=168h"
+    # Clean Docker resources with a timeout
+    timeout 30s docker system prune -f --filter "until=168h" || true
     
     print_success "Cleanup completed"
 }
@@ -446,8 +482,8 @@ validate_env_variables() {
     
     # Define patterns for validation
     local patterns=(
-        "^[a-zA-Z0-9_-]+$:DB_USER"
-        "^[a-zA-Z0-9_-]+$:DB_NAME"
+        "^[a-zA-Z0-9_-]+$:POSTGRES_USER"
+        "^[a-zA-Z0-9_-]+$:POSTGRES_DB"
         "^[0-9]+$:PORT"
         "^[a-zA-Z0-9._-]+$:HOST"
     )
@@ -455,7 +491,8 @@ validate_env_variables() {
     for pattern in "${patterns[@]}"; do
         local regex="${pattern%%:*}"
         local var="${pattern#*:}"
-        if [ -n "${!var}" ] && ! [[ "${!var}" =~ ${regex} ]]; then
+        local val="${!var:-}"
+        if [ -n "$val" ] && ! [[ "$val" =~ $regex ]]; then
             print_error "Invalid environment variable" "${var} contains invalid characters"
             exit 1
         fi
@@ -506,27 +543,75 @@ validate_dependency_graph() {
     fi
 }
 
+# Function to check system requirements
+check_requirements() {
+    print_step "Checking system requirements..."
+    
+    # Check Docker
+    if ! docker info &> /dev/null; then
+        print_error "Docker is not running or not installed"
+        exit 1
+    fi
+    
+    # Check Docker Compose
+    if ! docker compose version &> /dev/null; then
+        print_error "Docker Compose is not installed"
+        exit 1
+    fi
+    
+    # Check disk space
+    check_disk_space
+    
+    # Check system resources
+    check_deployment_resources
+}
+
+# Function to prepare directories
+prepare_directories() {
+    print_step "Preparing directories..."
+    
+    # Create data directory if it doesn't exist
+    if [ ! -d "${SHH_DATA_DIR}" ]; then
+        sudo mkdir -p "${SHH_DATA_DIR}"
+        sudo chown -R "${USER}:${USER}" "${SHH_DATA_DIR}"
+    fi
+    
+    # Create required subdirectories
+    mkdir -p "${SHH_DATA_DIR}/"{logs,data}
+    
+    # Set proper permissions
+    chmod 755 "${SHH_DATA_DIR}"
+    chmod 755 "${SHH_DATA_DIR}/logs"
+    chmod 755 "${SHH_DATA_DIR}/data"
+}
+
 # Main deployment flow
 main() {
-    print_header "Starting SHH Deployment (${NODE_ENV} mode)"
+    trap 'cleanup_on_error "Received interrupt signal"' INT TERM
+    trap 'cleanup_on_error "Error on line $LINENO"' ERR
+    
+    print_banner "Starting SHH Deployment"
+    
+    # Validate environment
+    validate_env_variables
+    check_requirements
+    prepare_directories
     
     # Pre-deployment checks
     check_versions
-    check_disk_space
-    check_deployment_resources
     verify_network
     verify_dependencies
     verify_config
-    validate_env_variables
-    validate_dependency_graph
-
+    
+    # Create directories first
+    create_directories
+    
     # Pre-deployment tasks
     rotate_logs
     cleanup_resources
     backup_data
     
     # Deployment steps
-    create_directories
     pull_images
     build_images
     start_services
@@ -539,9 +624,7 @@ main() {
     print_header "Deployment Complete"
 }
 
-# Enhanced error handling
-trap 'cleanup_on_error "Received interrupt signal"' INT TERM
-trap 'cleanup_on_error "Error on line $LINENO"' ERR
-
-# Execute main function
-main
+# Run main if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

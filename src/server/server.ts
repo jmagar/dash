@@ -41,7 +41,6 @@ const monitorFactory = new ProcessMonitorFactory(
 // Configure Redis rate limiter
 const redisClient = createClient({
   url: `redis://${config.server.redis.host}:${config.server.redis.port}`,
-  password: config.server.redis.password,
   database: config.server.redis.db,
 });
 
@@ -71,8 +70,19 @@ if (config.server.monitoring.enabled) {
 // Apply rate limiter to all routes
 app.use(rateLimiter);
 
-// Setup routes
+// Serve static files from the React build directory
+app.use(express.static('build', {
+  maxAge: '1d',
+  index: false // Let us handle serving index.html
+}));
+
+// Setup API routes
 app.use('/api', routes);
+
+// Serve index.html for all other routes to support client-side routing
+app.get('*', (req, res) => {
+  res.sendFile('index.html', { root: 'build' });
+});
 
 // Error handling
 app.use(notFoundHandler);

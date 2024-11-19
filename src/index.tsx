@@ -1,7 +1,5 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-
 import { App } from './client/App';
 import { ThemeProvider } from './client/context/ThemeContext';
 import { UserProvider } from './client/context/UserContext';
@@ -13,12 +11,10 @@ const root = createRoot(container);
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <UserProvider>
-        <ThemeProvider>
-          <App />
-        </ThemeProvider>
-      </UserProvider>
-    </BrowserRouter>
+    <UserProvider>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </UserProvider>
   </React.StrictMode>,
 );

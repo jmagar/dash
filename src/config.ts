@@ -69,7 +69,7 @@ function loadConfig(): Config {
 const config = loadConfig();
 
 // Validate required fields
-const requiredEnvVars = ['POSTGRES_PASSWORD', 'REDIS_PASSWORD', 'JWT_SECRET'];
+const requiredEnvVars = ['POSTGRES_PASSWORD', 'JWT_SECRET'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     throw new Error(`Missing required environment variable: ${envVar}`);

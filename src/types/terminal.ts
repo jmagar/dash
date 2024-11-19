@@ -1,13 +1,13 @@
-import type { Socket } from 'socket.io-client/build/esm/socket';
+import type { Socket } from 'socket.io-client';
 import type { TokenPayload } from './auth';
 import { CacheCommand } from './cache';
 import { SSHClient, SSHStream } from './ssh';
 
-export interface TerminalOptions {
+export interface TerminalOptions extends TerminalSize {
   hostId: string;
   sessionId: string;
-  cols: number;
-  rows: number;
+  command?: string;
+  args?: string[];
   cwd?: string;
   env?: Record<string, string>;
 }
@@ -45,23 +45,36 @@ export interface TerminalExit {
 }
 
 export interface TerminalEvents {
-  'terminal:join': (data: { hostId: string; sessionId: string }) => void;
-  'terminal:leave': (data: { hostId: string; sessionId: string }) => void;
-  'terminal:data': (data: TerminalData) => void;
-  'terminal:resize': (data: TerminalResize) => void;
-  'terminal:exit': (data: TerminalExit) => void;
+  data: (data: string) => void;
+  error: (error: string) => void;
+  exit: (code: number) => void;
+  resize: (data: { cols: number; rows: number }) => void;
+  command: (data: CommandData) => void;
 }
 
-export type TerminalSocket = Socket<TerminalEvents>;
+export type TerminalSocket = typeof Socket & {
+  emit: {
+    (event: 'data', data: string): boolean;
+    (event: 'error', error: string): boolean;
+    (event: 'exit', code: number): boolean;
+    (event: 'resize', data: { cols: number; rows: number }): boolean;
+    (event: 'command', data: CommandData): boolean;
+  };
+  on: {
+    (event: 'data', listener: (data: string) => void): void;
+    (event: 'error', listener: (error: string) => void): void;
+    (event: 'exit', listener: (code: number) => void): void;
+    (event: 'resize', listener: (data: { cols: number; rows: number }) => void): void;
+    (event: 'command', listener: (data: CommandData) => void): void;
+  };
+};
 
 export interface CommandData {
   command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
   hostId: string;
-}
-
-export interface ResizeData {
-  cols: number;
-  rows: number;
 }
 
 export interface CommandHistory {
@@ -85,7 +98,7 @@ export interface CommandHistoryResponse {
   error?: string;
 }
 
-export interface AuthenticatedSocket extends Socket {
+export interface AuthenticatedSocket extends Omit<TerminalSocket, 'on'> {
   user?: TokenPayload;
   terminal?: {
     hostId: string;
@@ -93,9 +106,16 @@ export interface AuthenticatedSocket extends Socket {
     rows: number;
     cols: number;
   };
-  on(event: 'disconnect', listener: () => void): this;
-  on(event: 'terminal:data', listener: (data: string) => void): this;
-  on(event: 'terminal:resize', listener: (data: ResizeData) => void): this;
+  on: {
+    (event: 'data', listener: (data: string) => void): void;
+    (event: 'error', listener: (error: string) => void): void;
+    (event: 'exit', listener: (code: number) => void): void;
+    (event: 'resize', listener: (data: { cols: number; rows: number }) => void): void;
+    (event: 'command', listener: (data: CommandData) => void): void;
+    (event: 'disconnect', listener: () => void): void;
+    (event: 'terminal:data', listener: (data: string) => void): void;
+    (event: 'terminal:resize', listener: (data: { cols: number; rows: number }) => void): void;
+  };
 }
 
 export interface TerminalState {

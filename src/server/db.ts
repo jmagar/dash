@@ -12,6 +12,7 @@ const poolConfig = {
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  family: 4, // Force IPv4
 };
 
 // Validate required config

@@ -17,25 +17,45 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Install mem0ai in virtual environment
 RUN pip install mem0ai
 
-# Install dependencies with increased memory limit for CopilotKit
-COPY package*.json ./
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps && \
-    NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps --also=dev
+# Copy package files first for better caching
+COPY package*.json .npmrc ./
 
-# Copy source code
-COPY . .
+# Copy Prisma schema before installing dependencies
+COPY prisma ./prisma/
 
-# Set database URL for Prisma
-ENV DATABASE_URL="postgresql://shh_user:P@ssw0rd_lf2qcTdAjYVkwD6B@postgres:5432/shh"
+# Install Prisma CLI globally first
+RUN npm install -g prisma
+
+# Set database URL for Prisma using environment variables
+ARG POSTGRES_USER
+ARG POSTGRES_PASSWORD
+ARG POSTGRES_DB
+ARG POSTGRES_HOST
+ENV DATABASE_URL="postgresql://${POSTGRES_USER:-shh_user}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-shh}"
+ENV POSTGRES_HOST=postgres
+
+# Install production dependencies first
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --only=production
+
+# Install dev dependencies for build
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+# Copy source files and configs
+COPY src ./src
+COPY public ./public
+COPY .eslintrc.* ./
+COPY .prettierrc.js ./
+COPY .babelrc ./
+COPY tsconfig*.json ./
+COPY craco.config.cjs ./
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN npm run prisma:generate
 
-# Build client with increased memory limit
-RUN NODE_OPTIONS="--max-old-space-size=4096" DOCKER_BUILD=1 SKIP_PREFLIGHT_CHECK=true DISABLE_ESLINT_PLUGIN=true npm run build:client
-
-# Build server with TypeScript
-RUN npm run build:server
+# Build client and server
+RUN npm run build
 
 # Go build stage for agent
 FROM golang:1.21-alpine AS agent-builder
@@ -49,47 +69,20 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 
-# Copy agent source
+# Copy go mod files
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 
+# Copy source code
 COPY agent .
 
-# Build the agent binary with CGO enabled for libpcap support
+# Build the binary with CGO enabled for libpcap support
 RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o shh-agent ./cmd/agent
 
-# Postgres stage
-FROM postgres:16 AS postgres
-
-# Install pgvector with minimal dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        postgresql-server-dev-16 \
-        build-essential \
-        git \
-    && git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git \
-    && cd pgvector \
-    && make \
-    && make install \
-    && cd .. \
-    && rm -rf pgvector \
-    && apt-get remove -y postgresql-server-dev-16 build-essential git \
-    && apt-get autoremove -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy init scripts
-COPY db/init.sql /docker-entrypoint-initdb.d/
-
 # Final stage
-FROM node:20-slim AS app
+FROM node:20-slim
 
-# Create non-root user
-RUN groupadd -r shh && useradd -r -g shh -s /bin/false shh
-
-WORKDIR /app
-
-# Install required packages with minimal dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     rsyslog \
     libpcap-dev \
@@ -98,39 +91,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user
+RUN groupadd -r shh && useradd -r -g shh -m -d /home/shh -s /bin/false shh
+
+WORKDIR /app
+
 # Copy Python virtual environment
 COPY --from=node-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy built files
+# Copy only production files
+COPY --from=node-builder /app/package*.json ./
+COPY --from=node-builder /app/node_modules ./node_modules
 COPY --from=node-builder /app/dist ./dist
 COPY --from=node-builder /app/build ./build
-COPY --from=node-builder /app/node_modules ./node_modules
-COPY --from=node-builder /app/package.json ./package.json
 COPY --from=node-builder /app/prisma ./prisma
 
-# Set database environment variables
-ENV DB_HOST=postgres \
-    DB_PORT=5432 \
-    DB_NAME=shh \
-    DB_USER=shh_user \
-    DB_PASSWORD=P@ssw0rd_lf2qcTdAjYVkwD6B \
-    DATABASE_URL="postgresql://shh_user:P@ssw0rd_lf2qcTdAjYVkwD6B@postgres:5432/shh"
-
 # Generate Prisma client in production
-RUN npx prisma generate
+RUN npm run prisma:generate
 
-# Install production dependencies only
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm ci --legacy-peer-deps --only=production
-
-# Copy agent binary and configs
+# Copy agent binary
 COPY --from=agent-builder /build/shh-agent /usr/local/bin/shh-agent
+
+# Copy configuration files
 COPY config/host-agent.json /etc/shh/agent.json
 COPY config/rsyslog.conf /etc/rsyslog.conf
 
 # Create required directories and set permissions
-RUN mkdir -p /var/log/shh /var/lib/shh /etc/shh && \
-    chown -R shh:shh /app /var/log/shh /var/lib/shh /etc/shh
+RUN mkdir -p /home/shh/.local/share/shh/logs && \
+    chown -R shh:shh /app /home/shh
 
 # Set environment variables
 ENV NODE_ENV=production \
@@ -144,8 +133,7 @@ USER shh
 EXPOSE 3000 1514 9090
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
     CMD nc -z localhost $PORT || exit 1
 
-# Start the application
 CMD ["node", "dist/server/server.js"]

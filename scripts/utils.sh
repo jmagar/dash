@@ -237,6 +237,44 @@ check_health() {
     fi
 }
 
+# Compare version strings
+version_gte() {
+    local version1=$1
+    local version2=$2
+    
+    # Remove any leading 'v' if present
+    version1=${version1#v}
+    version2=${version2#v}
+    
+    # Convert versions to arrays
+    IFS='.' read -ra v1_parts <<< "$version1"
+    IFS='.' read -ra v2_parts <<< "$version2"
+    
+    # Compare each part of the version
+    for ((i=0; i<${#v1_parts[@]} || i<${#v2_parts[@]}; i++)); do
+        # Default to 0 if the part doesn't exist
+        local v1_part=${v1_parts[i]:-0}
+        local v2_part=${v2_parts[i]:-0}
+        
+        # Remove any non-numeric suffix (like -rc1, beta, etc)
+        v1_part=$(echo "$v1_part" | sed 's/[^0-9].*//')
+        v2_part=$(echo "$v2_part" | sed 's/[^0-9].*//')
+        
+        # Convert to numbers for comparison
+        v1_num=$((10#${v1_part:-0}))
+        v2_num=$((10#${v2_part:-0}))
+        
+        if [ "$v1_num" -lt "$v2_num" ]; then
+            return 1
+        elif [ "$v1_num" -gt "$v2_num" ]; then
+            return 0
+        fi
+    done
+    
+    # If we get here, versions are equal
+    return 0
+}
+
 # Parse command line arguments
 parse_args() {
     while [[ $# -gt 0 ]]; do
