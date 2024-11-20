@@ -92,6 +92,24 @@ CREATE TABLE IF NOT EXISTS metrics (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create user_preferences table
+CREATE TABLE "user_preferences" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "themeMode" TEXT NOT NULL DEFAULT 'system',
+    "accentColor" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_preferences_pkey" PRIMARY KEY ("id")
+);
+
+-- Add unique constraint on userId
+CREATE UNIQUE INDEX "user_preferences_userId_key" ON "user_preferences"("userId");
+
+-- Add foreign key constraint
+ALTER TABLE "user_preferences" ADD CONSTRAINT "user_preferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -132,6 +150,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hosts_updated_at_trigger') THEN
         CREATE TRIGGER hosts_updated_at_trigger
             BEFORE UPDATE ON hosts
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- user_preferences table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_preferences_updated_at_trigger') THEN
+        CREATE TRIGGER user_preferences_updated_at_trigger
+            BEFORE UPDATE ON user_preferences
             FOR EACH ROW
             EXECUTE FUNCTION update_updated_at_column();
     END IF;

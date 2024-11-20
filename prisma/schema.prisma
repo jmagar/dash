@@ -20,6 +20,8 @@ model User {
   hosts        Host[]
   commands     Command[]
   interactions MemoryInteraction[]
+  bookmarks    Bookmark[]
+  preferences  UserPreferences?
 
   @@map("users")
 }
@@ -92,8 +94,26 @@ model Host {
   user          User      @relation(fields: [userId], references: [id])
   commands      Command[]
   metrics       Metric[]
+  bookmarks     Bookmark[]
 
   @@map("hosts")
+}
+
+model Bookmark {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  hostId       String   @map("host_id") @db.Uuid
+  path         String
+  name         String
+  isDirectory  Boolean  @map("is_directory")
+  notes        String?
+  addedAt      DateTime @default(now()) @map("added_at") @db.Timestamptz
+  lastAccessed DateTime @updatedAt @map("last_accessed") @db.Timestamptz
+  user         User     @relation(fields: [userId], references: [id])
+  host         Host     @relation(fields: [hostId], references: [id])
+
+  @@unique([userId, hostId, path])
+  @@map("bookmarks")
 }
 
 model Command {
@@ -118,6 +138,18 @@ model Metric {
   host      Host     @relation(fields: [hostId], references: [id])
 
   @@map("metrics")
+}
+
+model UserPreferences {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  themeMode   String   @default("system") // "light", "dark", or "system"
+  accentColor String?  // Optional accent color
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("user_preferences")
 }
 
 enum Role {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, CircularProgress, Typography } from '@mui/material';
+import { Button, CircularProgress, Typography, Box } from '@mui/material';
 import { Computer as ComputerIcon } from '@mui/icons-material';
 import { FolderOpen } from '@mui/icons-material';
 import { useHost } from '../hooks/useHost';
@@ -14,7 +14,11 @@ import { FilePreview } from './FilePreview';
 import { NewFolderDialog, RenameDialog, DeleteDialog } from './FileOperationDialogs';
 import { fileOperations } from '../api/files.client';
 import { useFileClipboard } from '../hooks/useFileClipboard';
+import { useDirectoryCache } from '../hooks/useDirectoryCache';
 import type { Host } from '../../types/models-shared';
+import { VirtualizedList } from './VirtualizedList';
+import { useLoadingState } from '../hooks/useLoadingState';
+import { LoadingIndicator } from './LoadingIndicator';
 
 interface FileInfo {
   name: string;
@@ -27,9 +31,13 @@ interface FileInfo {
   group: string;
 }
 
-export function FileExplorer() {
+interface FileExplorerProps {
+  hostId: string;
+}
+
+export function FileExplorer({ hostId }: FileExplorerProps) {
   const navigate = useNavigate();
-  const { hostId = '', path = '/' } = useParams();
+  const { path = '/' } = useParams();
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +63,17 @@ export function FileExplorer() {
     clearClipboard,
     canPaste,
   } = useFileClipboard();
+  const {
+    getCachedFiles,
+    cacheFiles,
+    invalidateCache,
+  } = useDirectoryCache();
+  const {
+    startLoading,
+    updateProgress,
+    finishLoading,
+    getAllLoadingStates,
+  } = useLoadingState();
 
   const sortFiles = useCallback((unsortedFiles: FileInfo[]) => {
     return [...unsortedFiles].sort((a, b) => {
@@ -80,36 +99,64 @@ export function FileExplorer() {
     });
   }, [sortField, sortDirection]);
 
-  useEffect(() => {
-    const fetchFiles = async () => {
-      if (!hostId) {
-        setFiles([]);
+  const loadFiles = useCallback(async () => {
+    if (!hostId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Check cache first
+      const cachedFiles = getCachedFiles(hostId, path);
+      if (cachedFiles) {
+        setFiles(cachedFiles);
         setLoading(false);
         return;
       }
 
-      try {
-        const response = await fetch(`/api/hosts/${hostId}/files?path=${encodeURIComponent(path)}`);
-        const data = await response.json();
+      const response = await fileOperations.listFiles(hostId, path);
+      setFiles(response.files);
+      
+      // Cache the results
+      cacheFiles(hostId, path, response.files);
+    } catch (err) {
+      setError(err.message || 'Failed to load files');
+    } finally {
+      setLoading(false);
+    }
+  }, [hostId, path, getCachedFiles, cacheFiles]);
 
-        if (data.success && data.data) {
-          const fileList = data.data.map((file: any) => ({
-            ...file,
-            isDirectory: file.isDir,
-          }));
-          setFiles(sortFiles(fileList));
-        } else {
-          setError(data.error || 'Failed to fetch files');
-        }
-      } catch (error) {
-        setError(error instanceof Error ? error.message : 'Failed to fetch files');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const handleFileOperation = useCallback(async (operation: () => Promise<void>) => {
+    try {
+      await operation();
+      invalidateCache(hostId, path);
+      await loadFiles();
+    } catch (err) {
+      setError(err.message || 'Operation failed');
+    }
+  }, [hostId, path, invalidateCache, loadFiles]);
 
-    void fetchFiles();
-  }, [hostId, path, sortFiles]);
+  const handleCreateFolder = useCallback((name: string) => {
+    return handleFileOperation(async () => {
+      await fileOperations.createFolder(hostId, path, name);
+    });
+  }, [handleFileOperation, hostId, path]);
+
+  const handleDelete = useCallback((files: string[]) => {
+    return handleFileOperation(async () => {
+      await fileOperations.deleteFiles(hostId, files);
+    });
+  }, [handleFileOperation, hostId]);
+
+  const handleRename = useCallback((oldPath: string, newName: string) => {
+    return handleFileOperation(async () => {
+      await fileOperations.renameFile(hostId, oldPath, newName);
+    });
+  }, [handleFileOperation, hostId]);
+
+  useEffect(() => {
+    void loadFiles();
+  }, [loadFiles]);
 
   const handleHostSelect = (host: Host) => {
     navigate(`/files/${host.id}`);
@@ -122,7 +169,7 @@ export function FileExplorer() {
   };
 
   const handleRefresh = () => {
-    void fetchFiles();
+    void loadFiles();
   };
 
   const handleSelect = useCallback((file: FileInfo, selected: boolean) => {
@@ -184,10 +231,10 @@ export function FileExplorer() {
   const handleNewFolder = async (name: string) => {
     try {
       setOperationError(null);
-      const result = await fileOperations.createFolder(hostId, { path, name });
+      const result = await fileOperations.createFolder(hostId, path, name);
       if (result.success) {
         setNewFolderDialogOpen(false);
-        void fetchFiles();
+        await loadFiles();
       } else {
         setOperationError(result.error || 'Failed to create folder');
       }
@@ -204,10 +251,10 @@ export function FileExplorer() {
       const oldPath = contextMenu.file.path;
       const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName;
       
-      const result = await fileOperations.rename(hostId, { oldPath, newPath });
+      const result = await fileOperations.renameFile(hostId, oldPath, newPath);
       if (result.success) {
         setRenameDialogOpen(false);
-        void fetchFiles();
+        await loadFiles();
       } else {
         setOperationError(result.error || 'Failed to rename file');
       }
@@ -217,32 +264,63 @@ export function FileExplorer() {
   };
 
   const handleDelete = async () => {
+    if (selectedFiles.length === 0) return;
+
+    const operationId = `delete-${Date.now()}`;
+    startLoading(
+      operationId,
+      `Deleting ${selectedFiles.length} ${selectedFiles.length === 1 ? 'file' : 'files'}...`
+    );
+
     try {
-      setOperationError(null);
-      const paths = selectedFiles.map(file => file.path);
-      const result = await fileOperations.delete(hostId, { paths });
-      if (result.success) {
-        setDeleteDialogOpen(false);
-        handleSelectAll(false);
-        void fetchFiles();
-      } else {
-        setOperationError(result.error || 'Failed to delete files');
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        await fileOperations.deleteFile(hostId, file.path);
+        updateProgress(
+          operationId,
+          ((i + 1) / selectedFiles.length) * 100,
+          `Deleting ${i + 1}/${selectedFiles.length}: ${file.name}`
+        );
       }
+
+      handleSelectAll(false);
+      await loadFiles();
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : 'Failed to delete files');
+      setError(error.message || 'Failed to delete files');
+    } finally {
+      finishLoading(operationId);
     }
   };
 
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files && files.length > 0) {
-      void fileOperations.upload(hostId, path, files).then(result => {
-        if (result.success) {
-          void fetchFiles();
-        } else {
-          setOperationError(result.error || 'Failed to upload files');
-        }
-      });
+    if (!files || files.length === 0) return;
+
+    const operationId = `upload-${Date.now()}`;
+    startLoading(operationId, `Uploading ${files.length} files...`);
+
+    try {
+      const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+      let uploadedSize = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        await fileOperations.uploadFile(hostId, path, file, (progress) => {
+          uploadedSize = progress * file.size;
+          const totalProgress = (uploadedSize / totalSize) * 100;
+          updateProgress(
+            operationId,
+            totalProgress,
+            `Uploading ${i + 1}/${files.length}: ${file.name}`
+          );
+        });
+      }
+
+      await loadFiles();
+    } catch (error) {
+      setError(error.message || 'Failed to upload files');
+    } finally {
+      finishLoading(operationId);
     }
   };
 
@@ -257,27 +335,36 @@ export function FileExplorer() {
   };
 
   const handlePaste = async () => {
-    if (!clipboard.files.length || !clipboard.operation || !clipboard.sourceHostId) return;
+    if (!clipboard || !canPaste) return;
+
+    const operationId = `paste-${Date.now()}`;
+    const operation = clipboard.operation === 'copy' ? 'Copying' : 'Moving';
+    startLoading(
+      operationId,
+      `${operation} ${clipboard.files.length} ${clipboard.files.length === 1 ? 'file' : 'files'}...`
+    );
 
     try {
-      setOperationError(null);
-      const request = {
-        sourcePaths: clipboard.files.map(f => f.path),
-        targetPath: path,
-      };
-
-      const result = clipboard.operation === 'copy'
-        ? await fileOperations.copy(clipboard.sourceHostId, request)
-        : await fileOperations.move(clipboard.sourceHostId, request);
-
-      if (result.success) {
-        clearClipboard();
-        void fetchFiles();
-      } else {
-        setOperationError(result.error || `Failed to ${clipboard.operation} files`);
+      for (let i = 0; i < clipboard.files.length; i++) {
+        const file = clipboard.files[i];
+        if (clipboard.operation === 'copy') {
+          await fileOperations.copyFile(clipboard.sourceHostId, file.path, hostId, path);
+        } else {
+          await fileOperations.moveFile(clipboard.sourceHostId, file.path, hostId, path);
+        }
+        updateProgress(
+          operationId,
+          ((i + 1) / clipboard.files.length) * 100,
+          `${operation} ${i + 1}/${clipboard.files.length}: ${file.name}`
+        );
       }
+
+      clearClipboard();
+      await loadFiles();
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : `Failed to ${clipboard.operation} files`);
+      setError(error.message || `Failed to ${clipboard.operation} files`);
+    } finally {
+      finishLoading(operationId);
     }
   };
 
@@ -330,20 +417,101 @@ export function FileExplorer() {
 
       if (result.success) {
         handleSelectAll(false);
-        void fetchFiles();
+        await loadFiles();
       } else {
         setOperationError(result.error || 'Failed to move files');
       }
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : 'Failed to move files');
     }
-  }, [hostId, fetchFiles]);
+  }, [hostId, loadFiles]);
 
   const handleSort = useCallback((field: 'name' | 'size' | 'modTime', direction: 'asc' | 'desc') => {
     setSortField(field);
     setSortDirection(direction);
     setFiles(files => sortFiles(files));
   }, [sortFiles]);
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      );
+    }
+
+    if (error) {
+      return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="error">{error}</Typography>
+        </Box>
+      );
+    }
+
+    if (!files?.length) {
+      return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary">This folder is empty</Typography>
+        </Box>
+      );
+    }
+
+    const sortedFiles = [...files].sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    if (viewMode === 'grid') {
+      return (
+        <VirtualizedList
+          items={sortedFiles}
+          itemHeight={200}
+          containerHeight={600}
+          renderItem={(file, index) => (
+            <FileGridItem
+              key={file.path}
+              file={file}
+              onOpen={handleFileClick}
+              onSelect={(event) => handleFileSelect(file, event)}
+              selected={isSelected(file)}
+              draggable
+              onDragStart={(event) => handleDragStart(event, file)}
+              onDragOver={handleDragOver}
+              onDrop={(event) => handleDrop(event, file)}
+              hostId={hostId}
+            />
+          )}
+          className="file-grid"
+        />
+      );
+    }
+
+    return (
+      <VirtualizedList
+        items={sortedFiles}
+        itemHeight={48}
+        containerHeight={600}
+        renderItem={(file, index) => (
+          <FileListItem
+            key={file.path}
+            file={file}
+            onOpen={handleFileClick}
+            onSelect={(event) => handleFileSelect(file, event)}
+            selected={isSelected(file)}
+            draggable
+            onDragStart={(event) => handleDragStart(event, file)}
+            onDragOver={handleDragOver}
+            onDrop={(event) => handleDrop(event, file)}
+            hostId={hostId}
+          />
+        )}
+        className="file-list"
+      />
+    );
+  };
 
   if (!hostId) {
     return (
@@ -391,50 +559,7 @@ export function FileExplorer() {
         onChange={handleUpload}
       />
 
-      {loading ? (
-        <div className="flex justify-center items-center p-8">
-          <CircularProgress />
-        </div>
-      ) : error ? (
-        <div className="p-4 text-red-500 bg-red-50 rounded-md">
-          {error}
-        </div>
-      ) : files.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-8 text-gray-500">
-          <FolderOpen sx={{ fontSize: 48, marginBottom: 2 }} />
-          <Typography variant="h6">This folder is empty</Typography>
-        </div>
-      ) : (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4' : ''}>
-          {files.map((file) => (
-            viewMode === 'grid' ? (
-              <FileGridItem
-                key={file.path}
-                file={file}
-                selected={isSelected(file)}
-                onClick={() => handleFileClick(file)}
-                onSelect={(event) => handleFileSelect(file, event)}
-                onContextMenu={(event) => handleContextMenu(file, event)}
-                onDragStart={(event) => handleDragStart(event, file)}
-                onDragOver={handleDragOver}
-                onDrop={(event) => handleDrop(event, file)}
-              />
-            ) : (
-              <FileListItem
-                key={file.path}
-                file={file}
-                selected={isSelected(file)}
-                onClick={() => handleFileClick(file)}
-                onSelect={(event) => handleFileSelect(file, event)}
-                onContextMenu={(event) => handleContextMenu(file, event)}
-                onDragStart={(event) => handleDragStart(event, file)}
-                onDragOver={handleDragOver}
-                onDrop={(event) => handleDrop(event, file)}
-              />
-            )
-          ))}
-        </div>
-      )}
+      {renderContent()}
 
       <FileContextMenu
         file={contextMenu.file}
@@ -478,6 +603,8 @@ export function FileExplorer() {
         onConfirm={handleDelete}
         error={operationError}
       />
+
+      <LoadingIndicator loadingStates={getAllLoadingStates()} />
     </div>
   );
 }

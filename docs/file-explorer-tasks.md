@@ -22,6 +22,12 @@
 - [x] Image preview with zoom controls
 - [x] Image thumbnails in grid view
 
+### Performance Optimizations
+- [x] Virtual scrolling for large directories
+- [x] Lazy loading for thumbnails
+- [x] Caching frequently accessed directories
+- [x] Background loading indicators
+
 ## 🚧 In Progress
 - File Preview System
   - [x] Image thumbnails and preview
@@ -33,24 +39,18 @@
 ## 📝 Planned Features
 
 ### Advanced Operations
-- File compression/extraction (zip/unzip)
-- Bulk file operations progress indicators
+- [ ] File compression/extraction (zip/unzip)
+- [ ] Bulk file operations progress indicators
 
 ### User Experience
-- File search/filter functionality
-- List column customization (show/hide columns)
-- File permissions editing
-- "Open with" functionality for different file types
-
-### Performance Optimizations
-- Virtual scrolling for large directories
-- Lazy loading for thumbnails
-- Caching frequently accessed directories
-- Background loading indicators
+- [ ] File search/filter functionality
+- [ ] List column customization (show/hide columns)
+- [ ] File permissions editing
+- [ ] "Open with" functionality for different file types
 
 ### Additional Features
-- Favorites/Bookmarks system
-- Recent files list
-- Storage space indicators
-- File sharing links
-- File change notifications
+- [ ] Favorites/Bookmarks system
+- [ ] Recent files list
+- [ ] Storage space indicators
+- [ ] File sharing links
+- [ ] File change notifications

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { Image as ImageIcon } from '@mui/icons-material';
+import { useLazyImage } from '../hooks/useLazyImage';
 
 interface ImageThumbnailProps {
   src: string;
@@ -15,20 +16,15 @@ export function ImageThumbnail({
   size = 100,
   onClick,
 }: ImageThumbnailProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const handleLoad = () => {
-    setLoading(false);
-  };
-
-  const handleError = () => {
-    setLoading(false);
-    setError(true);
-  };
+  const { isLoading, error, ref, isVisible } = useLazyImage({
+    src,
+    threshold: 0.1,
+    rootMargin: '100px',
+  });
 
   return (
     <Box
+      ref={ref}
       onClick={onClick}
       sx={{
         width: size,
@@ -48,7 +44,7 @@ export function ImageThumbnail({
         } : {},
       }}
     >
-      {loading && (
+      {isLoading && (
         <Box
           sx={{
             position: 'absolute',
@@ -80,18 +76,19 @@ export function ImageThumbnail({
           </Typography>
         </Box>
       ) : (
-        <img
-          src={src}
-          alt={alt}
-          onLoad={handleLoad}
-          onError={handleError}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            transition: 'transform 0.2s ease-in-out',
-          }}
-        />
+        isVisible && (
+          <img
+            src={src}
+            alt={alt}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transition: 'transform 0.2s ease-in-out',
+              opacity: isLoading ? 0 : 1,
+            }}
+          />
+        )
       )}
     </Box>
   );

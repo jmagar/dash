@@ -1,88 +1,132 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ThemeProvider as MuiThemeProvider, PaletteMode } from '@mui/material';
-import { createAppTheme, AccentColor } from '../styles/theme';
+import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
+import { preferencesClient } from '../api/preferences.client';
+import { useAuth } from '../hooks/useAuth';
+import { logger } from '../utils/logger';
 import { CssBaseline } from '@mui/material';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+export type AccentColor = string;
+
 interface ThemeContextType {
-  mode: PaletteMode | 'system';
-  setMode: (mode: PaletteMode | 'system') => void;
+  mode: ThemeMode;
   accentColor: AccentColor;
+  setMode: (mode: ThemeMode) => void;
   setAccentColor: (color: AccentColor) => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({
-  mode: 'system',
-  setMode: () => {},
-  accentColor: 'blue',
-  setAccentColor: () => {},
-});
-
-export const useTheme = () => useContext(ThemeContext);
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
-const THEME_MODE_KEY = 'app-theme-mode';
-const ACCENT_COLOR_KEY = 'app-accent-color';
+const DEFAULT_MODE: ThemeMode = 'system';
+const DEFAULT_ACCENT_COLOR: AccentColor = '#1976d2';
 
-export const AppThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  // Initialize state from localStorage or defaults
-  const [mode, setMode] = useState<PaletteMode | 'system'>(() => {
-    const savedMode = localStorage.getItem(THEME_MODE_KEY);
-    return (savedMode as PaletteMode | 'system') || 'system';
-  });
+export function AppThemeProvider({ children }: ThemeProviderProps) {
+  const { user } = useAuth();
+  const [mode, setMode] = useState<ThemeMode>(DEFAULT_MODE);
+  const [accentColor, setAccentColor] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
+  const [loading, setLoading] = useState(true);
 
-  const [accentColor, setAccentColor] = useState<AccentColor>(() => {
-    const savedColor = localStorage.getItem(ACCENT_COLOR_KEY);
-    return (savedColor as AccentColor) || 'blue';
-  });
-
-  // Create theme based on current mode and accent color
-  const theme = React.useMemo(
-    () => createAppTheme(mode, accentColor),
-    [mode, accentColor]
-  );
-
-  // Persist theme preferences
+  // Load preferences from API when user is authenticated
   useEffect(() => {
-    localStorage.setItem(THEME_MODE_KEY, mode);
-  }, [mode]);
+    const loadPreferences = async () => {
+      if (!user) {
+        setMode(DEFAULT_MODE);
+        setAccentColor(DEFAULT_ACCENT_COLOR);
+        setLoading(false);
+        return;
+      }
 
-  useEffect(() => {
-    localStorage.setItem(ACCENT_COLOR_KEY, accentColor);
-  }, [accentColor]);
-
-  // Listen for system theme changes if in system mode
-  useEffect(() => {
-    if (mode !== 'system') return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => {
-      // Force theme recreation by updating state
-      setMode('system');
+      try {
+        const preferences = await preferencesClient.getPreferences();
+        if (preferences) {
+          setMode((preferences.themeMode || DEFAULT_MODE) as ThemeMode);
+          setAccentColor(preferences.accentColor || DEFAULT_ACCENT_COLOR);
+        }
+      } catch (error) {
+        logger.error('Failed to load theme preferences:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      } finally {
+        setLoading(false);
+      }
     };
 
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [mode]);
+    void loadPreferences();
+  }, [user]);
 
-  const contextValue = React.useMemo(
-    () => ({
-      mode,
-      setMode,
-      accentColor,
-      setAccentColor,
-    }),
+  // Save preferences to API when they change
+  const handleSetMode = async (newMode: ThemeMode) => {
+    setMode(newMode);
+    if (user) {
+      try {
+        await preferencesClient.updatePreferences({ themeMode: newMode });
+      } catch (error) {
+        logger.error('Failed to save theme mode:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  };
+
+  const handleSetAccentColor = async (newColor: AccentColor) => {
+    setAccentColor(newColor);
+    if (user) {
+      try {
+        await preferencesClient.updatePreferences({ accentColor: newColor });
+      } catch (error) {
+        logger.error('Failed to save accent color:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  };
+
+  const theme = React.useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: mode === 'system'
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : mode,
+          primary: {
+            main: accentColor,
+          },
+        },
+      }),
     [mode, accentColor]
   );
 
+  if (loading) {
+    return null; // Or a loading spinner
+  }
+
   return (
-    <ThemeContext.Provider value={contextValue}>
+    <ThemeContext.Provider
+      value={{
+        mode,
+        accentColor,
+        setMode: handleSetMode,
+        setAccentColor: handleSetAccentColor,
+      }}
+    >
       <MuiThemeProvider theme={theme}>
         <CssBaseline />
         {children}
       </MuiThemeProvider>
     </ThemeContext.Provider>
   );
-};
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+}

@@ -5,6 +5,8 @@ import dockerRoutes from './docker';
 import fileRoutes from './files';
 import packageRoutes from './packages';
 import notificationRoutes from './notifications';
+import bookmarkRoutes from './bookmarks';
+import preferencesRoutes from './preferences';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -18,5 +20,7 @@ router.use('/docker', requireAuth, dockerRoutes);
 router.use('/files', requireAuth, fileRoutes);
 router.use('/packages', requireAuth, packageRoutes);
 router.use('/notifications', requireAuth, notificationRoutes);
+router.use('/bookmarks', requireAuth, bookmarkRoutes);
+router.use('/api/preferences', preferencesRoutes);
 
 export default router;
