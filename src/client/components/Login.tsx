@@ -1,4 +1,14 @@
 import React, { useState } from 'react';
+
+import { useNavigate } from 'react-router-dom';
+
+import {
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Login as LoginIcon,
+  Key as KeyIcon,
+  Person as PersonIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Paper,
@@ -14,14 +24,7 @@ import {
   Fade,
   Divider,
 } from '@mui/material';
-import {
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  Login as LoginIcon,
-  Key as KeyIcon,
-  Person as PersonIcon,
-} from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+
 import { useAuth } from '../hooks/useAuth';
 import { logger } from '../utils/frontendLogger';
 

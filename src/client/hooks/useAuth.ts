@@ -1,22 +1,9 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useEffect, useCallback, useContext } from 'react';
+
 import { useNavigate } from 'react-router-dom';
+
 import { AuthContext } from '../context/AuthContext';
 import { logger } from '../utils/frontendLogger';
-
-interface User {
-  id: string;
-  username: string;
-  email?: string;
-  role: string;
-  permissions: string[];
-}
-
-interface AuthState {
-  user: User | null;
-  token: string | null;
-  loading: boolean;
-  error: string | null;
-}
 
 export function useAuth() {
   const navigate = useNavigate();

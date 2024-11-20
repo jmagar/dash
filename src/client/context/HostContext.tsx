@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { Host } from '../../types/models-shared';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+
 import { listHosts } from '../api/hosts.client';
 import { logger } from '../utils/logger';
+
+import type { Host } from '../../types/models-shared';
 
 interface HostContextType {
   hosts: Host[];
@@ -20,7 +22,7 @@ export function HostProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHosts = async () => {
+  const loadHosts = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
@@ -40,11 +42,11 @@ export function HostProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedHost]);
 
   useEffect(() => {
-    loadHosts();
-  }, []);
+    void loadHosts();
+  }, [loadHosts]);
 
   return (
     <HostContext.Provider

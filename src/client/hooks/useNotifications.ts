@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSocket } from './useSocket';
+
 import { logger } from '../utils/frontendLogger';
+
+import { useSocket } from './useSocket';
+
 import type { Notification } from '../../types/notifications';
 
 interface UseNotificationsOptions {
@@ -19,6 +22,12 @@ interface UseNotificationsResult {
   refresh: () => Promise<void>;
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions): UseNotificationsResult {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +39,7 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
       setLoading(true);
       setError(null);
       const response = await fetch(`/api/notifications?userId=${userId}&limit=${limit}`);
-      const data = await response.json();
+      const data: ApiResponse<Notification[]> = await response.json();
 
       if (data.success && data.data) {
         setNotifications(data.data);
@@ -56,7 +65,7 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
         },
       });
 
-      const data = await response.json();
+      const data: ApiResponse<void> = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to mark notification as read');
       }
@@ -85,7 +94,7 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
         body: JSON.stringify({ userId }),
       });
 
-      const data = await response.json();
+      const data: ApiResponse<void> = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to mark all notifications as read');
       }
@@ -112,7 +121,7 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
         body: JSON.stringify({ userId }),
       });
 
-      const data = await response.json();
+      const data: ApiResponse<void> = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to clear notifications');
       }
@@ -129,36 +138,40 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('notification:created', (...args: unknown[]) => {
-      const [data] = args;
-      const notification = data as Notification;
+    const handleNotificationCreated = (notification: Notification) => {
       if (notification.userId === userId) {
         setNotifications(prev => [notification, ...prev].slice(0, limit));
       }
-    });
+    };
 
-    socket.on('notification:updated', (...args: unknown[]) => {
-      const [data] = args;
-      const notification = data as Notification;
+    const handleNotificationUpdated = (notification: Notification) => {
       if (notification.userId === userId) {
         setNotifications(prev =>
           prev.map(n => (n.id === notification.id ? notification : n))
         );
       }
-    });
+    };
 
-    socket.on('notification:deleted', (...args: unknown[]) => {
-      const [data] = args;
-      const notificationId = data as string;
+    const handleNotificationDeleted = (notificationId: string) => {
       setNotifications(prev =>
         prev.filter(n => n.id !== notificationId)
       );
-    });
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    socket.on('notification:created', handleNotificationCreated);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    socket.on('notification:updated', handleNotificationUpdated);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    socket.on('notification:deleted', handleNotificationDeleted);
 
     return () => {
-      socket.off('notification:created');
-      socket.off('notification:updated');
-      socket.off('notification:deleted');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      socket.off('notification:created', handleNotificationCreated);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      socket.off('notification:updated', handleNotificationUpdated);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      socket.off('notification:deleted', handleNotificationDeleted);
     };
   }, [socket, userId, limit]);
 

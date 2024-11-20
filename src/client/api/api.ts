@@ -1,5 +1,12 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+
 import { logger } from '../utils/logger';
+
+interface ApiError {
+  status?: number;
+  data?: unknown;
+  message: string;
+}
 
 export const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
@@ -11,17 +18,18 @@ export const api = axios.create({
 
 // Add request interceptor
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    logger.error('API request error:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+  (error: unknown) => {
+    const apiError: ApiError = {
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    logger.error('API request error:', apiError);
     return Promise.reject(error);
   }
 );
@@ -29,12 +37,14 @@ api.interceptors.request.use(
 // Add response interceptor
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    logger.error('API response error:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      status: error.response?.status,
-      data: error.response?.data,
-    });
+  (error: unknown) => {
+    const axiosError = error as AxiosError;
+    const apiError: ApiError = {
+      message: axiosError instanceof Error ? axiosError.message : 'Unknown error',
+      status: axiosError.response?.status,
+      data: axiosError.response?.data,
+    };
+    logger.error('API response error:', apiError);
     return Promise.reject(error);
   }
 );

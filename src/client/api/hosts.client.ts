@@ -1,7 +1,10 @@
-import { api } from './api';
+
 import { createApiError } from '../../types/error';
-import type { Host, SystemStats, CreateHostRequest } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
+
+import { api } from './api';
+
+import type { Host, SystemStats, CreateHostRequest } from '../../types/models-shared';
 
 const HOST_ENDPOINTS = {
   LIST: '/hosts',

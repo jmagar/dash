@@ -1,20 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 
-import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  LinearProgress,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
 import {
   CartesianGrid,
   Line,
@@ -24,6 +9,22 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+
+import {
+  Box,
+  Card,
+  CardContent,
+  Grid,
+  LinearProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+
 
 import { useHostMetrics } from '../hooks/useHostMetrics';
 import { formatBytes } from '../utils/formatters';
@@ -63,53 +64,12 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
     },
   ];
 
-  const packetData = [
-    {
-      name: 'Current',
-      sent: metrics.network.tx_packets,
-      received: metrics.network.rx_packets,
-    },
-  ];
-
-  const errorData = [
-    {
-      name: 'Current',
-      errors_in: metrics.network.rx_errors,
-      errors_out: metrics.network.tx_errors,
-    },
-  ];
-
-  const dropData = [
-    {
-      name: 'Current',
-      drops_in: metrics.network.rx_dropped,
-      drops_out: metrics.network.tx_dropped,
-    },
-  ];
-
-  const connectionData = [
-    {
-      name: 'Current',
-      tcp: metrics.network.tcp_conns,
-      udp: metrics.network.udp_conns,
-      listening: metrics.network.listen_ports,
-    },
-  ];
-
-  const speedData = [
-    {
-      name: 'Current',
-      average: metrics.network.average_speed,
-      total: metrics.network.total_speed,
-    },
-  ];
-
   return (
     <Box>
       <Grid container spacing={3}>
         <Grid item xs={12} lg={8}>
-          <Paper sx={{ p: 2, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
+          <TableContainer component={Card}>
+            <Typography variant="h6" gutterBottom sx={{ p: 2 }}>
               Network Traffic
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
@@ -132,7 +92,7 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
                 />
               </LineChart>
             </ResponsiveContainer>
-          </Paper>
+          </TableContainer>
         </Grid>
 
         <Grid item xs={12} lg={4}>
@@ -185,7 +145,7 @@ export const NetworkAnalytics: React.FC<NetworkAnalyticsProps> = ({ hostId }) =>
         </Grid>
 
         <Grid item xs={12}>
-          <TableContainer component={Paper}>
+          <TableContainer component={Card}>
             <Table>
               <TableHead>
                 <TableRow>

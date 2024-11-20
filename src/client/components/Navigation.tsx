@@ -1,19 +1,7 @@
-import React from 'react';
-import {
-  Box,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemButton,
-  Tooltip,
-  Divider,
-  useTheme,
-  alpha,
-  Typography,
-  Collapse,
-  IconButton,
-} from '@mui/material';
+import React, { useState } from 'react';
+
+import { useLocation, useNavigate } from 'react-router-dom';
+
 import {
   Dashboard as DashboardIcon,
   Terminal as TerminalIcon,
@@ -30,14 +18,27 @@ import {
   Help as HelpIcon,
   Logout as LogoutIcon,
   KeyboardArrowDown as ExpandMoreIcon,
-  KeyboardArrowUp as ExpandLessIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
-  Menu as MenuIcon,
 } from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Box,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemButton,
+  Divider,
+  useTheme,
+  alpha,
+  Typography,
+  Collapse,
+  IconButton,
+} from '@mui/material';
+
 import { useAuth } from '../hooks/useAuth';
 import { useTheme as useAppTheme } from '../hooks/useTheme';
+
 import { NotificationBell } from './NotificationBell';
 
 interface NavigationItem {
@@ -115,7 +116,7 @@ export function Navigation() {
   const theme = useTheme();
   const { theme: appTheme, toggleTheme } = useAppTheme();
   const { user, logout } = useAuth();
-  const [openItems, setOpenItems] = React.useState<{ [key: string]: boolean }>({});
+  const [openItems, setOpenItems] = useState<{ [key: string]: boolean }>({});
 
   const handleItemClick = (path: string) => {
     navigate(path);
@@ -210,10 +211,10 @@ export function Navigation() {
             )}
           </ListItemButton>
         </ListItem>
-        {hasSubItems && (
+        {hasSubItems && item.subItems && (
           <Collapse in={isOpen} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
-              {item.subItems!.map((subItem) =>
+              {item.subItems.map((subItem) =>
                 renderNavigationItem(subItem, depth + 1)
               )}
             </List>

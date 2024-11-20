@@ -1,15 +1,41 @@
 import { useState, useEffect, useCallback } from 'react';
-import { socket } from '../socket';
+
+
+import { logger } from '../utils/frontendLogger';
+
+import { useSocket } from './useSocket';
+
+import type { TypedSocket } from './useSocket';
 import type { SystemMetrics } from '../../types/metrics';
 import type { ProcessInfo } from '../../types/process';
-import { logger } from '../utils/frontendLogger';
 
 interface UseHostMetricsOptions {
   hostId: string;
   enabled?: boolean;
 }
 
-export function useHostMetrics(options: UseHostMetricsOptions | string) {
+interface MetricsUpdateData {
+  hostId: string;
+  metrics: SystemMetrics;
+}
+
+interface ProcessMetricsData {
+  hostId: string;
+  processes: ProcessInfo[];
+}
+
+interface MetricsErrorData {
+  hostId: string;
+  error: string;
+}
+
+export function useHostMetrics(options: UseHostMetricsOptions | string): {
+  metrics: SystemMetrics | null;
+  processes: ProcessInfo[];
+  loading: boolean;
+  error: string | null;
+  refresh: () => void;
+} {
   const hostId = typeof options === 'string' ? options : options.hostId;
   const enabled = typeof options === 'string' ? true : options.enabled ?? true;
 
@@ -18,54 +44,68 @@ export function useHostMetrics(options: UseHostMetricsOptions | string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleMetricsUpdate = useCallback((...args: unknown[]) => {
-    const data = args[0] as { hostId: string; metrics: SystemMetrics };
+  const socket: TypedSocket | null = useSocket();
+
+  const handleMetricsUpdate = useCallback((data: MetricsUpdateData) => {
     if (data.hostId === hostId) {
       setMetrics(data.metrics);
     }
   }, [hostId]);
 
-  const handleProcessUpdate = useCallback((...args: unknown[]) => {
-    const data = args[0] as { hostId: string; processes: ProcessInfo[] };
+  const handleProcessUpdate = useCallback((data: ProcessMetricsData) => {
     if (data.hostId === hostId) {
       setProcesses(data.processes);
     }
   }, [hostId]);
 
+  const handleMetricsError = useCallback((data: MetricsErrorData) => {
+    if (data.hostId === hostId) {
+      setError(data.error);
+      logger.error('Host metrics error:', { error: data.error });
+    }
+  }, [hostId]);
+
   const startMonitoring = useCallback(() => {
-    if (!enabled) return;
+    if (!enabled || !socket) return;
 
     setLoading(true);
     setError(null);
 
     socket.emit('metrics:subscribe', { hostId });
     socket.emit('process:monitor', { hostId });
-  }, [hostId, enabled]);
+  }, [socket, hostId, enabled]);
 
   const stopMonitoring = useCallback(() => {
+    if (!socket) return;
+
     socket.emit('metrics:unsubscribe', { hostId });
     socket.emit('process:unmonitor', { hostId });
-  }, [hostId]);
+  }, [socket, hostId]);
 
   useEffect(() => {
+    if (!socket) return;
+
     startMonitoring();
 
     socket.on('metrics:update', handleMetricsUpdate);
     socket.on('process:metrics', handleProcessUpdate);
-    socket.on('metrics:error', (...args: unknown[]) => {
-      const data = args[0] as { hostId: string; error: string };
-      if (data.hostId === hostId) {
-        setError(data.error);
-        logger.error('Host metrics error:', { error: data.error });
-      }
-    });
+    socket.on('metrics:error', handleMetricsError);
 
     return () => {
       stopMonitoring();
       socket.off('metrics:update', handleMetricsUpdate);
       socket.off('process:metrics', handleProcessUpdate);
+      socket.off('metrics:error', handleMetricsError);
     };
-  }, [hostId, startMonitoring, stopMonitoring, handleMetricsUpdate, handleProcessUpdate]);
+  }, [
+    socket,
+    hostId,
+    startMonitoring,
+    stopMonitoring,
+    handleMetricsUpdate,
+    handleProcessUpdate,
+    handleMetricsError
+  ]);
 
   return {
     metrics,

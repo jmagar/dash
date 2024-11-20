@@ -97,10 +97,12 @@ export function useAuth() {
 
   const { state, dispatch } = context;
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      // TODO: Implement actual login logic
+      // Simulate async operation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const mockUser: User = {
         id: '1',
         username,

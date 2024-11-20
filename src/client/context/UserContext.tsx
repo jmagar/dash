@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
+
 import type { AuthenticatedUser } from '../../types/auth';
-import { validate } from '../api/auth.client';
-import { logger } from '../utils/logger';
 
 interface UserContextType {
   user: AuthenticatedUser | null;

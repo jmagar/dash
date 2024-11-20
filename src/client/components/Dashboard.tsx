@@ -1,5 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
+
 import { useParams } from 'react-router-dom';
+
+import {
+  Refresh as RefreshIcon,
+  Settings as SettingsIcon,
+  Timeline as TimelineIcon,
+  Storage as StorageIcon,
+  Memory as MemoryIcon,
+  Router as RouterIcon,
+  Security as SecurityIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Grid,
@@ -12,22 +23,14 @@ import {
   alpha,
   CircularProgress,
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  Settings as SettingsIcon,
-  Timeline as TimelineIcon,
-  Storage as StorageIcon,
-  Memory as MemoryIcon,
-  Router as RouterIcon,
-  Security as SecurityIcon,
-} from '@mui/icons-material';
+
+import { useHostMetrics } from '../hooks/useHostMetrics';
 
 import { MetricsDisplay } from './MetricsDisplay';
-import { ProcessList } from './ProcessList';
 import { NetworkAnalytics } from './NetworkAnalytics';
+import { ProcessList } from './ProcessList';
 import { StorageManager } from './StorageManager';
 import { SystemHealth } from './SystemHealth';
-import { useHostMetrics } from '../hooks/useHostMetrics';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -58,7 +61,7 @@ function TabPanel(props: TabPanelProps) {
 export const Dashboard: React.FC = () => {
   const theme = useTheme();
   const { hostId } = useParams<{ hostId: string }>();
-  const [tabValue, setTabValue] = React.useState(0);
+  const [tabValue, setTabValue] = useState(0);
   const { metrics, loading, error, refresh } = useHostMetrics(hostId || '');
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {

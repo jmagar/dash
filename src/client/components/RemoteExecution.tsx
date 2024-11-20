@@ -1,4 +1,16 @@
 import React, { useState } from 'react';
+
+import {
+  Send,
+  Folder,
+  Clear,
+  History,
+  Code,
+  Terminal,
+  ContentCopy,
+  NavigateNext,
+  Download as DownloadIcon,
+} from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -8,7 +20,6 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Divider,
   IconButton,
   InputAdornment,
   Paper,
@@ -20,21 +31,12 @@ import {
   Link,
   Chip,
 } from '@mui/material';
-import {
-  Send,
-  Folder,
-  Clear,
-  History,
-  Code,
-  Terminal,
-  ContentCopy,
-  NavigateNext,
-  ContentCopy as ContentCopyIcon,
-  Download as DownloadIcon,
-} from '@mui/icons-material';
-import { useHost } from '../hooks/useHost';
+
+
 import { executeCommand } from '../api/remoteExecution.client';
+import { useHost } from '../hooks/useHost';
 import { logger } from '../utils/logger';
+
 import type { CommandRequest, CommandResult } from '../../types/models-shared';
 
 export function RemoteExecution() {
@@ -84,8 +86,14 @@ export function RemoteExecution() {
     setError(null);
   };
 
-  const handleCopyOutput = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyOutput = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      logger.error('Failed to copy text:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   };
 
   const handleNavigateToHosts = (e: React.MouseEvent) => {
@@ -260,21 +268,11 @@ export function RemoteExecution() {
                         <Tooltip title="Copy Output">
                           <IconButton
                             size="small"
-                            onClick={() => handleCopyOutput(result.stdout)}
+                            onClick={() => void handleCopyOutput(result.stdout)}
                           >
                             <ContentCopy fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <IconButton
-                          onClick={() => {
-                            logger.info('Copy functionality not implemented yet');
-                          }}
-                          size="small"
-                          title="Copy to clipboard"
-                          disabled
-                        >
-                          <ContentCopyIcon />
-                        </IconButton>
                         <IconButton
                           onClick={() => {
                             logger.info('Download functionality not implemented yet');
@@ -305,7 +303,7 @@ export function RemoteExecution() {
                         <Tooltip title="Copy Error Output">
                           <IconButton
                             size="small"
-                            onClick={() => handleCopyOutput(result.stderr)}
+                            onClick={() => void handleCopyOutput(result.stderr)}
                           >
                             <ContentCopy fontSize="small" />
                           </IconButton>

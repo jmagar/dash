@@ -1,8 +1,10 @@
-import type { ApiResponse } from '../../types/express';
-import type { CommandRequest, CommandResult } from '../../types/models-shared';
-import { api } from './api';
+
 import { createApiError } from '../../types/error';
 import { logger } from '../utils/frontendLogger';
+
+import { api } from './api';
+
+import type { CommandRequest, CommandResult } from '../../types/models-shared';
 
 const EXEC_ENDPOINTS = {
   EXECUTE: (hostId: string) => `/hosts/${hostId}/execute`,

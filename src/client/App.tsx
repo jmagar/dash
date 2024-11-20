@@ -1,23 +1,26 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import { ThemeProvider, createTheme } from '@mui/material';
-import { AuthProvider } from './context/AuthContext';
-import { HostProvider } from './context/HostContext';
-import { PrivateRoute } from './components/PrivateRoute';
-import Login from './components/Login';
+
 import { Dashboard } from './components/Dashboard';
-import { UserProfile } from './components/UserProfile';
-import { SetupWizard } from './components/SetupWizard';
-import { RemoteExecution } from './components/RemoteExecution';
-import { NotificationSettingsWrapper } from './components/NotificationSettingsWrapper';
+import Login from './components/Login';
 import { Navigation } from './components/Navigation';
-import { useTheme } from './hooks/useTheme';
+import { NotificationSettingsWrapper } from './components/NotificationSettingsWrapper';
+import { PrivateRoute } from './components/PrivateRoute';
+import { RemoteExecution } from './components/RemoteExecution';
+import { SetupWizard } from './components/SetupWizard';
+import { UserProfile } from './components/UserProfile';
+import { AuthProvider } from './context/AuthContext';
 import { CopilotProvider } from './context/CopilotContext';
+import { HostProvider } from './context/HostContext';
+import { useTheme } from './hooks/useTheme';
 
 export function App() {
   const { effectiveTheme } = useTheme();
 
-  const muiTheme = React.useMemo(() => createTheme({
+  const muiTheme = useMemo(() => createTheme({
     palette: {
       mode: effectiveTheme,
     },

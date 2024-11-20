@@ -1,27 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  ToggleButton,
-  ToggleButtonGroup,
-  Grid,
-  Paper,
-  LinearProgress,
-  Tooltip,
-  IconButton,
-  Fade,
-  useTheme,
-} from '@mui/material';
-import {
-  Timeline as TimelineIcon,
-  Memory as MemoryIcon,
-  Storage as StorageIcon,
-  Router as NetworkIcon,
-  Refresh as RefreshIcon,
-  Info as InfoIcon,
-} from '@mui/icons-material';
+
 import {
   ResponsiveContainer,
   LineChart,
@@ -34,7 +12,32 @@ import {
   Tooltip as ChartTooltip,
   Legend,
 } from 'recharts';
-import { formatBytes, formatPercentage, formatNumber } from '../utils/format';
+
+import {
+  Timeline as TimelineIcon,
+  Memory as MemoryIcon,
+  Storage as StorageIcon,
+  Router as NetworkIcon,
+  Refresh as RefreshIcon,
+  Info as InfoIcon,
+} from '@mui/icons-material';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  ToggleButton,
+  ToggleButtonGroup,
+  Grid,
+  LinearProgress,
+  Tooltip,
+  IconButton,
+  useTheme,
+} from '@mui/material';
+
+
+import { formatBytes, formatPercentage } from '../utils/format';
+
 import type { SystemMetrics } from '../../types/metrics';
 
 interface MetricsDisplayProps {
@@ -44,9 +47,9 @@ interface MetricsDisplayProps {
   onRefresh?: () => void;
 }
 
-export function MetricsDisplay({ 
-  metrics, 
-  history = [], 
+export function MetricsDisplay({
+  metrics,
+  history = [],
   className = '',
   onRefresh,
 }: MetricsDisplayProps) {

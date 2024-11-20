@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
+
 import { socket } from '../socket';
-import type { NotificationPreferences, NotificationType } from '@/types/notifications';
-import type { NotificationPreferencesResponse } from '@/types/socket-events';
 import { logger } from '../utils/frontendLogger';
+
+import type { NotificationPreferences, NotificationType } from '../../types/notifications';
+import type { NotificationPreferencesResponse } from '../../types/socket-events';
 
 interface UseNotificationPreferencesOptions {
   userId: string;

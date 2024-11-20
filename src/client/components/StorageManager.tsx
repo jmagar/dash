@@ -1,4 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
+
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts';
+
 import {
   Box,
   Grid,
@@ -13,16 +22,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  useTheme,
-  alpha,
 } from '@mui/material';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts';
+
 import { useHostMetrics } from '../hooks/useHostMetrics';
 import { formatBytes } from '../utils/formatters';
 
@@ -32,10 +33,19 @@ interface StorageManagerProps {
   hostId: string;
 }
 
+interface StorageDataItem {
+  name: string;
+  value: number;
+}
+
+interface IODataItem {
+  name: string;
+  operations: number;
+  bytes: number;
+}
+
 export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
-  const theme = useTheme();
-  const [selectedDrive, setSelectedDrive] = useState<string>('');
-  const { metrics, loading, error } = useHostMetrics({ hostId });
+  const { metrics, loading, error } = useHostMetrics(hostId);
 
   if (loading) {
     return <LinearProgress />;
@@ -53,7 +63,7 @@ export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
     return <Typography>No storage metrics available</Typography>;
   }
 
-  const storageData = [
+  const storageData: StorageDataItem[] = [
     {
       name: 'Used',
       value: metrics.storage.used,
@@ -64,7 +74,7 @@ export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
     },
   ];
 
-  const ioData = metrics.storage.ioStats ? [
+  const ioData: IODataItem[] = metrics.storage.ioStats ? [
     {
       name: 'Read',
       operations: metrics.storage.ioStats.readCount,
@@ -76,6 +86,10 @@ export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
       bytes: metrics.storage.ioStats.writeBytes,
     },
   ] : [];
+
+  const renderPieLabel = ({ name, value }: StorageDataItem) => `${name}: ${formatBytes(value)}`;
+
+  const formatTooltipValue = (value: number) => formatBytes(value);
 
   return (
     <Box>
@@ -95,7 +109,7 @@ export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
-                  label={({ name, value }) => `${name}: ${formatBytes(value)}`}
+                  label={renderPieLabel}
                 >
                   {storageData.map((entry, index) => (
                     <Cell
@@ -104,7 +118,7 @@ export const StorageManager: React.FC<StorageManagerProps> = ({ hostId }) => {
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => formatBytes(value as number)} />
+                <Tooltip formatter={formatTooltipValue} />
               </PieChart>
             </ResponsiveContainer>
             <Box sx={{ mt: 2, textAlign: 'center' }}>

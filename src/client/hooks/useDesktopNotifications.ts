@@ -1,6 +1,9 @@
 import { useEffect, useCallback } from 'react';
-import { useSocket } from './useSocket';
+
 import { logger } from '../utils/frontendLogger';
+
+import { useSocket } from './useSocket';
+
 import type { DesktopNotification } from '../../types/notifications';
 
 interface UseDesktopNotificationsResult {
@@ -78,16 +81,16 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
   useEffect(() => {
     if (!socket) return;
 
-    const handleNotification = (...args: unknown[]) => {
-      const [data] = args;
-      const notification = data as DesktopNotification;
+    const handleDesktopNotification = (notification: DesktopNotification) => {
       void showNotification(notification);
     };
 
-    socket.on('notification:desktop', handleNotification);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    socket.on('notification:desktop', handleDesktopNotification);
 
     return () => {
-      socket.off('notification:desktop', handleNotification);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      socket.off('notification:desktop', handleDesktopNotification);
     };
   }, [socket, showNotification]);
 
