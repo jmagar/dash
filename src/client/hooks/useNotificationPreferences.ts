@@ -1,85 +1,86 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { socket } from '../socket';
+import { logger } from '../utils/frontendLogger';
+import { useQuery } from './useQuery';
+import { useMutation } from './useMutation';
+
 import type { NotificationPreferences, NotificationType } from '@/types/notifications';
 import type { NotificationPreferencesResponse } from '@/types/socket-events';
-import { logger } from '../utils/frontendLogger';
 
-export function useNotificationPreferences(userId: string) {
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+interface UseNotificationPreferencesOptions {
+  userId: string;
+  enabled?: boolean;
+}
 
-  const loadPreferences = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+interface UpdatePreferencesVariables {
+  channel: keyof NotificationPreferences;
+  types: NotificationType[];
+}
 
-      return new Promise<NotificationPreferences>((resolve, reject) => {
-        socket.emit('notifications:preferences:get', { userId }, (response: NotificationPreferencesResponse) => {
-          if (response.success && response.data?.preferences) {
-            setPreferences(response.data.preferences);
-            resolve(response.data.preferences);
-          } else {
-            const errorMessage = response.error || 'Failed to load notification preferences';
-            setError(errorMessage);
-            reject(new Error(errorMessage));
-          }
-        });
+export function useNotificationPreferences({ userId, enabled = true }: UseNotificationPreferencesOptions) {
+  // Query for loading preferences
+  const fetchPreferences = useCallback(async () => {
+    return new Promise<NotificationPreferences>((resolve, reject) => {
+      socket.emit('notifications:preferences:get', { userId }, (response: NotificationPreferencesResponse) => {
+        if (response.success && response.data?.preferences) {
+          resolve(response.data.preferences);
+        } else {
+          reject(new Error(response.error || 'Failed to load notification preferences'));
+        }
       });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      logger.error('Failed to load notification preferences:', { error: errorMessage });
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+    });
   }, [userId]);
 
-  const updatePreferences = useCallback(async (channel: keyof NotificationPreferences, types: NotificationType[]) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      if (!preferences) {
-        throw new Error('Preferences not loaded');
-      }
-
-      const updatedPreferences: NotificationPreferences = {
-        ...preferences,
-        [channel]: types,
-      };
-
-      return new Promise<NotificationPreferences>((resolve, reject) => {
-        socket.emit('notifications:preferences:update',
-          { userId, preferences: updatedPreferences },
-          (response: NotificationPreferencesResponse) => {
-            if (response.success && response.data?.preferences) {
-              setPreferences(response.data.preferences);
-              resolve(response.data.preferences);
-            } else {
-              const errorMessage = response.error || 'Failed to update notification preferences';
-              setError(errorMessage);
-              reject(new Error(errorMessage));
-            }
-          }
-        );
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      logger.error('Failed to update notification preferences:', { error: errorMessage });
-      throw err;
-    } finally {
-      setLoading(false);
+  const {
+    data: preferences,
+    isLoading: loading,
+    error,
+    refetch: loadPreferences
+  } = useQuery(fetchPreferences, {
+    enabled,
+    onError: (err) => {
+      logger.error('Failed to load notification preferences:', { error: err.message });
     }
-  }, [userId, preferences]);
+  });
+
+  // Mutation for updating preferences
+  const updatePreferencesFn = useCallback(async ({ channel, types }: UpdatePreferencesVariables) => {
+    if (!enabled) return preferences;
+    if (!preferences) {
+      throw new Error('Preferences not loaded');
+    }
+
+    const updatedPreferences: NotificationPreferences = {
+      ...preferences,
+      [channel]: types,
+    };
+
+    return new Promise<NotificationPreferences>((resolve, reject) => {
+      socket.emit('notifications:preferences:update',
+        { userId, preferences: updatedPreferences },
+        (response: NotificationPreferencesResponse) => {
+          if (response.success && response.data?.preferences) {
+            resolve(response.data.preferences);
+          } else {
+            reject(new Error(response.error || 'Failed to update notification preferences'));
+          }
+        }
+      );
+    });
+  }, [userId, preferences, enabled]);
+
+  const [updatePreferences, updateState] = useMutation(updatePreferencesFn, {
+    onError: (err) => {
+      logger.error('Failed to update notification preferences:', { error: err.message });
+    }
+  });
 
   return {
     preferences,
-    loading,
-    error,
-    loadPreferences,
-    updatePreferences,
+    loading: loading || updateState.isLoading,
+    error: error || updateState.error,
+    loadPreferences: enabled ? loadPreferences : () => Promise.resolve(),
+    updatePreferences: (channel: keyof NotificationPreferences, types: NotificationType[]) =>
+      updatePreferences({ channel, types }),
   };
 }

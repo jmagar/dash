@@ -5,7 +5,7 @@ import type {
   NotificationPreferences,
   NotificationType,
 } from '../../types/notifications';
-import { api } from './api';
+import { BaseApiClient } from './base.client';
 
 interface GetNotificationsParams {
   userId: string;
@@ -17,7 +17,20 @@ interface GetNotificationsParams {
   offset?: number;
 }
 
-class NotificationsClient {
+const NOTIFICATION_ENDPOINTS = {
+  LIST: '/notifications',
+  COUNT: '/notifications/count',
+  READ: (id: string) => `/notifications/${id}/read`,
+  READ_ALL: '/notifications/read-all',
+  DELETE: '/notifications',
+  PREFERENCES: '/notifications/preferences',
+} as const;
+
+class NotificationsClient extends BaseApiClient {
+  constructor() {
+    super(NOTIFICATION_ENDPOINTS);
+  }
+
   /**
    * Get notifications for a user
    */
@@ -32,49 +45,49 @@ class NotificationsClient {
       ...(params.offset && { offset: String(params.offset) }),
     });
 
-    return api.get(`/notifications?${queryParams.toString()}`);
+    return this.get<Notification[]>(`${this.getEndpoint('LIST')}?${queryParams.toString()}`);
   }
 
   /**
    * Get notification counts for a user
    */
   async getNotificationCount(userId: string): Promise<ApiResult<NotificationCount>> {
-    return api.get(`/notifications/count?userId=${userId}`);
+    return this.get<NotificationCount>(`${this.getEndpoint('COUNT')}?userId=${userId}`);
   }
 
   /**
    * Mark notification as read
    */
   async markAsRead(notificationId: string): Promise<ApiResult<void>> {
-    return api.post(`/notifications/${notificationId}/read`);
+    return this.post<void>(this.getEndpoint('READ', notificationId));
   }
 
   /**
    * Mark multiple notifications as read
    */
   async markAllAsRead(notificationIds: string[]): Promise<ApiResult<void>> {
-    return api.post('/notifications/read-all', { notificationIds });
+    return this.post<void>(this.getEndpoint('READ_ALL'), { notificationIds });
   }
 
   /**
    * Delete notifications
    */
   async deleteNotifications(notificationIds: string[]): Promise<ApiResult<void>> {
-    return api.delete('/notifications', { data: { notificationIds } });
+    return this.delete<void>(this.getEndpoint('DELETE'), { data: { notificationIds } });
   }
 
   /**
    * Get notification preferences
    */
   async getPreferences(): Promise<ApiResult<NotificationPreferences>> {
-    return api.get('/notifications/preferences');
+    return this.get<NotificationPreferences>(this.getEndpoint('PREFERENCES'));
   }
 
   /**
    * Update notification preferences
    */
   async updatePreferences(preferences: Omit<NotificationPreferences, 'userId'>): Promise<ApiResult<void>> {
-    return api.put('/notifications/preferences', preferences);
+    return this.put<void>(this.getEndpoint('PREFERENCES'), preferences);
   }
 }
 

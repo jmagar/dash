@@ -3,35 +3,58 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../types/socket
 import { config } from './config';
 import { logger } from './utils/frontendLogger';
 
-// Create a socket instance with our custom events
-const socket = io(config.websocketUrl, {
+// Create a typed socket instance
+const socket = io<ServerToClientEvents, ClientToServerEvents>(config.websocketUrl, {
   autoConnect: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   timeout: 20000,
+  transports: ['websocket'],
 });
 
-socket.on('connect', (...args: unknown[]) => {
+// Connection events with proper typing
+socket.on('connect', () => {
   logger.info('Socket connected:', { id: socket.id });
 });
 
-socket.on('disconnect', (...args: unknown[]) => {
-  const [reason] = args;
+socket.on('disconnect', (reason: string) => {
   logger.info('Socket disconnected:', { reason });
 });
 
-socket.on('connect_error', (...args: unknown[]) => {
-  const [error] = args;
-  const errorObj = error as Error;
-  logger.error('Socket connection error:', { error: errorObj.message });
+socket.on('connect_error', (error: Error) => {
+  logger.error('Socket connection error:', { 
+    error: error.message,
+    stack: error.stack 
+  });
 });
 
-socket.on('error', (...args: unknown[]) => {
-  const [error] = args;
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  logger.error('Socket error:', { error: errorMessage });
+socket.on('error', (error: Error) => {
+  logger.error('Socket error:', { 
+    error: error.message,
+    stack: error.stack 
+  });
+});
+
+// Reconnection events
+socket.io.on('reconnect', (attempt: number) => {
+  logger.info('Socket reconnected:', { attempt });
+});
+
+socket.io.on('reconnect_attempt', (attempt: number) => {
+  logger.info('Socket reconnection attempt:', { attempt });
+});
+
+socket.io.on('reconnect_error', (error: Error) => {
+  logger.error('Socket reconnection error:', { 
+    error: error.message,
+    stack: error.stack 
+  });
+});
+
+socket.io.on('reconnect_failed', () => {
+  logger.error('Socket reconnection failed');
 });
 
 export { socket };

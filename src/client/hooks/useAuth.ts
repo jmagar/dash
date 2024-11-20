@@ -137,7 +137,7 @@ export function useAuth() {
           permissions: data.data.user.permissions,
           isAdmin: data.data.user.role === 'admin'
         };
-        
+
         dispatch({ type: 'SET_USER', payload: userWithPermissions });
         dispatch({ type: 'SET_TOKEN', payload: token });
         logger.info('Token verification successful');

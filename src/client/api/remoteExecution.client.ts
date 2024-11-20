@@ -1,9 +1,4 @@
-
-import { createApiError } from '../../types/error';
-import { logger } from '../utils/frontendLogger';
-
-import { api } from './api';
-
+import { BaseApiClient } from './base.client';
 import type { CommandRequest, CommandResult } from '../../types/models-shared';
 
 const EXEC_ENDPOINTS = {
@@ -14,74 +9,40 @@ const EXEC_ENDPOINTS = {
   STATUS: (hostId: string, pid: number) => `/hosts/${hostId}/processes/${pid}`,
 } as const;
 
-export async function executeCommand(hostId: string, command: CommandRequest): Promise<CommandResult> {
-  try {
-    const response = await api.post<CommandResult>(EXEC_ENDPOINTS.EXECUTE(hostId), command);
+class RemoteExecutionClient extends BaseApiClient {
+  constructor() {
+    super(EXEC_ENDPOINTS);
+  }
 
+  async executeCommand(hostId: string, command: CommandRequest): Promise<CommandResult> {
+    const response = await this.post<CommandResult>(this.getEndpoint('EXECUTE', hostId), command);
     return response.data;
-  } catch (error) {
-    logger.error('Failed to execute command:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId,
-      command,
-    });
-    throw createApiError('Failed to execute command', error);
   }
-}
 
-export async function streamCommand(hostId: string, command: string): Promise<void> {
-  try {
-    await api.post(EXEC_ENDPOINTS.STREAM(hostId), {
-      command,
-    });
-  } catch (error) {
-    logger.error('Failed to stream command:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId,
-      command,
-    });
-    throw createApiError('Failed to stream command', error);
+  async streamCommand(hostId: string, command: string): Promise<void> {
+    await this.post<void>(this.getEndpoint('STREAM', hostId), { command });
   }
-}
 
-export async function killCommand(hostId: string, pid: number): Promise<void> {
-  try {
-    await api.post(EXEC_ENDPOINTS.KILL(hostId, pid));
-  } catch (error) {
-    logger.error('Failed to kill command:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId,
-      pid,
-    });
-    throw createApiError('Failed to kill command', error);
+  async killCommand(hostId: string, pid: number): Promise<void> {
+    await this.post<void>(this.getEndpoint('KILL', hostId, pid));
   }
-}
 
-export async function listProcesses(hostId: string): Promise<CommandResult[]> {
-  try {
-    const response = await api.get<CommandResult[]>(EXEC_ENDPOINTS.LIST(hostId));
-
+  async listProcesses(hostId: string): Promise<CommandResult[]> {
+    const response = await this.get<CommandResult[]>(this.getEndpoint('LIST', hostId));
     return response.data;
-  } catch (error) {
-    logger.error('Failed to list processes:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId,
-    });
-    throw createApiError('Failed to list processes', error);
   }
-}
 
-export async function getProcessStatus(hostId: string, pid: number): Promise<CommandResult> {
-  try {
-    const response = await api.get<CommandResult>(EXEC_ENDPOINTS.STATUS(hostId, pid));
-
+  async getProcessStatus(hostId: string, pid: number): Promise<CommandResult> {
+    const response = await this.get<CommandResult>(this.getEndpoint('STATUS', hostId, pid));
     return response.data;
-  } catch (error) {
-    logger.error('Failed to get process status:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId,
-      pid,
-    });
-    throw createApiError('Failed to get process status', error);
   }
 }
+
+export const remoteExecutionClient = new RemoteExecutionClient();
+export const {
+  executeCommand,
+  streamCommand,
+  killCommand,
+  listProcesses,
+  getProcessStatus,
+} = remoteExecutionClient;

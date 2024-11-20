@@ -1,6 +1,13 @@
+/**
+ * @deprecated This file is being replaced by the new AgentService.
+ * All functionality should be migrated to src/server/services/agent/agent.service.ts
+ * TODO: Remove this file once migration is complete.
+ */
+
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
 import { logger } from '../../utils/logger';
 import type { Host } from '../../../types/models-shared';
 import { SSHClient } from '../../../types/ssh';
@@ -14,6 +21,11 @@ interface InstallOptions {
     agent_id: string;
     labels?: Record<string, string>;
   };
+}
+
+interface SystemInfo {
+  os: 'windows' | 'linux';
+  arch: 'x64' | 'arm64' | 'arm';
 }
 
 /**
@@ -64,6 +76,86 @@ EOL
     echo "Agent installation complete"
   `;
 
+  private readonly windowsInstallScript = `
+    @echo off
+
+    REM Check if agent is already installed
+    if exist "C:\\Program Files\\SSH Helper\\shh-agent.exe" (
+      echo Agent already installed, updating...
+    )
+
+    REM Create agent directories
+    mkdir "C:\\Program Files\\SSH Helper" 2>nul
+    mkdir "C:\\ProgramData\\SSH Helper\\logs" 2>nul
+    mkdir "C:\\ProgramData\\SSH Helper\\data" 2>nul
+
+    REM Copy binary
+    copy /Y shh-agent.exe "C:\\Program Files\\SSH Helper\\shh-agent.exe"
+
+    REM Create Windows service
+    sc create "SSH Helper Agent" binPath= "C:\\Program Files\\SSH Helper\\shh-agent.exe" start= auto
+    sc description "SSH Helper Agent" "SSH Helper Agent Service"
+    sc start "SSH Helper Agent"
+
+    echo Agent installation complete
+  `;
+
+  /**
+   * Get system information from remote host
+   */
+  private async getSystemInfo(ssh: SSHClient): Promise<SystemInfo> {
+    let os: 'windows' | 'linux';
+    let arch: 'x64' | 'arm64' | 'arm';
+
+    try {
+      // Try Windows command first
+      const systemInfoCmd = 'systeminfo | findstr /B /C:"OS Name" /C:"System Type"';
+      const result = await this.execCommand(ssh, systemInfoCmd);
+      if (result.includes('Windows')) {
+        os = 'windows';
+        arch = result.includes('x64') ? 'x64' :
+               result.includes('ARM64') ? 'arm64' : 'arm';
+      } else {
+        // Try Linux commands
+        const archCmd = 'uname -m';
+        const archResult = await this.execCommand(ssh, archCmd);
+        os = 'linux';
+        arch = archResult.includes('x86_64') ? 'x64' :
+               archResult.includes('aarch64') ? 'arm64' : 'arm';
+      }
+
+      return { os, arch };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to detect system info', { error: errorMessage });
+      throw new Error('Failed to detect system architecture');
+    }
+  }
+
+  /**
+   * Get the appropriate binary path based on OS and architecture
+   */
+  private getBinaryPath(systemInfo: SystemInfo): string {
+    const binDir = path.join(__dirname, '../../../../bin');
+    const binaryName = systemInfo.os === 'windows' ? 'shh-agent.exe' : 'shh-agent';
+    const archSuffix = `-${systemInfo.arch}`;
+    const osSuffix = `-${systemInfo.os}`;
+
+    const binaryPath = path.join(binDir, `${binaryName}${osSuffix}${archSuffix}`);
+
+    // Verify binary exists
+    try {
+      if (!fs.existsSync(binaryPath)) {
+        throw new Error(`Binary not found for ${systemInfo.os}-${systemInfo.arch}`);
+      }
+      return binaryPath;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to find agent binary', { error: errorMessage, systemInfo });
+      throw new Error(`Agent binary not available for ${systemInfo.os}-${systemInfo.arch}`);
+    }
+  }
+
   /**
    * Install agent on a host using existing SSH connection
    */
@@ -74,9 +166,22 @@ EOL
         hostname: host.hostname,
       });
 
+      // Get system information
+      const systemInfo = await this.getSystemInfo(ssh);
+      logger.info('Detected system info', { systemInfo });
+
+      // Get appropriate binary
+      const binaryPath = this.getBinaryPath(systemInfo);
+
       // Create temporary directory
-      const tempDir = `/tmp/shh-agent-${Date.now()}`;
-      await this.execCommand(ssh, `mkdir -p ${tempDir}`);
+      const tempDir = systemInfo.os === 'windows' ?
+        `C:\\Windows\\Temp\\shh-agent-${Date.now()}` :
+        `/tmp/shh-agent-${Date.now()}`;
+
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `mkdir "${tempDir}"` :
+        `mkdir -p ${tempDir}`
+      );
 
       // Create config file
       const configContent = JSON.stringify({
@@ -90,30 +195,53 @@ EOL
       }, null, 2);
 
       // Write config file
-      await this.execCommand(ssh, `cat > ${tempDir}/config.json << 'EOL'\n${configContent}\nEOL`);
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `echo ${configContent.replace(/"/g, '\\"')} > "${tempDir}\\config.json"` :
+        `cat > ${tempDir}/config.json << 'EOL'\n${configContent}\nEOL`
+      );
 
       // Copy agent binary
-      // TODO: Select correct binary based on host OS and architecture
-      const binaryPath = path.join(__dirname, '../../../../bin/shh-agent');
-      await this.execCommand(ssh, `cp ${binaryPath} ${tempDir}/shh-agent`);
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `copy /Y "${binaryPath}" "${tempDir}\\shh-agent.exe"` :
+        `cp ${binaryPath} ${tempDir}/shh-agent`
+      );
 
       // Write install script
-      await this.execCommand(ssh, `cat > ${tempDir}/install.sh << 'EOL'\n${this.installScript}\nEOL`);
-      await this.execCommand(ssh, `chmod +x ${tempDir}/install.sh`);
+      const installScript = systemInfo.os === 'windows' ?
+        this.windowsInstallScript :
+        this.installScript;
+
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `echo ${installScript.replace(/"/g, '\\"')} > "${tempDir}\\install.bat"` :
+        `cat > ${tempDir}/install.sh << 'EOL'\n${installScript}\nEOL`
+      );
+
+      // Make script executable (Linux only)
+      if (systemInfo.os === 'linux') {
+        await this.execCommand(ssh, `chmod +x ${tempDir}/install.sh`);
+      }
 
       // Run installation
-      await this.execCommand(ssh, `cd ${tempDir} && ./install.sh`);
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `cd "${tempDir}" && install.bat` :
+        `cd ${tempDir} && ./install.sh`
+      );
 
       // Cleanup
-      await this.execCommand(ssh, `rm -rf ${tempDir}`);
+      await this.execCommand(ssh, systemInfo.os === 'windows' ?
+        `rmdir /S /Q "${tempDir}"` :
+        `rm -rf ${tempDir}`
+      );
 
       logger.info('Agent installation completed', {
         hostId: host.id,
         hostname: host.hostname,
+        systemInfo,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Agent installation failed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         hostId: host.id,
         hostname: host.hostname,
       });
@@ -147,7 +275,7 @@ EOL
           if (code !== 0) {
             reject(new Error(`Command failed with code ${code}: ${error}`));
           } else {
-            resolve(output);
+            resolve(output.trim());
           }
         });
       });

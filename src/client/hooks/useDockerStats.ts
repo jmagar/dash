@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
 import type { DockerStats } from '@/types/docker';
 import { logger } from '../utils/frontendLogger';
+import { useQuery } from './useQuery';
 
 interface UseDockerStatsOptions {
   hostId: string;
@@ -20,58 +21,85 @@ export function useDockerStats(options: UseDockerStatsOptions | string): UseDock
   const enabled = typeof options === 'string' ? true : options.enabled ?? true;
 
   const [stats, setStats] = useState<DockerStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const startMonitoring = useCallback(() => {
-    if (!enabled) return;
+  // Initial fetch and refresh functionality using useQuery
+  const fetchStats = useCallback(async () => {
+    return new Promise<DockerStats>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Docker stats request timed out'));
+      }, 10000); // 10 second timeout
 
-    setLoading(true);
-    setError(null);
+      socket.emit('docker:subscribe', { hostId });
 
-    socket.emit('docker:subscribe', { hostId });
-  }, [hostId, enabled]);
+      function handleInitialStats(...args: unknown[]) {
+        const [data] = args;
+        const statsData = data as { hostId: string; stats: DockerStats };
+        if (statsData.hostId === hostId) {
+          clearTimeout(timeout);
+          socket.off('docker:stats', handleInitialStats);
+          socket.off('docker:error', handleInitialError);
+          resolve(statsData.stats);
+        }
+      }
 
-  const stopMonitoring = useCallback(() => {
-    socket.emit('docker:unsubscribe', { hostId });
+      function handleInitialError(...args: unknown[]) {
+        const [data] = args;
+        const errorData = data as { hostId: string; error: string };
+        if (errorData.hostId === hostId) {
+          clearTimeout(timeout);
+          socket.off('docker:stats', handleInitialStats);
+          socket.off('docker:error', handleInitialError);
+          reject(new Error(errorData.error));
+        }
+      }
+
+      socket.on('docker:stats', handleInitialStats);
+      socket.on('docker:error', handleInitialError);
+    });
   }, [hostId]);
 
-  useEffect(() => {
-    startMonitoring();
+  const { isLoading, error, refetch } = useQuery(fetchStats, {
+    enabled: enabled,
+    onSuccess: (data) => setStats(data),
+    onError: (err) => {
+      logger.error('Docker stats error:', { error: err.message });
+    }
+  });
 
-    const handleStats = (...args: unknown[]) => {
+  // Real-time updates
+  useEffect(() => {
+    if (!enabled) return;
+
+    function handleStats(...args: unknown[]) {
       const [data] = args;
       const statsData = data as { hostId: string; stats: DockerStats };
       if (statsData.hostId === hostId) {
         setStats(statsData.stats);
-        setLoading(false);
       }
-    };
+    }
 
-    const handleError = (...args: unknown[]) => {
+    function handleError(...args: unknown[]) {
       const [data] = args;
       const errorData = data as { hostId: string; error: string };
       if (errorData.hostId === hostId) {
-        setError(errorData.error);
-        setLoading(false);
         logger.error('Docker stats error:', { error: errorData.error });
       }
-    };
+    }
 
     socket.on('docker:stats', handleStats);
     socket.on('docker:error', handleError);
 
     return () => {
-      stopMonitoring();
+      socket.emit('docker:unsubscribe', { hostId });
       socket.off('docker:stats', handleStats);
       socket.off('docker:error', handleError);
     };
-  }, [hostId, startMonitoring, stopMonitoring]);
+  }, [hostId, enabled]);
 
   return {
     stats,
-    loading,
-    error,
-    refresh: startMonitoring,
+    loading: isLoading,
+    error: error?.message || null,
+    refresh: refetch,
   };
 }

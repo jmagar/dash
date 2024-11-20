@@ -1,5 +1,10 @@
 import React from 'react';
 import { formatBytes, formatDate, formatPermissions } from '../utils/formatters';
+import ListItem from '@mui/material/ListItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Checkbox from '@mui/material/Checkbox';
+import Typography from '@mui/material/Typography';
 
 interface FileInfo {
   name: string;
@@ -14,10 +19,25 @@ interface FileInfo {
 
 interface FileListItemProps {
   file: FileInfo;
-  onClick: () => void;
+  onOpen: (file: FileInfo) => void;
+  onSelect?: (file: FileInfo, selected: boolean) => void;
+  selected?: boolean;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent, file: FileInfo) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
 }
 
-export function FileListItem({ file, onClick }: FileListItemProps) {
+export function FileListItem({
+  file,
+  onOpen,
+  onSelect,
+  selected = false,
+  draggable = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+}: FileListItemProps) {
   const getFileIcon = (file: FileInfo): string => {
     if (file.isDirectory) return '📁';
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -76,25 +96,49 @@ export function FileListItem({ file, onClick }: FileListItemProps) {
   };
 
   return (
-    <button
-      onClick={onClick}
-      className="w-full grid grid-cols-12 gap-4 p-4 hover:bg-gray-50 focus:outline-none focus:bg-gray-50 text-left"
+    <ListItem
+      button
+      draggable={draggable}
+      onDragStart={(e) => onDragStart?.(e, file)}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+          onSelect?.(file, !selected);
+        } else {
+          onOpen(file);
+        }
+      }}
+      selected={selected}
+      sx={{
+        cursor: 'pointer',
+        '&:hover': {
+          backgroundColor: 'action.hover',
+        },
+      }}
     >
-      <div className="col-span-6 flex items-center space-x-2">
+      <ListItemIcon>
+        <Checkbox
+          edge="start"
+          checked={selected}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect?.(file, !selected);
+          }}
+          sx={{ mr: 1 }}
+        />
         <span role="img" aria-label={file.isDirectory ? 'Folder' : 'File'}>
           {getFileIcon(file)}
         </span>
-        <span className="truncate">{file.name}</span>
-      </div>
-      <div className="col-span-2 text-gray-500">
-        {file.isDirectory ? '--' : formatBytes(file.size)}
-      </div>
-      <div className="col-span-2 text-gray-500">
-        {formatDate(file.modTime)}
-      </div>
-      <div className="col-span-2 text-gray-500 font-mono">
-        {formatPermissions(file.mode)}
-      </div>
-    </button>
+      </ListItemIcon>
+      <ListItemText
+        primary={file.name}
+        secondary={
+          <Typography variant="body2" color="text.secondary">
+            {formatBytes(file.size)} • {formatDate(file.modTime)}
+          </Typography>
+        }
+      />
+    </ListItem>
   );
 }

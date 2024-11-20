@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-
 import { useLocation, useNavigate } from 'react-router-dom';
-
 import {
   Dashboard as DashboardIcon,
   Terminal as TerminalIcon,
@@ -18,8 +16,6 @@ import {
   Help as HelpIcon,
   Logout as LogoutIcon,
   KeyboardArrowDown as ExpandMoreIcon,
-  DarkMode as DarkModeIcon,
-  LightMode as LightModeIcon,
 } from '@mui/icons-material';
 import {
   Box,
@@ -29,7 +25,7 @@ import {
   ListItemText,
   ListItemButton,
   Divider,
-  useTheme,
+  useTheme as useMuiTheme,
   alpha,
   Typography,
   Collapse,
@@ -37,8 +33,7 @@ import {
 } from '@mui/material';
 
 import { useAuth } from '../hooks/useAuth';
-import { useTheme as useAppTheme } from '../hooks/useTheme';
-
+import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 
 interface NavigationItem {
@@ -65,7 +60,7 @@ const navigationItems: NavigationItem[] = [
     icon: <ComputerIcon />,
     subItems: [
       {
-        label: 'Manager',
+        label: 'SSH Manager',
         path: '/hosts/manager',
         icon: <DnsIcon />,
       },
@@ -113,8 +108,7 @@ const navigationItems: NavigationItem[] = [
 export function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const { theme: appTheme, toggleTheme } = useAppTheme();
+  const theme = useMuiTheme();
   const { user, logout } = useAuth();
   const [openItems, setOpenItems] = useState<{ [key: string]: boolean }>({});
 
@@ -159,13 +153,13 @@ export function Navigation() {
               mx: 1,
               mb: 0.5,
               '&.Mui-selected': {
-                bgcolor: alpha(theme.palette.primary.main, appTheme === 'dark' ? 0.2 : 0.1),
+                bgcolor: alpha(theme.palette.primary.main, 0.2),
                 '&:hover': {
-                  bgcolor: alpha(theme.palette.primary.main, appTheme === 'dark' ? 0.3 : 0.2),
+                  bgcolor: alpha(theme.palette.primary.main, 0.3),
                 },
               },
               '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, appTheme === 'dark' ? 0.1 : 0.05),
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
               },
             }}
           >
@@ -247,7 +241,7 @@ export function Navigation() {
       >
         <DnsIcon color="primary" sx={{ fontSize: 32 }} />
         <Typography variant="h6" fontWeight="bold">
-          SSH Manager
+          Remote Manager
         </Typography>
       </Box>
 
@@ -345,17 +339,7 @@ export function Navigation() {
                 variant: 'body2',
               }}
             />
-            <IconButton
-              edge="end"
-              size="small"
-              onClick={toggleTheme}
-              sx={{
-                transform: 'none',
-                transition: 'transform 0.3s',
-              }}
-            >
-              {appTheme === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-            </IconButton>
+            <ThemeToggle />
           </ListItemButton>
         </ListItem>
         <ListItem disablePadding>

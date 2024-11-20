@@ -89,6 +89,22 @@ useDockerUpdates({
 });
 ```
 
+## useClipboard
+
+A hook for copying text to clipboard with success and error states.
+
+```typescript
+const { copyToClipboard, hasCopied, error } = useClipboard({ timeout: 2000 });
+
+// Example usage
+<button 
+  onClick={() => copyToClipboard("Text to copy")}
+  disabled={hasCopied}
+>
+  {hasCopied ? "Copied!" : "Copy to clipboard"}
+</button>
+```
+
 ## Installation
 
 These hooks are part of the project and can be imported directly:

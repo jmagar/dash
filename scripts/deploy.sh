@@ -147,7 +147,7 @@ verify_network() {
     fi
 
     # Check if required ports are available
-    for port in 3000 5432 6379 9090; do
+    for port in 3000 5432 6379; do
         if netstat -tuln | grep -q ":${port} "; then
             print_error "Port conflict" "Port ${port} is already in use"
             exit 1
@@ -268,20 +268,20 @@ verify_deployment() {
         local all_healthy=true
         
         for service in "${services[@]}"; do
-            local status=$(${DOCKER_COMPOSE} ps --format json ${service} | jq -r '.Health.Status // "none"')
-            
-            if [ "${status}" != "healthy" ] && [ "${status}" != "none" ]; then
-                all_healthy=false
-                break
-            fi
-            
             local container_id=$(${DOCKER_COMPOSE} ps -q ${service})
             if [ -z "${container_id}" ]; then
                 all_healthy=false
                 break
             fi
             
-            if ! docker inspect "${container_id}" --format '{{.State.Running}}' | grep -q "true"; then
+            local status=$(docker inspect "${container_id}" --format '{{.State.Health.Status}}')
+            if [ -z "${status}" ]; then
+                # Container has no health check, check if it's running
+                if ! docker inspect "${container_id}" --format '{{.State.Running}}' | grep -q "true"; then
+                    all_healthy=false
+                    break
+                fi
+            elif [ "${status}" != "healthy" ]; then
                 all_healthy=false
                 break
             fi
@@ -313,7 +313,6 @@ display_info() {
     print_substep "Service URLs:"
     echo "Web UI:          http://localhost:3000"
     echo "API:             http://localhost:3000/api"
-    echo "Prometheus:      http://localhost:9090"
     
     # Get resource usage
     print_substep "Resource Usage:"
@@ -461,7 +460,6 @@ check_health_endpoints() {
     local endpoints=(
         "http://localhost:3000/health"
         "http://localhost:3000/api/health"
-        "http://localhost:9090/-/healthy"
     )
     
     for endpoint in "${endpoints[@]}"; do

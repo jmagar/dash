@@ -44,7 +44,7 @@ export function Terminal({
 
     const xterm = new XTerm({
       cursorBlink: true,
-      fontFamily: 'JetBrains Mono, monospace',
+      fontFamily: '"Noto Sans Mono", monospace',
       fontSize: 14,
       lineHeight: 1.2,
       theme: {

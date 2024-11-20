@@ -1,7 +1,14 @@
+/**
+ * @deprecated This file is being replaced by the new HostService.
+ * All functionality should be migrated to src/server/services/host/host.service.ts
+ * TODO: Remove this file once migration is complete.
+ */
+
 import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/models-shared';
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
 import { db } from '../../db';
+import { Client as SSHClient } from 'ssh2';
 
 /**
  * List all hosts for a user
@@ -151,14 +158,55 @@ export async function deleteHost(userId: string, id: string): Promise<void> {
  * Test connection to a host
  */
 export async function testConnection(host: Host): Promise<void> {
-  try {
-    // TODO: Implement actual SSH connection test
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  } catch (error) {
+  const ssh = new SSHClient();
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      ssh.end();
+      reject(new Error('Connection timed out'));
+    }, 10000); // 10 second timeout
+
+    ssh.on('ready', () => {
+      clearTimeout(timeout);
+      ssh.end();
+      resolve();
+    });
+
+    ssh.on('error', (err) => {
+      clearTimeout(timeout);
+      ssh.end();
+      reject(new Error(`Connection failed: ${err.message}`));
+    });
+
+    try {
+      ssh.connect({
+        host: host.hostname,
+        port: host.port,
+        username: host.username,
+        password: host.password,
+        privateKey: host.privateKey,
+        passphrase: host.passphrase,
+        // Add some reasonable defaults for connection
+        readyTimeout: 10000,
+        keepaliveInterval: 1000,
+        keepaliveCountMax: 3,
+        debug: (info: string) => {
+          logger.debug('SSH Debug:', {
+            hostId: host.id,
+            info,
+          });
+        },
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      reject(new Error('Failed to initiate connection'));
+    }
+  }).catch((error) => {
     logger.error('Failed to test host connection:', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      hostId: host.id.toString(),
+      hostId: host.id,
+      hostname: host.hostname,
     });
     throw new ApiError('Failed to test connection', error);
-  }
+  });
 }

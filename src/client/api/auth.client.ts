@@ -1,7 +1,6 @@
-import { api } from './api';
+import { BaseApiClient } from './base.client';
 import type { LoginRequest, LoginResponse, ValidateResponse, AuthenticatedUser } from '../../types/auth';
-import { createApiError } from '../../types/error';
-import { logger } from '../utils/logger';
+import type { ApiResponse } from '../../types/express';
 
 const AUTH_ENDPOINTS = {
   LOGIN: '/auth/login',
@@ -10,49 +9,48 @@ const AUTH_ENDPOINTS = {
   UPDATE: '/auth/update',
 } as const;
 
-export async function login(request: LoginRequest): Promise<LoginResponse> {
-  try {
-    const response = await api.post<LoginResponse>(AUTH_ENDPOINTS.LOGIN, request);
+class AuthClient extends BaseApiClient {
+  constructor() {
+    super(AUTH_ENDPOINTS);
+  }
+
+  login = async (request: LoginRequest): Promise<LoginResponse> => {
+    const response = await this.post<LoginResponse>(this.getEndpoint('LOGIN'), request);
+    if (!response.data) {
+      throw new Error('Login failed: No response data');
+    }
     return response.data;
-  } catch (error) {
-    logger.error('Failed to login:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to login', error);
-  }
-}
+  };
 
-export async function logout(): Promise<void> {
-  try {
-    await api.post(AUTH_ENDPOINTS.LOGOUT);
-  } catch (error) {
-    logger.error('Failed to logout:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to logout', error);
-  }
-}
+  logout = async (): Promise<void> => {
+    await this.post<void>(this.getEndpoint('LOGOUT'));
+  };
 
-export async function validate(): Promise<ValidateResponse> {
-  try {
-    const response = await api.get<ValidateResponse>(AUTH_ENDPOINTS.VALIDATE);
+  validate = async (): Promise<ValidateResponse> => {
+    const response = await this.get<ValidateResponse>(this.getEndpoint('VALIDATE'));
+    if (!response.data) {
+      throw new Error('Validation failed: No response data');
+    }
     return response.data;
-  } catch (error) {
-    logger.error('Failed to validate token:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to validate token', error);
-  }
+  };
+
+  updateUser = async (user: Partial<AuthenticatedUser>): Promise<AuthenticatedUser> => {
+    const response = await this.post<AuthenticatedUser>(this.getEndpoint('UPDATE'), user);
+    if (!response.data) {
+      throw new Error('Update user failed: No response data');
+    }
+    return response.data;
+  };
 }
 
-export async function updateUser(user: Partial<AuthenticatedUser>): Promise<AuthenticatedUser> {
-  try {
-    const response = await api.post<{ data: AuthenticatedUser }>(AUTH_ENDPOINTS.UPDATE, user);
-    return response.data.data;
-  } catch (error) {
-    logger.error('Failed to update user:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw createApiError('Failed to update user', error);
-  }
-}
+// Create a single instance
+const authClient = new AuthClient();
+
+// Export bound methods
+export const login = authClient.login;
+export const logout = authClient.logout;
+export const validate = authClient.validate;
+export const updateUser = authClient.updateUser;
+
+// Export client instance
+export { authClient };

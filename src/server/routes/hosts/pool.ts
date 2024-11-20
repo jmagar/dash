@@ -1,3 +1,9 @@
+/**
+ * @deprecated This file is being replaced by the new HostService.
+ * All functionality should be migrated to src/server/services/host/host.service.ts
+ * TODO: Remove this file once migration is complete.
+ */
+
 import { Client } from 'ssh2';
 import type { Host } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';

@@ -1,5 +1,4 @@
-import { api } from './api';
-import { logger } from '../utils/frontendLogger';
+import { BaseApiClient } from './base.client';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -17,39 +16,35 @@ interface ChatResponse {
   };
 }
 
-export async function sendChatMessage(
-  message: string,
-  options: {
-    useMem0?: boolean;
-    systemPrompt?: string;
-  } = {}
-): Promise<ChatResponse> {
-  try {
+interface ChatOptions {
+  useMem0?: boolean;
+  systemPrompt?: string;
+}
+
+const CHAT_ENDPOINTS = {
+  SEND: '/api/chat',
+} as const;
+
+class ChatClient extends BaseApiClient {
+  constructor() {
+    super(CHAT_ENDPOINTS);
+  }
+
+  async sendChatMessage(message: string, options: ChatOptions = {}): Promise<ChatResponse> {
     const metadata = {
       messageLength: message.length,
       useMem0: options.useMem0,
       hasSystemPrompt: !!options.systemPrompt,
     };
-    logger.info('Sending chat message', metadata);
 
-    const response = await api.post<ChatResponse>('/api/chat', {
+    const response = await this.post<ChatResponse>(this.getEndpoint('SEND'), {
       message,
       ...options,
     });
 
-    logger.info('Chat message sent successfully', {
-      ...metadata,
-      responseLength: response.data?.data?.length || 0,
-      usage: response.data?.usage,
-    });
-
     return response.data;
-  } catch (error) {
-    const errorMetadata = {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      messageLength: message.length,
-    };
-    logger.error('Failed to send chat message:', errorMetadata);
-    throw error;
   }
 }
+
+export const chatClient = new ChatClient();
+export const { sendChatMessage } = chatClient;

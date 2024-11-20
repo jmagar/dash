@@ -5,10 +5,14 @@ import { store } from './store';
 import { App } from './App';
 import './styles/tailwind.css';
 
-import '@fontsource/roboto/300.css';
-import '@fontsource/roboto/400.css';
-import '@fontsource/roboto/500.css';
-import '@fontsource/roboto/700.css';
+// MUI and fonts
+import '@mui/material/styles';
+import '@fontsource/noto-sans/300.css';
+import '@fontsource/noto-sans/400.css';
+import '@fontsource/noto-sans/500.css';
+import '@fontsource/noto-sans/700.css';
+import '@fontsource/noto-sans-mono/400.css';
+import '@fontsource/noto-sans-mono/500.css';
 
 const container = document.getElementById('root');
 if (!container) {
