@@ -54,7 +54,7 @@ export function UserProfile() {
     if (error) setError(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editing) return;
 
@@ -66,7 +66,7 @@ export function UserProfile() {
         throw new Error('New passwords do not match');
       }
 
-      const response = await fetch('/api/users/profile', {
+      const response: Response = await fetch('/api/users/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ export function UserProfile() {
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
+      const data: { success: boolean; error?: string } = await response.json();
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to update profile');

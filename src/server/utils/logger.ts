@@ -5,7 +5,7 @@ import {
   Logger as WinstonLogger,
   transport as WinstonTransport
 } from 'winston';
-import type { Logger, LogMetadata } from '../../types/logger';
+import type { Logger, LogMetadata, LogLevel } from '../../types/logger';
 import config from '../config';
 import { join } from 'path';
 import { GotifyTransport } from './gotifyTransport';
@@ -62,24 +62,48 @@ class ServerLogger implements Logger {
     });
   }
 
+  private formatMessage(level: LogLevel, message: string, data?: unknown): string {
+    const timestamp = new Date().toISOString();
+    const formattedData = data ? this.formatData(data) : '';
+    return `${timestamp} ${message}${formattedData}`;
+  }
+
+  private formatData(data: unknown): string {
+    if (!data) return '';
+    
+    if (data instanceof Error) {
+      return ` Error: ${data.message}`;
+    }
+
+    if (typeof data === 'object') {
+      try {
+        return ` ${JSON.stringify(data)}`;
+      } catch {
+        return ` [Object]`;
+      }
+    }
+
+    return ` ${String(data)}`;
+  }
+
   debug(message: string, meta?: LogMetadata): void {
-    this.logger.debug(message, meta);
+    this.logger.debug(this.formatMessage('debug', message, meta));
   }
 
   info(message: string, meta?: LogMetadata): void {
-    this.logger.info(message, meta);
+    this.logger.info(this.formatMessage('info', message, meta));
   }
 
   warn(message: string, meta?: LogMetadata): void {
-    this.logger.warn(message, meta);
+    this.logger.warn(this.formatMessage('warn', message, meta));
   }
 
   error(message: string, meta?: LogMetadata): void {
-    this.logger.error(message, meta);
+    this.logger.error(this.formatMessage('error', message, meta));
   }
 
   critical(message: string, meta?: LogMetadata): void {
-    this.logger.error(message, { ...meta, level: 'critical' });
+    this.logger.error(this.formatMessage('critical', message, meta));
   }
 
   withContext(context: Record<string, unknown>): Logger {

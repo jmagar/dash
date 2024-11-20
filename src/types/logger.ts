@@ -2,7 +2,7 @@
  * Logging system type definitions
  */
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'critical';
 
 export interface LogContext {
   requestId?: string;

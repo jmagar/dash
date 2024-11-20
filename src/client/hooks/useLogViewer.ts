@@ -86,19 +86,22 @@ export function useLogViewer({
   useEffect(() => {
     subscribe();
 
-    socket.on('logs:new', handleNewLog);
-    socket.on('logs:stream', handleLogStream);
-    socket.on('logs:error', (...args: unknown[]) => {
-      const data = args[0] as { error: string };
+    const handleError = (...args: unknown[]) => {
+      const [data] = args as [{ error: string }];
       setError(data.error);
       setLoading(false);
       logger.error('Log viewer error:', { error: data.error });
-    });
+    };
+
+    socket.on('logs:new', handleNewLog);
+    socket.on('logs:stream', handleLogStream);
+    socket.on('logs:error', handleError);
 
     return () => {
       unsubscribe();
       socket.off('logs:new', handleNewLog);
       socket.off('logs:stream', handleLogStream);
+      socket.off('logs:error', handleError);
     };
   }, [hostIds, filter, subscribe, unsubscribe, handleNewLog, handleLogStream]);
 

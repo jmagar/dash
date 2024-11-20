@@ -40,7 +40,7 @@ export class FrontendLogger implements Logger {
         if (typeof value === 'object') {
           return `${key}=${JSON.stringify(value)}`;
         }
-        return `${key}=${value}`;
+        return `${key}=${String(value)}`;
       })
       .join(' ');
 

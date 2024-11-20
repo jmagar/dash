@@ -1,9 +1,33 @@
 import { useEffect, useCallback, useContext } from 'react';
-
 import { useNavigate } from 'react-router-dom';
-
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext, User } from '../context/AuthContext';
 import { logger } from '../utils/frontendLogger';
+
+interface LoginResponse {
+  success: boolean;
+  data?: {
+    token: string;
+    user: {
+      id: string;
+      username: string;
+      role: string;
+      permissions: string[];
+    };
+  };
+  error?: string;
+}
+
+interface VerifyResponse {
+  success: boolean;
+  data?: {
+    user: {
+      id: string;
+      username: string;
+      role: string;
+      permissions: string[];
+    };
+  };
+}
 
 export function useAuth() {
   const navigate = useNavigate();
@@ -30,28 +54,31 @@ export function useAuth() {
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await response.json();
+      const data: LoginResponse = await response.json();
 
-      if (!data.success) {
-        throw new Error(data.error || 'Login failed');
+      if (data.success && data.data) {
+        const { token, user } = data.data;
+        const userWithPermissions: User = {
+          ...user,
+          email: undefined, // Optional field
+          permissions: user.permissions,
+          isAdmin: user.role === 'admin'
+        };
+
+        localStorage.setItem('token', token);
+        dispatch({ type: 'SET_USER', payload: userWithPermissions });
+        dispatch({ type: 'SET_TOKEN', payload: token });
+
+        logger.info('Login successful:', { username: user.username });
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Login failed' };
       }
-
-      const { user, token } = data.data;
-
-      localStorage.setItem('token', token);
-      dispatch({ type: 'SET_USER', payload: user });
-      dispatch({ type: 'SET_TOKEN', payload: token });
-
-      logger.info('Login successful:', { username: user.username });
     } catch (error) {
       logger.error('Login failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      dispatch({
-        type: 'SET_ERROR',
-        payload: error instanceof Error ? error.message : 'Login failed',
-      });
-      throw error;
+      return { success: false, error: 'Login failed' };
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -59,61 +86,78 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'CLEAR_ERROR' });
+
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${state.token}`,
-        },
-      });
-    } catch (error) {
-      logger.error('Logout error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } finally {
-      localStorage.removeItem('token');
-      dispatch({ type: 'CLEAR_AUTH' });
-      navigate('/login');
-    }
-  }, [state.token, dispatch, navigate]);
-
-  const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      dispatch({ type: 'CLEAR_AUTH' });
-      return;
-    }
-
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      const response = await fetch('/api/auth/verify', {
-        headers: {
-          Authorization: `Bearer ${token}`,
         },
       });
 
       const data = await response.json();
 
+      if (data.success) {
+        localStorage.removeItem('token');
+        dispatch({ type: 'CLEAR_AUTH' });
+        navigate('/login');
+        logger.info('Logout successful');
+      } else {
+        logger.error('Logout failed:', { error: data.error });
+      }
+    } catch (error) {
+      logger.error('Logout failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [dispatch, navigate, state.token]);
+
+  const verify = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('/api/auth/verify', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data: VerifyResponse = await response.json();
+
       if (data.success && data.data) {
-        dispatch({ type: 'SET_USER', payload: data.data });
+        const userWithPermissions: User = {
+          ...data.data.user,
+          email: undefined, // Optional field
+          permissions: data.data.user.permissions,
+          isAdmin: data.data.user.role === 'admin'
+        };
+        
+        dispatch({ type: 'SET_USER', payload: userWithPermissions });
         dispatch({ type: 'SET_TOKEN', payload: token });
+        logger.info('Token verification successful');
       } else {
         localStorage.removeItem('token');
         dispatch({ type: 'CLEAR_AUTH' });
+        logger.warn('Token verification failed');
       }
     } catch (error) {
-      logger.error('Auth verification failed:', {
+      logger.error('Token verification failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       localStorage.removeItem('token');
       dispatch({ type: 'CLEAR_AUTH' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [dispatch]);
 
   useEffect(() => {
-    void checkAuth();
-  }, [checkAuth]);
+    void verify();
+  }, [verify]);
 
   return {
     user: state.user,
@@ -123,6 +167,6 @@ export function useAuth() {
     isAdmin,
     login,
     logout,
-    checkAuth,
+    verify,
   };
 }

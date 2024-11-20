@@ -70,47 +70,49 @@ export function useProcessMonitor(options: UseProcessMonitorOptions | string): U
   useEffect(() => {
     startMonitoring();
 
-    socket.on('process:list', (...args: unknown[]) => {
-      const [data] = args;
-      const processData = data as { hostId: string; processes: ProcessInfo[] };
-      if (processData.hostId === hostId) {
-        setProcesses(processData.processes);
+    const handleProcessList = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; processes: ProcessInfo[] }];
+      if (data.hostId === hostId) {
+        setProcesses(data.processes);
       }
-    });
+    };
 
-    socket.on('process:started', (...args: unknown[]) => {
-      const [data] = args;
-      const processData = data as { hostId: string; process: ProcessInfo };
-      handleProcessStart(processData);
-    });
+    const handleProcessStarted = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; process: ProcessInfo }];
+      handleProcessStart(data);
+    };
 
-    socket.on('process:ended', (...args: unknown[]) => {
-      const [data] = args;
-      const processData = data as { hostId: string; process: ProcessInfo };
-      handleProcessEnd(processData);
-    });
+    const handleProcessEnded = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; process: ProcessInfo }];
+      handleProcessEnd(data);
+    };
 
-    socket.on('process:changed', (...args: unknown[]) => {
-      const [data] = args;
-      const processData = data as { hostId: string; process: ProcessInfo; oldStatus: string };
-      handleProcessChange(processData);
-    });
+    const handleProcessChanged = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; process: ProcessInfo; oldStatus: string }];
+      handleProcessChange(data);
+    };
 
-    socket.on('process:error', (...args: unknown[]) => {
-      const [data] = args;
-      const errorData = data as { hostId: string; error: string };
-      if (errorData.hostId === hostId) {
-        setError(errorData.error);
-        logger.error('Process monitor error:', { error: errorData.error });
+    const handleProcessError = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; error: string }];
+      if (data.hostId === hostId) {
+        setError(data.error);
+        logger.error('Process monitor error:', { error: data.error });
       }
-    });
+    };
+
+    socket.on('process:list', handleProcessList);
+    socket.on('process:started', handleProcessStarted);
+    socket.on('process:ended', handleProcessEnded);
+    socket.on('process:changed', handleProcessChanged);
+    socket.on('process:error', handleProcessError);
 
     return () => {
       stopMonitoring();
-      socket.off('process:list');
-      socket.off('process:started');
-      socket.off('process:ended');
-      socket.off('process:changed');
+      socket.off('process:list', handleProcessList);
+      socket.off('process:started', handleProcessStarted);
+      socket.off('process:ended', handleProcessEnded);
+      socket.off('process:changed', handleProcessChanged);
+      socket.off('process:error', handleProcessError);
     };
   }, [hostId, startMonitoring, stopMonitoring, handleProcessStart, handleProcessEnd, handleProcessChange]);
 

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 
-
 import { logger } from '../utils/frontendLogger';
 
 import { useSocket } from './useSocket';
@@ -46,19 +45,22 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
 
   const socket: TypedSocket | null = useSocket();
 
-  const handleMetricsUpdate = useCallback((data: MetricsUpdateData) => {
+  const handleMetricsUpdate = useCallback((...args: unknown[]) => {
+    const [data] = args as [MetricsUpdateData];
     if (data.hostId === hostId) {
       setMetrics(data.metrics);
     }
   }, [hostId]);
 
-  const handleProcessUpdate = useCallback((data: ProcessMetricsData) => {
+  const handleProcessUpdate = useCallback((...args: unknown[]) => {
+    const [data] = args as [ProcessMetricsData];
     if (data.hostId === hostId) {
       setProcesses(data.processes);
     }
   }, [hostId]);
 
-  const handleMetricsError = useCallback((data: MetricsErrorData) => {
+  const handleMetricsError = useCallback((...args: unknown[]) => {
+    const [data] = args as [MetricsErrorData];
     if (data.hostId === hostId) {
       setError(data.error);
       logger.error('Host metrics error:', { error: data.error });

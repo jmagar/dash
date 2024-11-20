@@ -35,114 +35,76 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
   const socket = useSocket();
 
   useEffect(() => {
-    if (!socket) {
-      setError('Socket not connected');
-      return;
-    }
+    if (!socket) return;
 
-    const handleProcessList = (data: ProcessListData) => {
+    const handleProcessList = (...args: unknown[]) => {
+      const [data] = args as [ProcessListData];
       if (data.hostId === hostId) {
         setProcesses(data.processes);
         setLoading(false);
       }
     };
 
-    const handleProcessUpdate = (data: ProcessUpdateData) => {
+    const handleProcessUpdate = (...args: unknown[]) => {
+      const [data] = args as [ProcessUpdateData];
       if (data.hostId === hostId) {
-        setProcesses(prev => {
-          const index = prev.findIndex(p => p.pid === data.process.pid);
-          if (index === -1) {
-            return [...prev, data.process];
-          }
-          const newProcesses = [...prev];
-          newProcesses[index] = data.process;
-          return newProcesses;
-        });
+        setProcesses((prevProcesses) =>
+          prevProcesses.map((p) => (p.pid === data.process.pid ? data.process : p))
+        );
       }
     };
 
-    const handleProcessError = (data: ProcessErrorData) => {
+    const handleProcessError = (...args: unknown[]) => {
+      const [data] = args as [ProcessErrorData];
       if (data.hostId === hostId) {
         setError(data.error);
         setLoading(false);
       }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-    socket.emit('process:monitor', { hostId });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('process:list', handleProcessList);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('process:update', handleProcessUpdate);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('process:error', handleProcessError);
 
+    // Request initial process list
+    socket.emit('process:monitor', { hostId });
+
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      socket.emit('process:unmonitor', { hostId });
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('process:list', handleProcessList);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('process:update', handleProcessUpdate);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('process:error', handleProcessError);
+      socket.emit('process:unmonitor', { hostId });
     };
   }, [socket, hostId]);
 
-  const killProcess = useCallback(async (pid: number, signal?: string) => {
-    if (!socket) {
-      throw new Error('Socket not connected');
-    }
+  const killProcess = useCallback(
+    async (pid: number, signal?: string) => {
+      if (!socket) {
+        throw new Error('Socket not connected');
+      }
 
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Kill process timeout'));
-        }, 5000);
-
-        const handleSuccess = () => {
-          clearTimeout(timeout);
+      return new Promise<void>((resolve, reject) => {
+        const handleKillSuccess = (...args: unknown[]) => {
           resolve();
+          socket.off('process:kill:success', handleKillSuccess);
+          socket.off('process:kill:error', handleKillError);
         };
 
-        const handleError = (error: string) => {
-          clearTimeout(timeout);
+        const handleKillError = (...args: unknown[]) => {
+          const [error] = args as [string];
           reject(new Error(error));
+          socket.off('process:kill:success', handleKillSuccess);
+          socket.off('process:kill:error', handleKillError);
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        socket.on('process:kill:success', handleKillSuccess);
+        socket.on('process:kill:error', handleKillError);
+
         socket.emit('process:kill', { hostId, pid, signal });
-
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-        socket.once('process:kill:success', handleSuccess);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-        socket.once('process:kill:error', handleError);
-
-        // Clean up event listeners if promise resolves/rejects
-        Promise.race([
-          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
-          new Promise<void>((resolve) => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            socket.once('process:kill:success', () => resolve());
-          })
-        ]).finally(() => {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-          socket.off('process:kill:success', handleSuccess);
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-          socket.off('process:kill:error', handleError);
-        });
       });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to kill process';
-      logger.error('Failed to kill process:', {
-        error: errorMsg,
-        pid,
-        signal,
-      });
-      throw new Error(errorMsg);
-    }
-  }, [socket, hostId]);
+    },
+    [socket, hostId]
+  );
 
   return { processes, loading, error, killProcess };
 }

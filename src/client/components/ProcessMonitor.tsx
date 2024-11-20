@@ -27,27 +27,28 @@ export function ProcessMonitor({ hostId }: ProcessMonitorProps) {
 
     socket.emit('process:monitor', { hostId });
 
-    socket.on('process:list', (...args: unknown[]) => {
-      const [data] = args;
-      const processData = data as { hostId: string; processes: ProcessInfo[] };
-      if (processData.hostId === hostId) {
-        setProcesses(processData.processes);
+    const handleProcessList = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; processes: ProcessInfo[] }];
+      if (data.hostId === hostId) {
+        setProcesses(data.processes);
       }
-    });
+    };
 
-    socket.on('process:error', (...args: unknown[]) => {
-      const [data] = args;
-      const errorData = data as { hostId: string; error: string };
-      if (errorData.hostId === hostId) {
-        setError(errorData.error);
-        logger.error('Process monitor error:', { error: errorData.error });
+    const handleProcessError = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; error: string }];
+      if (data.hostId === hostId) {
+        setError(data.error);
+        logger.error('Process monitor error:', { error: data.error });
       }
-    });
+    };
+
+    socket.on('process:list', handleProcessList);
+    socket.on('process:error', handleProcessError);
 
     return () => {
       socket.emit('process:unmonitor', { hostId });
-      socket.off('process:list');
-      socket.off('process:error');
+      socket.off('process:list', handleProcessList);
+      socket.off('process:error', handleProcessError);
     };
   }, [socket, hostId]);
 

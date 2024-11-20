@@ -37,7 +37,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
       setLoading(true);
       setError(null);
       const response = await fetch(`/api/hosts/${hostId}`);
-      const data = await response.json();
+      const data: { success: boolean; data?: Host; error?: string } = await response.json();
 
       if (data.success && data.data) {
         setHost(data.data);
@@ -45,12 +45,12 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
           setSelectedHost(data.data);
         }
       } else {
+        setHost(null);
         setError(data.error || 'Failed to fetch host');
       }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch host';
-      logger.error('Failed to fetch host:', { error: errorMsg, hostId });
-      setError(errorMsg);
+    } catch (err) {
+      setHost(null);
+      setError('Failed to fetch host information');
     } finally {
       setLoading(false);
     }

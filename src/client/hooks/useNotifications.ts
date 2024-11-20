@@ -39,7 +39,7 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
       setLoading(true);
       setError(null);
       const response = await fetch(`/api/notifications?userId=${userId}&limit=${limit}`);
-      const data: ApiResponse<Notification[]> = await response.json();
+      const data: { success: boolean; data?: Notification[]; error?: string } = await response.json();
 
       if (data.success && data.data) {
         setNotifications(data.data);
@@ -59,22 +59,18 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
     try {
       setError(null);
       const response = await fetch(`/api/notifications/${notificationId}/read`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        method: 'POST',
       });
-
-      const data: ApiResponse<void> = await response.json();
-      if (!data.success) {
+      const data: { success: boolean; error?: string } = await response.json();
+      if (data.success) {
+        setNotifications(prev =>
+          prev.map(n =>
+            n.id === notificationId ? { ...n, read: true } : n
+          )
+        );
+      } else {
         throw new Error(data.error || 'Failed to mark notification as read');
       }
-
-      setNotifications(prev =>
-        prev.map(n =>
-          n.id === notificationId ? { ...n, read: true } : n
-        )
-      );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to mark notification as read';
       logger.error('Failed to mark notification as read:', { error: errorMsg, notificationId });
@@ -93,15 +89,14 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
         },
         body: JSON.stringify({ userId }),
       });
-
-      const data: ApiResponse<void> = await response.json();
-      if (!data.success) {
+      const data: { success: boolean; error?: string } = await response.json();
+      if (data.success) {
+        setNotifications(prev =>
+          prev.map(n => ({ ...n, read: true }))
+        );
+      } else {
         throw new Error(data.error || 'Failed to mark all notifications as read');
       }
-
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, read: true }))
-      );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to mark all notifications as read';
       logger.error('Failed to mark all notifications as read:', { error: errorMsg, userId });
@@ -120,13 +115,12 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
         },
         body: JSON.stringify({ userId }),
       });
-
-      const data: ApiResponse<void> = await response.json();
-      if (!data.success) {
+      const data: { success: boolean; error?: string } = await response.json();
+      if (data.success) {
+        setNotifications([]);
+      } else {
         throw new Error(data.error || 'Failed to clear notifications');
       }
-
-      setNotifications([]);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to clear notifications';
       logger.error('Failed to clear notifications:', { error: errorMsg, userId });
@@ -138,39 +132,30 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
   useEffect(() => {
     if (!socket) return;
 
-    const handleNotificationCreated = (notification: Notification) => {
-      if (notification.userId === userId) {
-        setNotifications(prev => [notification, ...prev].slice(0, limit));
-      }
+    const handleNotificationCreated = (...args: unknown[]) => {
+      const [notification] = args as [Notification];
+      setNotifications(prev => [...prev, notification]);
     };
 
-    const handleNotificationUpdated = (notification: Notification) => {
-      if (notification.userId === userId) {
-        setNotifications(prev =>
-          prev.map(n => (n.id === notification.id ? notification : n))
-        );
-      }
-    };
-
-    const handleNotificationDeleted = (notificationId: string) => {
+    const handleNotificationUpdated = (...args: unknown[]) => {
+      const [notification] = args as [Notification];
       setNotifications(prev =>
-        prev.filter(n => n.id !== notificationId)
+        prev.map(n => (n.id === notification.id ? notification : n))
       );
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const handleNotificationDeleted = (...args: unknown[]) => {
+      const [notificationId] = args as [string];
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    };
+
     socket.on('notification:created', handleNotificationCreated);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('notification:updated', handleNotificationUpdated);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('notification:deleted', handleNotificationDeleted);
 
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('notification:created', handleNotificationCreated);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('notification:updated', handleNotificationUpdated);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('notification:deleted', handleNotificationDeleted);
     };
   }, [socket, userId, limit]);

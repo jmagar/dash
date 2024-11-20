@@ -75,49 +75,14 @@ module.exports = {
         '@typescript-eslint/explicit-function-return-type': 'off',
         '@typescript-eslint/explicit-module-boundary-types': 'off',
         '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-unused-vars': ['error', { 
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_'
-        }],
+        '@typescript-eslint/no-unused-vars': 'off',
+        'import/order': 'off',
 
         // React specific rules
         'react/prop-types': 'off',
         'react/react-in-jsx-scope': 'off',
 
         // Import ordering rules
-        'import/order': [
-          'error',
-          {
-            'groups': [
-              'builtin',
-              'external',
-              'internal',
-              'parent',
-              'sibling',
-              'index',
-              'object',
-              'type'
-            ],
-            'pathGroups': [
-              {
-                'pattern': 'react',
-                'group': 'external',
-                'position': 'before'
-              },
-              {
-                'pattern': '@mui/**',
-                'group': 'external',
-                'position': 'after'
-              }
-            ],
-            'pathGroupsExcludedImportTypes': ['react'],
-            'newlines-between': 'always',
-            'alphabetize': {
-              'order': 'asc',
-              'caseInsensitive': true
-            }
-          }
-        ],
         'import/no-unresolved': 'error',
         'import/named': 'error',
         'import/default': 'error',

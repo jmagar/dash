@@ -1,18 +1,59 @@
-import { useRef, useEffect } from 'react';
-
-import io from 'socket.io-client';
-
-import { logger } from '../utils/frontendLogger';
-
+import { useRef, useEffect, useCallback } from 'react';
+import { default as io } from 'socket.io-client';
 import type { SystemMetrics } from '../../types/metrics';
 import type { Notification, DesktopNotification } from '../../types/notifications';
 import type { ProcessInfo } from '../../types/process';
 
+import { logger } from '../utils/frontendLogger';
 
-interface ServerToClientEvents {
+// Socket error types
+type ErrorType = 'ConnectionError' | 'AuthError' | 'UnknownError';
+
+interface BaseSocketError {
+  message: string;
+  description?: string;
+  code?: string;
+}
+
+interface ConnectionError extends BaseSocketError {
+  type: 'ConnectionError';
+}
+
+interface AuthError extends BaseSocketError {
+  type: 'AuthError';
+}
+
+interface UnknownError extends BaseSocketError {
+  type: 'UnknownError';
+}
+
+type SocketError = ConnectionError | AuthError | UnknownError;
+type SocketErrorType = SocketError | Error;
+
+// Type guard for SocketError
+function isSocketError(error: SocketErrorType): error is SocketError {
+  return (error as SocketError).type !== undefined;
+}
+
+// Error factory
+function createSocketError(error: Error): SocketError {
+  return {
+    type: 'UnknownError',
+    message: error.message,
+    description: error.stack,
+  };
+}
+
+// Event handler types
+type ServerToClientEventsMap = {
   connect: () => void;
   disconnect: (reason: string) => void;
-  connect_error: (error: Error) => void;
+  connect_error: (error: SocketErrorType) => void;
+  error: (error: SocketErrorType) => void;
+  reconnect: (attemptNumber: number) => void;
+  reconnect_attempt: (attemptNumber: number) => void;
+  reconnect_error: (error: SocketErrorType) => void;
+  reconnect_failed: () => void;
   // Process events
   'process:list': (data: { hostId: string; processes: ProcessInfo[] }) => void;
   'process:update': (data: { hostId: string; process: ProcessInfo }) => void;
@@ -33,9 +74,9 @@ interface ServerToClientEvents {
   'terminal:exit': (data: { hostId: string; sessionId: string; code: number }) => void;
   // Host events
   'host:updated': (data: { hostId: string; host: Record<string, unknown> }) => void;
-}
+};
 
-interface ClientToServerEvents {
+type ClientToServerEventsMap = {
   // Process events
   'process:monitor': (data: { hostId: string }) => void;
   'process:unmonitor': (data: { hostId: string }) => void;
@@ -53,27 +94,9 @@ interface ClientToServerEvents {
   'host:disconnect': (data: { hostId: string; force?: boolean }, callback?: (response: { error?: string }) => void) => void;
   // Chat events
   'chat:send': (data: { content: string; role: 'system' | 'user' | 'assistant' }) => void;
-}
-
-export type TypedSocket = {
-  emit: <Ev extends keyof ClientToServerEvents>(
-    ev: Ev,
-    ...args: Parameters<ClientToServerEvents[Ev]>
-  ) => void;
-  on: <Ev extends keyof ServerToClientEvents>(
-    ev: Ev,
-    listener: ServerToClientEvents[Ev]
-  ) => void;
-  off: <Ev extends keyof ServerToClientEvents>(
-    ev: Ev,
-    listener?: ServerToClientEvents[Ev]
-  ) => void;
-  once: <Ev extends keyof ServerToClientEvents>(
-    ev: Ev,
-    listener: ServerToClientEvents[Ev]
-  ) => void;
-  disconnect: () => void;
 };
+
+export type TypedSocket = ReturnType<typeof io>;
 
 // Socket configuration
 const SOCKET_CONFIG = {
@@ -83,47 +106,71 @@ const SOCKET_CONFIG = {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   timeout: 20000,
+  auth: {
+    token: localStorage.getItem('token') || '',
+  },
 };
 
 // Event handler functions
-const handleConnect = () => {
+const handleConnect = (...args: unknown[]) => {
   logger.info('Socket connected');
 };
 
-const handleDisconnect = (reason: string) => {
-  logger.warn('Socket disconnected', { reason });
+const handleDisconnect = (...args: unknown[]) => {
+  const [reason] = args as [string];
+  logger.info(`Socket disconnected: ${reason}`);
 };
 
-const handleConnectError = (error: Error) => {
-  logger.error('Socket connection error', { error: error.message });
+const handleConnectError = (...args: unknown[]) => {
+  const [error] = args as [SocketErrorType];
+  logger.error('Socket connection error', { error: error.message || String(error) });
 };
 
-// Create socket with proper typing
-function createSocket(): TypedSocket {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-  const rawSocket = io(
-    process.env.REACT_APP_WEBSOCKET_URL || 'ws://localhost:3001',
-    SOCKET_CONFIG
-  );
+const handleError = (...args: unknown[]) => {
+  const [error] = args as [SocketErrorType];
+  logger.error('Socket error', { error: error.message || String(error) });
+};
 
-  // Type assertion for the socket instance
-  const socket = rawSocket as TypedSocket;
+const handleReconnect = (...args: unknown[]) => {
+  const [attemptNumber] = args as [number];
+  logger.info(`Socket reconnected after ${attemptNumber} attempts`);
+};
 
-  socket.on('connect', handleConnect);
-  socket.on('disconnect', handleDisconnect);
-  socket.on('connect_error', handleConnectError);
+const handleReconnectAttempt = (...args: unknown[]) => {
+  const [attemptNumber] = args as [number];
+  logger.info(`Socket reconnection attempt ${attemptNumber}`);
+};
 
-  return socket;
-}
+const handleReconnectError = (...args: unknown[]) => {
+  const [error] = args as [SocketErrorType];
+  logger.error('Socket reconnection error', { error: error.message || String(error) });
+};
+
+const handleReconnectFailed = (...args: unknown[]) => {
+  logger.error('Socket reconnection failed');
+};
 
 // Socket hook
 export function useSocket(): TypedSocket | null {
   const socketRef = useRef<TypedSocket | null>(null);
 
+  const createSocket = useCallback((): TypedSocket => {
+    const socket = io(process.env.REACT_APP_SOCKET_URL || '', SOCKET_CONFIG);
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.on('error', handleError);
+    socket.on('reconnect', handleReconnect);
+    socket.on('reconnect_attempt', handleReconnectAttempt);
+    socket.on('reconnect_error', handleReconnectError);
+    socket.on('reconnect_failed', handleReconnectFailed);
+
+    return socket;
+  }, []);
+
   useEffect(() => {
-    if (!socketRef.current) {
-      socketRef.current = createSocket();
-    }
+    socketRef.current = createSocket();
 
     return () => {
       if (socketRef.current) {
@@ -131,7 +178,7 @@ export function useSocket(): TypedSocket | null {
         socketRef.current = null;
       }
     };
-  }, []);
+  }, [createSocket]);
 
   return socketRef.current;
 }

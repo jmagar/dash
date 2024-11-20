@@ -103,27 +103,28 @@ export function Terminal({
       onData?.(data);
     };
 
-    const handleTerminalData = (data: { hostId: string; sessionId: string; data: string }) => {
+    const handleTerminalData = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; sessionId: string; data: string }];
       if (data.hostId === hostId && data.sessionId === sessionId) {
-        xterm.write(data.data);
+        xtermRef.current?.write(data.data);
       }
     };
 
-    const handleExit = (data: { hostId: string; sessionId: string; code: number }) => {
+    const handleTerminalExit = (...args: unknown[]) => {
+      const [data] = args as [{ hostId: string; sessionId: string; code: number }];
       if (data.hostId === hostId && data.sessionId === sessionId) {
-        logger.info('Terminal session ended', { hostId, sessionId, code: data.code });
         onExit?.(data.code);
       }
     };
 
     xterm.onData(handleData);
     socket.on('terminal:data', handleTerminalData);
-    socket.on('terminal:exit', handleExit);
+    socket.on('terminal:exit', handleTerminalExit);
 
     return () => {
       if (socket) {
         socket.off('terminal:data', handleTerminalData);
-        socket.off('terminal:exit', handleExit);
+        socket.off('terminal:exit', handleTerminalExit);
         socket.emit('terminal:leave', { hostId, sessionId });
       }
 

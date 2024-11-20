@@ -81,15 +81,14 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
   useEffect(() => {
     if (!socket) return;
 
-    const handleDesktopNotification = (notification: DesktopNotification) => {
+    const handleDesktopNotification = (...args: unknown[]) => {
+      const [notification] = args as [DesktopNotification];
       void showNotification(notification);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     socket.on('notification:desktop', handleDesktopNotification);
 
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       socket.off('notification:desktop', handleDesktopNotification);
     };
   }, [socket, showNotification]);
