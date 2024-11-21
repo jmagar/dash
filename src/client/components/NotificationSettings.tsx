@@ -101,7 +101,8 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     try {
       setIsSaving(true);
       // If the channel is enabled, we want to keep all current types, otherwise clear them
-      const types = preferences[`${channel}Enabled`] ? [] : preferences[channel];
+      const isEnabled = preferences[`${channel}Enabled`] as boolean;
+      const types = isEnabled ? [] : (preferences[channel] as NotificationType[]);
       await updatePreferences(channel, types);
     } catch (error) {
       logger.error('Failed to toggle notification channel:', {
@@ -120,7 +121,8 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
       const channels: Array<'web' | 'gotify' | 'desktop'> = ['web', 'gotify', 'desktop'];
 
       for (const channel of channels) {
-        if (preferences[`${channel}Enabled`]) {
+        const isEnabled = preferences[`${channel}Enabled`] as boolean;
+        if (isEnabled) {
           const currentTypes = preferences[channel] as NotificationType[];
           const hasType = currentTypes.includes(eventType);
           const updatedTypes = hasType

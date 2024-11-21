@@ -46,10 +46,10 @@ socket.io.on('reconnect_attempt', (attempt: number) => {
   logger.info('Socket reconnection attempt:', { attempt });
 });
 
-socket.io.on('reconnect_error', (error: Error) => {
+socket.io.on('reconnect_error', (error: any) => {
   logger.error('Socket reconnection error:', { 
-    error: error.message,
-    stack: error.stack 
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined
   });
 });
 

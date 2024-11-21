@@ -130,19 +130,20 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
 
   useEffect(() => {
     if (socket) {
-      socket.on('host:updated', (...args: unknown[]) => {
-        const [data] = args;
-        const updatedHost = data as Host;
+      const handleHostUpdate = (data: { hostId: string; host: Host }) => {
+        const updatedHost = data.host;
         if (updatedHost.id === hostId) {
           setHost(updatedHost);
           if (selectedHost?.id === updatedHost.id) {
             setSelectedHost(updatedHost);
           }
         }
-      });
+      };
+
+      socket.on('host:updated', handleHostUpdate);
 
       return () => {
-        socket.off('host:updated');
+        socket.off('host:updated', handleHostUpdate);
       };
     }
   }, [socket, hostId, selectedHost]);

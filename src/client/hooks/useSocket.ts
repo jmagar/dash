@@ -187,39 +187,62 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
   const createSocket = useCallback(() => {
     if (!hostId) return null;
 
-    const socket = io(`${process.env.REACT_APP_AGENT_WS_URL}/host/${hostId}`, {
-      transports: ['websocket'],
-      reconnection: false, // We handle reconnection manually
-      auth: {
-        token,
-      },
-    }) as TypedSocket;
+    try {
+      const socket = io(`${process.env.REACT_APP_AGENT_WS_URL}/host/${hostId}`, {
+        transports: ['websocket'],
+        reconnection: false, // We handle reconnection manually
+        auth: {
+          token,
+        },
+      }) as TypedSocket;
 
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-    socket.on('connect_error', handleError);
-    socket.on('error', handleError);
+      socket.on('connect', handleConnect);
+      socket.on('disconnect', handleDisconnect);
+      socket.on('connect_error', handleError);
+      socket.on('error', handleError);
 
-    return socket;
+      socketRef.current = socket;
+      return socket;
+    } catch (error) {
+      logger.error('Failed to create socket:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
+      return null;
+    }
   }, [hostId, token, handleConnect, handleDisconnect, handleError]);
 
   const reconnect = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
+    try {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      reconnectAttemptsRef.current = 0;
+      socketRef.current = createSocket();
+    } catch (error) {
+      logger.error('Failed to reconnect:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
     }
-    reconnectAttemptsRef.current = 0;
-    socketRef.current = createSocket();
   }, [createSocket]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+    try {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      setConnectionState('disconnected');
+    } catch (error) {
+      logger.error('Failed to disconnect:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
     }
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    setConnectionState('disconnected');
   }, []);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
@@ -230,7 +253,15 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
       logger.warn('Socket not connected, cannot emit event:', { event });
       return;
     }
-    socketRef.current.emit(event, ...args);
+    try {
+      socketRef.current.emit(event, ...args);
+    } catch (error) {
+      logger.error('Failed to emit event:', {
+        error: error instanceof Error ? error.message : String(error),
+        event,
+        args
+      });
+    }
   }, []);
 
   const on = useCallback(<T extends keyof ServerToClientEvents>(
@@ -239,12 +270,20 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
   ) => {
     if (!socketRef.current) return () => undefined;
 
-    socketRef.current.on(event, handler);
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off(event, handler);
-      }
-    };
+    try {
+      socketRef.current.on(event, handler);
+      return () => {
+        if (socketRef.current) {
+          socketRef.current.off(event, handler);
+        }
+      };
+    } catch (error) {
+      logger.error('Failed to register event handler:', {
+        error: error instanceof Error ? error.message : String(error),
+        event
+      });
+      return () => undefined;
+    }
   }, []);
 
   useEffect(() => {

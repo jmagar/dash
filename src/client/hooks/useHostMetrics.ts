@@ -70,32 +70,55 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
     setLoading(true);
     setError(null);
 
-    socket.emit('metrics:subscribe', { hostId });
-    socket.emit('process:monitor', { hostId });
+    try {
+      socket.emit('metrics:subscribe', { hostId });
+      socket.emit('process:monitor', { hostId });
+    } catch (error) {
+      logger.error('Failed to start monitoring:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
+      setError('Failed to start monitoring');
+    }
   }, [socket, hostId, enabled]);
 
   const stopMonitoring = useCallback(() => {
     if (!socket) return;
 
-    socket.emit('metrics:unsubscribe', { hostId });
-    socket.emit('process:unmonitor', { hostId });
+    try {
+      socket.emit('metrics:unsubscribe', { hostId });
+      socket.emit('process:unmonitor', { hostId });
+    } catch (error) {
+      logger.error('Failed to stop monitoring:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
+    }
   }, [socket, hostId]);
 
   useEffect(() => {
     if (!socket) return;
 
-    startMonitoring();
+    try {
+      startMonitoring();
 
-    socket.on('metrics:update', handleMetricsUpdate);
-    socket.on('process:metrics', handleProcessUpdate);
-    socket.on('metrics:error', handleMetricsError);
+      socket.on('metrics:update', handleMetricsUpdate);
+      socket.on('process:metrics', handleProcessUpdate);
+      socket.on('metrics:error', handleMetricsError);
 
-    return () => {
-      stopMonitoring();
-      socket.off('metrics:update', handleMetricsUpdate);
-      socket.off('process:metrics', handleProcessUpdate);
-      socket.off('metrics:error', handleMetricsError);
-    };
+      return () => {
+        stopMonitoring();
+        socket.off('metrics:update', handleMetricsUpdate);
+        socket.off('process:metrics', handleProcessUpdate);
+        socket.off('metrics:error', handleMetricsError);
+      };
+    } catch (error) {
+      logger.error('Error in metrics monitoring effect:', {
+        error: error instanceof Error ? error.message : String(error),
+        hostId
+      });
+      setError('Failed to setup metrics monitoring');
+    }
   }, [
     socket,
     hostId,
