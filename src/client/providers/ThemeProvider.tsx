@@ -111,8 +111,12 @@ export function AppThemeProvider({ children }: ThemeProviderProps) {
       value={{
         mode,
         accentColor,
-        setMode: handleSetMode,
-        setAccentColor: handleSetAccentColor,
+        setMode: (newMode: ThemeMode) => {
+          void handleSetMode(newMode);
+        },
+        setAccentColor: (newColor: AccentColor) => {
+          void handleSetAccentColor(newColor);
+        },
       }}
     >
       <MuiThemeProvider theme={theme}>

@@ -39,7 +39,7 @@ const logTransports: WinstonTransport[] = [
       format.simple()
     ),
   }),
-  new (transports as any).DailyRotateFile({
+  new (transports.DailyRotateFile)({
     filename: logFile,
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',

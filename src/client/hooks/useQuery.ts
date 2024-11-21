@@ -90,10 +90,12 @@ export function useQuery<T>(
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchData();
+    void fetchData();
 
     if (refetchInterval) {
-      refetchIntervalRef.current = setInterval(fetchData, refetchInterval);
+      refetchIntervalRef.current = setInterval(() => {
+        void fetchData();
+      }, refetchInterval);
     }
 
     return () => {

@@ -39,10 +39,10 @@ class RemoteExecutionClient extends BaseApiClient {
 }
 
 export const remoteExecutionClient = new RemoteExecutionClient();
-export const {
-  executeCommand,
-  streamCommand,
-  killCommand,
-  listProcesses,
-  getProcessStatus,
-} = remoteExecutionClient;
+
+// Bind methods to avoid unbound method issues
+export const executeCommand = remoteExecutionClient.executeCommand.bind(remoteExecutionClient);
+export const streamCommand = remoteExecutionClient.streamCommand.bind(remoteExecutionClient);
+export const killCommand = remoteExecutionClient.killCommand.bind(remoteExecutionClient);
+export const listProcesses = remoteExecutionClient.listProcesses.bind(remoteExecutionClient);
+export const getProcessStatus = remoteExecutionClient.getProcessStatus.bind(remoteExecutionClient);

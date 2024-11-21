@@ -68,15 +68,15 @@ class HostsClient extends BaseApiClient {
 }
 
 export const hostsClient = new HostsClient();
-export const {
-  listHosts,
-  getHost,
-  createHost,
-  updateHost,
-  deleteHost,
-  testHost,
-  getHostStats,
-  connectHost,
-  disconnectHost,
-  getHostStatus,
-} = hostsClient;
+
+// Bind methods to avoid unbound method issues
+export const listHosts = hostsClient.listHosts.bind(hostsClient);
+export const getHost = hostsClient.getHost.bind(hostsClient);
+export const createHost = hostsClient.createHost.bind(hostsClient);
+export const updateHost = hostsClient.updateHost.bind(hostsClient);
+export const deleteHost = hostsClient.deleteHost.bind(hostsClient);
+export const testHost = hostsClient.testHost.bind(hostsClient);
+export const getHostStats = hostsClient.getHostStats.bind(hostsClient);
+export const connectHost = hostsClient.connectHost.bind(hostsClient);
+export const disconnectHost = hostsClient.disconnectHost.bind(hostsClient);
+export const getHostStatus = hostsClient.getHostStatus.bind(hostsClient);

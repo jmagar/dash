@@ -121,7 +121,7 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
 
       for (const channel of channels) {
         if (preferences[`${channel}Enabled`]) {
-          const currentTypes = preferences[channel];
+          const currentTypes = preferences[channel] as NotificationType[];
           const hasType = currentTypes.includes(eventType);
           const updatedTypes = hasType
             ? currentTypes.filter(t => t !== eventType)
