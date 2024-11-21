@@ -81,8 +81,7 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
   useEffect(() => {
     if (!socket) return;
 
-    const handleDesktopNotification = (...args: unknown[]) => {
-      const [notification] = args as [DesktopNotification];
+    const handleDesktopNotification = (notification: DesktopNotification) => {
       void showNotification(notification);
     };
 

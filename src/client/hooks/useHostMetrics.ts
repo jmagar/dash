@@ -45,22 +45,19 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
 
   const socket: TypedSocket | null = useSocket();
 
-  const handleMetricsUpdate = useCallback((...args: unknown[]) => {
-    const [data] = args as [MetricsUpdateData];
+  const handleMetricsUpdate = useCallback((data: MetricsUpdateData) => {
     if (data.hostId === hostId) {
       setMetrics(data.metrics);
     }
   }, [hostId]);
 
-  const handleProcessUpdate = useCallback((...args: unknown[]) => {
-    const [data] = args as [ProcessMetricsData];
+  const handleProcessUpdate = useCallback((data: ProcessMetricsData) => {
     if (data.hostId === hostId) {
       setProcesses(data.processes);
     }
   }, [hostId]);
 
-  const handleMetricsError = useCallback((...args: unknown[]) => {
-    const [data] = args as [MetricsErrorData];
+  const handleMetricsError = useCallback((data: MetricsErrorData) => {
     if (data.hostId === hostId) {
       setError(data.error);
       logger.error('Host metrics error:', { error: data.error });

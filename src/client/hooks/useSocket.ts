@@ -257,7 +257,7 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 
   return {
     socket: socketRef.current,
-    appSocket: appSocket as TypedSocket,
+    appSocket,
     connectionState,
     error,
     reconnect,

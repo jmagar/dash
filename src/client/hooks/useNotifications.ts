@@ -132,20 +132,17 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
   useEffect(() => {
     if (!socket) return;
 
-    const handleNotificationCreated = (...args: unknown[]) => {
-      const [notification] = args as [Notification];
+    const handleNotificationCreated = (notification: Notification) => {
       setNotifications(prev => [...prev, notification]);
     };
 
-    const handleNotificationUpdated = (...args: unknown[]) => {
-      const [notification] = args as [Notification];
+    const handleNotificationUpdated = (notification: Notification) => {
       setNotifications(prev =>
         prev.map(n => (n.id === notification.id ? notification : n))
       );
     };
 
-    const handleNotificationDeleted = (...args: unknown[]) => {
-      const [notificationId] = args as [string];
+    const handleNotificationDeleted = (notificationId: string) => {
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
     };
 

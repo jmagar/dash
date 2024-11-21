@@ -37,16 +37,14 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
   useEffect(() => {
     if (!socket) return;
 
-    const handleProcessList = (...args: unknown[]) => {
-      const [data] = args as [ProcessListData];
+    const handleProcessList = (data: ProcessListData) => {
       if (data.hostId === hostId) {
         setProcesses(data.processes);
         setLoading(false);
       }
     };
 
-    const handleProcessUpdate = (...args: unknown[]) => {
-      const [data] = args as [ProcessUpdateData];
+    const handleProcessUpdate = (data: ProcessUpdateData) => {
       if (data.hostId === hostId) {
         setProcesses((prevProcesses) =>
           prevProcesses.map((p) => (p.pid === data.process.pid ? data.process : p))
@@ -54,8 +52,7 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
       }
     };
 
-    const handleProcessError = (...args: unknown[]) => {
-      const [data] = args as [ProcessErrorData];
+    const handleProcessError = (data: ProcessErrorData) => {
       if (data.hostId === hostId) {
         setError(data.error);
         setLoading(false);
@@ -84,14 +81,13 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
       }
 
       return new Promise<void>((resolve, reject) => {
-        const handleKillSuccess = (...args: unknown[]) => {
+        const handleKillSuccess = () => {
           resolve();
           socket.off('process:kill:success', handleKillSuccess);
           socket.off('process:kill:error', handleKillError);
         };
 
-        const handleKillError = (...args: unknown[]) => {
-          const [error] = args as [string];
+        const handleKillError = (error: string) => {
           reject(new Error(error));
           socket.off('process:kill:success', handleKillSuccess);
           socket.off('process:kill:error', handleKillError);
