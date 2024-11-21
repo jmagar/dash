@@ -92,23 +92,178 @@ CREATE TABLE IF NOT EXISTS metrics (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create user_preferences table
-CREATE TABLE "user_preferences" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "themeMode" TEXT NOT NULL DEFAULT 'system',
-    "accentColor" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+-- Drop existing user_preferences table if it exists
+DROP TABLE IF EXISTS "user_preferences" CASCADE;
 
-    CONSTRAINT "user_preferences_pkey" PRIMARY KEY ("id")
+-- Create settings_store table for both admin and user settings
+CREATE TABLE IF NOT EXISTS settings_store (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    category VARCHAR(50) NOT NULL,
+    subcategory VARCHAR(50) NOT NULL,
+    settings JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, category, subcategory)
 );
 
--- Add unique constraint on userId
-CREATE UNIQUE INDEX "user_preferences_userId_key" ON "user_preferences"("userId");
+-- Create settings_cache table for performance
+CREATE TABLE IF NOT EXISTS settings_cache (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    cache_key TEXT NOT NULL,
+    cache_value JSONB NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, cache_key)
+);
 
--- Add foreign key constraint
-ALTER TABLE "user_preferences" ADD CONSTRAINT "user_preferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Create admin_settings table for system-wide settings
+CREATE TABLE IF NOT EXISTS admin_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category VARCHAR(50) NOT NULL,
+    settings JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(category)
+);
+
+-- Create file_explorer_preferences table
+CREATE TABLE IF NOT EXISTS file_explorer_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    view_mode VARCHAR(50) NOT NULL DEFAULT 'list',
+    sort_field VARCHAR(50) NOT NULL DEFAULT 'name',
+    sort_direction VARCHAR(4) NOT NULL DEFAULT 'asc',
+    show_hidden_files BOOLEAN NOT NULL DEFAULT false,
+    preview_pane_enabled BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id)
+);
+
+-- Create directory_cache table
+CREATE TABLE IF NOT EXISTS directory_cache (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    content JSONB NOT NULL,
+    access_count INTEGER NOT NULL DEFAULT 1,
+    last_accessed TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(host_id, path)
+);
+
+-- Create file_operations_history table
+CREATE TABLE IF NOT EXISTS file_operations_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    operation_type VARCHAR(50) NOT NULL,
+    source_path TEXT NOT NULL,
+    target_path TEXT,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create compression_preferences table
+CREATE TABLE IF NOT EXISTS compression_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    default_format VARCHAR(50) NOT NULL DEFAULT 'zip',
+    preserve_structure BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id)
+);
+
+-- Create compression_history table
+CREATE TABLE IF NOT EXISTS compression_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    operation_type VARCHAR(50) NOT NULL,
+    source_paths TEXT[] NOT NULL,
+    target_path TEXT NOT NULL,
+    format VARCHAR(50) NOT NULL,
+    size_before BIGINT,
+    size_after BIGINT,
+    compression_ratio FLOAT,
+    status VARCHAR(50) NOT NULL,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create file_access_patterns table
+CREATE TABLE IF NOT EXISTS file_access_patterns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    access_count INTEGER NOT NULL DEFAULT 1,
+    last_accessed TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, host_id, path)
+);
+
+-- Create file_type_associations table
+CREATE TABLE IF NOT EXISTS file_type_associations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_extension VARCHAR(50) NOT NULL,
+    preview_mode VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, file_extension)
+);
+
+-- Create file_search_history table
+CREATE TABLE IF NOT EXISTS file_search_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    query TEXT NOT NULL,
+    filters JSONB,
+    result_count INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create file_favorites table
+CREATE TABLE IF NOT EXISTS file_favorites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, host_id, path)
+);
+
+-- Create file_tags table
+CREATE TABLE IF NOT EXISTS file_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    color VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, name)
+);
+
+-- Create file_tag_assignments table
+CREATE TABLE IF NOT EXISTS file_tag_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tag_id UUID NOT NULL REFERENCES file_tags(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tag_id, user_id, host_id, path)
+);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -154,12 +309,127 @@ BEGIN
             EXECUTE FUNCTION update_updated_at_column();
     END IF;
 
-    -- user_preferences table
-    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_preferences_updated_at_trigger') THEN
-        CREATE TRIGGER user_preferences_updated_at_trigger
-            BEFORE UPDATE ON user_preferences
+    -- file_explorer_preferences table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'file_explorer_preferences_updated_at_trigger') THEN
+        CREATE TRIGGER file_explorer_preferences_updated_at_trigger
+            BEFORE UPDATE ON file_explorer_preferences
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- directory_cache table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'directory_cache_updated_at_trigger') THEN
+        CREATE TRIGGER directory_cache_updated_at_trigger
+            BEFORE UPDATE ON directory_cache
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- compression_preferences table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'compression_preferences_updated_at_trigger') THEN
+        CREATE TRIGGER compression_preferences_updated_at_trigger
+            BEFORE UPDATE ON compression_preferences
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- file_access_patterns table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'file_access_patterns_updated_at_trigger') THEN
+        CREATE TRIGGER file_access_patterns_updated_at_trigger
+            BEFORE UPDATE ON file_access_patterns
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- file_type_associations table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'file_type_associations_updated_at_trigger') THEN
+        CREATE TRIGGER file_type_associations_updated_at_trigger
+            BEFORE UPDATE ON file_type_associations
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- file_tags table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'file_tags_updated_at_trigger') THEN
+        CREATE TRIGGER file_tags_updated_at_trigger
+            BEFORE UPDATE ON file_tags
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- settings_store table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'settings_store_updated_at_trigger') THEN
+        CREATE TRIGGER settings_store_updated_at_trigger
+            BEFORE UPDATE ON settings_store
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    -- admin_settings table
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'admin_settings_updated_at_trigger') THEN
+        CREATE TRIGGER admin_settings_updated_at_trigger
+            BEFORE UPDATE ON admin_settings
             FOR EACH ROW
             EXECUTE FUNCTION update_updated_at_column();
     END IF;
 END;
 $$;
+
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_settings_store_user_id ON settings_store(user_id);
+CREATE INDEX IF NOT EXISTS idx_settings_store_category ON settings_store(category);
+CREATE INDEX IF NOT EXISTS idx_settings_cache_user_id ON settings_cache(user_id);
+CREATE INDEX IF NOT EXISTS idx_settings_cache_expires ON settings_cache(expires_at);
+
+-- Insert default admin settings
+INSERT INTO admin_settings (category, settings)
+VALUES 
+    ('system', '{
+        "serverSettings": {
+            "logLevel": "info",
+            "maxConcurrentOperations": 10,
+            "tempFileLifetime": 24
+        },
+        "databaseSettings": {
+            "connectionPoolSize": 10,
+            "statementTimeout": 30,
+            "idleTimeout": 60
+        },
+        "securitySettings": {
+            "sessionTimeout": 60,
+            "maxLoginAttempts": 5,
+            "passwordPolicy": {
+                "minLength": 8,
+                "requireNumbers": true,
+                "requireSpecialChars": true,
+                "requireUppercase": true,
+                "requireLowercase": true
+            }
+        }
+    }'::jsonb)
+ON CONFLICT (category) DO UPDATE
+SET settings = EXCLUDED.settings;
+
+-- Insert default user preferences for existing users
+INSERT INTO settings_store (user_id, category, subcategory, settings)
+SELECT 
+    id as user_id,
+    'interface',
+    'general',
+    '{
+        "theme": "system",
+        "accentColor": "#1976d2",
+        "language": "en",
+        "layout": {
+            "density": "comfortable",
+            "sidebarWidth": 240,
+            "sidebarCollapsed": false,
+            "terminalHeight": 300
+        },
+        "fonts": {
+            "size": 14,
+            "useCustomMonoFont": false
+        }
+    }'::jsonb
+FROM users
+ON CONFLICT (user_id, category, subcategory) DO NOTHING;

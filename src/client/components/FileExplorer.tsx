@@ -10,8 +10,10 @@ import { HostSelector } from './HostSelector';
 import { FileBreadcrumbs } from './FileBreadcrumbs';
 import { FileToolbar } from './FileToolbar';
 import { FileContextMenu } from './FileContextMenu';
-import { FilePreview } from './FilePreview';
+import { FilePreviewModal } from './FilePreviewModal';
 import { NewFolderDialog, RenameDialog, DeleteDialog } from './FileOperationDialogs';
+import { CompressionDialog } from './CompressionDialog';
+import { BulkOperationProgress } from './BulkOperationProgress';
 import { fileOperations } from '../api/files.client';
 import { useFileClipboard } from '../hooks/useFileClipboard';
 import { useDirectoryCache } from '../hooks/useDirectoryCache';
@@ -19,6 +21,10 @@ import type { Host } from '../../types/models-shared';
 import { VirtualizedList } from './VirtualizedList';
 import { useLoadingState } from '../hooks/useLoadingState';
 import { LoadingIndicator } from './LoadingIndicator';
+import { useLogger } from '../hooks/useLogger';
+import { useErrorHandler } from '../hooks/useErrorHandler';
+import { useNotification } from '../hooks/useNotification';
+import type { LogMetadata } from '../../types/logger';
 
 interface FileInfo {
   name: string;
@@ -55,7 +61,14 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
   const [sortField, setSortField] = useState<'name' | 'size' | 'modTime'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [compressionDialogOpen, setCompressionDialogOpen] = useState(false);
+  const [compressionMode, setCompressionMode] = useState<'compress' | 'extract'>('compress');
+  const [operations, setOperations] = useState<Array<{ id: string; message: string; progress: number; completed?: boolean }>>([]);
+  
   const { host } = useHost({ hostId });
+  const logger = useLogger();
+  const handleError = useErrorHandler();
+  const { showNotification } = useNotification();
   const {
     clipboard,
     copyToClipboard,
@@ -102,73 +115,171 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   const loadFiles = useCallback(async () => {
     if (!hostId) return;
 
+    const loadingId = startLoading('Loading files...');
     setLoading(true);
     setError(null);
 
     try {
+      logger.info('Loading files', {
+        hostId,
+        path,
+        component: 'FileExplorer'
+      });
+
       // Check cache first
       const cachedFiles = getCachedFiles(hostId, path);
       if (cachedFiles) {
+        logger.debug('Using cached files', {
+          hostId,
+          path,
+          fileCount: cachedFiles.length,
+          component: 'FileExplorer'
+        });
         setFiles(cachedFiles);
         setLoading(false);
         return;
       }
 
       const response = await fileOperations.listFiles(hostId, path);
-      setFiles(response.files);
+      logger.info('Files loaded successfully', {
+        hostId,
+        path,
+        fileCount: response.files.length,
+        component: 'FileExplorer'
+      });
       
-      // Cache the results
+      setFiles(response.files);
       cacheFiles(hostId, path, response.files);
+      showNotification('success', 'Files loaded successfully');
     } catch (err) {
+      const metadata: LogMetadata = {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        hostId,
+        path,
+        component: 'FileExplorer'
+      };
+      handleError(err, metadata);
       setError(err.message || 'Failed to load files');
+      showNotification('error', 'Failed to load files');
     } finally {
       setLoading(false);
+      finishLoading(loadingId);
     }
-  }, [hostId, path, getCachedFiles, cacheFiles]);
+  }, [hostId, path, getCachedFiles, cacheFiles, logger, handleError, showNotification, startLoading, finishLoading]);
 
-  const handleFileOperation = useCallback(async (operation: () => Promise<void>) => {
+  const handleFileOperation = useCallback(async (operation: () => Promise<void>, operationName: string) => {
+    const loadingId = startLoading(`${operationName}...`);
     try {
+      logger.info(`Starting file operation: ${operationName}`, {
+        hostId,
+        path,
+        component: 'FileExplorer'
+      });
+
       await operation();
       invalidateCache(hostId, path);
       await loadFiles();
+      
+      logger.info(`File operation completed: ${operationName}`, {
+        hostId,
+        path,
+        component: 'FileExplorer'
+      });
+      showNotification('success', `${operationName} completed successfully`);
     } catch (err) {
+      const metadata: LogMetadata = {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        hostId,
+        path,
+        operation: operationName,
+        component: 'FileExplorer'
+      };
+      handleError(err, metadata);
       setError(err.message || 'Operation failed');
+      showNotification('error', `${operationName} failed`);
+    } finally {
+      finishLoading(loadingId);
     }
-  }, [hostId, path, invalidateCache, loadFiles]);
+  }, [hostId, path, invalidateCache, loadFiles, logger, handleError, showNotification, startLoading, finishLoading]);
 
   const handleCreateFolder = useCallback((name: string) => {
-    return handleFileOperation(async () => {
-      await fileOperations.createFolder(hostId, path, name);
-    });
-  }, [handleFileOperation, hostId, path]);
+    return handleFileOperation(
+      async () => {
+        logger.info('Creating new folder', {
+          hostId,
+          path,
+          folderName: name,
+          component: 'FileExplorer'
+        });
+        await fileOperations.createFolder(hostId, path, name);
+      },
+      'Create folder'
+    );
+  }, [handleFileOperation, hostId, path, logger]);
 
   const handleDelete = useCallback((files: string[]) => {
-    return handleFileOperation(async () => {
-      await fileOperations.deleteFiles(hostId, files);
-    });
-  }, [handleFileOperation, hostId]);
+    return handleFileOperation(
+      async () => {
+        logger.info('Deleting files', {
+          hostId,
+          path,
+          files,
+          component: 'FileExplorer'
+        });
+        await fileOperations.deleteFiles(hostId, files);
+      },
+      'Delete files'
+    );
+  }, [handleFileOperation, hostId, logger]);
 
   const handleRename = useCallback((oldPath: string, newName: string) => {
-    return handleFileOperation(async () => {
-      await fileOperations.renameFile(hostId, oldPath, newName);
-    });
-  }, [handleFileOperation, hostId]);
+    return handleFileOperation(
+      async () => {
+        logger.info('Renaming file', {
+          hostId,
+          oldPath,
+          newName,
+          component: 'FileExplorer'
+        });
+        await fileOperations.renameFile(hostId, oldPath, newName);
+      },
+      'Rename file'
+    );
+  }, [handleFileOperation, hostId, logger]);
 
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
 
   const handleHostSelect = (host: Host) => {
+    logger.info('Host selected', {
+      hostId: host.id,
+      component: 'FileExplorer'
+    });
     navigate(`/files/${host.id}`);
   };
 
   const handleFileClick = (file: FileInfo) => {
+    logger.debug('File clicked', {
+      hostId,
+      path: file.path,
+      isDirectory: file.isDirectory,
+      component: 'FileExplorer'
+    });
+    
     if (file.isDirectory) {
       navigate(`/files/${hostId}${file.path}`);
+    } else {
+      setPreviewFile(file);
     }
   };
 
   const handleRefresh = () => {
+    logger.info('Refreshing files', {
+      hostId,
+      path,
+      component: 'FileExplorer'
+    });
     void loadFiles();
   };
 
@@ -267,28 +378,24 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
     if (selectedFiles.length === 0) return;
 
     const operationId = `delete-${Date.now()}`;
-    startLoading(
-      operationId,
-      `Deleting ${selectedFiles.length} ${selectedFiles.length === 1 ? 'file' : 'files'}...`
-    );
+    const totalFiles = selectedFiles.length;
 
     try {
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
+        const progress = ((i + 1) / totalFiles) * 100;
+        const message = `Deleting ${i + 1}/${totalFiles}: ${file.name}`;
+        
+        updateOperationProgress(operationId, progress, message);
         await fileOperations.deleteFile(hostId, file.path);
-        updateProgress(
-          operationId,
-          ((i + 1) / selectedFiles.length) * 100,
-          `Deleting ${i + 1}/${selectedFiles.length}: ${file.name}`
-        );
       }
 
+      updateOperationProgress(operationId, 100, 'Delete completed', true);
       handleSelectAll(false);
       await loadFiles();
     } catch (error) {
       setError(error.message || 'Failed to delete files');
-    } finally {
-      finishLoading(operationId);
+      updateOperationProgress(operationId, 0, 'Failed to delete files', true);
     }
   };
 
@@ -297,18 +404,16 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
     if (!files || files.length === 0) return;
 
     const operationId = `upload-${Date.now()}`;
-    startLoading(operationId, `Uploading ${files.length} files...`);
+    const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+    let uploadedSize = 0;
 
     try {
-      const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
-      let uploadedSize = 0;
-
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         await fileOperations.uploadFile(hostId, path, file, (progress) => {
           uploadedSize = progress * file.size;
           const totalProgress = (uploadedSize / totalSize) * 100;
-          updateProgress(
+          updateOperationProgress(
             operationId,
             totalProgress,
             `Uploading ${i + 1}/${files.length}: ${file.name}`
@@ -316,11 +421,11 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
         });
       }
 
+      updateOperationProgress(operationId, 100, 'Upload completed', true);
       await loadFiles();
     } catch (error) {
       setError(error.message || 'Failed to upload files');
-    } finally {
-      finishLoading(operationId);
+      updateOperationProgress(operationId, 0, 'Failed to upload files', true);
     }
   };
 
@@ -339,40 +444,30 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
 
     const operationId = `paste-${Date.now()}`;
     const operation = clipboard.operation === 'copy' ? 'Copying' : 'Moving';
-    startLoading(
-      operationId,
-      `${operation} ${clipboard.files.length} ${clipboard.files.length === 1 ? 'file' : 'files'}...`
-    );
+    const totalFiles = clipboard.files.length;
 
     try {
       for (let i = 0; i < clipboard.files.length; i++) {
         const file = clipboard.files[i];
+        const progress = ((i + 1) / totalFiles) * 100;
+        const message = `${operation} ${i + 1}/${totalFiles}: ${file.name}`;
+        
+        updateOperationProgress(operationId, progress, message);
+
         if (clipboard.operation === 'copy') {
           await fileOperations.copyFile(clipboard.sourceHostId, file.path, hostId, path);
         } else {
           await fileOperations.moveFile(clipboard.sourceHostId, file.path, hostId, path);
         }
-        updateProgress(
-          operationId,
-          ((i + 1) / clipboard.files.length) * 100,
-          `${operation} ${i + 1}/${clipboard.files.length}: ${file.name}`
-        );
       }
 
+      updateOperationProgress(operationId, 100, `${operation} completed`, true);
       clearClipboard();
       await loadFiles();
     } catch (error) {
       setError(error.message || `Failed to ${clipboard.operation} files`);
-    } finally {
-      finishLoading(operationId);
+      updateOperationProgress(operationId, 0, `Failed to ${operation.toLowerCase()} files`, true);
     }
-  };
-
-  const handlePreview = () => {
-    if (contextMenu.file && !contextMenu.file.isDirectory) {
-      setPreviewFile(contextMenu.file);
-    }
-    handleCloseContextMenu();
   };
 
   const handleDragStart = useCallback((event: React.DragEvent, file: FileInfo) => {
@@ -431,6 +526,40 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
     setSortDirection(direction);
     setFiles(files => sortFiles(files));
   }, [sortFiles]);
+
+  const handleCompressFiles = () => {
+    setCompressionMode('compress');
+    setCompressionDialogOpen(true);
+  };
+
+  const handleExtractFiles = () => {
+    if (selectedFiles.length !== 1) {
+      return;
+    }
+    setCompressionMode('extract');
+    setCompressionDialogOpen(true);
+  };
+
+  const updateOperationProgress = useCallback((operationId: string, progress: number, message: string, completed?: boolean) => {
+    setOperations(prevOperations => {
+      const existingOpIndex = prevOperations.findIndex(op => op.id === operationId);
+      if (existingOpIndex >= 0) {
+        const newOperations = [...prevOperations];
+        newOperations[existingOpIndex] = {
+          ...newOperations[existingOpIndex],
+          progress,
+          message,
+          completed,
+        };
+        return newOperations;
+      }
+      return [...prevOperations, { id: operationId, progress, message, completed }];
+    });
+  }, []);
+
+  const removeOperation = useCallback((operationId: string) => {
+    setOperations(prevOperations => prevOperations.filter(op => op.id !== operationId));
+  }, []);
 
   const renderContent = () => {
     if (loading) {
@@ -533,22 +662,21 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <FileBreadcrumbs hostId={hostId} path={path} />
       
       <FileToolbar
-        onRefresh={handleRefresh}
-        onNewFolder={() => setNewFolderDialogOpen(true)}
-        onUpload={() => document.getElementById('file-upload')?.click()}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        onSort={handleSort}
-        sortField={sortField}
-        sortDirection={sortDirection}
-        disabled={loading}
-        selectedCount={selectedFiles.length}
-        totalCount={files.length}
-        onSelectAll={handleSelectAll}
+        selectedFiles={selectedFiles}
+        onNewFolder={() => setNewFolderDialogOpen(true)}
+        onCopy={() => copyToClipboard(selectedFiles)}
+        onCut={() => cutToClipboard(selectedFiles)}
+        onPaste={handlePaste}
+        canPaste={canPaste}
+        onCompress={handleCompressFiles}
+        onExtract={handleExtractFiles}
+        canExtract={selectedFiles.length === 1 && selectedFiles[0].name.match(/\.(zip|tar|gz|bz2)$/)}
       />
 
       <input
@@ -571,14 +699,14 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
         onDelete={() => setDeleteDialogOpen(true)}
         onRename={() => setRenameDialogOpen(true)}
         onDownload={() => {/* TODO */}}
-        onPreview={handlePreview}
+        onPreview={() => setPreviewFile(contextMenu.file)}
       />
 
-      <FilePreview
-        open={Boolean(previewFile)}
+      <FilePreviewModal
+        open={previewFile !== null}
+        onClose={() => setPreviewFile(null)}
         file={previewFile}
         hostId={hostId}
-        onClose={() => setPreviewFile(null)}
       />
 
       <NewFolderDialog
@@ -604,7 +732,21 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
         error={operationError}
       />
 
+      <CompressionDialog
+        open={compressionDialogOpen}
+        onClose={() => setCompressionDialogOpen(false)}
+        hostId={hostId}
+        selectedPaths={selectedFiles.map(f => f.path)}
+        mode={compressionMode}
+        currentPath={path}
+      />
+
+      <BulkOperationProgress
+        operations={operations}
+        onClose={() => setOperations([])}
+      />
+
       <LoadingIndicator loadingStates={getAllLoadingStates()} />
-    </div>
+    </Box>
   );
 }

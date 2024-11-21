@@ -1,34 +1,41 @@
-import React, { useState } from 'react';
-import { Box, CircularProgress, IconButton, Paper, Typography } from '@mui/material';
-import { ZoomIn, ZoomOut, Close } from '@mui/icons-material';
+import React from 'react';
+import { Box, CircularProgress } from '@mui/material';
+import { logger } from '../utils/logger';
+import type { FileInfo } from '../../types/files';
 
 interface ImagePreviewProps {
-  src: string;
-  alt: string;
-  onClose: () => void;
+  file: FileInfo;
+  hostId: string;
+  zoom: number;
+  rotation: number;
+  onError: (error: Error) => void;
 }
 
-export function ImagePreview({ src, alt, onClose }: ImagePreviewProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [zoom, setZoom] = useState(1);
+export function ImagePreview({ file, hostId, zoom, rotation, onError }: ImagePreviewProps) {
+  const [loading, setLoading] = React.useState(true);
 
   const handleLoad = () => {
+    logger.debug('Image loaded successfully', {
+      fileName: file.name,
+      fileSize: file.size,
+    });
     setLoading(false);
   };
 
   const handleError = () => {
+    const error = new Error(`Failed to load image: ${file.name}`);
+    logger.error('Image load error:', {
+      error: error.message,
+      fileName: file.name,
+      fileSize: file.size,
+      hostId,
+    });
     setLoading(false);
-    setError(true);
+    onError(error);
   };
 
-  const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev * 1.2, 3));
-  };
-
-  const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev / 1.2, 0.5));
-  };
+  // Construct the image URL using the file service
+  const imageUrl = `/api/files/${hostId}/content${file.path}`;
 
   return (
     <Box
@@ -44,9 +51,8 @@ export function ImagePreview({ src, alt, onClose }: ImagePreviewProps) {
         justifyContent: 'center',
         zIndex: 1300,
       }}
-      onClick={onClose}
     >
-      <Paper
+      <Box
         sx={{
           position: 'relative',
           maxWidth: '90vw',
@@ -55,16 +61,15 @@ export function ImagePreview({ src, alt, onClose }: ImagePreviewProps) {
           bgcolor: 'background.paper',
           borderRadius: 1,
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
-          <IconButton onClick={handleZoomIn} sx={{ mr: 1 }}>
+          <IconButton onClick={() => {}} sx={{ mr: 1 }}>
             <ZoomIn />
           </IconButton>
-          <IconButton onClick={handleZoomOut} sx={{ mr: 1 }}>
+          <IconButton onClick={() => {}} sx={{ mr: 1 }}>
             <ZoomOut />
           </IconButton>
-          <IconButton onClick={onClose}>
+          <IconButton onClick={() => {}}>
             <Close />
           </IconButton>
         </Box>
@@ -95,25 +100,21 @@ export function ImagePreview({ src, alt, onClose }: ImagePreviewProps) {
               <CircularProgress />
             </Box>
           )}
-          {error ? (
-            <Typography color="error">Failed to load image</Typography>
-          ) : (
-            <img
-              src={src}
-              alt={alt}
-              onLoad={handleLoad}
-              onError={handleError}
-              style={{
-                maxWidth: '100%',
-                maxHeight: '80vh',
-                objectFit: 'contain',
-                transform: `scale(${zoom})`,
-                transition: 'transform 0.2s ease-in-out',
-              }}
-            />
-          )}
+          <img
+            src={imageUrl}
+            alt={file.name}
+            onLoad={handleLoad}
+            onError={handleError}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '80vh',
+              objectFit: 'contain',
+              transform: `scale(${zoom}) rotate(${rotation}deg)`,
+              transition: 'transform 0.2s ease-in-out',
+            }}
+          />
         </Box>
-      </Paper>
+      </Box>
     </Box>
   );
 }

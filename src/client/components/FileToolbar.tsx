@@ -11,6 +11,8 @@ import {
   ListItemText,
   Checkbox,
   Typography,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -25,6 +27,8 @@ import {
   Schedule as ScheduleIcon,
   Memory as MemoryIcon,
   ContentPaste as ContentPasteIcon,
+  Compress,
+  UnarchiveOutlined,
 } from '@mui/icons-material';
 
 interface FileToolbarProps {
@@ -42,6 +46,9 @@ interface FileToolbarProps {
   selectedCount: number;
   totalCount: number;
   onSelectAll: (selected: boolean) => void;
+  onCompress: () => void;
+  onExtract: () => void;
+  canExtract: boolean;
 }
 
 export function FileToolbar({
@@ -59,6 +66,9 @@ export function FileToolbar({
   selectedCount,
   totalCount,
   onSelectAll,
+  onCompress,
+  onExtract,
+  canExtract,
 }: FileToolbarProps) {
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null);
 
@@ -135,24 +145,19 @@ export function FileToolbar({
 
       <Box sx={{ flexGrow: 1 }} />
 
-      <ButtonGroup size="small" disabled={disabled}>
-        <Tooltip title="List View">
-          <IconButton
-            color={viewMode === 'list' ? 'primary' : 'default'}
-            onClick={() => onViewModeChange('list')}
-          >
-            <ViewListIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Grid View">
-          <IconButton
-            color={viewMode === 'grid' ? 'primary' : 'default'}
-            onClick={() => onViewModeChange('grid')}
-          >
-            <ViewModuleIcon />
-          </IconButton>
-        </Tooltip>
-      </ButtonGroup>
+      <ToggleButtonGroup
+        value={viewMode}
+        exclusive
+        onChange={(_, value) => value && onViewModeChange(value)}
+        size="small"
+      >
+        <ToggleButton value="list">
+          <ViewListIcon />
+        </ToggleButton>
+        <ToggleButton value="grid">
+          <ViewModuleIcon />
+        </ToggleButton>
+      </ToggleButtonGroup>
 
       <Tooltip title="Sort">
         <span>
@@ -192,6 +197,24 @@ export function FileToolbar({
           <ListItemText>Modified</ListItemText>
         </MenuItem>
       </Menu>
+
+      <Divider orientation="vertical" flexItem />
+
+      <Tooltip title="Compress">
+        <span>
+          <IconButton onClick={onCompress} disabled={disabled}>
+            <Compress />
+          </IconButton>
+        </span>
+      </Tooltip>
+
+      <Tooltip title="Extract">
+        <span>
+          <IconButton onClick={onExtract} disabled={!canExtract}>
+            <UnarchiveOutlined />
+          </IconButton>
+        </span>
+      </Tooltip>
     </Box>
   );
 }

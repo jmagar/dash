@@ -14,6 +14,11 @@
 - Context menu with common operations
 - Cut/Copy/Paste operations
 - Keyboard shortcuts (Delete, Ctrl+C, Ctrl+V, etc.)
+- Favorites/Bookmarks system with database persistence
+- File search/filter functionality
+- List column customization
+- File permissions editing
+- File compression/extraction
 
 ### File Preview Features
 - [x] Text file preview with syntax highlighting
@@ -21,6 +26,7 @@
 - [x] Media file preview (video/audio)
 - [x] Image preview with zoom controls
 - [x] Image thumbnails in grid view
+- [x] Preview modal/sidebar implementation
 
 ### Performance Optimizations
 - [x] Virtual scrolling for large directories
@@ -28,29 +34,8 @@
 - [x] Caching frequently accessed directories
 - [x] Background loading indicators
 
-## 🚧 In Progress
-- File Preview System
-  - [x] Image thumbnails and preview
-  - [x] Text file preview with syntax highlighting
-  - [x] PDF preview
-  - [x] Media file preview (video/audio)
-  - [ ] Preview modal/sidebar implementation
-
-## 📝 Planned Features
-
-### Advanced Operations
-- [ ] File compression/extraction (zip/unzip)
-- [ ] Bulk file operations progress indicators
+## 📝 Remaining Tasks
 
 ### User Experience
-- [ ] File search/filter functionality
-- [ ] List column customization (show/hide columns)
-- [ ] File permissions editing
 - [ ] "Open with" functionality for different file types
-
-### Additional Features
-- [ ] Favorites/Bookmarks system
-- [ ] Recent files list
-- [ ] Storage space indicators
-- [ ] File sharing links
-- [ ] File change notifications
+- [ ] Bulk file operations progress indicators
