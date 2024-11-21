@@ -5,6 +5,7 @@ import {
   Logger as WinstonLogger,
   transport as WinstonTransport
 } from 'winston';
+import 'winston-daily-rotate-file';
 import type { Logger, LogMetadata, LogLevel } from '../../types/logger';
 import config from '../config';
 import { join } from 'path';
@@ -15,7 +16,7 @@ import { mkdirSync } from 'fs';
 // Use platform-specific log directory
 const isWindows = os.platform() === 'win32';
 const logDir = isWindows ? 'C:\\ProgramData\\shh\\logs' : '/var/log/shh';
-const logFile = join(logDir, 'server.log');
+const logFile = join(logDir, 'app.log');
 
 // Ensure log directory exists
 try {
@@ -24,7 +25,13 @@ try {
   console.warn(`Failed to create log directory: ${error}`);
 }
 
-// Create base transports array
+// Custom format that includes metadata
+const customFormat = format.printf(({ level, message, timestamp, ...metadata }) => {
+  const metaString = Object.keys(metadata).length ? JSON.stringify(metadata) : '';
+  return `${timestamp} [${level.toUpperCase()}] ${message} ${metaString}`;
+});
+
+// Create base transports array with a single rotating file
 const logTransports: WinstonTransport[] = [
   new transports.Console({
     format: format.combine(
@@ -32,16 +39,24 @@ const logTransports: WinstonTransport[] = [
       format.simple()
     ),
   }),
-  new transports.File({
+  new (transports as any).DailyRotateFile({
     filename: logFile,
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
-    tailable: true,
-    zippedArchive: !isWindows, // Only use zipped archives on Unix systems
+    datePattern: 'YYYY-MM-DD',
+    maxSize: '20m',
+    maxFiles: '14d',
+    format: format.combine(
+      format.timestamp(),
+      format.json(),
+      customFormat
+    ),
+    // Compress older logs
+    zippedArchive: !isWindows,
+    // Keep logs for 14 days
+    maxRetentionDays: 14
   })
 ];
 
-// Add Gotify transport if configured
+// Add Gotify transport if configured (for critical errors only)
 if (config.gotify?.url && config.gotify?.token) {
   logTransports.push(new GotifyTransport({
     level: 'error'
@@ -50,40 +65,37 @@ if (config.gotify?.url && config.gotify?.token) {
 
 class ServerLogger implements Logger {
   private logger: WinstonLogger;
+  private context: Record<string, unknown> = {};
 
   constructor() {
     this.logger = createLogger({
       level: config.logging?.level || 'info',
       format: format.combine(
         format.timestamp(),
-        format.json()
+        format.json(),
+        customFormat
       ),
       transports: logTransports,
+      // Add exception handling
+      exceptionHandlers: logTransports,
+      // Don't exit on uncaught exceptions
+      exitOnError: false
+    });
+
+    // Handle uncaught promise rejections
+    process.on('unhandledRejection', (reason: unknown) => {
+      this.error('Unhandled Promise Rejection', { error: reason });
     });
   }
 
-  private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const timestamp = new Date().toISOString();
-    const formattedData = data ? this.formatData(data) : '';
-    return `${timestamp} ${message}${formattedData}`;
-  }
-
-  private formatData(data: unknown): string {
-    if (!data) return '';
-    
-    if (data instanceof Error) {
-      return ` Error: ${data.message}`;
-    }
-
-    if (typeof data === 'object') {
-      try {
-        return ` ${JSON.stringify(data)}`;
-      } catch {
-        return ` [Object]`;
-      }
-    }
-
-    return ` ${String(data)}`;
+  private formatMessage(level: LogLevel, message: string, meta?: LogMetadata): any {
+    return {
+      level,
+      message,
+      timestamp: new Date().toISOString(),
+      ...this.context,
+      ...(meta || {}),
+    };
   }
 
   debug(message: string, meta?: LogMetadata): void {
@@ -103,17 +115,17 @@ class ServerLogger implements Logger {
   }
 
   critical(message: string, meta?: LogMetadata): void {
-    this.logger.error(this.formatMessage('critical', message, meta));
+    this.logger.error(this.formatMessage('critical', message, {
+      ...meta,
+      notify: true, // Flag for Gotify transport
+      critical: true
+    }));
   }
 
   withContext(context: Record<string, unknown>): Logger {
     const childLogger = new ServerLogger();
-    childLogger.logger = this.logger.child(context);
+    childLogger.context = { ...this.context, ...context };
     return childLogger;
-  }
-
-  setContext(_context: LogMetadata): void {
-    // No-op, context is now handled by withContext
   }
 
   child(options: LogMetadata): Logger {

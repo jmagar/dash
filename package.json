@@ -122,7 +122,7 @@
     "@types/node": "^20.11.16",
     "@types/pdfjs-dist": "^2.10.378",
     "@types/pg": "^8.11.0",
-    "@types/prom-client": "^14.0.0",
+    "@types/prom-client": "^15.0.0",
     "@types/qs": "6.9.11",
     "@types/rate-limit-redis": "1.7.4",
     "@types/react": "^18.3.12",
