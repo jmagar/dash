@@ -54,7 +54,10 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
     // You can also log the error to an error reporting service here
-    console.error('Error caught by ErrorBoundary:', error, errorInfo);
+    logger.error('Error caught by ErrorBoundary:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      componentStack: errorInfo.componentStack
+    });
   }
 
   handleRefresh = () => {

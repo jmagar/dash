@@ -46,7 +46,10 @@ export function OpenWithMenu({ file, anchorEl, onClose, hostId }: OpenWithMenuPr
         throw new Error('Failed to open file');
       }
     } catch (error) {
-      console.error('Error opening file:', error);
+      logger.error('Error opening file:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        filePath: file.path
+      });
     }
     onClose();
   };

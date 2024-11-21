@@ -104,7 +104,10 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
       const types = preferences[`${channel}Enabled`] ? [] : preferences[channel];
       await updatePreferences(channel, types);
     } catch (error) {
-      console.error('Failed to toggle notification channel:', error);
+      logger.error('Failed to toggle notification channel:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        channelId: channel
+      });
     } finally {
       setIsSaving(false);
     }
@@ -127,7 +130,10 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
         }
       }
     } catch (error) {
-      console.error('Failed to toggle notification event:', error);
+      logger.error('Failed to toggle notification event:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        eventId: eventType
+      });
     } finally {
       setIsSaving(false);
     }
