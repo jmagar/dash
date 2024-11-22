@@ -6,7 +6,8 @@ import { Type } from 'class-transformer';
  */
 export class ListFilesDto {
   @IsString()
-  path: string;
+  @IsOptional()
+  path: string = '';
 
   @IsOptional()
   @IsBoolean()
@@ -18,7 +19,8 @@ export class ListFilesDto {
  */
 export class UploadFilesDto {
   @IsString()
-  path: string;
+  @IsOptional()
+  path: string = '';
 
   // Files will be handled by multer
 }
@@ -38,7 +40,11 @@ export class CopyMoveDto {
 
   @IsOptional()
   @IsBoolean()
-  recursive?: boolean;
+  recursive?: boolean = true;
+
+  @IsOptional()
+  @IsBoolean()
+  overwrite?: boolean = false;
 }
 
 /**

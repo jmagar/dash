@@ -107,7 +107,10 @@ export class FilesystemController {
     @UploadedFiles() files: Express.Multer.File[]
   ): Promise<void> {
     if (!files?.length) {
-      throw new BadRequestException('No files provided');
+      throw new BadRequestException('No files provided for upload');
+    }
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
     }
     await this.filesystemManager.uploadFiles(locationId, dto.path, files);
   }
@@ -118,6 +121,12 @@ export class FilesystemController {
     @Param('locationId') locationId: string,
     @Body() dto: CopyMoveDto
   ): Promise<void> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
+    if (locationId === dto.targetLocationId && dto.sourcePath === dto.targetPath) {
+      throw new BadRequestException('Source and target paths cannot be the same');
+    }
     await this.filesystemManager.copyFiles(locationId, dto);
   }
 
@@ -127,6 +136,12 @@ export class FilesystemController {
     @Param('locationId') locationId: string,
     @Body() dto: CopyMoveDto
   ): Promise<void> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
+    if (locationId === dto.targetLocationId && dto.sourcePath === dto.targetPath) {
+      throw new BadRequestException('Source and target paths cannot be the same');
+    }
     await this.filesystemManager.moveFiles(locationId, dto);
   }
 
@@ -207,6 +222,9 @@ export class FilesystemController {
     @Body('locationId') locationId: string,
     @Body('path') path: string
   ): Promise<void> {
+    if (!locationId || !path) {
+      throw new BadRequestException('Both locationId and path are required');
+    }
     await this.filesystemManager.addToFavorites(locationId, path);
   }
 
@@ -216,6 +234,9 @@ export class FilesystemController {
     @Body('locationId') locationId: string,
     @Body('path') path: string
   ): Promise<void> {
+    if (!locationId || !path) {
+      throw new BadRequestException('Both locationId and path are required');
+    }
     await this.filesystemManager.removeFromFavorites(locationId, path);
   }
 
