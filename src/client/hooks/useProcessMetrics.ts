@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
 import { logger } from '../utils/frontendLogger';
-
 import { useSocket } from './useSocket';
-
 import type { ProcessInfo } from '../../types/process';
 
 interface UseProcessMetricsResult {
@@ -32,7 +29,10 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
+  const { socket, emit, on } = useSocket({
+    hostId,
+    autoReconnect: true,
+  });
 
   useEffect(() => {
     if (!socket) return;
@@ -59,20 +59,20 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
       }
     };
 
-    socket.on('process:list', handleProcessList);
-    socket.on('process:update', handleProcessUpdate);
-    socket.on('process:error', handleProcessError);
+    const unsubProcessList = on('process:list', handleProcessList);
+    const unsubProcessUpdate = on('process:update', handleProcessUpdate);
+    const unsubProcessError = on('process:error', handleProcessError);
 
     // Request initial process list
-    socket.emit('process:monitor', { hostId });
+    emit('process:monitor', { hostId });
 
     return () => {
-      socket.off('process:list', handleProcessList);
-      socket.off('process:update', handleProcessUpdate);
-      socket.off('process:error', handleProcessError);
-      socket.emit('process:unmonitor', { hostId });
+      unsubProcessList();
+      unsubProcessUpdate();
+      unsubProcessError();
+      emit('process:unmonitor', { hostId });
     };
-  }, [socket, hostId]);
+  }, [socket, hostId, emit, on]);
 
   const killProcess = useCallback(
     async (pid: number, signal?: string) => {
@@ -83,23 +83,23 @@ export function useProcessMetrics(hostId: string): UseProcessMetricsResult {
       return new Promise<void>((resolve, reject) => {
         const handleKillSuccess = () => {
           resolve();
-          socket.off('process:kill:success', handleKillSuccess);
-          socket.off('process:kill:error', handleKillError);
+          unsubKillSuccess();
+          unsubKillError();
         };
 
         const handleKillError = (error: string) => {
           reject(new Error(error));
-          socket.off('process:kill:success', handleKillSuccess);
-          socket.off('process:kill:error', handleKillError);
+          unsubKillSuccess();
+          unsubKillError();
         };
 
-        socket.on('process:kill:success', handleKillSuccess);
-        socket.on('process:kill:error', handleKillError);
+        const unsubKillSuccess = on('process:kill:success', handleKillSuccess);
+        const unsubKillError = on('process:kill:error', handleKillError);
 
-        socket.emit('process:kill', { hostId, pid, signal });
+        emit('process:kill', { hostId, pid, signal });
       });
     },
-    [socket, hostId]
+    [socket, hostId, emit, on]
   );
 
   return { processes, loading, error, killProcess };

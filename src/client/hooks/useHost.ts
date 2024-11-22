@@ -24,7 +24,10 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
   const [selectedHost, setSelectedHost] = useState<Host | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
+  const { socket, emit, on } = useSocket({
+    hostId: hostId || '',
+    autoReconnect: true,
+  });
 
   const fetchHost = useCallback(async () => {
     if (!hostId) {
@@ -70,7 +73,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
           return;
         }
 
-        socket.emit('host:connect', { hostId: host.id }, (response: { error?: string }) => {
+        emit('host:connect', { hostId: host.id }, (response: { error?: string }) => {
           if (response.error) {
             reject(new Error(response.error));
           } else {
@@ -86,7 +89,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
     } finally {
       setLoading(false);
     }
-  }, [socket, host]);
+  }, [socket, host, emit]);
 
   const disconnect = useCallback(async () => {
     if (!host) {
@@ -102,7 +105,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
           return;
         }
 
-        socket.emit('host:disconnect', { hostId: host.id }, (response: { error?: string }) => {
+        emit('host:disconnect', { hostId: host.id }, (response: { error?: string }) => {
           if (response.error) {
             reject(new Error(response.error));
           } else {
@@ -118,7 +121,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
     } finally {
       setLoading(false);
     }
-  }, [socket, host]);
+  }, [socket, host, emit]);
 
   const refresh = useCallback(async () => {
     await fetchHost();
@@ -140,25 +143,25 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
         }
       };
 
-      socket.on('host:updated', handleHostUpdate);
+      const unsubHostUpdate = on('host:updated', handleHostUpdate);
 
       return () => {
-        socket.off('host:updated', handleHostUpdate);
+        unsubHostUpdate();
       };
     }
-  }, [socket, hostId, selectedHost]);
+  }, [socket, hostId, selectedHost, on]);
 
   useEffect(() => {
-    void fetchHost();
-  }, [fetchHost]);
-
-  useEffect(() => {
-    if (autoConnect && host) {
-      if (host.status === 'offline') {
-        void connect();
-      }
+    if (autoConnect && host && socket) {
+      connect().catch((error) => {
+        logger.error('Failed to auto-connect:', { error: error.message, hostId: host.id });
+      });
     }
-  }, [autoConnect, host, connect]);
+  }, [autoConnect, host, socket, connect]);
+
+  useEffect(() => {
+    fetchHost();
+  }, [fetchHost]);
 
   return {
     host,

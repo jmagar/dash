@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
 import { logger } from '../utils/frontendLogger';
-
 import { useSocket } from './useSocket';
-
 import type { TypedSocket } from './useSocket';
 import type { SystemMetrics } from '../../types/metrics';
 import type { ProcessInfo } from '../../types/process';
@@ -43,7 +40,10 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const socket: TypedSocket | null = useSocket();
+  const { socket, emit, on } = useSocket({
+    hostId,
+    autoReconnect: true,
+  });
 
   const handleMetricsUpdate = useCallback((data: MetricsUpdateData) => {
     if (data.hostId === hostId) {
@@ -71,8 +71,8 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
     setError(null);
 
     try {
-      socket.emit('metrics:subscribe', { hostId });
-      socket.emit('process:monitor', { hostId });
+      emit('metrics:subscribe', { hostId });
+      emit('process:monitor', { hostId });
     } catch (error) {
       logger.error('Failed to start monitoring:', {
         error: error instanceof Error ? error.message : String(error),
@@ -80,21 +80,21 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
       });
       setError('Failed to start monitoring');
     }
-  }, [socket, hostId, enabled]);
+  }, [socket, hostId, enabled, emit]);
 
   const stopMonitoring = useCallback(() => {
     if (!socket) return;
 
     try {
-      socket.emit('metrics:unsubscribe', { hostId });
-      socket.emit('process:unmonitor', { hostId });
+      emit('metrics:unsubscribe', { hostId });
+      emit('process:unmonitor', { hostId });
     } catch (error) {
       logger.error('Failed to stop monitoring:', {
         error: error instanceof Error ? error.message : String(error),
         hostId
       });
     }
-  }, [socket, hostId]);
+  }, [socket, hostId, emit]);
 
   useEffect(() => {
     if (!socket) return;
@@ -102,15 +102,15 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
     try {
       startMonitoring();
 
-      socket.on('metrics:update', handleMetricsUpdate);
-      socket.on('process:metrics', handleProcessUpdate);
-      socket.on('metrics:error', handleMetricsError);
+      const unsubMetrics = on('metrics:update', handleMetricsUpdate);
+      const unsubProcess = on('process:metrics', handleProcessUpdate);
+      const unsubError = on('metrics:error', handleMetricsError);
 
       return () => {
         stopMonitoring();
-        socket.off('metrics:update', handleMetricsUpdate);
-        socket.off('process:metrics', handleProcessUpdate);
-        socket.off('metrics:error', handleMetricsError);
+        unsubMetrics();
+        unsubProcess();
+        unsubError();
       };
     } catch (error) {
       logger.error('Error in metrics monitoring effect:', {
@@ -126,7 +126,8 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
     stopMonitoring,
     handleMetricsUpdate,
     handleProcessUpdate,
-    handleMetricsError
+    handleMetricsError,
+    on
   ]);
 
   return {

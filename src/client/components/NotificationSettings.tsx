@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
-import type { NotificationType } from '@/types/notifications';
+import type { NotificationType, NotificationPreferences } from '@/types/notifications';
+import { logger } from '../utils/frontendLogger';
 
 interface NotificationSettingsProps {
   userId: string;
@@ -70,7 +71,7 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     loading,
     error,
     updatePreferences,
-  } = useNotificationPreferences({ userId });
+  } = useNotificationPreferences<NotificationPreferences>({ userId });
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -101,8 +102,8 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     try {
       setIsSaving(true);
       // If the channel is enabled, we want to keep all current types, otherwise clear them
-      const isEnabled = preferences[`${channel}Enabled`] as boolean;
-      const types = isEnabled ? [] : (preferences[channel] as NotificationType[]);
+      const isEnabled = preferences[`${channel}Enabled`];
+      const types = isEnabled ? [] : preferences[channel];
       await updatePreferences(channel, types);
     } catch (error) {
       logger.error('Failed to toggle notification channel:', {
@@ -121,9 +122,9 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
       const channels: Array<'web' | 'gotify' | 'desktop'> = ['web', 'gotify', 'desktop'];
 
       for (const channel of channels) {
-        const isEnabled = preferences[`${channel}Enabled`] as boolean;
+        const isEnabled = preferences[`${channel}Enabled`];
         if (isEnabled) {
-          const currentTypes = preferences[channel] as NotificationType[];
+          const currentTypes = preferences[channel];
           const hasType = currentTypes.includes(eventType);
           const updatedTypes = hasType
             ? currentTypes.filter(t => t !== eventType)

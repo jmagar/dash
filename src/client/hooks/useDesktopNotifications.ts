@@ -1,9 +1,6 @@
 import { useEffect, useCallback } from 'react';
-
 import { logger } from '../utils/frontendLogger';
-
 import { useSocket } from './useSocket';
-
 import type { DesktopNotification } from '../../types/notifications';
 
 interface UseDesktopNotificationsResult {
@@ -13,7 +10,9 @@ interface UseDesktopNotificationsResult {
 }
 
 export function useDesktopNotifications(): UseDesktopNotificationsResult {
-  const socket = useSocket();
+  const { socket, on } = useSocket({
+    autoReconnect: true,
+  });
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (!('Notification' in window)) {
@@ -85,12 +84,12 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
       void showNotification(notification);
     };
 
-    socket.on('notification:desktop', handleDesktopNotification);
+    const unsubDesktopNotification = on('notification:desktop', handleDesktopNotification);
 
     return () => {
-      socket.off('notification:desktop', handleDesktopNotification);
+      unsubDesktopNotification();
     };
-  }, [socket, showNotification]);
+  }, [socket, showNotification, on]);
 
   return {
     requestPermission,

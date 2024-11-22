@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-
 import { logger } from '../utils/frontendLogger';
-
 import { useSocket } from './useSocket';
-
 import type { Notification } from '../../types/notifications';
 
 interface UseNotificationsOptions {
@@ -32,7 +29,9 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
+  const { socket, on } = useSocket({
+    autoReconnect: true,
+  });
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -146,19 +145,19 @@ export function useNotifications({ userId, limit = 50 }: UseNotificationsOptions
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
     };
 
-    socket.on('notification:created', handleNotificationCreated);
-    socket.on('notification:updated', handleNotificationUpdated);
-    socket.on('notification:deleted', handleNotificationDeleted);
+    const unsubCreated = on('notification:created', handleNotificationCreated);
+    const unsubUpdated = on('notification:updated', handleNotificationUpdated);
+    const unsubDeleted = on('notification:deleted', handleNotificationDeleted);
 
     return () => {
-      socket.off('notification:created', handleNotificationCreated);
-      socket.off('notification:updated', handleNotificationUpdated);
-      socket.off('notification:deleted', handleNotificationDeleted);
+      unsubCreated();
+      unsubUpdated();
+      unsubDeleted();
     };
-  }, [socket, userId, limit]);
+  }, [socket, on]);
 
   useEffect(() => {
-    void fetchNotifications();
+    fetchNotifications();
   }, [fetchNotifications]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
