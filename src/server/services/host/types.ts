@@ -79,7 +79,7 @@ export interface OperationResult<T = void> {
  * Emergency operations when agent is unavailable
  */
 export interface EmergencyOperations {
-  restart(): Promise<void>;
-  killProcess(pid: number): Promise<void>;
-  checkConnectivity(): Promise<boolean>;
+  restart(hostId: string): Promise<OperationResult>;
+  killProcess(hostId: string, pid: number): Promise<OperationResult>;
+  checkConnectivity(hostId: string): Promise<OperationResult<boolean>>;
 }

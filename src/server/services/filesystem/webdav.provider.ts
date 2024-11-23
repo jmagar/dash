@@ -41,15 +41,18 @@ export class WebDAVProvider implements FileSystemProvider {
   }
 
   async listFiles(path: string): Promise<FileItem[]> {
-    this.ensureConnected();
-    const contents = await this.client!.getDirectoryContents(path);
-    return (contents as FileStat[]).map(item => ({
+    if (!this.client) {
+      throw new Error('WebDAV client not connected');
+    }
+
+    const contents = await this.client.getDirectoryContents(path);
+    return contents.map(item => ({
       name: item.basename,
       path: item.filename,
-      isDirectory: item.type === 'directory',
+      type: item.type,
       size: item.size,
-      modifiedTime: new Date(item.lastmod).toISOString(),
-      permissions: '644', // WebDAV doesn't provide Unix permissions
+      modifiedTime: new Date(item.lastmod),
+      permissions: '644' // WebDAV doesn't provide Unix permissions
     }));
   }
 

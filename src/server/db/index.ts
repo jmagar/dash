@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { DatabaseRepository } from './repository';
 
-const prisma = new PrismaClient();
+const db = DatabaseRepository.getInstance();
 
-export default prisma;
+export { db };
+export default db;

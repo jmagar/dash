@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import { BaseService } from './base.service';
-import type { Settings, SettingsPath, SettingsValue, SettingsResponse, SettingsError } from '../../types/settings';
+import type { Settings, SettingsPath, SettingsValue, SettingsResponse, SettingsError, UserPreferences, AdminSettings } from '../../types/settings';
 import { db } from '../db';
 import { redis } from '../redis';
 import { NotFoundError, ValidationError } from '../errors';
@@ -20,6 +20,11 @@ export class SettingsService extends BaseService {
       SettingsService.instance = new SettingsService();
     }
     return SettingsService.instance;
+  }
+
+  async cleanup(): Promise<void> {
+    // Close database connection
+    await this.pool.end();
   }
 
   // Cache helpers
@@ -71,10 +76,10 @@ export class SettingsService extends BaseService {
       
       // Transform rows into settings object
       const settings: Settings['user'] = {
-        interface: {},
-        fileExplorer: {},
-        operations: {},
-        personal: {}
+        interface: {} as UserPreferences['interface'],
+        fileExplorer: {} as UserPreferences['fileExplorer'],
+        operations: {} as UserPreferences['operations'],
+        personal: {} as UserPreferences['personal']
       };
 
       rows.forEach(row => {
@@ -175,10 +180,10 @@ export class SettingsService extends BaseService {
       
       // Transform rows into settings object
       const settings: Settings['admin'] = {
-        system: {},
-        userManagement: {},
-        hostManagement: {},
-        storageManagement: {}
+        system: {} as AdminSettings['system'],
+        userManagement: {} as AdminSettings['userManagement'],
+        hostManagement: {} as AdminSettings['hostManagement'],
+        storageManagement: {} as AdminSettings['storageManagement']
       };
 
       rows.forEach(row => {

@@ -48,17 +48,22 @@ export class SMBProvider implements FileSystemProvider {
   }
 
   async listFiles(path: string): Promise<FileItem[]> {
-    this.ensureConnected();
-    const normalizedPath = this.normalizePath(path);
-    
-    const files = await this.client!.readdir(normalizedPath, { stats: true });
-    return files.map(file => ({
-      name: file.name,
-      path: `${path}/${file.name}`.replace(/\/+/g, '/'),
-      isDirectory: file.stats.isDirectory(),
-      size: file.stats.size,
-      modifiedTime: new Date(file.stats.mtime).toISOString(),
-      permissions: (file.stats.mode & 0o777).toString(8),
+    if (!this.client) {
+      throw new Error('SMB client not connected');
+    }
+
+    const files = await this.client.readdir(path);
+    return Promise.all(files.map(async file => {
+      const fullPath = path ? `${path}/${file}` : file;
+      const stats = await this.client!.stat(fullPath);
+      return {
+        name: file,
+        path: fullPath,
+        type: stats.isDirectory() ? 'directory' : 'file',
+        size: stats.size,
+        modifiedTime: stats.mtime,
+        permissions: '644' // SMB doesn't provide Unix permissions
+      };
     }));
   }
 

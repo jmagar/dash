@@ -14,7 +14,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FileSystemManager } from '../../services/filesystem/filesystem.manager';
 import { FileSystemLocation, FileListResponse, Space, QuickAccessResponse } from '../../../types/filesystem';
 import {
@@ -53,6 +53,7 @@ export class FilesystemController {
   @Post('locations')
   @ApiOperation({ summary: 'Create a new filesystem location' })
   @ApiResponse({ status: 201, type: FileSystemLocation })
+  @ApiBody({ type: CreateLocationDto })
   async createLocation(@Body() dto: CreateLocationDto): Promise<FileSystemLocation> {
     return this.filesystemManager.createLocation(dto);
   }
@@ -60,6 +61,8 @@ export class FilesystemController {
   @Put('locations/:id')
   @ApiOperation({ summary: 'Update a filesystem location' })
   @ApiResponse({ status: 200, type: FileSystemLocation })
+  @ApiParam({ name: 'id', description: 'Location ID' })
+  @ApiBody({ type: UpdateLocationDto })
   async updateLocation(
     @Param('id') id: string,
     @Body() dto: UpdateLocationDto
@@ -70,6 +73,7 @@ export class FilesystemController {
   @Delete('locations/:id')
   @ApiOperation({ summary: 'Delete a filesystem location' })
   @ApiResponse({ status: 204 })
+  @ApiParam({ name: 'id', description: 'Location ID' })
   async deleteLocation(@Param('id') id: string): Promise<void> {
     await this.filesystemManager.deleteLocation(id);
   }
@@ -80,26 +84,38 @@ export class FilesystemController {
   @Get(':locationId/files')
   @ApiOperation({ summary: 'List files in a directory' })
   @ApiResponse({ status: 200, type: FileListResponse })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiQuery({ type: ListFilesDto })
   async listFiles(
     @Param('locationId') locationId: string,
     @Query() dto: ListFilesDto
   ): Promise<FileListResponse> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
     return this.filesystemManager.listFiles(locationId, dto);
   }
 
   @Get(':locationId/files/download')
   @ApiOperation({ summary: 'Download a file' })
   @ApiResponse({ status: 200, type: StreamableFile })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiQuery({ name: 'path', description: 'File path' })
   async downloadFile(
     @Param('locationId') locationId: string,
     @Query('path') path: string
   ): Promise<StreamableFile> {
+    if (!locationId || !path) {
+      throw new BadRequestException('Both locationId and path are required');
+    }
     const stream = await this.filesystemManager.createDownloadStream(locationId, path);
     return new StreamableFile(stream);
   }
 
   @Post(':locationId/files/upload')
   @ApiOperation({ summary: 'Upload files' })
+  @ApiResponse({ status: 201 })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
   @UseInterceptors(FilesInterceptor('files'))
   async uploadFiles(
     @Param('locationId') locationId: string,
@@ -117,6 +133,9 @@ export class FilesystemController {
 
   @Post(':locationId/files/copy')
   @ApiOperation({ summary: 'Copy files/directories' })
+  @ApiResponse({ status: 201 })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiBody({ type: CopyMoveDto })
   async copyFiles(
     @Param('locationId') locationId: string,
     @Body() dto: CopyMoveDto
@@ -132,6 +151,9 @@ export class FilesystemController {
 
   @Post(':locationId/files/move')
   @ApiOperation({ summary: 'Move files/directories' })
+  @ApiResponse({ status: 201 })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiBody({ type: CopyMoveDto })
   async moveFiles(
     @Param('locationId') locationId: string,
     @Body() dto: CopyMoveDto
@@ -147,28 +169,46 @@ export class FilesystemController {
 
   @Post(':locationId/files/mkdir')
   @ApiOperation({ summary: 'Create a directory' })
+  @ApiResponse({ status: 201 })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiBody({ type: CreateDirectoryDto })
   async createDirectory(
     @Param('locationId') locationId: string,
     @Body() dto: CreateDirectoryDto
   ): Promise<void> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
     await this.filesystemManager.createDirectory(locationId, dto);
   }
 
   @Post(':locationId/files/delete')
   @ApiOperation({ summary: 'Delete files/directories' })
+  @ApiResponse({ status: 201 })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiBody({ type: DeleteFilesDto })
   async deleteFiles(
     @Param('locationId') locationId: string,
     @Body() dto: DeleteFilesDto
   ): Promise<void> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
     await this.filesystemManager.deleteFiles(locationId, dto);
   }
 
   @Post(':locationId/files/search')
   @ApiOperation({ summary: 'Search for files' })
+  @ApiResponse({ status: 200, type: FileListResponse })
+  @ApiParam({ name: 'locationId', description: 'Location ID' })
+  @ApiBody({ type: SearchFilesDto })
   async searchFiles(
     @Param('locationId') locationId: string,
     @Body() dto: SearchFilesDto
   ): Promise<FileListResponse> {
+    if (!locationId) {
+      throw new BadRequestException('Location ID is required');
+    }
     return this.filesystemManager.searchFiles(locationId, dto);
   }
 
@@ -185,6 +225,7 @@ export class FilesystemController {
   @Post('spaces')
   @ApiOperation({ summary: 'Create a new space' })
   @ApiResponse({ status: 201, type: Space })
+  @ApiBody({ type: CreateSpaceDto })
   async createSpace(@Body() dto: CreateSpaceDto): Promise<Space> {
     return this.filesystemManager.createSpace(dto);
   }
@@ -192,6 +233,8 @@ export class FilesystemController {
   @Put('spaces/:id')
   @ApiOperation({ summary: 'Update a space' })
   @ApiResponse({ status: 200, type: Space })
+  @ApiParam({ name: 'id', description: 'Space ID' })
+  @ApiBody({ type: UpdateSpaceDto })
   async updateSpace(
     @Param('id') id: string,
     @Body() dto: UpdateSpaceDto
@@ -202,6 +245,7 @@ export class FilesystemController {
   @Delete('spaces/:id')
   @ApiOperation({ summary: 'Delete a space' })
   @ApiResponse({ status: 204 })
+  @ApiParam({ name: 'id', description: 'Space ID' })
   async deleteSpace(@Param('id') id: string): Promise<void> {
     await this.filesystemManager.deleteSpace(id);
   }
@@ -218,6 +262,17 @@ export class FilesystemController {
 
   @Post('quick-access/favorites')
   @ApiOperation({ summary: 'Add item to favorites' })
+  @ApiResponse({ status: 201 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['locationId', 'path'],
+      properties: {
+        locationId: { type: 'string' },
+        path: { type: 'string' },
+      },
+    },
+  })
   async addToFavorites(
     @Body('locationId') locationId: string,
     @Body('path') path: string
@@ -230,6 +285,17 @@ export class FilesystemController {
 
   @Delete('quick-access/favorites')
   @ApiOperation({ summary: 'Remove item from favorites' })
+  @ApiResponse({ status: 204 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['locationId', 'path'],
+      properties: {
+        locationId: { type: 'string' },
+        path: { type: 'string' },
+      },
+    },
+  })
   async removeFromFavorites(
     @Body('locationId') locationId: string,
     @Body('path') path: string
@@ -245,6 +311,8 @@ export class FilesystemController {
    */
   @Post('select')
   @ApiOperation({ summary: 'Open file selector' })
+  @ApiResponse({ status: 200, type: FileListResponse })
+  @ApiBody({ type: SelectFilesDto })
   async openFileSelector(@Body() dto: SelectFilesDto): Promise<FileListResponse> {
     return this.filesystemManager.selectFiles(dto);
   }

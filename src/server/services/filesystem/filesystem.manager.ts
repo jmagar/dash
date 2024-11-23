@@ -30,6 +30,8 @@ import { randomUUID } from 'crypto';
 import { logger } from '../../../logger';
 import { ApiError } from '../../../types/api-error';
 import { sanitizePath, validateFile } from '../../utils/security';
+import { LogMetadata } from '../../../types/logging';
+import { FileItem } from '../../../types/models-shared';
 
 @Injectable()
 export class FileSystemManager {
@@ -693,7 +695,7 @@ export class FileSystemManager {
         component: 'FileSystemManager'
       });
 
-      const files: FileInfo[] = [];
+      const files: FileItem[] = [];
       for (const path of dto.paths) {
         const location = await this.locationRepository.findOne({ where: { path } });
         if (location) {

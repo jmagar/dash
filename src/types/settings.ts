@@ -180,8 +180,8 @@ export interface Settings {
 }
 
 // Settings Update Types
-export type SettingsPath = string[]; // e.g. ['user', 'interface', 'theme']
-export type SettingsValue = any;
+export type SettingsPath = (keyof Settings | string)[]; // e.g. ['user', 'interface', 'theme']
+export type SettingsValue = any; // TODO: Make this more specific based on path
 
 export interface SettingsUpdate {
   path: SettingsPath;

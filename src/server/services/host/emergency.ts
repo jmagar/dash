@@ -2,6 +2,7 @@ import { Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import type { Host } from '../../../types/host';
 import type { EmergencyOperations, OperationResult } from './types';
+import { HostState } from './types';
 
 /**
  * EmergencyService provides critical operations when the agent is unavailable
@@ -13,6 +14,15 @@ import type { EmergencyOperations, OperationResult } from './types';
  */
 export class EmergencyService extends BaseService implements EmergencyOperations {
   /**
+   * Implements cleanup method from BaseService
+   */
+  async cleanup(): Promise<void> {
+    // Close any open connections
+    await Promise.all(Array.from(this.connections.values()).map(conn => conn.end()));
+    this.connections.clear();
+  }
+
+  /**
    * Restart the agent service
    */
   async restart(hostId: string): Promise<OperationResult> {
@@ -21,7 +31,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
       return {
         success: false,
         error: new Error('Host not found'),
-        state: 'error'
+        state: HostState.ERROR
       };
     }
 
@@ -32,7 +42,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
           await this.execCommand(ssh, 'sudo systemctl restart shh-agent');
           return;
         } catch (error) {
-          this.logger.warn('Failed to restart agent via systemctl', { error, hostId });
+          this.logger.warn('Failed to restart agent via systemctl', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
         }
 
         // Fallback to process kill
@@ -47,14 +57,14 @@ export class EmergencyService extends BaseService implements EmergencyOperations
 
       return {
         success: true,
-        state: 'maintenance'
+        state: HostState.MAINTENANCE
       };
     } catch (error) {
-      this.logger.error('Failed to restart agent', { error, hostId });
+      this.logger.error('Failed to restart agent', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
       return {
         success: false,
-        error: error as Error,
-        state: 'error'
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        state: HostState.ERROR
       };
     }
   }
@@ -68,31 +78,31 @@ export class EmergencyService extends BaseService implements EmergencyOperations
       return {
         success: false,
         error: new Error('Host not found'),
-        state: 'error'
+        state: HostState.ERROR
       };
     }
 
     try {
       await this.withSSH(host, async (ssh) => {
-        await this.execCommand(ssh, `sudo kill -9 ${pid}`);
+        await this.execCommand(ssh, `kill -9 ${pid}`);
       });
 
       return {
         success: true,
-        state: 'active'
+        state: HostState.ACTIVE
       };
     } catch (error) {
-      this.logger.error('Failed to kill process', { error, hostId, pid });
+      this.logger.error('Failed to kill process', { error: error instanceof Error ? error.message : 'Unknown error', hostId, pid });
       return {
         success: false,
-        error: error as Error,
-        state: 'error'
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        state: HostState.ERROR
       };
     }
   }
 
   /**
-   * Check host connectivity and basic health
+   * Check if host is reachable via SSH
    */
   async checkConnectivity(hostId: string): Promise<OperationResult<boolean>> {
     const host = await this.db.hosts.findById(hostId);
@@ -100,37 +110,32 @@ export class EmergencyService extends BaseService implements EmergencyOperations
       return {
         success: false,
         error: new Error('Host not found'),
-        state: 'error'
+        state: HostState.ERROR
       };
     }
 
     try {
+      let connected = false;
       await this.withSSH(host, async (ssh) => {
-        // Basic system checks
-        const checks = await Promise.allSettled([
-          this.checkDiskSpace(ssh),
-          this.checkMemory(ssh),
-          this.checkNetwork(ssh)
-        ]);
-
-        const failed = checks.filter(r => r.status === 'rejected');
-        if (failed.length > 0) {
-          throw new Error('One or more health checks failed');
+        try {
+          await this.execCommand(ssh, 'echo 1');
+          connected = true;
+        } catch {
+          connected = false;
         }
       });
 
       return {
         success: true,
-        data: true,
-        state: 'active'
+        data: connected,
+        state: HostState.ACTIVE
       };
     } catch (error) {
-      this.logger.error('Host connectivity check failed', { error, hostId });
+      this.logger.error('Host connectivity check failed', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
       return {
         success: false,
-        error: error as Error,
-        data: false,
-        state: 'unreachable'
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        state: HostState.UNREACHABLE
       };
     }
   }
@@ -178,7 +183,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
 
     const [, usage] = lines[1].split(/\s+/);
     const usagePercent = parseInt(usage.replace('%', ''));
-    
+
     if (usagePercent > 90) {
       throw new Error(`Disk usage critical: ${usagePercent}%`);
     }
@@ -194,7 +199,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
 
     const [, total, used] = lines[1].split(/\s+/).map(Number);
     const usagePercent = (used / total) * 100;
-    
+
     if (usagePercent > 90) {
       throw new Error(`Memory usage critical: ${usagePercent.toFixed(1)}%`);
     }
@@ -206,7 +211,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
   private async checkNetwork(ssh: SSHClient): Promise<void> {
     // Check DNS resolution
     await this.execCommand(ssh, 'ping -c 1 google.com');
-    
+
     // Check HTTP connectivity
     await this.execCommand(ssh, 'curl -s -S --max-time 5 https://google.com > /dev/null');
   }

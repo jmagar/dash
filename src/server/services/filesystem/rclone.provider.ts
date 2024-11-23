@@ -78,9 +78,9 @@ export class RcloneProvider implements FileSystemProvider {
     return items.map(item => ({
       name: item.Name,
       path: item.Path,
-      isDirectory: item.IsDir,
+      type: item.IsDir ? 'directory' : 'file',
       size: item.Size,
-      modifiedTime: new Date(item.ModTime).toISOString(),
+      modifiedTime: new Date(item.ModTime),
       permissions: '644', // Rclone doesn't provide Unix permissions
     }));
   }

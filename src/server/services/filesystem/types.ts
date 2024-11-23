@@ -29,6 +29,10 @@ export interface FileSystemCredentials {
 export interface FileSystemStats {
   size: number;
   mtime: number;
+  mode: number;
+  modTime: number;
+  owner: string;
+  group: string;
   isDirectory: boolean;
   isFile: boolean;
   permissions?: string;
