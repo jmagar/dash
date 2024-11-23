@@ -1,9 +1,9 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { ShareAccessType, ShareStatus } from '../dto/sharing.dto';
 
 @Entity('file_shares')
 export class FileShare {
-    @PrimaryColumn()
+    @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column()
@@ -11,7 +11,8 @@ export class FileShare {
 
     @Column({
         type: 'enum',
-        enum: ShareAccessType
+        enum: ShareAccessType,
+        default: ShareAccessType.READ
     })
     accessType: ShareAccessType;
 
@@ -26,26 +27,54 @@ export class FileShare {
     createdAt: Date;
 
     @Column({ nullable: true })
-    expiresAt?: Date;
+    expiresAt: Date | null;
 
     @Column({ default: 0 })
     accessCount: number;
 
     @Column({ nullable: true })
-    maxAccesses?: number;
+    maxAccesses: number | null;
 
     @Column({ nullable: true })
-    passwordHash?: string;
+    passwordHash: string | null;
 
     @Column({ default: false })
     allowZipDownload: boolean;
 
-    @Column({ nullable: true, type: 'timestamp' })
-    lastAccessedAt?: Date;
+    @Column({ type: 'jsonb', nullable: true })
+    metadata: Record<string, unknown> | null;
 
     @Column({ type: 'jsonb', nullable: true })
-    metadata?: Record<string, unknown>;
+    security: {
+        rateLimit?: {
+            maxRequests: number;
+            windowMinutes: number;
+        };
+        allowedIps?: string[];
+        allowedReferrers?: string[];
+        csrfProtection?: boolean;
+    } | null;
+
+    @Column({ nullable: true })
+    csrfToken: string | null;
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @Column({ nullable: true, type: 'timestamp' })
+    lastAccessedAt: Date | null;
+
+    @Column({ type: 'jsonb', nullable: true })
+    accessLog: {
+        timestamp: Date;
+        ipAddress: string;
+        userAgent: string;
+        status: string;
+        error?: string;
+        headers?: Record<string, string>;
+        rateLimit?: {
+            remaining: number;
+            reset: Date;
+        };
+    }[] | null;
 }

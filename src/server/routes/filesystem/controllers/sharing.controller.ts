@@ -11,7 +11,8 @@ import {
     Res,
     UseGuards,
     StreamableFile,
-    BadRequestException
+    BadRequestException,
+    UnauthorizedException
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { Request, Response } from 'express';
@@ -19,6 +20,7 @@ import { createReadStream } from 'fs';
 import { join } from 'path';
 import * as archiver from 'archiver';
 import rateLimit from 'express-rate-limit';
+import { ValidationPipe } from '@nestjs/common';
 
 import { SharingService } from '../services/sharing.service';
 import { FilesystemService } from '../services/filesystem.service';
@@ -36,6 +38,7 @@ import { logger } from '../../../utils/logger';
 import { errorAggregator } from '../../../services/errorAggregator';
 import { validateRequest } from '../../../middleware/validation';
 import { z } from 'zod';
+import * as mime from 'mime-types';
 
 // Rate limiter for share access
 const shareAccessLimiter = rateLimit({
@@ -46,7 +49,7 @@ const shareAccessLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-@Controller('api/shares')
+@Controller('shares')
 @ApiTags('File Sharing')
 export class SharingController {
     constructor(
@@ -56,150 +59,146 @@ export class SharingController {
 
     @Post()
     @UseGuards(AuthGuard('jwt'))
+    @UsePipes(new ValidationPipe({ transform: true }))
     @ApiOperation({ summary: 'Create a new file share' })
     @ApiResponse({ status: 201, type: ShareInfoDto })
-    async createShare(@Body() dto: CreateShareRequestDto): Promise<ShareInfoDto> {
+    async createShare(
+        @Body() dto: CreateShareRequestDto,
+        @Req() req: Request
+    ): Promise<ShareInfoDto> {
         try {
-            return await this.sharingService.createShare(dto);
+            return await this.sharingService.createShare(dto, req);
         } catch (error) {
-            logger.error('Failed to create share:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
+            logger.error('Failed to create share', {
+                error: error.message,
                 path: dto.path,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;
         }
     }
 
-    @Get(':id')
-    @UseGuards(shareAccessLimiter)
-    @ApiOperation({ summary: 'Get share information' })
-    @ApiParam({ name: 'id', description: 'Share ID' })
+    @Post(':shareId/access')
+    @UsePipes(new ValidationPipe({ transform: true }))
+    @ApiOperation({ summary: 'Access a shared file' })
     @ApiResponse({ status: 200, type: ShareInfoDto })
-    async getShareInfo(@Param('id') id: string): Promise<ShareInfoDto> {
+    async accessShare(
+        @Param('shareId') shareId: string,
+        @Body() dto: ShareAccessRequestDto,
+        @Req() req: Request
+    ): Promise<ShareInfoDto> {
         try {
-            return await this.sharingService.getShareInfo(id);
+            dto.shareId = shareId;
+            return await this.sharingService.accessShare(dto, req);
         } catch (error) {
-            logger.error('Failed to get share info:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                shareId: id,
+            logger.error('Failed to access share', {
+                error: error.message,
+                shareId,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;
         }
     }
 
-    @Get(':id/download')
-    @UseGuards(shareAccessLimiter)
-    @ApiOperation({ summary: 'Download shared file' })
-    @ApiParam({ name: 'id', description: 'Share ID' })
-    @ApiQuery({ name: 'password', required: false })
-    async downloadSharedFile(
-        @Param('id') id: string,
+    @Get(':shareId/download')
+    @ApiOperation({ summary: 'Download a shared file' })
+    async downloadShare(
+        @Param('shareId') shareId: string,
         @Query('password') password: string,
         @Req() req: Request,
         @Res() res: Response
     ): Promise<void> {
         try {
-            // Verify share access
-            await this.sharingService.verifyShareAccess(id, req, password);
+            const dto: ShareAccessRequestDto = { shareId, password };
+            const share = await this.sharingService.accessShare(dto, req);
 
-            // Get share info
-            const share = await this.sharingService.getShareInfo(id);
-            const stats = await this.filesystemService.getStats(share.path);
-
-            if (stats.isDirectory() && !share.allowZipDownload) {
-                throw new BadRequestException('Directory download not allowed for this share');
+            // Validate CSRF token for downloads if enabled
+            if (share.security?.csrfProtection) {
+                const csrfToken = req.get('x-csrf-token');
+                if (!csrfToken || csrfToken !== share.csrfToken) {
+                    throw new UnauthorizedException('Invalid CSRF token');
+                }
             }
 
-            // Set response headers with content security policy
-            const filename = share.path.split('/').pop();
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+            // Set security headers
+            res.setHeader('Content-Security-Policy', "default-src 'self'");
             res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('X-Frame-Options', 'DENY');
+            res.setHeader('X-XSS-Protection', '1; mode=block');
 
-            if (stats.isDirectory()) {
-                // Create zip archive for directory with progress tracking
-                const archive = archiver('zip', { zlib: { level: 9 } });
+            const filePath = share.path;
+            const fileName = path.basename(filePath);
+
+            if (share.allowZipDownload && (await this.filesystemService.isDirectory(filePath))) {
                 res.setHeader('Content-Type', 'application/zip');
-                
-                let totalSize = 0;
-                archive.on('entry', (entry) => {
-                    totalSize += entry.size;
-                    logger.debug('Archiving file:', {
-                        filename: entry.name,
-                        size: entry.size,
-                        totalSize,
-                        shareId: id,
-                    });
-                });
+                res.setHeader('Content-Disposition', `attachment; filename="${fileName}.zip"`);
 
-                archive.pipe(res);
-                archive.directory(share.path, false);
-                await archive.finalize();
+                const zipStream = await this.filesystemService.createZipStream(filePath);
+                zipStream.pipe(res);
             } else {
-                // Stream single file with proper content type
-                const mimeType = await this.filesystemService.getMimeType(share.path);
-                const fileStream = createReadStream(share.path);
-                res.setHeader('Content-Type', mimeType);
-                fileStream.pipe(res);
+                const stat = await this.filesystemService.stat(filePath);
+                const contentType = mime.lookup(filePath) || 'application/octet-stream';
 
-                // Log download completion
-                fileStream.on('end', () => {
-                    logger.info('File download completed:', {
-                        shareId: id,
-                        path: share.path,
-                        size: stats.size,
-                    });
-                });
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Content-Length', stat.size);
+                res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+                const fileStream = await this.filesystemService.createReadStream(filePath);
+                fileStream.pipe(res);
             }
         } catch (error) {
-            logger.error('Failed to download shared file:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                shareId: id,
+            logger.error('Failed to download share', {
+                error: error.message,
+                shareId,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;
         }
     }
 
-    @Put(':id')
+    @Put(':shareId')
     @UseGuards(AuthGuard('jwt'))
+    @UsePipes(new ValidationPipe({ transform: true }))
     @ApiOperation({ summary: 'Modify share settings' })
-    @ApiParam({ name: 'id', description: 'Share ID' })
     @ApiResponse({ status: 200, type: ShareInfoDto })
     async modifyShare(
-        @Param('id') id: string,
-        @Body() dto: ModifyShareRequestDto
+        @Param('shareId') shareId: string,
+        @Body() dto: ModifyShareRequestDto,
+        @Req() req: Request
     ): Promise<ShareInfoDto> {
         try {
-            dto.shareId = id;
+            dto.shareId = shareId;
             return await this.sharingService.modifyShare(dto);
         } catch (error) {
-            logger.error('Failed to modify share:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                shareId: id,
+            logger.error('Failed to modify share', {
+                error: error.message,
+                shareId,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;
         }
     }
 
-    @Delete(':id')
+    @Delete(':shareId')
     @UseGuards(AuthGuard('jwt'))
     @ApiOperation({ summary: 'Revoke share' })
-    @ApiParam({ name: 'id', description: 'Share ID' })
     async revokeShare(
-        @Param('id') id: string,
-        @Body() dto: RevokeShareRequestDto
+        @Param('shareId') shareId: string,
+        @Body() dto: RevokeShareRequestDto,
+        @Req() req: Request
     ): Promise<void> {
         try {
-            dto.shareId = id;
+            dto.shareId = shareId;
             await this.sharingService.revokeShare(dto);
         } catch (error) {
-            logger.error('Failed to revoke share:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                shareId: id,
+            logger.error('Failed to revoke share', {
+                error: error.message,
+                shareId,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;
@@ -208,14 +207,19 @@ export class SharingController {
 
     @Get()
     @UseGuards(AuthGuard('jwt'))
+    @UsePipes(new ValidationPipe({ transform: true }))
     @ApiOperation({ summary: 'List shares' })
     @ApiResponse({ status: 200, type: ListSharesResponseDto })
-    async listShares(@Query() dto: ListSharesRequestDto): Promise<ListSharesResponseDto> {
+    async listShares(
+        @Query() dto: ListSharesRequestDto,
+        @Req() req: Request
+    ): Promise<ListSharesResponseDto> {
         try {
             return await this.sharingService.listShares(dto);
         } catch (error) {
-            logger.error('Failed to list shares:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
+            logger.error('Failed to list shares', {
+                error: error.message,
+                userId: req.user?.id
             });
             errorAggregator.trackError(error);
             throw error;

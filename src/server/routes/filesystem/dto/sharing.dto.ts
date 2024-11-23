@@ -35,6 +35,51 @@ export enum ShareStatus {
 }
 
 /**
+ * Share rate limit configuration DTO
+ */
+export class ShareRateLimitConfigDto {
+    @ApiProperty({ description: 'Maximum number of requests per window' })
+    @IsInt()
+    @Min(1)
+    @Max(1000)
+    maxRequests: number;
+
+    @ApiProperty({ description: 'Time window in minutes' })
+    @IsInt()
+    @Min(1)
+    @Max(60)
+    windowMinutes: number;
+}
+
+/**
+ * Share security configuration DTO
+ */
+export class ShareSecurityConfigDto {
+    @ApiPropertyOptional({ description: 'Rate limit configuration' })
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ShareRateLimitConfigDto)
+    rateLimit?: ShareRateLimitConfigDto;
+
+    @ApiPropertyOptional({ description: 'Allowed IP addresses' })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    allowedIps?: string[];
+
+    @ApiPropertyOptional({ description: 'Allowed referrers' })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    allowedReferrers?: string[];
+
+    @ApiPropertyOptional({ description: 'Whether to enforce CSRF protection' })
+    @IsOptional()
+    @IsBoolean()
+    csrfProtection?: boolean;
+}
+
+/**
  * Share creation request DTO
  */
 export class CreateShareRequestDto {
@@ -73,6 +118,12 @@ export class CreateShareRequestDto {
     @IsOptional()
     @IsObject()
     metadata?: Record<string, unknown>;
+
+    @ApiPropertyOptional({ description: 'Security configuration' })
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ShareSecurityConfigDto)
+    security?: ShareSecurityConfigDto;
 }
 
 /**
@@ -139,6 +190,17 @@ export class ShareInfoDto {
     @IsOptional()
     @IsObject()
     metadata?: Record<string, unknown>;
+
+    @ApiPropertyOptional({ description: 'Security configuration' })
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ShareSecurityConfigDto)
+    security?: ShareSecurityConfigDto;
+
+    @ApiPropertyOptional({ description: 'CSRF token if enabled' })
+    @IsOptional()
+    @IsString()
+    csrfToken?: string;
 }
 
 /**
@@ -195,6 +257,12 @@ export class ModifyShareRequestDto {
     @IsOptional()
     @IsObject()
     metadata?: Record<string, unknown>;
+
+    @ApiPropertyOptional({ description: 'Updated security configuration' })
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => ShareSecurityConfigDto)
+    security?: ShareSecurityConfigDto;
 }
 
 /**
@@ -241,6 +309,19 @@ export class ShareAccessLogEntryDto {
     @IsOptional()
     @IsString()
     error?: string;
+
+    @ApiPropertyOptional({ description: 'Request headers' })
+    @IsOptional()
+    @IsObject()
+    headers?: Record<string, string>;
+
+    @ApiPropertyOptional({ description: 'Rate limit status' })
+    @IsOptional()
+    @IsObject()
+    rateLimit?: {
+        remaining: number;
+        reset: Date;
+    };
 }
 
 /**

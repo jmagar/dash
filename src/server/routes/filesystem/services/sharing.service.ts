@@ -8,6 +8,7 @@ import { Request } from 'express';
 import { normalize, resolve } from 'path';
 import { Cache } from 'cache-manager';
 import sanitize from 'sanitize-filename';
+import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 import {
     CreateShareRequestDto,
@@ -33,6 +34,8 @@ const SHARE_LIST_PREFIX = 'share_list:';
 
 @Injectable()
 export class SharingService {
+    private readonly rateLimiters: Map<string, RateLimiterMemory> = new Map();
+
     constructor(
         @InjectRepository(FileShare)
         private shareRepository: Repository<FileShare>,
@@ -55,7 +58,96 @@ export class SharingService {
         await this.cacheManager.del(`${SHARE_INFO_PREFIX}${shareId}`);
     }
 
-    async createShare(dto: CreateShareRequestDto): Promise<ShareInfoDto> {
+    private async validateSecurity(
+        share: FileShare,
+        req: Request
+    ): Promise<{ isValid: boolean; error?: string }> {
+        if (!share.security) {
+            return { isValid: true };
+        }
+
+        // Check IP allowlist
+        if (share.security.allowedIps?.length > 0) {
+            const clientIp = req.ip;
+            if (!share.security.allowedIps.includes(clientIp)) {
+                return {
+                    isValid: false,
+                    error: 'IP address not allowed'
+                };
+            }
+        }
+
+        // Check referrer allowlist
+        if (share.security.allowedReferrers?.length > 0) {
+            const referrer = req.get('referer');
+            if (!referrer || !share.security.allowedReferrers.some(allowed => referrer.startsWith(allowed))) {
+                return {
+                    isValid: false,
+                    error: 'Invalid referrer'
+                };
+            }
+        }
+
+        // Check CSRF token if enabled
+        if (share.security.csrfProtection) {
+            const csrfToken = req.get('x-csrf-token');
+            const storedToken = await this.getCachedCsrfToken(share.id);
+            
+            if (!csrfToken || !storedToken || csrfToken !== storedToken) {
+                return {
+                    isValid: false,
+                    error: 'Invalid CSRF token'
+                };
+            }
+        }
+
+        // Check rate limit
+        if (share.security.rateLimit) {
+            try {
+                const rateLimiter = this.getRateLimiter(share);
+                await rateLimiter.consume(req.ip);
+            } catch (error) {
+                return {
+                    isValid: false,
+                    error: 'Rate limit exceeded'
+                };
+            }
+        }
+
+        return { isValid: true };
+    }
+
+    private getRateLimiter(share: FileShare): RateLimiterMemory {
+        if (!this.rateLimiters.has(share.id)) {
+            const config = share.security?.rateLimit;
+            this.rateLimiters.set(
+                share.id,
+                new RateLimiterMemory({
+                    points: config?.maxRequests || 60,
+                    duration: (config?.windowMinutes || 1) * 60
+                })
+            );
+        }
+        return this.rateLimiters.get(share.id)!;
+    }
+
+    private async getCachedCsrfToken(shareId: string): Promise<string | null> {
+        return this.cacheManager.get<string>(`${SHARE_INFO_PREFIX}${shareId}:csrf`);
+    }
+
+    private async setCachedCsrfToken(shareId: string, token: string): Promise<void> {
+        await this.cacheManager.set(
+            `${SHARE_INFO_PREFIX}${shareId}:csrf`,
+            token,
+            CACHE_TTL
+        );
+    }
+
+    private generateCsrfToken(): string {
+        return crypto.randomBytes(32).toString('hex');
+    }
+
+    async createShare(dto: CreateShareRequestDto, req: Request): Promise<ShareInfoDto> {
         try {
             // Sanitize and validate path
             const sanitizedPath = this.sanitizePath(dto.path);
@@ -72,8 +164,16 @@ export class SharingService {
                 maxAccesses: dto.maxAccesses,
                 allowZipDownload: dto.allowZipDownload,
                 metadata: dto.metadata,
-                passwordHash: dto.password ? await this.hashPassword(dto.password) : null
+                passwordHash: dto.password ? await this.hashPassword(dto.password) : null,
+                security: dto.security
             });
+
+            // Generate CSRF token if protection is enabled
+            if (dto.security?.csrfProtection) {
+                const csrfToken = this.generateCsrfToken();
+                await this.setCachedCsrfToken(share.id, csrfToken);
+                share.csrfToken = csrfToken;
+            }
 
             const savedShare = await this.shareRepository.save(share);
             const shareInfo = this.mapShareToDto(savedShare);
@@ -134,6 +234,12 @@ export class SharingService {
                     });
                     throw new UnauthorizedException('Invalid password');
                 }
+            }
+
+            // Validate security settings
+            const securityValidation = await this.validateSecurity(share, req);
+            if (!securityValidation.isValid) {
+                throw new UnauthorizedException(securityValidation.error);
             }
 
             const log = this.accessLogRepository.create({
@@ -220,7 +326,8 @@ export class SharingService {
             maxAccesses: share.maxAccesses,
             allowZipDownload: share.allowZipDownload,
             hasPassword: !!share.passwordHash,
-            metadata: share.metadata
+            metadata: share.metadata,
+            security: share.security
         };
     }
 
@@ -266,8 +373,24 @@ export class SharingService {
                 ...(dto.maxAccesses && { maxAccesses: dto.maxAccesses }),
                 ...(dto.allowZipDownload !== undefined && { allowZipDownload: dto.allowZipDownload }),
                 ...(dto.metadata && { metadata: { ...share.metadata, ...dto.metadata } }),
-                ...(dto.password && { passwordHash: await this.hashPassword(dto.password) })
+                ...(dto.password && { passwordHash: await this.hashPassword(dto.password) }),
+                ...(dto.security && { security: dto.security })
             });
+
+            // Update CSRF token if protection is enabled/disabled
+            if (dto.security?.csrfProtection) {
+                const csrfToken = this.generateCsrfToken();
+                await this.setCachedCsrfToken(share.id, csrfToken);
+                share.csrfToken = csrfToken;
+            } else {
+                await this.cacheManager.del(`${SHARE_INFO_PREFIX}${share.id}:csrf`);
+                share.csrfToken = null;
+            }
+
+            // Reset rate limiter if configuration changed
+            if (dto.security?.rateLimit) {
+                this.rateLimiters.delete(share.id);
+            }
 
             const savedShare = await this.shareRepository.save(share);
             const shareInfo = this.mapShareToDto(savedShare);
