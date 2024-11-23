@@ -2,16 +2,8 @@ import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import config from '../config';
 import { logger } from '../utils/logger';
-
-interface ChatOptions {
-  systemPrompt?: string;
-}
-
-interface ChatResponse {
-  success: boolean;
-  data?: string;
-  error?: string;
-}
+import { SendMessageDto, ChatMessageDto, ChatSettingsDto, ChatRole } from '../routes/chat/dto/chat.dto';
+import { plainToClass } from 'class-transformer';
 
 class ChatService {
   private openai: ChatOpenAI;
@@ -45,30 +37,51 @@ class ChatService {
     return '';
   }
 
-  async chat(message: string, options: ChatOptions = {}): Promise<ChatResponse> {
+  async chat(messageDto: SendMessageDto, settingsDto: ChatSettingsDto): Promise<ChatMessageDto> {
     try {
+      // Configure OpenAI with settings
+      this.openai.temperature = settingsDto.temperature || config.openai.temperature;
+      if (settingsDto.maxTokens) {
+        this.openai.maxTokens = settingsDto.maxTokens;
+      }
+
       // Build messages array
       const messages: BaseMessage[] = [
-        new SystemMessage(options.systemPrompt || this.defaultSystemPrompt),
-        new HumanMessage(message)
+        new SystemMessage(settingsDto.systemPrompt || this.defaultSystemPrompt),
+        new HumanMessage(messageDto.content)
       ];
+
+      // If there's a code snippet, append it to the message
+      if (messageDto.codeSnippet) {
+        messages[1] = new HumanMessage(`${messageDto.content}\n\nCode:\n${messageDto.codeSnippet}`);
+      }
 
       // Get response from OpenAI
       const response = await this.openai.call(messages);
       const content = this.extractContent(response);
 
-      return {
-        success: true,
-        data: content,
-      };
+      // Create response DTO
+      return plainToClass(ChatMessageDto, {
+        id: Date.now().toString(),
+        role: ChatRole.ASSISTANT,
+        content: content,
+        timestamp: new Date(),
+        success: true
+      });
     } catch (error) {
       logger.error('Chat service error:', {
         error: error instanceof Error ? error.message : String(error),
       });
-      return {
+      
+      // Return error response DTO
+      return plainToClass(ChatMessageDto, {
+        id: Date.now().toString(),
+        role: ChatRole.ASSISTANT,
+        content: 'Failed to process chat message',
+        timestamp: new Date(),
         success: false,
-        error: 'Failed to process chat message',
-      };
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 }

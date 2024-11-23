@@ -34,6 +34,8 @@ import {
   CreateSpaceDto,
   UpdateSpaceDto,
 } from './dto/space.dto';
+import { FavoriteItemDto } from './dto/favorites.dto';
+import { FilePathDto } from './dto/file-path.dto';
 
 @ApiTags('Filesystem')
 @Controller('api/fs')
@@ -96,19 +98,16 @@ export class FilesystemController {
     return this.filesystemManager.listFiles(locationId, dto);
   }
 
-  @Get(':locationId/files/download')
+  @Get(':locationId/download')
   @ApiOperation({ summary: 'Download a file' })
-  @ApiResponse({ status: 200, type: StreamableFile })
-  @ApiParam({ name: 'locationId', description: 'Location ID' })
-  @ApiQuery({ name: 'path', description: 'File path' })
   async downloadFile(
     @Param('locationId') locationId: string,
-    @Query('path') path: string
+    @Query() dto: FilePathDto
   ): Promise<StreamableFile> {
-    if (!locationId || !path) {
+    if (!locationId || !dto.path) {
       throw new BadRequestException('Both locationId and path are required');
     }
-    const stream = await this.filesystemManager.createDownloadStream(locationId, path);
+    const stream = await this.filesystemManager.createDownloadStream(locationId, dto.path);
     return new StreamableFile(stream);
   }
 
@@ -260,50 +259,22 @@ export class FilesystemController {
     return this.filesystemManager.getQuickAccess();
   }
 
-  @Post('quick-access/favorites')
-  @ApiOperation({ summary: 'Add item to favorites' })
-  @ApiResponse({ status: 201 })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['locationId', 'path'],
-      properties: {
-        locationId: { type: 'string' },
-        path: { type: 'string' },
-      },
-    },
-  })
-  async addToFavorites(
-    @Body('locationId') locationId: string,
-    @Body('path') path: string
-  ): Promise<void> {
-    if (!locationId || !path) {
+  @Post(':locationId/favorites/add')
+  @ApiOperation({ summary: 'Add a file or directory to favorites' })
+  async addToFavorites(@Body() dto: FavoriteItemDto): Promise<void> {
+    if (!dto.locationId || !dto.path) {
       throw new BadRequestException('Both locationId and path are required');
     }
-    await this.filesystemManager.addToFavorites(locationId, path);
+    await this.filesystemManager.addToFavorites(dto.locationId, dto.path);
   }
 
-  @Delete('quick-access/favorites')
-  @ApiOperation({ summary: 'Remove item from favorites' })
-  @ApiResponse({ status: 204 })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['locationId', 'path'],
-      properties: {
-        locationId: { type: 'string' },
-        path: { type: 'string' },
-      },
-    },
-  })
-  async removeFromFavorites(
-    @Body('locationId') locationId: string,
-    @Body('path') path: string
-  ): Promise<void> {
-    if (!locationId || !path) {
+  @Post(':locationId/favorites/remove')
+  @ApiOperation({ summary: 'Remove a file or directory from favorites' })
+  async removeFromFavorites(@Body() dto: FavoriteItemDto): Promise<void> {
+    if (!dto.locationId || !dto.path) {
       throw new BadRequestException('Both locationId and path are required');
     }
-    await this.filesystemManager.removeFromFavorites(locationId, path);
+    await this.filesystemManager.removeFromFavorites(dto.locationId, dto.path);
   }
 
   /**
