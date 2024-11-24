@@ -23,6 +23,11 @@ export class AuditChange {
   @ApiProperty({ description: 'New value', required: false })
   @IsOptional()
   newValue?: any;
+
+  constructor(partial: Partial<AuditChange>) {
+    this.field = '';
+    Object.assign(this, partial);
+  }
 }
 
 export class BaseAuditDto {
@@ -64,6 +69,15 @@ export class BaseAuditDto {
   metadata?: Record<string, any>;
 
   constructor(partial: Partial<BaseAuditDto>) {
+    this.action = AuditAction.READ;
+    this.actor = '';
+    this.actorType = 'SYSTEM';
+    this.resource = '';
+    this.resourceType = '';
     Object.assign(this, partial);
+    
+    if (partial.changes) {
+      this.changes = partial.changes.map(change => new AuditChange(change));
+    }
   }
 }

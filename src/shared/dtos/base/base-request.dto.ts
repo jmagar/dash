@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsArray, IsObject, ValidateNested, Type } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsArray, IsObject, ValidateNested, IsNumber } from 'class-validator';
+import { Type as ValidateType } from 'class-transformer';
 
 export class UserContext {
   @ApiProperty({ description: 'User ID making the request' })
@@ -21,6 +22,12 @@ export class UserContext {
   @IsObject()
   @IsOptional()
   preferences?: Record<string, unknown>;
+
+  constructor(partial: Partial<UserContext>) {
+    this.userId = '';
+    this.roles = [];
+    Object.assign(this, partial);
+  }
 }
 
 export class TenantContext {
@@ -37,6 +44,11 @@ export class TenantContext {
   @IsObject()
   @IsOptional()
   settings?: Record<string, unknown>;
+
+  constructor(partial: Partial<TenantContext>) {
+    this.tenantId = '';
+    Object.assign(this, partial);
+  }
 }
 
 export class RequestSettings {
@@ -50,15 +62,9 @@ export class RequestSettings {
   @IsOptional()
   timeoutMs?: number = 30000;
 
-  @ApiProperty({ description: 'Whether to return detailed response' })
-  @IsBoolean()
-  @IsOptional()
-  detailed?: boolean = false;
-
-  @ApiProperty({ description: 'Response format preference', enum: ['JSON', 'XML', 'CSV'] })
-  @IsString()
-  @IsOptional()
-  responseFormat?: 'JSON' | 'XML' | 'CSV' = 'JSON';
+  constructor(partial: Partial<RequestSettings>) {
+    Object.assign(this, partial);
+  }
 }
 
 export class BaseRequestDto {
@@ -84,19 +90,19 @@ export class BaseRequestDto {
 
   @ApiProperty({ description: 'User context information' })
   @ValidateNested()
-  @Type(() => UserContext)
+  @ValidateType(() => UserContext)
   @IsOptional()
   userContext?: UserContext;
 
   @ApiProperty({ description: 'Tenant context information' })
   @ValidateNested()
-  @Type(() => TenantContext)
+  @ValidateType(() => TenantContext)
   @IsOptional()
   tenantContext?: TenantContext;
 
   @ApiProperty({ description: 'Request settings' })
   @ValidateNested()
-  @Type(() => RequestSettings)
+  @ValidateType(() => RequestSettings)
   @IsOptional()
   settings?: RequestSettings;
 
@@ -107,5 +113,14 @@ export class BaseRequestDto {
 
   constructor(partial: Partial<BaseRequestDto>) {
     Object.assign(this, partial);
+    if (this.userContext) {
+      this.userContext = new UserContext(this.userContext);
+    }
+    if (this.tenantContext) {
+      this.tenantContext = new TenantContext(this.tenantContext);
+    }
+    if (this.settings) {
+      this.settings = new RequestSettings(this.settings);
+    }
   }
 }

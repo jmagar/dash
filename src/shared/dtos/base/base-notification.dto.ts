@@ -49,29 +49,34 @@ export class BaseNotificationDto {
   @IsEnum(NotificationStatus)
   status: NotificationStatus = NotificationStatus.PENDING;
 
-  @ApiProperty({ description: 'When the notification was created' })
+  @ApiProperty({ description: 'Creation timestamp' })
   @IsDate()
   createdAt: Date = new Date();
 
-  @ApiProperty({ description: 'When the notification expires', required: false })
-  @IsOptional()
+  @ApiProperty({ description: 'Expiration timestamp', required: false })
   @IsDate()
+  @IsOptional()
   expiresAt?: Date;
 
-  @ApiProperty({ description: 'Whether the notification is read' })
+  @ApiProperty({ description: 'Is notification read', required: false })
   @IsBoolean()
-  isRead: boolean = false;
-
-  @ApiProperty({ description: 'Action URL for the notification', required: false })
-  @IsString()
   @IsOptional()
-  actionUrl?: string;
+  isRead?: boolean = false;
 
-  @ApiProperty({ description: 'Additional notification data', required: false })
+  @ApiProperty({ description: 'Additional metadata', required: false })
   @IsOptional()
   metadata?: Record<string, any>;
 
   constructor(partial: Partial<BaseNotificationDto>) {
+    this.type = NotificationType.INFO;
+    this.priority = NotificationPriority.LOW;
+    this.title = '';
+    this.message = '';
+    this.recipients = [];
+    this.status = NotificationStatus.PENDING;
+    this.createdAt = new Date();
+    this.isRead = false;
+    
     Object.assign(this, partial);
   }
 }

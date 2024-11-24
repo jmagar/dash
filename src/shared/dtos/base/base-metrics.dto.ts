@@ -25,6 +25,13 @@ export class MetricValue {
   @ApiProperty({ description: 'Timestamp of the measurement' })
   @IsString()
   timestamp: string = new Date().toISOString();
+
+  constructor(partial: Partial<MetricValue>) {
+    this.value = 0;
+    this.type = MetricType.COUNTER;
+    this.timestamp = new Date().toISOString();
+    Object.assign(this, partial);
+  }
 }
 
 export class BaseMetricsDto {
@@ -54,6 +61,19 @@ export class BaseMetricsDto {
   metadata?: Record<string, any>;
 
   constructor(partial: Partial<BaseMetricsDto>) {
+    this.name = '';
+    this.description = '';
+    this.value = new MetricValue({});
     Object.assign(this, partial);
+
+    // Ensure value is properly instantiated
+    if (partial.value) {
+      this.value = new MetricValue(partial.value);
+    }
+
+    // Convert any history items to proper MetricValue instances
+    if (partial.history) {
+      this.history = partial.history.map(h => new MetricValue(h));
+    }
   }
 }

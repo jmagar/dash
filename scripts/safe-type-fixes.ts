@@ -110,10 +110,10 @@ class TypeScriptFixer {
 
       // For test files, we'll log the errors but not block the process
       if (diagnostics.length > 0) {
-        this.log(`Test file validation warnings in ${filePath}:`, 'warn');
+        this.log(`Test file validation warnings in ${filePath}:`, 'warning');
         diagnostics.forEach(diagnostic => {
           const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-          this.log(`  - ${message} (${diagnostic.code})`, 'warn');
+          this.log(`  - ${message} (${diagnostic.code})`, 'warning');
         });
       }
       

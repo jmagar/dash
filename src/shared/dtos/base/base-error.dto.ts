@@ -45,6 +45,7 @@ export class ErrorLocation {
   stackTrace?: string;
 
   constructor(partial: Partial<ErrorLocation>) {
+    this.file = '';
     Object.assign(this, partial);
   }
 }
@@ -97,7 +98,7 @@ export class BaseErrorDto {
 
   @ApiProperty({ description: 'Timestamp when the error occurred' })
   @IsDateString()
-  timestamp: string;
+  timestamp: string = new Date().toISOString();
 
   @ApiProperty({ description: 'Request ID associated with the error' })
   @IsUUID()
@@ -121,31 +122,14 @@ export class BaseErrorDto {
   metadata?: Record<string, unknown>;
 
   constructor(partial: Partial<BaseErrorDto>) {
+    this.code = 'ERR_UNKNOWN';
+    this.category = 'UNKNOWN';
+    this.message = 'An unknown error occurred';
     Object.assign(this, partial);
-    
-    // Set default timestamp if not provided
-    if (!this.timestamp) {
-      this.timestamp = new Date().toISOString();
-    }
-    
-    // Set default severity if not provided
-    if (!this.severity) {
-      this.severity = ErrorSeverity.ERROR;
-    }
 
     // Initialize location if provided
     if (partial.location) {
       this.location = new ErrorLocation(partial.location);
-    }
-
-    // Ensure timestamp is in ISO format
-    if (this.timestamp && !(this.timestamp instanceof Date)) {
-      try {
-        const date = new Date(this.timestamp);
-        this.timestamp = date.toISOString();
-      } catch (e) {
-        this.timestamp = new Date().toISOString();
-      }
     }
   }
 }
