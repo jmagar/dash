@@ -1,105 +1,165 @@
 # Cascade Implementation Guide - DTO Migration Project
 
 ## Overview
-As Cascade, I will implement Phase 1 of the DTO migration project using my built-in capabilities:
-- Code search and analysis
-- File viewing and modification
+As Cascade, I will extend and standardize the existing DTO infrastructure using my capabilities:
+- Code analysis and search
+- File modification
 - Command execution
 - Progress tracking
 
-## Document Structure
-1. `README.md`: Project overview and quality standards
-2. `phase1-standardization.md`: Technical requirements
-3. `phase1-implementation-guide.md`: Step-by-step process
-4. This file: Implementation approach
+## Current Implementation Analysis
 
-## Implementation Approach
+### 1. Base DTOs
+```typescript
+// Core Base DTOs
+- BaseEntityDto
+- BaseResponseDto
+- BaseErrorDto
+- PaginatedResponseDto
 
-### 1. Analysis Phase
-Using `codebase_search` and `grep_search`:
-- Map all DTO locations
-- Identify usage patterns
-- Find dependencies
-- Detect potential breaking changes
-
-### 2. Implementation Process
-Using `edit_file` and `write_to_file`:
-- Make atomic changes
-- Update types systematically
-- Maintain documentation
-- Create new type definitions
-
-### 3. Verification Steps
-Using `run_command`:
-```bash
-# Type checking
-npm run type-check
-
-# Tests
-npm run test
-
-# Coverage
-npm run type-coverage
+// Specialized Base DTOs
+- BaseAuditDto
+- BaseConfigDto
+- BaseHealthDto
+- BaseMetricsDto
+- BaseNotificationDto
+- BasePermissionDto
+- BaseSearchDto
+- BaseTimeRangeDto
+- BaseValidationDto
 ```
 
-## Progress Tracking Format
-```markdown
-## Implementation Status: [Step X]
+### 2. Validation Infrastructure
+```typescript
+// Custom Decorators
+- @IsValidTenantId()
+- @IsValidMetadata()
+- @IsValidTags()
+- @IsValidVersion()
 
-### Completed Actions
-- [List of specific changes made]
-- Files modified: [file paths]
-- Types affected: [type names]
+// Validation Pipe
+- DtoValidationPipe
+- ValidationConfig
+```
 
-### Verification Results
-- Type Coverage: XX%
-- Test Results: [Details]
-- Breaking Changes: [List]
+### 3. Error Handling
+```typescript
+// Error Types
+- ValidationError
+- BusinessError
+- SystemError
 
-### Next Actions
-- [Specific next steps]
-- [Any blockers or concerns]
+// Error Response
+- code: string
+- category: string
+- message: string
+- severity: ErrorSeverity
+- details?: Record<string, unknown>
+```
+
+## Implementation Process
+
+### 1. Analysis Phase
+Using `codebase_search`:
+```typescript
+// Find DTO usage
+- "extends BaseEntityDto"
+- "extends BaseResponseDto"
+- "@IsValidTenantId"
+- "@ValidateNested"
+```
+
+### 2. Extension Process
+Using `edit_file`:
+```typescript
+// Add new base DTOs
+- AuditableEntityDto
+- VersionedEntityDto
+- TaggableEntityDto
+
+// Enhance validation
+- Custom decorators
+- Validation rules
+- Error messages
+```
+
+### 3. Migration Process
+Using `grep_search`:
+```typescript
+// Find targets
+- "class *Dto"
+- "interface *Dto"
+- "@ApiProperty"
 ```
 
 ## Quality Standards
-- Type Safety: 98% coverage
-- Performance: Build <10%, Runtime <3%
-- Testing: Unit >95%, Integration >90%
+1. Type Safety
+   - Strict TypeScript
+   - No any types
+   - Full type coverage
+
+2. Performance
+   - Fast validation
+   - Efficient transforms
+   - Small memory footprint
+
+3. Testing
+   - Full coverage
+   - Edge cases
+   - Performance tests
 
 ## Tool Usage
 
 ### Code Analysis
 ```typescript
 // Search patterns
-codebase_search:
-- "interface *DTO"
-- "type *DTO"
-- "class *DTO"
-
-grep_search:
-- "export (interface|type|class) .*DTO"
+- "class *Dto"
+- "@ApiProperty"
+- "extends Base*Dto"
+- "@IsValid*"
 ```
 
 ### File Operations
-- View files before modification
+- Analyze before changes
 - Make atomic edits
 - Verify after changes
-- Track related files
+- Track dependencies
 
 ### Command Execution
-- Run verification after each change
-- Execute tests for affected areas
-- Monitor performance metrics
+```bash
+# Verification
+npm run type-check
+npm run test
+npm run lint
 
-## Communication
-I will:
-- Report progress after each step
-- Flag any issues immediately
-- Provide specific metrics
-- Suggest optimizations when found
+# Performance
+npm run perf:build
+npm run perf:bench
+```
+
+## Progress Tracking
+```markdown
+## Migration Status: [Step X]
+
+### Completed
+- DTOs migrated: XX
+- Tests added: XX
+- Coverage: XX%
+
+### Next Actions
+- Target DTOs
+- Validation rules
+- Test cases
+```
 
 ## Implementation Priority
-1. Core types with high usage
-2. Dependent type chains
-3. Isolated types
-4. Documentation and cleanup
+1. Core DTOs
+2. Validation rules
+3. Error handling
+4. Documentation
+
+## Communication
+- Report progress
+- Flag issues
+- Share metrics
+- Suggest improvements

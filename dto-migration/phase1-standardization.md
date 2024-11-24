@@ -1,159 +1,276 @@
 # Phase 1: Technical Requirements
 
 ## Overview
-This document defines the technical requirements and specifications for the DTO migration project. These requirements are designed to be verified programmatically through automated checks.
+This document defines the technical requirements for extending and standardizing the existing DTO infrastructure. These requirements build upon the current implementation while ensuring consistency and maintainability.
 
 ## Type System Requirements
 
-### 1. Type Safety
-- TypeScript strict mode enabled
-- No implicit any types
-- No type assertions without justification
-- Type coverage > 98%
-- All public APIs fully typed
-- Generic constraints defined
-
-### 2. DTO Patterns
+### 1. Base DTO Hierarchy
 ```typescript
-// Base DTO Pattern
-interface BaseDTO {
+// Entity Base
+interface BaseEntityDto {
   id: string;
-  createdAt: string;
-  updatedAt: string;
+  tenantId: string;
+  audit: AuditInfo;
+  version?: number;
+  isActive?: boolean;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
-// Request/Response Pattern
-interface RequestDTO {
-  // Request-specific fields
-}
-
-interface ResponseDTO {
+// Response Pattern
+interface BaseResponseDto<T = any> {
   success: boolean;
-  data: unknown;
-  error?: string;
+  data?: T;
+  message?: string;
+  timestamp: string;
 }
 
-// Validation Pattern
-interface ValidationError {
-  field: string;
-  message: string;
+// Error Pattern
+interface BaseErrorDto {
   code: string;
+  category: string;
+  message: string;
+  severity: 'INFO' | 'WARN' | 'ERROR';
+  details?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 ```
 
-### 3. Naming Conventions
-- DTOs: `*DTO` suffix
-- Requests: `*RequestDTO`
-- Responses: `*ResponseDTO`
-- Validation: `*ValidationDTO`
+### 2. Validation Decorators
+```typescript
+// Custom Decorators
+@IsValidTenantId()
+@IsValidMetadata()
+@IsValidTags()
+@IsValidVersion()
+@IsValidPriority()
+@IsValidTimeoutMs()
+
+// Standard Class Validator Usage
+@IsString()
+@IsNumber()
+@IsBoolean()
+@IsOptional()
+@ValidateNested()
+@Type(() => SubDto)
+```
+
+### 3. Documentation Standards
+```typescript
+/**
+ * Represents a [purpose]
+ * @extends {BaseEntityDto} Base entity properties
+ * @implements {Interface} Additional interfaces
+ * 
+ * @property {Type} field - Description
+ * @throws {ValidationError} Conditions
+ * @example
+ * ```typescript
+ * const dto = new SpecificDto({
+ *   field: value
+ * });
+ * ```
+ */
+```
 
 ## Performance Requirements
 
-### 1. Build Performance
-- Build time: <10% increase
-- Type checking: <5% increase
-- No circular dependencies
+### 1. Validation Performance
+- Decorator overhead: <0.1ms per field
+- Transform time: <1ms per object
+- Memory per instance: <1KB average
 
-### 2. Runtime Performance
-- API response time: <3% increase
-- Memory usage: <5% increase
-- Type instantiation: minimal overhead
+### 2. Build Performance
+- Type checking: <100ms per file
+- No circular dependencies
+- Efficient imports
 
 ## Testing Requirements
 
-### 1. Coverage Requirements
-- Unit tests: >95%
-- Integration tests: >90%
-- E2E tests: Critical paths
-
-### 2. Test Patterns
+### 1. Test Patterns
 ```typescript
 describe('DTO', () => {
   it('should validate required fields', () => {
-    // Validation tests
+    const dto = new SpecificDto({});
+    expect(validate(dto)).rejects.toHaveLength(1);
   });
 
-  it('should handle optional fields', () => {
-    // Optional field tests
+  it('should transform correctly', () => {
+    const raw = { date: '2023-01-01' };
+    const dto = plainToInstance(SpecificDto, raw);
+    expect(dto.date).toBeInstanceOf(Date);
   });
 
-  it('should maintain type safety', () => {
-    // Type safety tests
+  it('should handle inheritance', () => {
+    const dto = new SpecificDto({});
+    expect(dto).toBeInstanceOf(BaseEntityDto);
   });
 });
 ```
 
-## Documentation Requirements
+### 2. Coverage Requirements
+- Property validation: 100%
+- Transformation: 100%
+- Error cases: 95%
+- Integration: 90%
 
-### 1. Code Documentation
+## Migration Requirements
+
+### 1. Compatibility
+- Backward compatible APIs
+- Gradual adoption path
+- Version migration tools
+
+### 2. Documentation
+- Migration guides
+- Breaking changes
+- Upgrade scripts
+
+## Redundancy Prevention
+
+### 1. Static Analysis
 ```typescript
-/**
- * Represents a [purpose]
- * @template T - Type parameter description
- * @property {string} field - Field description
- * @throws {ValidationError} When [condition]
- */
+// Detect duplicate types
+type A = { x: string }
+type B = { x: string } // Should extend A
+
+// Detect similar interfaces
+interface UserDto {
+  name: string;
+  email: string;
+}
+interface CustomerDto { // Should reuse UserDto
+  name: string;
+  email: string;
+  customerId: string;
+}
 ```
 
-### 2. Type Documentation
-- Purpose and usage
-- Type parameters
-- Constraints
-- Examples
+### 2. Pattern Detection
+```bash
+# Find similar property patterns
+npm run find-similar-types
+
+# Find duplicate validation rules
+npm run find-duplicate-rules
+```
+
+### 3. Code Analysis Tools
+```typescript
+// ESLint rules
+{
+  "rules": {
+    "@typescript-eslint/no-duplicate-type-constituents": "error",
+    "@typescript-eslint/no-redundant-type-constituents": "error",
+    "@typescript-eslint/unified-signatures": "error"
+  }
+}
+
+// Custom checks
+checkDtoRedundancy({
+  propertyThreshold: 0.7, // 70% similar properties
+  validatePatterns: true,
+  checkInheritance: true
+});
+```
+
+### 4. Inheritance Analysis
+```typescript
+// Detect missing inheritance
+class UserProfileDto { // Should extend BaseEntityDto
+  id: string;
+  tenantId: string;
+  audit: AuditInfo;
+}
+
+// Detect unnecessary inheritance
+class SimpleDto extends BaseEntityDto { // Doesn't need full entity
+  message: string;
+}
+```
+
+### 5. Validation Rules
+```typescript
+// Centralize common validation
+const commonValidation = {
+  name: [IsString(), MaxLength(100)],
+  email: [IsEmail()],
+  phone: [IsPhoneNumber()]
+};
+
+// Reuse in DTOs
+@ValidateByGroup(commonValidation.name)
+name: string;
+```
+
+### 6. Automated Reports
+```bash
+# Generate redundancy report
+npm run analyze-dtos
+
+# Output format
+Redundancy Report
+----------------
+- Similar Types: 3 groups
+- Duplicate Validation: 2 patterns
+- Missing Inheritance: 4 types
+- Unnecessary Base: 2 types
+```
 
 ## Implementation Steps
 
-### 1. Pre-Migration Analysis
-- [ ] Map existing DTOs
-  - Location
-  - Usage patterns
-  - Dependencies
+### 1. Extension Points
+- [ ] Add specialized base DTOs
+- [ ] Extend validation rules
+- [ ] Enhance error handling
+- [ ] Add utility types
 
-### 2. Architecture Design
-- [ ] Define type system
-  - Base types
-  - Type hierarchy
-  - Validation approach
+### 2. Migration Tools
+- [ ] Create codemods
+- [ ] Build validation helpers
+- [ ] Add test utilities
 
-### 3. Base Implementation
-- [ ] Core types
-  - Entity bases
-  - Service interfaces
-  - Utility types
+### 3. Documentation
+- [ ] API references
+- [ ] Migration guides
+- [ ] Best practices
 
-### 4. Extended Implementation
-- [ ] Advanced features
-  - Validation
-  - Security
-  - Configuration
-
-### 5. Cross-Cutting
-- [ ] Shared functionality
-  - Error handling
-  - Type guards
-  - Utilities
-
-### 6. Final Verification
-- [ ] Quality checks
-  - Type coverage
-  - Performance
-  - Documentation
+### 4. Quality Checks
+- [ ] Type coverage
+- [ ] Performance metrics
+- [ ] Test coverage
 
 ## Verification Methods
 
-### 1. Type Coverage
+### 1. Static Analysis
 ```bash
+# Type coverage
 npm run type-coverage
+
+# Circular dependencies
+npm run madge
+
+# Lint
+npm run lint
 ```
 
 ### 2. Performance
 ```bash
+# Build time
 npm run perf:build
-npm run perf:type-check
+
+# Runtime
+npm run perf:bench
 ```
 
 ### 3. Testing
 ```bash
+# Unit tests
 npm run test
+
+# Integration
 npm run test:integration
-```
+
+# Coverage
+npm run test:coverage
