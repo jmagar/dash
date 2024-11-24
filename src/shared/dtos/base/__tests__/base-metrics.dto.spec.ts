@@ -1,0 +1,220 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { BaseMetricsDto, MetricType, MetricValue } from '../base-metrics.dto';
+
+describe('BaseMetricsDto', () => {
+  describe('Type Safety', () => {
+    it('should enforce required fields', async () => {
+      const dto = new BaseMetricsDto({});
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.map(e => e.property)).toContain('name');
+      expect(errors.map(e => e.property)).toContain('description');
+      expect(errors.map(e => e.property)).toContain('value');
+    });
+
+    it('should validate metric value structure', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER
+        }
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should validate metric type enum', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: 'INVALID_TYPE' as MetricType
+        }
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      const valueErrors = errors.find(e => e.property === 'value')?.children || [];
+      expect(valueErrors.map(e => e.property)).toContain('type');
+    });
+
+    it('should validate historical values', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER
+        },
+        history: [
+          {
+            value: 'invalid' as unknown,
+            type: MetricType.COUNTER
+          },
+          {
+            value: 80,
+            type: 'INVALID_TYPE' as MetricType
+          }
+        ]
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      const historyErrors = errors.find(e => e.property === 'history')?.children || [];
+      expect(historyErrors.length).toBe(2);
+    });
+  });
+
+  describe('Default Values', () => {
+    it('should set default timestamp in MetricValue', () => {
+      const before = new Date();
+      const metricValue = new MetricValue({
+        value: 100,
+        type: MetricType.COUNTER
+      });
+      const after = new Date();
+      
+      const timestamp: number = new Date(metricValue.timestamp);
+      expect(timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(timestamp.getTime()).toBeLessThanOrEqual(after.getTime());
+      expect(metricValue.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+  });
+
+  describe('Optional Fields', () => {
+    it('should accept valid optional fields', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER,
+          unit: 'requests/sec'
+        },
+        labels: { service: 'api', env: 'prod' },
+        history: [
+          {
+            value: 90,
+            type: MetricType.COUNTER,
+            unit: 'requests/sec'
+          }
+        ],
+        metadata: { lastReset: new Date().toISOString() }
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should validate labels as object with string values', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER
+        },
+        labels: { valid: 'string', invalid: 123 as unknown }
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('labels');
+    });
+  });
+
+  describe('Performance', () => {
+    it('should validate within 1ms', async () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER
+        }
+      });
+      
+      const start = process.hrtime();
+      await validate(dto);
+      const [seconds, nanoseconds] = process.hrtime(start);
+      const milliseconds = seconds * 1000 + nanoseconds / 1000000;
+      
+      expect(milliseconds).toBeLessThan(1);
+    });
+
+    it('should have memory footprint less than 2KB', () => {
+      const dto = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER,
+          unit: 'requests/sec'
+        },
+        labels: { service: 'api', env: 'prod' },
+        history: [
+          {
+            value: 90,
+            type: MetricType.COUNTER,
+            unit: 'requests/sec'
+          }
+        ],
+        metadata: { lastReset: new Date().toISOString() }
+      });
+      
+      const size: number = Buffer.byteLength(JSON.stringify(dto));
+      expect(size).toBeLessThan(2048); // 2KB
+    });
+  });
+
+  describe('Serialization', () => {
+    it('should properly serialize and deserialize', () => {
+      const original = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER,
+          unit: 'requests/sec'
+        },
+        labels: { service: 'api' },
+        history: [
+          {
+            value: 90,
+            type: MetricType.COUNTER,
+            unit: 'requests/sec'
+          }
+        ]
+      });
+
+      const serialized = JSON.stringify(original);
+      const deserialized = plainToInstance(BaseMetricsDto, JSON.parse(serialized));
+
+      expect(deserialized).toBeInstanceOf(BaseMetricsDto);
+      expect(deserialized.name).toBe(original.name);
+      expect(deserialized.value).toBeInstanceOf(MetricValue);
+      expect(deserialized.value.value).toBe(original.value.value);
+      expect(deserialized.value.type).toBe(original.value.type);
+      expect(deserialized.history?.[0]).toBeInstanceOf(MetricValue);
+      expect(deserialized.labels).toEqual(original.labels);
+    });
+
+    it('should handle optional fields correctly', () => {
+      const original = new BaseMetricsDto({
+        name: 'request_count',
+        description: 'Total number of requests',
+        value: {
+          value: 100,
+          type: MetricType.COUNTER
+        }
+      });
+
+      const serialized = JSON.stringify(original);
+      const deserialized = plainToInstance(BaseMetricsDto, JSON.parse(serialized));
+
+      expect(deserialized.labels).toBeUndefined();
+      expect(deserialized.history).toBeUndefined();
+      expect(deserialized.metadata).toBeUndefined();
+    });
+  });
+});

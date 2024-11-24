@@ -2,25 +2,26 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsDate, IsOptional, IsObject, IsBoolean, IsString, IsArray, ValidateNested, Min, IsInt, IsNotEmpty, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsAuditDatesValid } from './validators/is-audit-dates-valid.validator';
+import * as crypto from 'crypto';
 
 export class AuditInfo {
   @ApiProperty({ description: 'When the entity was created' })
   @Type(() => Date)
   @IsDate()
-  createdAt: Date;
+  createdAt: Date = new Date();
 
   @ApiProperty({ description: 'Who created the entity' })
-  @IsUUID()
-  createdBy: string;
+  @IsString()
+  createdBy: string = 'system';
 
   @ApiProperty({ description: 'When the entity was last updated' })
   @Type(() => Date)
   @IsDate()
-  updatedAt: Date;
+  updatedAt: Date = new Date();
 
   @ApiProperty({ description: 'Who last updated the entity' })
-  @IsUUID()
-  updatedBy: string;
+  @IsString()
+  updatedBy: string = 'system';
 
   @ApiProperty({ description: 'When the entity was deleted (if applicable)' })
   @Type(() => Date)
@@ -29,7 +30,7 @@ export class AuditInfo {
   deletedAt?: Date;
 
   @ApiProperty({ description: 'Who deleted the entity (if applicable)' })
-  @IsUUID()
+  @IsString()
   @IsOptional()
   deletedBy?: string;
 
@@ -80,18 +81,18 @@ export class AuditInfo {
 
 export class BaseEntityDto {
   @ApiProperty({ description: 'Unique identifier for the entity' })
-  @IsUUID()
-  id: string;
+  @IsString()
+  id: string = crypto.randomUUID();
 
   @ApiProperty({ description: 'Tenant identifier for multi-tenancy support' })
-  @IsUUID()
-  tenantId: string;
+  @IsString()
+  tenantId: string = 'default';
 
   @ApiProperty({ description: 'Audit information for the entity' })
   @ValidateNested()
   @Type(() => AuditInfo)
   @IsAuditDatesValid()
-  audit: AuditInfo;
+  audit: AuditInfo = new AuditInfo({});
 
   @ApiProperty({ description: 'Version number for optimistic locking' })
   @IsInt()

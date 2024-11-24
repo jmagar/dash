@@ -1,0 +1,17 @@
+{
+  "name": "type-fix-scripts",
+  "version": "1.0.0",
+  "description": "Helper scripts for fixing TypeScript errors",
+  "scripts": {
+    "analyze": "ts-node type-fix-helper.ts",
+    "fix-types": "ts-node type-fix-helper.ts --fix",
+    "check-progress": "ts-node type-fix-helper.ts --progress"
+  },
+  "dependencies": {
+    "ts-node": "^10.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.3",
+    "typescript": "^5.7.2"
+  }
+}
