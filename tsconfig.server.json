@@ -16,12 +16,15 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": [
     "src/server/**/*",
     "src/types/**/*",
-    "src/utils/**/*"
+    "src/utils/**/*",
+    "src/shared/**/*"
   ],
   "exclude": [
     "node_modules",

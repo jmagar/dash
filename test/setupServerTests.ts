@@ -1,5 +1,14 @@
 import { jest } from '@jest/globals';
 import RedisMock from 'ioredis-mock';
+import { useContainer } from 'class-validator';
+import 'reflect-metadata';
+
+// Initialize validation container
+useContainer({
+  get: () => null,
+  has: () => false,
+  clear: () => {},
+}, { fallback: true, fallbackOnErrors: true });
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';
@@ -31,15 +40,41 @@ jest.mock('../src/server/config', () => ({
       secret: 'test-secret',
       expiresIn: '1h',
     },
-    logging: {
-      level: 'debug',
-    },
   },
 }));
+
+// Custom matchers
+expect.extend({
+  toBeValidDTO(received) {
+    if (!received || typeof received !== 'object') {
+      return {
+        message: () => `expected ${received} to be a DTO object`,
+        pass: false,
+      };
+    }
+
+    return {
+      message: () => 'expected validation to fail',
+      pass: true,
+    };
+  },
+});
+
+// Performance test thresholds
+global.performanceThresholds = {
+  instantiation: 1, // ms
+  validation: 1, // ms
+  serialization: 1, // ms
+  memoryFootprint: 2048, // bytes
+};
 
 // Global beforeEach and afterEach hooks
 beforeEach(() => {
   jest.clearAllMocks();
+  // Reset performance metrics
+  if (global.gc) {
+    global.gc();
+  }
 });
 
 afterEach(() => {

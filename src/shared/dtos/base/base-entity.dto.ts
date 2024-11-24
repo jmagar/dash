@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsDate, IsOptional, IsObject, IsBoolean, IsString, IsArray, ValidateNested } from 'class-validator';
+import { IsUUID, IsDate, IsOptional, IsObject, IsBoolean, IsString, IsArray, ValidateNested, Min, IsInt, IsNotEmpty, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsAuditDatesValid } from './validators/is-audit-dates-valid.validator';
 
 export class AuditInfo {
   @ApiProperty({ description: 'When the entity was created' })
@@ -61,6 +62,20 @@ export class AuditInfo {
   @IsString()
   @IsOptional()
   deletedUserAgent?: string;
+
+  constructor(partial: Partial<AuditInfo>) {
+    Object.assign(this, partial);
+    // Convert string dates to Date objects
+    if (partial.createdAt && !(partial.createdAt instanceof Date)) {
+      this.createdAt = new Date(partial.createdAt);
+    }
+    if (partial.updatedAt && !(partial.updatedAt instanceof Date)) {
+      this.updatedAt = new Date(partial.updatedAt);
+    }
+    if (partial.deletedAt && !(partial.deletedAt instanceof Date)) {
+      this.deletedAt = new Date(partial.deletedAt);
+    }
+  }
 }
 
 export class BaseEntityDto {
@@ -75,9 +90,12 @@ export class BaseEntityDto {
   @ApiProperty({ description: 'Audit information for the entity' })
   @ValidateNested()
   @Type(() => AuditInfo)
+  @IsAuditDatesValid()
   audit: AuditInfo;
 
   @ApiProperty({ description: 'Version number for optimistic locking' })
+  @IsInt()
+  @Min(0)
   @IsOptional()
   version?: number;
 
@@ -89,6 +107,8 @@ export class BaseEntityDto {
   @ApiProperty({ description: 'Tags for categorizing and filtering entities' })
   @IsArray()
   @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @MaxLength(50, { each: true })
   @IsOptional()
   tags?: string[];
 
@@ -99,5 +119,16 @@ export class BaseEntityDto {
 
   constructor(partial: Partial<BaseEntityDto>) {
     Object.assign(this, partial);
+    // Initialize audit info if provided
+    if (partial.audit) {
+      this.audit = new AuditInfo(partial.audit);
+    }
+    // Initialize default values
+    if (this.isActive === undefined) {
+      this.isActive = true;
+    }
+    if (!this.version) {
+      this.version = 0;
+    }
   }
 }

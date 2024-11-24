@@ -5,7 +5,11 @@ module.exports = {
     {
       displayName: 'server',
       testEnvironment: 'node',
-      testMatch: ['<rootDir>/test/server/**/*.test.ts'],
+      testMatch: [
+        '<rootDir>/test/server/**/*.test.ts',
+        '<rootDir>/src/shared/dtos/**/*.spec.ts',
+        '<rootDir>/src/shared/dtos/**/*.benchmark.ts'
+      ],
       transform: {
         '^.+\\.tsx?$': ['ts-jest', {
           tsconfig: 'tsconfig.server.json',
@@ -14,10 +18,11 @@ module.exports = {
       },
       moduleFileExtensions: ['ts', 'js', 'json', 'node'],
       moduleNameMapper: {
-        '^(.*)$': '<rootDir>/src/$1',
+        '^src/(.*)$': '<rootDir>/src/$1'
       },
       setupFilesAfterEnv: ['<rootDir>/test/setupServerTests.ts'],
       moduleDirectories: ['node_modules', 'src'],
+      roots: ['<rootDir>'],
     },
     // Client tests configuration
     {
@@ -32,7 +37,7 @@ module.exports = {
       },
       moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
       moduleNameMapper: {
-        '^(.*)$': '<rootDir>/src/$1',
+        '^src/(.*)$': '<rootDir>/src/$1'
       },
       setupFilesAfterEnv: ['<rootDir>/test/setupTests.ts'],
       moduleDirectories: ['node_modules', 'src'],
