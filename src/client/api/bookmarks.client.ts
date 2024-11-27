@@ -1,13 +1,22 @@
 import { BaseApiClient } from './base.client';
 import type { Bookmark } from '@prisma/client';
+import type { ApiResponse } from '../../types/express';
 
-const BOOKMARK_ENDPOINTS = {
+interface BookmarkEndpoints {
+  LIST: string;
+  CREATE: string;
+  UPDATE: (hostId: string, path: string) => string;
+  DELETE: (hostId: string, path: string) => string;
+  ACCESS: (hostId: string, path: string) => string;
+}
+
+const BOOKMARK_ENDPOINTS: BookmarkEndpoints = {
   LIST: '/api/bookmarks',
   CREATE: '/api/bookmarks',
   UPDATE: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}`,
   DELETE: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}`,
   ACCESS: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}/access`,
-} as const;
+};
 
 interface CreateBookmarkParams {
   hostId: string;
@@ -21,23 +30,18 @@ interface UpdateBookmarkParams {
   notes: string;
 }
 
-class BookmarkClient extends BaseApiClient {
+class BookmarkClient extends BaseApiClient<BookmarkEndpoints> {
   constructor() {
     super(BOOKMARK_ENDPOINTS);
   }
 
   async listBookmarks(): Promise<Bookmark[]> {
-    const response = await this.get<{ success: boolean; data: Bookmark[] }>(
-      this.endpoints.LIST
-    );
+    const response = await this.get<Bookmark[]>(this.getEndpoint('LIST'));
     return response.data;
   }
 
   async createBookmark(params: CreateBookmarkParams): Promise<Bookmark> {
-    const response = await this.post<{ success: boolean; data: Bookmark }>(
-      this.endpoints.CREATE,
-      params
-    );
+    const response = await this.post<Bookmark>(this.getEndpoint('CREATE'), params);
     return response.data;
   }
 
@@ -46,23 +50,16 @@ class BookmarkClient extends BaseApiClient {
     path: string,
     params: UpdateBookmarkParams
   ): Promise<Bookmark> {
-    const response = await this.patch<{ success: boolean; data: Bookmark }>(
-      this.endpoints.UPDATE(hostId, path),
-      params
-    );
+    const response = await this.put<Bookmark>(this.getEndpoint('UPDATE', hostId, path), params);
     return response.data;
   }
 
   async deleteBookmark(hostId: string, path: string): Promise<void> {
-    await this.delete<{ success: boolean }>(
-      this.endpoints.DELETE(hostId, path)
-    );
+    await this.delete<void>(this.getEndpoint('DELETE', hostId, path));
   }
 
   async updateLastAccessed(hostId: string, path: string): Promise<void> {
-    await this.post<{ success: boolean }>(
-      this.endpoints.ACCESS(hostId, path)
-    );
+    await this.post<void>(this.getEndpoint('ACCESS', hostId, path));
   }
 }
 

@@ -17,6 +17,7 @@
     "jsx": "react-jsx",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],

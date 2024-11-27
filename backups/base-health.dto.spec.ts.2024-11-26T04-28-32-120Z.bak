@@ -1,0 +1,179 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { BaseHealthDto, HealthMetrics } from '../base-health.dto';
+describe('BaseHealthDto', () => {
+    describe('Type Safety', () => {
+        it('should enforce required fields', async () => {
+            const dto = new BaseHealthDto({});
+            const errors = await validate(dto);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors.map(e => e.property)).toContain('isHealthy');
+            expect(errors.map(e => e.property)).toContain('uptime');
+            expect(errors.map(e => e.property)).toContain('version');
+            expect(errors.map(e => e.property)).toContain('metrics');
+        });
+        it('should validate metrics structure', async () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                })
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBe(0);
+        });
+        it('should validate nested metrics fields', async () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 'invalid' as unknown,
+                    cpuUsage: '25.5' as unknown,
+                    diskUsage: true as unknown
+                })
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBeGreaterThan(0);
+            const metricsErrors = errors.find(e => e.property === 'metrics')?.children || [];
+            expect(metricsErrors.map(e => e.property)).toContain('memoryUsage');
+            expect(metricsErrors.map(e => e.property)).toContain('cpuUsage');
+            expect(metricsErrors.map(e => e.property)).toContain('diskUsage');
+        });
+    });
+    describe('Default Values', () => {
+        it('should set default timestamp to current ISO string', () => {
+            const before = new Date();
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                })
+            });
+            const after = new Date();
+            expect(dto.timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime());
+            expect(dto.timestamp.getTime()).toBeLessThanOrEqual(after.getTime());
+            expect(dto.timestamp.toISOString()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        });
+    });
+    describe('Optional Fields', () => {
+        it('should accept valid optional fields', async () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                }),
+                metadata: {
+                    lastCheck: new Date().toISOString(),
+                    dependencies: { database: 'healthy', cache: 'healthy' }
+                }
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBe(0);
+        });
+        it('should validate metadata as object', async () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                }),
+                metadata: 'invalid' as unknown
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0].property).toBe('metadata');
+        });
+    });
+    describe('Performance', () => {
+        it('should validate within 1ms', async () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                })
+            });
+            const start = process.hrtime();
+            await validate(dto);
+            const [seconds, nanoseconds] = process.hrtime(start);
+            const milliseconds = seconds * 1000 + nanoseconds / 1000000;
+            expect(milliseconds).toBeLessThan(1);
+        });
+        it('should have memory footprint less than 2KB', () => {
+            const dto = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                }),
+                metadata: {
+                    lastCheck: new Date().toISOString(),
+                    dependencies: { database: 'healthy', cache: 'healthy' }
+                }
+            });
+            const size: number = Buffer.byteLength(JSON.stringify(dto));
+            expect(size).toBeLessThan(2048); // 2KB
+        });
+    });
+    describe('Serialization', () => {
+        it('should properly serialize and deserialize', () => {
+            const original = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                }),
+                metadata: { dependencies: { database: 'healthy' } }
+            });
+            const serialized = JSON.stringify(original);
+            const deserialized = plainToInstance(BaseHealthDto, JSON.parse(serialized));
+            expect(deserialized).toBeInstanceOf(BaseHealthDto);
+            expect(deserialized.isHealthy).toBe(original.isHealthy);
+            expect(deserialized.uptime).toBe(original.uptime);
+            expect(deserialized.version).toBe(original.version);
+            expect(deserialized.metrics).toBeInstanceOf(HealthMetrics);
+            expect(deserialized.metrics.memoryUsage).toBe(original.metrics.memoryUsage);
+            expect(deserialized.metadata).toEqual(original.metadata);
+        });
+        it('should handle optional fields correctly', () => {
+            const original = new BaseHealthDto({
+                isHealthy: true,
+                uptime: 3600,
+                version: '1.0.0',
+                metrics: new HealthMetrics({
+                    memoryUsage: 512,
+                    cpuUsage: 25.5,
+                    diskUsage: 75.0
+                })
+            });
+            const serialized = JSON.stringify(original);
+            const deserialized = plainToInstance(BaseHealthDto, JSON.parse(serialized));
+            expect(deserialized.metadata).toBeUndefined();
+        });
+    });
+});

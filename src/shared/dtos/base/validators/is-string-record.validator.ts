@@ -9,7 +9,7 @@ export function IsStringRecord(validationOptions?: ValidationOptions) {
       options: validationOptions,
       validator: {
         validate(value: unknown, args: ValidationArguments): boolean {
-          if (typeof value !== 'object' || value === null) {
+          if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
             return false;
           }
           return Object.values(value as Record<string, unknown>).every((item) => typeof item === 'string');

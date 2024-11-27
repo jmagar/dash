@@ -1,0 +1,161 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { BaseConfigDto, ConfigValue } from '../base-config.dto';
+import { Environment } from '../enums';
+
+describe('BaseConfigDto', () => {
+    describe('Type Safety', () => {
+        it('should enforce required fields', async () => {
+            const dto = new BaseConfigDto({});
+            const errors = await validate(dto);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors.map(e => e.property)).toContain('key');
+            expect(errors.map(e => e.property)).toContain('description');
+            expect(errors.map(e => e.property)).toContain('environment');
+        });
+
+        it('should validate ConfigValue structure', async () => {
+            const now = new Date();
+            const dto = new BaseConfigDto({
+                key: 'app.timeout',
+                description: 'Application timeout in seconds',
+                environment: Environment.Development,
+                value: new ConfigValue<number>({
+                    value: 30,
+                    type: 'number',
+                    isEncrypted: false,
+                    updatedAt: now,
+                    environment: Environment.Development
+                })
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBe(0);
+        });
+
+        it('should validate nested ConfigValue fields', async () => {
+            const dto = new BaseConfigDto({
+                key: 'app.settings',
+                description: 'Application settings',
+                environment: Environment.Development,
+                value: new ConfigValue<Record<string, unknown>>({
+                    value: { debug: true, logLevel: 'info' },
+                    type: 'object',
+                    isEncrypted: false,
+                    updatedAt: new Date(),
+                    environment: Environment.Development
+                })
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBe(0);
+        });
+
+        it('should validate string array values', async () => {
+            const dto = new BaseConfigDto({
+                key: 'app.allowed_origins',
+                description: 'Allowed CORS origins',
+                environment: Environment.Development,
+                value: new ConfigValue<string[]>({
+                    value: ['http://localhost:3000', 'https://example.com'],
+                    type: 'array',
+                    isEncrypted: false,
+                    updatedAt: new Date(),
+                    environment: Environment.Development
+                }),
+                tags: ['security', 'cors']
+            });
+            const errors = await validate(dto);
+            expect(errors.length).toBe(0);
+        });
+    });
+
+    describe('Default Values', () => {
+        it('should set default values correctly', () => {
+            const dto = new BaseConfigDto({
+                key: 'app.timeout',
+                description: 'Application timeout in seconds',
+                environment: Environment.Development
+            });
+            
+            expect(dto.enabled).toBe(true);
+            expect(dto.tags).toEqual([]);
+            expect(dto.metadata).toEqual({});
+            expect(dto.value).toBeInstanceOf(ConfigValue);
+        });
+
+        it('should handle undefined optional fields', () => {
+            const dto = new BaseConfigDto({
+                key: 'app.timeout',
+                description: 'Application timeout in seconds',
+                environment: Environment.Development,
+                value: new ConfigValue<number>({
+                    value: 30,
+                    type: 'number',
+                    isEncrypted: false,
+                    updatedAt: new Date(),
+                    environment: Environment.Development
+                })
+            });
+
+            expect(dto.enabled).toBeUndefined();
+            expect(dto.tags).toBeUndefined();
+            expect(dto.metadata).toBeUndefined();
+        });
+    });
+
+    describe('Serialization', () => {
+        it('should properly serialize and deserialize', () => {
+            const now = new Date();
+            const original = new BaseConfigDto({
+                key: 'app.timeout',
+                description: 'Application timeout in seconds',
+                environment: Environment.Development,
+                value: new ConfigValue<number>({
+                    value: 30,
+                    type: 'number',
+                    isEncrypted: false,
+                    updatedAt: now,
+                    environment: Environment.Development
+                }),
+                enabled: true,
+                tags: ['performance', 'timeout'],
+                metadata: { source: 'config-file' }
+            });
+
+            const serialized = JSON.stringify(original);
+            const deserialized = plainToInstance(BaseConfigDto, JSON.parse(serialized));
+
+            expect(deserialized).toBeInstanceOf(BaseConfigDto);
+            expect(deserialized.key).toBe(original.key);
+            expect(deserialized.description).toBe(original.description);
+            expect(deserialized.environment).toBe(original.environment);
+            expect(deserialized.value).toBeInstanceOf(ConfigValue);
+            expect(deserialized.value.value).toBe(original.value.value);
+            expect(deserialized.value.type).toBe(original.value.type);
+            expect(deserialized.value.isEncrypted).toBe(original.value.isEncrypted);
+            expect(deserialized.value.updatedAt.getTime()).toBe(original.value.updatedAt.getTime());
+            expect(deserialized.enabled).toBe(original.enabled);
+            expect(deserialized.tags).toEqual(original.tags);
+            expect(deserialized.metadata).toEqual(original.metadata);
+        });
+    });
+
+    describe('Encryption', () => {
+        it('should handle encrypted values', () => {
+            const dto = new BaseConfigDto({
+                key: 'app.secret',
+                description: 'Secret key',
+                environment: Environment.Development,
+                value: new ConfigValue<string>({
+                    value: 'encrypted-value',
+                    type: 'string',
+                    isEncrypted: true,
+                    updatedAt: new Date(),
+                    environment: Environment.Development
+                })
+            });
+
+            expect(dto.value.isEncrypted).toBe(true);
+            expect(typeof dto.value.value).toBe('string');
+        });
+    });
+});

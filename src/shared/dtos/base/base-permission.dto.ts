@@ -1,10 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDate, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { PermissionType, ResourceType } from '../enums';
 
 export enum PermissionType {
   READ = 'READ',
   WRITE = 'WRITE',
-  DELETE = 'DELETE',
   EXECUTE = 'EXECUTE',
   ADMIN = 'ADMIN',
 }
@@ -12,33 +13,45 @@ export enum PermissionType {
 export enum ResourceType {
   FILE = 'FILE',
   DIRECTORY = 'DIRECTORY',
-  DATABASE = 'DATABASE',
-  API = 'API',
-  SERVICE = 'SERVICE',
+  SYSTEM = 'SYSTEM',
+  APPLICATION = 'APPLICATION',
+  ANY = 'ANY',
 }
 
 export class BasePermissionDto {
   @ApiProperty({ description: 'Permission type', enum: PermissionType })
   @IsEnum(PermissionType)
-  type: PermissionType;
+  @IsNotEmpty()
+  type: PermissionType = PermissionType.READ;
 
   @ApiProperty({ description: 'Resource type', enum: ResourceType })
   @IsEnum(ResourceType)
-  resourceType: ResourceType;
+  @IsNotEmpty()
+  resourceType: ResourceType = ResourceType.ANY;
 
   @ApiProperty({ description: 'Resource identifier' })
   @IsString()
-  resourceId: string;
+  @IsNotEmpty()
+  resourceId: string = '*';
 
-  @ApiProperty({ description: 'Permission expiration date', required: false })
+  @ApiProperty({ description: 'Permission granted timestamp' })
+  @IsDate()
+  @Type(() => Date)
+  @IsNotEmpty()
+  grantedAt: Date = new Date();
+
+  @ApiProperty({ description: 'Permission expiry timestamp' })
+  @IsDate()
+  @Type(() => Date)
   @IsOptional()
   expiresAt?: Date;
 
-  @ApiProperty({ description: 'Additional permission metadata', required: false })
+  @ApiProperty({ description: 'Additional permission metadata' })
+  @IsObject()
   @IsOptional()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> = {};
 
-  constructor(partial: Partial<BasePermissionDto>) {
+  constructor(partial?: Partial<BasePermissionDto>) {
     Object.assign(this, partial);
   }
 }

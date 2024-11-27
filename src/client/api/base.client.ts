@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+import { Socket, io } from 'socket.io-client';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { createApiError } from '../../types/error';
@@ -8,13 +9,18 @@ export interface BaseClientConfig {
   baseURL?: string;
   timeout?: number;
   headers?: Record<string, string>;
+  socketURL?: string;
 }
 
-export class BaseApiClient {
-  protected api: AxiosInstance;
-  protected endpoints: Record<string, string | ((id: string) => string)>;
+export type EndpointFunction = (...args: any[]) => string;
+export type Endpoint = string | EndpointFunction;
 
-  constructor(endpoints: Record<string, string | ((id: string) => string)>, clientConfig?: BaseClientConfig) {
+export class BaseApiClient<T extends Record<string, Endpoint>> {
+  protected api: AxiosInstance;
+  protected endpoints: T;
+  protected socket: Socket;
+
+  constructor(endpoints: T, clientConfig?: BaseClientConfig) {
     this.endpoints = endpoints;
     this.api = axios.create({
       baseURL: clientConfig?.baseURL || config.apiUrl,
@@ -25,7 +31,15 @@ export class BaseApiClient {
       },
     });
 
+    this.socket = io(clientConfig?.socketURL || config.socketUrl, {
+      autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+
     this.setupInterceptors();
+    this.setupSocketHandlers();
   }
 
   private setupInterceptors() {
@@ -61,43 +75,59 @@ export class BaseApiClient {
     );
   }
 
-  protected async get<T>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  private setupSocketHandlers() {
+    this.socket.on('connect', () => {
+      logger.info('Socket connected');
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      logger.warn('Socket disconnected:', { reason });
+    });
+
+    this.socket.on('connect_error', (error) => {
+      logger.error('Socket connection error:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
+  }
+
+  protected async get<R>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
     try {
-      const response = await this.api.get<ApiResponse<T>>(endpoint, config);
+      const response = await this.api.get<ApiResponse<R>>(endpoint, config);
       return response.data;
     } catch (error) {
       throw createApiError(`GET request failed: ${endpoint}`, error);
     }
   }
 
-  protected async post<T>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  protected async post<R>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
     try {
-      const response = await this.api.post<ApiResponse<T>>(endpoint, data, config);
+      const response = await this.api.post<ApiResponse<R>>(endpoint, data, config);
       return response.data;
     } catch (error) {
       throw createApiError(`POST request failed: ${endpoint}`, error);
     }
   }
 
-  protected async put<T>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  protected async put<R>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
     try {
-      const response = await this.api.put<ApiResponse<T>>(endpoint, data, config);
+      const response = await this.api.put<ApiResponse<R>>(endpoint, data, config);
       return response.data;
     } catch (error) {
       throw createApiError(`PUT request failed: ${endpoint}`, error);
     }
   }
 
-  protected async delete<T>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  protected async delete<R>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
     try {
-      const response = await this.api.delete<ApiResponse<T>>(endpoint, config);
+      const response = await this.api.delete<ApiResponse<R>>(endpoint, config);
       return response.data;
     } catch (error) {
       throw createApiError(`DELETE request failed: ${endpoint}`, error);
     }
   }
 
-  protected getEndpoint(key: string, ...params: string[]): string {
+  protected getEndpoint(key: keyof T, ...params: any[]): string {
     const endpoint = this.endpoints[key];
     if (typeof endpoint === 'function') {
       return endpoint(...params);

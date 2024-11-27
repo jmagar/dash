@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsDate, IsEnum, IsNotEmpty, IsOptional, IsObject, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export enum NotificationType {
   INFO = 'INFO',
@@ -24,59 +25,74 @@ export enum NotificationStatus {
 }
 
 export class BaseNotificationDto {
-  @ApiProperty({ description: 'Notification type', enum: NotificationType })
+  @ApiProperty({ enum: NotificationType, description: 'Notification type' })
   @IsEnum(NotificationType)
-  type: NotificationType;
+  type!: NotificationType;
 
-  @ApiProperty({ description: 'Notification priority', enum: NotificationPriority })
+  @ApiProperty({ enum: NotificationPriority, description: 'Notification priority' })
   @IsEnum(NotificationPriority)
-  priority: NotificationPriority;
+  priority!: NotificationPriority;
 
   @ApiProperty({ description: 'Notification title' })
   @IsString()
-  title: string;
+  @IsNotEmpty()
+  title!: string;
 
   @ApiProperty({ description: 'Notification message' })
   @IsString()
-  message: string;
+  @IsNotEmpty()
+  message!: string;
 
-  @ApiProperty({ description: 'Target users/groups', type: [String] })
+  @ApiProperty({ type: [String], description: 'Target users/groups' })
   @IsArray()
   @IsString({ each: true })
-  recipients: string[];
+  recipients!: string[];
 
-  @ApiProperty({ description: 'Notification status', enum: NotificationStatus })
+  @ApiProperty({ enum: NotificationStatus, description: 'Notification status' })
   @IsEnum(NotificationStatus)
-  status: NotificationStatus = NotificationStatus.PENDING;
+  status!: NotificationStatus;
 
   @ApiProperty({ description: 'Creation timestamp' })
   @IsDate()
-  createdAt: Date = new Date();
+  @Type(() => Date)
+  createdAt!: Date;
 
   @ApiProperty({ description: 'Expiration timestamp', required: false })
   @IsDate()
   @IsOptional()
+  @Type(() => Date)
   expiresAt?: Date;
 
-  @ApiProperty({ description: 'Is notification read', required: false })
+  @ApiProperty({ description: 'Has the notification been read' })
   @IsBoolean()
   @IsOptional()
-  isRead?: boolean = false;
+  isRead?: boolean;
 
   @ApiProperty({ description: 'Additional metadata', required: false })
+  @IsObject()
   @IsOptional()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 
-  constructor(partial: Partial<BaseNotificationDto>) {
+  constructor(partial?: Partial<BaseNotificationDto>) {
+    // Set default values for optional fields only
     this.type = NotificationType.INFO;
     this.priority = NotificationPriority.LOW;
-    this.title = '';
-    this.message = '';
-    this.recipients = [];
     this.status = NotificationStatus.PENDING;
-    this.createdAt = new Date();
     this.isRead = false;
-    
-    Object.assign(this, partial);
+    this.metadata = {};
+    this.createdAt = new Date();
+
+    if (partial) {
+      Object.assign(this, {
+        ...partial,
+        createdAt: partial.createdAt ? new Date(partial.createdAt) : this.createdAt,
+        expiresAt: partial.expiresAt ? new Date(partial.expiresAt) : undefined,
+        metadata: partial.metadata || this.metadata,
+        type: partial.type || this.type,
+        priority: partial.priority || this.priority,
+        status: partial.status || this.status,
+        isRead: partial.isRead !== undefined ? partial.isRead : this.isRead
+      });
+    }
   }
 }

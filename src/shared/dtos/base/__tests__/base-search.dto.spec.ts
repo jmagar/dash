@@ -1,6 +1,6 @@
-import { validate } from 'class-validator';
-import { BaseSearchDto } from '../base-search.dto';
-import { SortDirection } from '../enums';
+import { validate, ValidationError } from 'class-validator';
+import { BaseSearchDto, SortField } from '../base-search.dto';
+import { SortDirection } from '../../enums';
 describe('BaseSearchDto', () => {
     describe('Type Safety', () => {
         it('should enforce page as number', async () => {
@@ -10,8 +10,8 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('page');
-            expect(errors[0].constraints).toHaveProperty('isNumber');
+            expect((errors[0] as ValidationError).property).toBe('page');
+            expect((errors[0] as ValidationError).constraints).toHaveProperty('isNumber');
         });
         it('should enforce limit as number', async () => {
             const dto = new BaseSearchDto({
@@ -20,8 +20,8 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('limit');
-            expect(errors[0].constraints).toHaveProperty('isNumber');
+            expect((errors[0] as ValidationError).property).toBe('limit');
+            expect((errors[0] as ValidationError).constraints).toHaveProperty('isNumber');
         });
         it('should validate sort options', async () => {
             const dto = new BaseSearchDto({
@@ -34,7 +34,7 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('sort');
+            expect((errors[0] as ValidationError).property).toBe('sort');
         });
         it('should validate fields as string array', async () => {
             const dto = new BaseSearchDto({
@@ -44,7 +44,7 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('fields');
+            expect((errors[0] as ValidationError).property).toBe('fields');
         });
     });
     describe('Pagination', () => {
@@ -55,8 +55,8 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('page');
-            expect(errors[0].constraints).toHaveProperty('min');
+            expect((errors[0] as ValidationError).property).toBe('page');
+            expect((errors[0] as ValidationError).constraints).toHaveProperty('min');
         });
         it('should enforce minimum limit value', async () => {
             const dto = new BaseSearchDto({
@@ -65,8 +65,8 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('limit');
-            expect(errors[0].constraints).toHaveProperty('min');
+            expect((errors[0] as ValidationError).property).toBe('limit');
+            expect((errors[0] as ValidationError).constraints).toHaveProperty('min');
         });
         it('should use default values when not provided', () => {
             const dto = new BaseSearchDto({});
@@ -86,7 +86,7 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('sort');
+            expect((errors[0] as ValidationError).property).toBe('sort');
         });
         it('should accept valid sort options', async () => {
             const dto = new BaseSearchDto({
@@ -179,8 +179,8 @@ describe('BaseSearchDto', () => {
             const serialized = JSON.stringify(original);
             const deserialized = new BaseSearchDto(JSON.parse(serialized));
             expect(deserialized.query).toBeUndefined();
-            expect(deserialized.sort).toBeUndefined();
-            expect(deserialized.fields).toBeUndefined();
+            expect(deserialized.sort).toEqual([]);
+            expect(deserialized.fields).toEqual([]);
             expect(deserialized.filters).toBeUndefined();
         });
     });
@@ -193,7 +193,8 @@ describe('BaseSearchDto', () => {
             });
             const errors = await validate(dto);
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0].property).toBe('filters');
+            expect((errors[0] as ValidationError).property).toBe('filters');
+            expect((errors[0] as ValidationError).constraints).toHaveProperty('isJson');
         });
         it('should accept valid JSON filters', async () => {
             const dto = new BaseSearchDto({
@@ -201,11 +202,57 @@ describe('BaseSearchDto', () => {
                 limit: 10,
                 filters: JSON.stringify({
                     status: 'active',
-                    categories: ['A', 'B']
+                    tags: ['tag1', 'tag2']
                 })
             });
             const errors = await validate(dto);
             expect(errors.length).toBe(0);
+        });
+        it('should parse filters correctly using getFilters()', () => {
+            const filters = {
+                status: 'active',
+                tags: ['tag1', 'tag2']
+            };
+            const dto = new BaseSearchDto({
+                filters: JSON.stringify(filters)
+            });
+            expect(dto.getFilters()).toEqual(filters);
+        });
+        it('should return null for invalid JSON in getFilters()', () => {
+            const dto = new BaseSearchDto({
+                filters: '{invalid json'
+            });
+            expect(dto.getFilters()).toBeNull();
+        });
+        it('should return null for undefined filters in getFilters()', () => {
+            const dto = new BaseSearchDto({});
+            expect(dto.getFilters()).toBeNull();
+        });
+        it('should handle complex filter objects', () => {
+            interface ComplexFilter {
+                status: string;
+                dateRange: {
+                    start: string;
+                    end: string;
+                };
+                tags: string[];
+            }
+            const filters: ComplexFilter = {
+                status: 'active',
+                dateRange: {
+                    start: '2023-01-01',
+                    end: '2023-12-31'
+                },
+                tags: ['important', 'urgent']
+            };
+            const dto = new BaseSearchDto({
+                filters: JSON.stringify(filters)
+            });
+            const parsed = dto.getFilters<ComplexFilter>();
+            expect(parsed).toBeDefined();
+            expect(parsed?.status).toBe('active');
+            expect(parsed?.dateRange.start).toBe('2023-01-01');
+            expect(parsed?.tags).toContain('important');
         });
     });
 });

@@ -1,20 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsEnum, IsJSON, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { SortDirection } from '../enums';
 
-export enum SortDirection {
-  ASC = 'ASC',
-  DESC = 'DESC',
-}
-
-export class SortOption {
+export class SortField {
   @ApiProperty({ description: 'Field to sort by' })
   @IsString()
-  field: string;
+  @IsNotEmpty()
+  field!: string;
 
   @ApiProperty({ description: 'Sort direction', enum: SortDirection })
   @IsEnum(SortDirection)
+  @IsOptional()
   direction: SortDirection = SortDirection.ASC;
+
+  constructor(partial?: Partial<SortField>) {
+    if (partial) {
+      Object.assign(this, partial);
+    }
+  }
 }
 
 export class BaseSearchDto {
@@ -23,35 +27,50 @@ export class BaseSearchDto {
   @IsOptional()
   query?: string;
 
-  @ApiProperty({ description: 'Page number', default: 1 })
-  @Type(() => Number)
+  @ApiProperty({ description: 'Page number for pagination', minimum: 1, default: 1 })
   @IsNumber()
   @Min(1)
+  @IsOptional()
   page: number = 1;
 
-  @ApiProperty({ description: 'Number of items per page', default: 10 })
-  @Type(() => Number)
+  @ApiProperty({ description: 'Number of items per page', minimum: 1, default: 10 })
   @IsNumber()
   @Min(1)
+  @IsOptional()
   limit: number = 10;
 
-  @ApiProperty({ description: 'Sort options', required: false, type: [SortOption] })
-  @IsArray()
+  @ApiProperty({ description: 'Sort fields', type: [SortField], required: false })
+  @ValidateNested({ each: true })
+  @Type(() => SortField)
   @IsOptional()
-  sort?: SortOption[];
+  sort?: SortField[] = [];
 
-  @ApiProperty({ description: 'Fields to include in the response', required: false })
+  @ApiProperty({ description: 'Fields to include in the response', type: [String], required: false })
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
-  fields?: string[];
+  fields?: string[] = [];
 
-  @ApiProperty({ description: 'Filter criteria in JSON format', required: false })
-  @IsString()
+  @ApiProperty({ description: 'Filter string in JSON format', required: false })
+  @IsJSON()
   @IsOptional()
   filters?: string;
 
-  constructor(partial: Partial<BaseSearchDto>) {
-    Object.assign(this, partial);
+  constructor(partial?: Partial<BaseSearchDto>) {
+    if (partial) {
+      Object.assign(this, partial);
+    }
+  }
+
+  /**
+   * Parse the filters string into an object
+   * @returns Parsed filters object or null if filters is not set or invalid
+   */
+  getFilters<T = Record<string, unknown>>(): T | null {
+    try {
+      return this.filters ? JSON.parse(this.filters) as T : null;
+    } catch {
+      return null;
+    }
   }
 }

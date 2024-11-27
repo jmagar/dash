@@ -1,0 +1,216 @@
+{
+    "parallelism": 4,
+    "cache_duration_hours": 24,
+    "analysis_levels": {
+        "quick": {
+            "skip_git_history": true,
+            "skip_test_coverage": true,
+            "skip_pattern_analysis": true
+        },
+        "standard": {
+            "skip_git_history": false,
+            "skip_test_coverage": false,
+            "skip_pattern_analysis": false
+        },
+        "deep": {
+            "skip_git_history": false,
+            "skip_test_coverage": false,
+            "skip_pattern_analysis": false,
+            "include_historical_patterns": true
+        }
+    },
+    "file_patterns": {
+        "components": ["*.component.*"],
+        "services": ["*.service.*"],
+        "models": ["*.model.*", "*.entity.*"],
+        "tests": ["*.test.*", "*.spec.*"],
+        "configs": ["*.config.*", "*.conf.*"],
+        "documentation": ["*.md", "*.mdx"],
+        "styles": ["*.css", "*.scss", "*.less"],
+        "scripts": ["*.js", "*.ts"],
+        "api": ["*.api.*", "*.controller.*", "*.service.*"],
+        "database": ["*.model.*", "*.entity.*", "*.repository.*"],
+        "security": ["*.auth.*", "*.guard.*", "*.middleware.*"],
+        "utils": ["*.util.*", "*.helper.*", "*.common.*"]
+    },
+    "ignore_patterns": [
+        "node_modules",
+        "dist",
+        "build",
+        ".git",
+        "coverage",
+        ".next",
+        ".cache",
+        "public",
+        "static",
+        "tmp",
+        "temp"
+    ],
+    "metrics": {
+        "complexity_threshold": 20,
+        "file_size_warning_kb": 500,
+        "min_coverage": 80,
+        "max_dependencies": 10,
+        "pattern_frequency_threshold": 3,
+        "max_depth": 3,
+        "max_params": 4,
+        "max_statements": 20,
+        "max_lines": 300,
+        "max_complexity": 15
+    },
+    "security": {
+        "check_dependencies": true,
+        "scan_secrets": true,
+        "check_sql_injection": true,
+        "check_xss": true,
+        "check_csrf": true,
+        "check_auth": true
+    },
+    "performance": {
+        "check_bundle_size": true,
+        "check_memory_leaks": true,
+        "check_render_performance": true,
+        "check_network_calls": true,
+        "check_resource_usage": true
+    },
+    "accessibility": {
+        "wcag_level": "AA",
+        "check_aria": true,
+        "check_contrast": true,
+        "check_keyboard": true,
+        "check_images": true
+    },
+    "reports": {
+        "formats": ["md", "html", "json"],
+        "include_charts": true,
+        "include_trends": true,
+        "include_recommendations": true
+    },
+    "notifications": {
+        "slack": {
+            "enabled": false,
+            "webhook": ""
+        },
+        "email": {
+            "enabled": false,
+            "smtp_server": "",
+            "from": "",
+            "to": []
+        }
+    },
+    "integrations": {
+        "github": {
+            "enabled": false,
+            "token": "",
+            "create_issues": true,
+            "create_prs": false
+        },
+        "jira": {
+            "enabled": false,
+            "host": "",
+            "token": "",
+            "project": "",
+            "create_tickets": true
+        }
+    },
+    "refactoring": {
+        "strategies": {
+            "extract_component": true,
+            "extract_hook": true,
+            "combine_duplicates": true,
+            "split_large_files": true,
+            "optimize_imports": true
+        },
+        "automation": {
+            "auto_fix_lint": true,
+            "auto_format": true,
+            "auto_organize_imports": true,
+            "auto_remove_unused": true
+        }
+    },
+    "component_patterns": [
+        "src/([^/]+)/",
+        "components/([^/]+)/",
+        "modules/([^/]+)/"
+    ],
+    "code_patterns": {
+        "architectural": {
+            "mvc": {
+                "description": "Model-View-Controller pattern",
+                "indicators": [
+                    "class.*Controller",
+                    "class.*Model",
+                    "class.*View"
+                ]
+            },
+            "repository": {
+                "description": "Repository pattern",
+                "indicators": [
+                    "class.*Repository",
+                    "interface.*Repository"
+                ]
+            },
+            "factory": {
+                "description": "Factory pattern",
+                "indicators": [
+                    "class.*Factory",
+                    "Create[A-Z]\\w+"
+                ]
+            }
+        },
+        "design": {
+            "singleton": {
+                "description": "Singleton pattern",
+                "indicators": [
+                    "static\\s+\\w+\\s+Instance",
+                    "private\\s+static\\s+\\w+\\s+instance"
+                ],
+                "recommendation": "Consider dependency injection instead of singletons for better testability"
+            },
+            "observer": {
+                "description": "Observer pattern",
+                "indicators": [
+                    "interface.*Observer",
+                    "class.*Subject",
+                    "notify\\w*\\(",
+                    "subscribe\\w*\\("
+                ]
+            }
+        },
+        "implementation": {
+            "caching": {
+                "description": "Caching implementation",
+                "indicators": [
+                    "cache\\w*\\s*=",
+                    "\\bcache\\b.*\\bget\\b",
+                    "\\bcache\\b.*\\bset\\b"
+                ]
+            },
+            "error_handling": {
+                "description": "Error handling patterns",
+                "indicators": [
+                    "try\\s*{[^}]*}\\s*catch",
+                    "throw\\s+new\\s+\\w+Exception"
+                ]
+            }
+        },
+        "testing": {
+            "unit_test": {
+                "description": "Unit test pattern",
+                "indicators": [
+                    "\\[Test\\]",
+                    "test\\w+\\s*\\([^)]*\\)\\s*{",
+                    "assert\\."
+                ]
+            },
+            "mock": {
+                "description": "Mocking pattern",
+                "indicators": [
+                    "mock\\w*\\s*=",
+                    "Mock<",
+                    "setup\\w*\\("
+                ]
+            }
+        }
+    }
+}

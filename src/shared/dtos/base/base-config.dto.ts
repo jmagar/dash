@@ -1,81 +1,99 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsBoolean, IsDate, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Environment } from './enums';
 
-export class ConfigValue {
+export class ConfigValue<T = any> {
   @ApiProperty({ description: 'Configuration value' })
-  value: any;
+  @IsNotEmpty()
+  value: T;
 
   @ApiProperty({ description: 'Configuration value type' })
   @IsString()
-  type: string;
+  @IsNotEmpty()
+  type: string = '';
 
   @ApiProperty({ description: 'Is the configuration value encrypted' })
   @IsBoolean()
-  isEncrypted: boolean;
+  isEncrypted: boolean = false;
 
   @ApiProperty({ description: 'Last updated timestamp' })
+  @IsDate()
+  @Type(() => Date)
+  updatedAt: Date = new Date();
+
+  @ApiProperty({ description: 'Environment for this configuration' })
   @IsString()
-  updatedAt: string;
+  @IsNotEmpty()
+  environment: string = '';
 
-  constructor(partial: Partial<ConfigValue>) {
-    // Set default values
-    this.value = null;
-    this.type = 'string';
-    this.isEncrypted = false;
-    this.updatedAt = new Date().toISOString();
+  constructor(partial?: Partial<ConfigValue<T>>) {
+    const defaults = {
+      value: undefined as T,
+      type: 'string',
+      isEncrypted: false,
+      updatedAt: new Date(),
+      environment: ''
+    };
 
-    // Override defaults with provided values
-    Object.assign(this, partial);
+    Object.assign(this, defaults);
+
+    if (partial) {
+      Object.assign(this, partial);
+      if (typeof partial.updatedAt === 'string') {
+        this.updatedAt = new Date(partial.updatedAt);
+      }
+    }
   }
 }
 
 export class BaseConfigDto {
-  @ApiProperty({ description: 'Configuration key/name' })
+  @ApiProperty({ description: 'Unique identifier for the config' })
   @IsString()
-  key: string;
+  @IsNotEmpty()
+  key!: string;
 
-  @ApiProperty({ description: 'Configuration description' })
+  @ApiProperty({ description: 'Description of what the config controls' })
   @IsString()
-  description: string;
+  @IsNotEmpty()
+  description!: string;
 
   @ApiProperty({ description: 'Configuration environment (e.g., development, production)' })
-  @IsString()
-  environment: string;
+  @IsEnum(Environment)
+  @IsNotEmpty()
+  environment!: Environment;
 
-  @ApiProperty({ description: 'Configuration value', type: ConfigValue })
-  @Type(() => ConfigValue)
+  @ApiProperty({ description: 'Configuration value object', type: ConfigValue })
   @ValidateNested()
-  value: ConfigValue;
+  @Type(() => ConfigValue)
+  @IsOptional()
+  value?: ConfigValue<any>;
 
   @ApiProperty({ description: 'Is the configuration enabled' })
   @IsBoolean()
-  enabled: boolean;
-
-  @ApiProperty({ description: 'Configuration tags', required: false })
-  @IsObject()
   @IsOptional()
-  tags?: Record<string, string>;
+  enabled?: boolean;
 
-  @ApiProperty({ description: 'Additional metadata', required: false })
+  @ApiProperty({ description: 'Configuration tags' })
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @ApiProperty({ description: 'Additional metadata' })
   @IsObject()
   @IsOptional()
   metadata?: Record<string, any>;
 
-  constructor(partial: Partial<BaseConfigDto>) {
-    // Set default values
-    this.key = '';
-    this.description = '';
-    this.environment = 'development';
-    this.enabled = true;
-    this.value = new ConfigValue({});
-
-    // Override defaults with provided values
-    Object.assign(this, partial);
-
-    // Ensure value is properly instantiated as ConfigValue
-    if (partial.value) {
-      this.value = new ConfigValue(partial.value);
+  constructor(partial?: Partial<BaseConfigDto>) {
+    if (partial) {
+      const { value, enabled, tags, metadata, ...rest } = partial;
+      Object.assign(this, {
+        ...rest,
+        value: value === null ? undefined : (value ? new ConfigValue(value) : undefined),
+        enabled: enabled === null ? undefined : enabled,
+        tags: tags === null ? undefined : tags,
+        metadata: metadata === null ? undefined : metadata
+      });
     }
   }
 }

@@ -1,5 +1,5 @@
 interface Config {
-  websocketUrl: string;
+  socketUrl: string;
   apiUrl: string;
   maxFileSize: number;
   maxUploadSize: number;
@@ -11,7 +11,7 @@ interface Config {
 const env = process.env.NODE_ENV || 'development';
 
 export const config: Config = {
-  websocketUrl: env === 'production' ? window.location.origin.replace(/^http/, 'ws') : 'ws://localhost:4000',
+  socketUrl: env === 'production' ? window.location.origin.replace(/^http/, 'ws') : 'ws://localhost:4000',
   apiUrl: env === 'production' ? '/api' : 'http://localhost:4000',
   maxFileSize: parseInt(process.env.REACT_APP_MAX_FILE_SIZE || '52428800', 10), // 50MB
   maxUploadSize: parseInt(process.env.REACT_APP_MAX_UPLOAD_SIZE || '104857600', 10), // 100MB

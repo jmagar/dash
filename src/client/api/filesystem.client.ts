@@ -1,4 +1,4 @@
-import { BaseAPIClient } from './base.client';
+import { BaseApiClient, type Endpoint, type EndpointFunction } from './base.client';
 import {
   FileSystemLocation,
   FileSystemCredentials,
@@ -9,13 +9,35 @@ import {
   QuickAccessResponse,
   SelectRequest,
   FileItem,
+  FileChangeEvent,
+  TransferProgressEvent
 } from '../../types/filesystem';
+import { Socket } from 'socket.io-client';
 
-export class FilesystemClient extends BaseAPIClient {
+export class FilesystemClient extends BaseApiClient<Record<string, Endpoint>> {
   private static instance: FilesystemClient;
 
   private constructor() {
-    super();
+    const endpoints: Record<string, Endpoint> = {
+      LOCATIONS: '/api/fs/locations',
+      LOCATION_BY_ID: (id: string) => `/api/fs/locations/${id}`,
+      FILES: (locationId: string) => `/api/fs/${locationId}/files`,
+      FILE_BY_PATH: (locationId: string, path: string) => `/api/fs/${locationId}/files/${encodeURIComponent(path)}`,
+      COPY: (locationId: string) => `/api/fs/${locationId}/files/copy`,
+      MOVE: (locationId: string) => `/api/fs/${locationId}/files/move`,
+      DELETE: (locationId: string, path: string) => `/api/fs/${locationId}/files/delete/${encodeURIComponent(path)}`,
+      SPACES: '/api/fs/spaces',
+      SPACE_BY_ID: (id: string) => `/api/fs/spaces/${id}`,
+      QUICK_ACCESS: '/api/fs/quick-access',
+      SELECT: '/api/fs/select',
+      UPLOAD: (locationId: string) => `/api/fs/${locationId}/files/upload`,
+      DOWNLOAD: (locationId: string, path: string) => `/api/fs/${locationId}/files/download/${encodeURIComponent(path)}`,
+      MKDIR: (locationId: string) => `/api/fs/${locationId}/files/mkdir`,
+      FAVORITES: '/api/fs/quick-access/favorites',
+      TRANSFER_PROGRESS: (operationId: string) => `fs:transfer:${operationId}`,
+      FILE_CHANGES: (locationId: string, path: string) => `fs:changes:${locationId}:${path}`,
+    };
+    super(endpoints);
   }
 
   static getInstance(): FilesystemClient {
@@ -27,7 +49,7 @@ export class FilesystemClient extends BaseAPIClient {
 
   // Location Management
   async listLocations(): Promise<FileSystemLocation[]> {
-    const response = await this.get<FileSystemLocation[]>('/api/fs/locations');
+    const response = await this.get<FileSystemLocation[]>(this.getEndpoint('LOCATIONS'));
     return response.data || [];
   }
 
@@ -36,7 +58,7 @@ export class FilesystemClient extends BaseAPIClient {
     type: string,
     credentials: FileSystemCredentials
   ): Promise<FileSystemLocation> {
-    const response = await this.post<FileSystemLocation>('/api/fs/locations', {
+    const response = await this.post<FileSystemLocation>(this.getEndpoint('LOCATIONS'), {
       name,
       type,
       credentials,
@@ -45,7 +67,7 @@ export class FilesystemClient extends BaseAPIClient {
   }
 
   async deleteLocation(id: string): Promise<void> {
-    await this.delete(`/api/fs/locations/${id}`);
+    await this.delete(this.getEndpoint('LOCATION_BY_ID', id));
   }
 
   // File Operations
@@ -55,7 +77,7 @@ export class FilesystemClient extends BaseAPIClient {
     showHidden = false
   ): Promise<FileListResponse> {
     const response = await this.get<FileListResponse>(
-      `/api/fs/${locationId}/files`,
+      this.getEndpoint('FILES', locationId),
       {
         params: {
           path,
@@ -67,11 +89,10 @@ export class FilesystemClient extends BaseAPIClient {
   }
 
   async downloadFile(locationId: string, path: string): Promise<Blob> {
-    const response = await this.get(`/api/fs/${locationId}/files/download`, {
-      params: { path },
+    const response = await this.api.get(this.getEndpoint('DOWNLOAD', locationId, path), {
       responseType: 'blob',
     });
-    return response.data;
+    return new Blob([response.data], { type: response.headers['content-type'] });
   }
 
   async uploadFiles(
@@ -83,7 +104,7 @@ export class FilesystemClient extends BaseAPIClient {
     formData.append('path', path);
     files.forEach((file) => formData.append('files', file));
 
-    await this.post(`/api/fs/${locationId}/files/upload`, formData, {
+    await this.post(this.getEndpoint('UPLOAD', locationId), formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -91,11 +112,11 @@ export class FilesystemClient extends BaseAPIClient {
   }
 
   async copyFiles(locationId: string, request: CopyMoveRequest): Promise<void> {
-    await this.post(`/api/fs/${locationId}/files/copy`, request);
+    await this.post(this.getEndpoint('COPY', locationId), request);
   }
 
   async moveFiles(locationId: string, request: CopyMoveRequest): Promise<void> {
-    await this.post(`/api/fs/${locationId}/files/move`, request);
+    await this.post(this.getEndpoint('MOVE', locationId), request);
   }
 
   async createDirectory(
@@ -103,53 +124,53 @@ export class FilesystemClient extends BaseAPIClient {
     path: string,
     name: string
   ): Promise<void> {
-    await this.post(`/api/fs/${locationId}/files/mkdir`, {
+    await this.post(this.getEndpoint('MKDIR', locationId), {
       path,
       name,
     });
   }
 
   async deleteFiles(locationId: string, paths: string[]): Promise<void> {
-    await this.post(`/api/fs/${locationId}/files/delete`, {
+    await this.post(this.getEndpoint('DELETE', locationId, paths[0]), {
       paths,
     });
   }
 
   // Spaces Management
   async listSpaces(): Promise<Space[]> {
-    const response = await this.get<Space[]>('/api/fs/spaces');
+    const response = await this.get<Space[]>(this.getEndpoint('SPACES'));
     return response.data || [];
   }
 
   async createSpace(request: CreateSpaceRequest): Promise<Space> {
-    const response = await this.post<Space>('/api/fs/spaces', request);
+    const response = await this.post<Space>(this.getEndpoint('SPACES'), request);
     return response.data;
   }
 
   async updateSpace(id: string, request: CreateSpaceRequest): Promise<Space> {
-    const response = await this.put<Space>(`/api/fs/spaces/${id}`, request);
+    const response = await this.put<Space>(this.getEndpoint('SPACE_BY_ID', id), request);
     return response.data;
   }
 
   async deleteSpace(id: string): Promise<void> {
-    await this.delete(`/api/fs/spaces/${id}`);
+    await this.delete(this.getEndpoint('SPACE_BY_ID', id));
   }
 
   // Quick Access
   async getQuickAccess(): Promise<QuickAccessResponse> {
-    const response = await this.get<QuickAccessResponse>('/api/fs/quick-access');
+    const response = await this.get<QuickAccessResponse>(this.getEndpoint('QUICK_ACCESS'));
     return response.data;
   }
 
   async addToFavorites(locationId: string, path: string): Promise<void> {
-    await this.post('/api/fs/quick-access/favorites', {
+    await this.post(this.getEndpoint('FAVORITES'), {
       locationId,
       path,
     });
   }
 
   async removeFromFavorites(locationId: string, path: string): Promise<void> {
-    await this.delete('/api/fs/quick-access/favorites', {
+    await this.delete(this.getEndpoint('FAVORITES'), {
       data: {
         locationId,
         path,
@@ -159,7 +180,7 @@ export class FilesystemClient extends BaseAPIClient {
 
   // File Selection
   async openFileSelector(request: SelectRequest): Promise<FileItem[]> {
-    const response = await this.post<FileItem[]>('/api/fs/select', request);
+    const response = await this.post<FileItem[]>(this.getEndpoint('SELECT'), request);
     return response.data;
   }
 
@@ -167,21 +188,25 @@ export class FilesystemClient extends BaseAPIClient {
   subscribeToFileChanges(
     locationId: string,
     path: string,
-    callback: (event: any) => void
+    callback: (event: FileChangeEvent) => void
   ): () => void {
     const socket = this.getSocket();
-    const event = `fs:changes:${locationId}:${path}`;
+    const event = this.getEndpoint('FILE_CHANGES', locationId, path);
     socket.on(event, callback);
     return () => socket.off(event, callback);
   }
 
   subscribeToTransferProgress(
     operationId: string,
-    callback: (event: any) => void
+    callback: (event: TransferProgressEvent) => void
   ): () => void {
     const socket = this.getSocket();
-    const event = `fs:transfer:${operationId}`;
+    const event = this.getEndpoint('TRANSFER_PROGRESS', operationId);
     socket.on(event, callback);
     return () => socket.off(event, callback);
+  }
+
+  protected getSocket(): Socket {
+    return this.api.socket;
   }
 }

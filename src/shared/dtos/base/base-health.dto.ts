@@ -1,56 +1,82 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDate, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class HealthMetrics {
-  @ApiProperty({ description: 'Current memory usage in MB' })
-  @IsNumber()
-  memoryUsage: number;
-
   @ApiProperty({ description: 'CPU usage percentage' })
   @IsNumber()
-  cpuUsage: number;
+  @IsOptional()
+  cpuUsage?: number;
 
-  @ApiProperty({ description: 'Disk usage percentage' })
+  @ApiProperty({ description: 'Memory usage in bytes' })
   @IsNumber()
-  diskUsage: number;
+  @IsOptional()
+  memoryUsage?: number;
 
-  constructor(partial: Partial<HealthMetrics>) {
+  @ApiProperty({ description: 'Disk usage in bytes' })
+  @IsNumber()
+  @IsOptional()
+  diskUsage?: number;
+
+  @ApiProperty({ description: 'Network latency in milliseconds' })
+  @IsNumber()
+  @IsOptional()
+  networkLatency?: number;
+
+  @ApiProperty({ description: 'Additional custom metrics' })
+  @IsObject()
+  @IsOptional()
+  customMetrics?: Record<string, any> = {};
+
+  constructor(partial?: Partial<HealthMetrics>) {
     Object.assign(this, partial);
   }
 }
 
 export class BaseHealthDto {
-  @ApiProperty({ description: 'Service is healthy and operational' })
+  @ApiProperty({ description: 'Overall health status' })
   @IsBoolean()
-  isHealthy: boolean;
+  @IsNotEmpty()
+  isHealthy!: boolean;
 
-  @ApiProperty({ description: 'Uptime in seconds' })
+  @ApiProperty({ description: 'System uptime in seconds' })
   @IsNumber()
-  uptime: number;
+  @IsNotEmpty()
+  uptime!: number;
 
-  @ApiProperty({ description: 'Version of the service' })
+  @ApiProperty({ description: 'System version' })
   @IsString()
-  version: string;
+  @IsNotEmpty()
+  version!: string;
 
   @ApiProperty({ description: 'Health check timestamp' })
-  @IsString()
-  timestamp: string = new Date().toISOString();
+  @IsDate()
+  @Type(() => Date)
+  @IsNotEmpty()
+  timestamp!: Date;
 
-  @ApiProperty({ description: 'System metrics', type: HealthMetrics })
+  @ApiProperty({ description: 'Detailed health metrics' })
+  @ValidateNested()
   @Type(() => HealthMetrics)
-  @IsObject()
-  metrics: HealthMetrics;
+  @IsOptional()
+  metrics?: HealthMetrics;
 
-  @ApiProperty({ description: 'Additional health information', required: false })
+  @ApiProperty({ description: 'Additional health metadata' })
   @IsObject()
   @IsOptional()
-  details?: Record<string, any>;
+  metadata?: Record<string, any>;
 
-  constructor(partial: Partial<BaseHealthDto>) {
-    Object.assign(this, partial);
-    if (partial.metrics) {
-      this.metrics = new HealthMetrics(partial.metrics);
+  constructor(partial?: Partial<BaseHealthDto>) {
+    if (partial) {
+      const { metrics, timestamp, metadata, ...rest } = partial;
+      Object.assign(this, {
+        ...rest,
+        metrics: metrics ? new HealthMetrics(metrics) : undefined,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        metadata: metadata === null ? undefined : metadata
+      });
+    } else {
+      this.timestamp = new Date();
     }
   }
 }
