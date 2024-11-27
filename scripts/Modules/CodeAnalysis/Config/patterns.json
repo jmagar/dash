@@ -1,4 +1,39 @@
 {
+    "version": "1.0",
+    "cascadeOptimization": {
+        "patternTypes": {
+            "refactoring": {
+                "priority": 1,
+                "cascadeCompatibility": "high",
+                "automationLevel": "full"
+            },
+            "style": {
+                "priority": 2,
+                "cascadeCompatibility": "high",
+                "automationLevel": "full"
+            },
+            "performance": {
+                "priority": 3,
+                "cascadeCompatibility": "medium",
+                "automationLevel": "assisted"
+            },
+            "security": {
+                "priority": 4,
+                "cascadeCompatibility": "low",
+                "automationLevel": "review"
+            }
+        },
+        "toolMappings": {
+            "edit_file": {
+                "patterns": ["style.*", "refactoring.*"],
+                "confidence": 0.9
+            },
+            "view_file": {
+                "patterns": ["security.*", "performance.*"],
+                "confidence": 0.7
+            }
+        }
+    },
     "languages": {
         ".go": {
             "interfaces": "^\\s*type\\s+\\w+\\s+interface\\s*{",
@@ -32,6 +67,63 @@
             "errorHandling": "try|catch|finally|throw",
             "pipelineInput": "\\{\\s*process\\s*\\{",
             "advancedFunctions": "function\\s+\\w+-\\w+"
+        },
+        "powershell": {
+            "patterns": {
+                "refactoring.function.complexity": {
+                    "regex": "function\\s+[\\w-]+\\s*{[^}]{500,}}",
+                    "type": "refactoring",
+                    "cascadeAction": {
+                        "tool": "edit_file",
+                        "strategy": "split_function",
+                        "validation": "unit_test"
+                    }
+                },
+                "style.naming.pascal": {
+                    "regex": "function\\s+[a-z]\\w+",
+                    "type": "style",
+                    "cascadeAction": {
+                        "tool": "edit_file",
+                        "strategy": "rename_pascal",
+                        "validation": "syntax"
+                    }
+                },
+                "performance.pipeline.optimization": {
+                    "regex": "\\|\\s*ForEach-Object\\s*{[^}]+}\\s*\\|\\s*Where-Object",
+                    "type": "performance",
+                    "cascadeAction": {
+                        "tool": "edit_file",
+                        "strategy": "pipeline_optimize",
+                        "validation": "benchmark"
+                    }
+                }
+            }
+        },
+        "python": {
+            "patterns": {
+                "refactoring.class.large": {
+                    "regex": "class\\s+\\w+[^}]{1000,}}",
+                    "type": "refactoring",
+                    "cascadeAction": {
+                        "tool": "edit_file",
+                        "strategy": "split_class",
+                        "validation": "unit_test"
+                    }
+                }
+            }
+        },
+        "javascript": {
+            "patterns": {
+                "refactoring.component.props": {
+                    "regex": "function\\s+\\w+\\s*\\(\\s*props\\s*\\)",
+                    "type": "refactoring",
+                    "cascadeAction": {
+                        "tool": "edit_file",
+                        "strategy": "destructure_props",
+                        "validation": "typescript"
+                    }
+                }
+            }
         }
     },
     "common": {

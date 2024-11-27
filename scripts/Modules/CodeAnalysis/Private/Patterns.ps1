@@ -43,7 +43,10 @@ function Get-CodePatterns {
         
         $patternResults = @{}
         
-        # Get AST-based patterns
+        # Get patterns for Cascade optimization
+        $cascadePatterns = $script:Patterns.cascadeOptimization.patternTypes
+        
+        # Get AST-based patterns with Cascade metadata
         $astResult = Get-AstParser -Language $Language -Content $Content
         if ($astResult -and $astResult.ast) {
             # Get metrics for indexing and analysis
@@ -55,19 +58,43 @@ function Get-CodePatterns {
                 Write-Warning "Failed to index file $FilePath"
             }
             
-            # Use AST patterns based on language
+            # Use AST patterns based on language with Cascade metadata
             switch ($Language) {
                 'powershell' {
                     $astPatterns = Get-PowerShellAstPatterns -Ast $astResult.ast
                     foreach ($pattern in $astPatterns.GetEnumerator()) {
-                        $patternResults[$pattern.Key] = $pattern.Value
+                        $patternType = ($pattern.Key -split '\.')[0]
+                        $cascadeInfo = $cascadePatterns[$patternType]
+                        
+                        $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
+                            $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
+                                priority = $cascadeInfo.priority
+                                compatibility = $cascadeInfo.cascadeCompatibility
+                                automation = $cascadeInfo.automationLevel
+                                toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
+                                    Where-Object { $pattern.Key -match $_.patterns[0] } |
+                                    Select-Object -First 1
+                            } -PassThru
+                        }
                     }
                 }
                 'python' {
                     if ($astResult.success) {
                         $astPatterns = Get-PythonAstPatterns -AstDump $astResult.ast
                         foreach ($pattern in $astPatterns.GetEnumerator()) {
-                            $patternResults[$pattern.Key] = $pattern.Value
+                            $patternType = ($pattern.Key -split '\.')[0]
+                            $cascadeInfo = $cascadePatterns[$patternType]
+                            
+                            $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
+                                $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
+                                    priority = $cascadeInfo.priority
+                                    compatibility = $cascadeInfo.cascadeCompatibility
+                                    automation = $cascadeInfo.automationLevel
+                                    toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
+                                        Where-Object { $pattern.Key -match $_.patterns[0] } |
+                                        Select-Object -First 1
+                                } -PassThru
+                            }
                         }
                     }
                 }
@@ -75,19 +102,34 @@ function Get-CodePatterns {
                     if ($astResult.success) {
                         $astPatterns = Get-JavaScriptAstPatterns -AstJson $astResult.ast
                         foreach ($pattern in $astPatterns.GetEnumerator()) {
-                            $patternResults[$pattern.Key] = $pattern.Value
+                            $patternType = ($pattern.Key -split '\.')[0]
+                            $cascadeInfo = $cascadePatterns[$patternType]
+                            
+                            $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
+                                $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
+                                    priority = $cascadeInfo.priority
+                                    compatibility = $cascadeInfo.cascadeCompatibility
+                                    automation = $cascadeInfo.automationLevel
+                                    toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
+                                        Where-Object { $pattern.Key -match $_.patterns[0] } |
+                                        Select-Object -First 1
+                                } -PassThru
+                            }
                         }
                     }
                 }
             }
         }
         
-        # Get ML-based pattern predictions
+        # Get ML-based pattern predictions with Cascade metadata
         $mlPredictions = Get-PredictedPatterns -Content $Content -Language $Language
         foreach ($prediction in $mlPredictions) {
             if (-not $patternResults[$prediction.pattern]) {
                 $patternResults[$prediction.pattern] = @()
             }
+            
+            $patternType = ($prediction.pattern -split '\.')[0]
+            $cascadeInfo = $cascadePatterns[$patternType]
             
             # Find actual occurrences of the predicted pattern
             $pattern = $script:Patterns.languages.$Language.patterns.$($prediction.pattern)
@@ -101,21 +143,26 @@ function Get-CodePatterns {
                             index = $_.Index
                             confidence = $prediction.confidence
                             type = $pattern.type
+                            cascadeMetadata = @{
+                                priority = $cascadeInfo.priority
+                                compatibility = $cascadeInfo.cascadeCompatibility
+                                automation = $cascadeInfo.automationLevel
+                                toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
+                                    Where-Object { $prediction.pattern -match $_.patterns[0] } |
+                                    Select-Object -First 1
+                                action = $pattern.cascadeAction
+                            }
                         }
                     })
                 }
             }
         }
         
-        # Add feedback for ML training
-        foreach ($pattern in $patternResults.GetEnumerator()) {
-            foreach ($occurrence in $pattern.Value) {
-                Add-PatternFeedback -Content $occurrence.value `
-                                  -Pattern $pattern.Key `
-                                  -Language $Language `
-                                  -IsCorrect $true
-            }
-        }
+        # Sort patterns by Cascade priority
+        $patternResults = $patternResults.GetEnumerator() | Sort-Object {
+            $cascadeInfo = $cascadePatterns[($_.Key -split '\.')[0]]
+            $cascadeInfo.priority
+        } | ForEach-Object { @{$_.Key = $_.Value} }
         
         # Cache the results
         Set-CacheItem -Key $cacheKey -Data $patternResults

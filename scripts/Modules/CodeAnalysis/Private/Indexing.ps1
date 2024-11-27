@@ -48,85 +48,221 @@ function Add-FileToIndex {
         [Parameter(Mandatory)]
         [string]$Content,
         [Parameter(Mandatory)]
-        [string]$Language,
+        [hashtable]$Metrics,
         [Parameter(Mandatory)]
-        [hashtable]$Metrics
+        [string]$Language
     )
-
+    
     try {
-        # Create Lucene document
-        $doc = [Lucene.Net.Documents.Document]::new()
-        
-        # Add fields
-        $doc.Add([Lucene.Net.Documents.Field]::new(
-            "path",
-            $FilePath,
-            [Lucene.Net.Documents.Field+Store]::YES,
-            [Lucene.Net.Documents.Field+Index]::NOT_ANALYZED
-        ))
-        
-        $doc.Add([Lucene.Net.Documents.Field]::new(
-            "language",
-            $Language,
-            [Lucene.Net.Documents.Field+Store]::YES,
-            [Lucene.Net.Documents.Field+Index]::NOT_ANALYZED
-        ))
-        
-        # Add metrics
-        foreach ($metric in $Metrics.GetEnumerator()) {
-            $doc.Add([Lucene.Net.Documents.Field]::new(
-                $metric.Key,
-                $metric.Value.ToString(),
-                [Lucene.Net.Documents.Field+Store]::YES,
-                [Lucene.Net.Documents.Field+Index]::NOT_ANALYZED
-            ))
-        }
-        
-        # Add symbols from metrics
-        foreach ($symbol in $Metrics.symbols) {
-            $symbolField = "$($symbol.type)_$($symbol.name)"
-            $doc.Add([Lucene.Net.Documents.Field]::new(
-                $symbolField,
-                "$($symbol.start):$($symbol.end)",
-                [Lucene.Net.Documents.Field+Store]::YES,
-                [Lucene.Net.Documents.Field+Index]::NOT_ANALYZED
-            ))
-            
-            # Update symbol index
-            $script:SymbolIndex[$symbolField] = @{
-                file = $FilePath
-                type = $symbol.type
-                name = $symbol.name
-                start = $symbol.start
-                end = $symbol.end
+        $index = Get-CodeIndex
+        if (-not $index) {
+            $index = @{
+                Files = @{}
+                Symbols = @{}
+                Dependencies = @{}
+                CascadeMetadata = @{
+                    RefactoringHistory = @{}
+                    ChangePatterns = @{}
+                    AutomationSuccess = @{}
+                    RiskProfiles = @{}
+                }
             }
         }
         
-        # Add dependencies from metrics
-        foreach ($dep in $Metrics.dependencies) {
-            $doc.Add([Lucene.Net.Documents.Field]::new(
-                "dependency",
-                $dep,
-                [Lucene.Net.Documents.Field+Store]::YES,
-                [Lucene.Net.Documents.Field+Index]::NOT_ANALYZED
-            ))
-            
-            # Update dependency graph
-            if (-not $script:DependencyGraph[$FilePath]) {
-                $script:DependencyGraph[$FilePath] = @()
+        # Add file metadata with Cascade-specific information
+        $index.Files[$FilePath] = @{
+            LastModified = (Get-Item $FilePath).LastWriteTime
+            Language = $Language
+            Metrics = $Metrics
+            CascadeMetadata = @{
+                RefactoringComplexity = Get-FileComplexityScore -Metrics $Metrics
+                AutomationCompatibility = Test-AutomationCompatibility -FilePath $FilePath -Language $Language
+                TestCoverage = Get-FileTestCoverage -FilePath $FilePath
+                ChangeFrequency = Get-FileChangeFrequency -FilePath $FilePath
+                LastRefactoring = Get-LastRefactoringInfo -FilePath $FilePath
             }
-            $script:DependencyGraph[$FilePath] += $dep
         }
         
-        # Add document to index
-        $script:IndexWriter.AddDocument($doc)
+        # Update symbol index with Cascade optimization data
+        $astResult = Get-AstParser -Language $Language -Content $Content
+        if ($astResult.success) {
+            $symbols = Get-FileSymbols -Ast $astResult.ast -Language $Language
+            foreach ($symbol in $symbols) {
+                $index.Symbols[$symbol.name] = @{
+                    FilePath = $FilePath
+                    Type = $symbol.type
+                    Location = $symbol.location
+                    CascadeMetadata = @{
+                        RefactoringHistory = Get-SymbolRefactoringHistory -Symbol $symbol
+                        Dependencies = Get-SymbolDependencyGraph -Symbol $symbol
+                        Complexity = Get-SymbolComplexityMetrics -Symbol $symbol
+                        AutomationScore = Calculate-AutomationScore -Symbol $symbol
+                    }
+                }
+            }
+        }
         
+        # Update dependency graph with Cascade-specific metadata
+        $dependencies = Get-FileDependencies -FilePath $FilePath -Content $Content -Language $Language
+        foreach ($dep in $dependencies) {
+            if (-not $index.Dependencies[$dep.source]) {
+                $index.Dependencies[$dep.source] = @()
+            }
+            
+            $depMetadata = @{
+                Target = $dep.target
+                Type = $dep.type
+                Required = $dep.required
+                CascadeMetadata = @{
+                    RefactoringRisk = Calculate-DependencyRisk -Dependency $dep
+                    AutomationCompatibility = Test-DependencyAutomation -Dependency $dep
+                    ChangeImpact = Measure-DependencyImpact -Dependency $dep
+                }
+            }
+            
+            $index.Dependencies[$dep.source] += $depMetadata
+        }
+        
+        # Update Cascade-specific metadata
+        $refactoringHistory = Get-RefactoringHistory -FilePath $FilePath
+        if ($refactoringHistory) {
+            $index.CascadeMetadata.RefactoringHistory[$FilePath] = $refactoringHistory
+        }
+        
+        $changePatterns = Analyze-ChangePatterns -FilePath $FilePath
+        if ($changePatterns) {
+            $index.CascadeMetadata.ChangePatterns[$FilePath] = $changePatterns
+        }
+        
+        $automationStats = Get-AutomationStats -FilePath $FilePath
+        if ($automationStats) {
+            $index.CascadeMetadata.AutomationSuccess[$FilePath] = $automationStats
+        }
+        
+        $riskProfile = Get-RiskProfile -FilePath $FilePath -Metrics $Metrics
+        if ($riskProfile) {
+            $index.CascadeMetadata.RiskProfiles[$FilePath] = $riskProfile
+        }
+        
+        # Save updated index
+        Save-CodeIndex -Index $index
         return $true
     }
     catch {
         Write-Error "Failed to add file to index: $_"
         return $false
     }
+}
+
+function Get-FileComplexityScore {
+    param($Metrics)
+    # Implementation for calculating file complexity score
+    $score = 0
+    
+    if ($Metrics.CyclomaticComplexity) {
+        $score += $Metrics.CyclomaticComplexity * 0.4
+    }
+    
+    if ($Metrics.CognitiveComplexity) {
+        $score += $Metrics.CognitiveComplexity * 0.3
+    }
+    
+    if ($Metrics.LinesOfCode) {
+        $score += ($Metrics.LinesOfCode / 100) * 0.2
+    }
+    
+    if ($Metrics.Dependencies) {
+        $score += ($Metrics.Dependencies.Count / 10) * 0.1
+    }
+    
+    return [Math]::Min(100, $score)
+}
+
+function Test-AutomationCompatibility {
+    param($FilePath, $Language)
+    # Implementation for testing automation compatibility
+    $compatibility = @{
+        Score = 100
+        Factors = @()
+    }
+    
+    # Check language support
+    $languageSupport = Get-LanguageAutomationSupport -Language $Language
+    $compatibility.Score *= $languageSupport.Score
+    $compatibility.Factors += @{
+        Name = "LanguageSupport"
+        Score = $languageSupport.Score
+        Details = $languageSupport.Details
+    }
+    
+    # Check file structure
+    $structureScore = Test-FileStructure -FilePath $FilePath
+    $compatibility.Score *= $structureScore.Score
+    $compatibility.Factors += @{
+        Name = "FileStructure"
+        Score = $structureScore.Score
+        Details = $structureScore.Details
+    }
+    
+    # Check dependencies
+    $depScore = Test-DependencyAutomation -FilePath $FilePath
+    $compatibility.Score *= $depScore.Score
+    $compatibility.Factors += @{
+        Name = "Dependencies"
+        Score = $depScore.Score
+        Details = $depScore.Details
+    }
+    
+    return $compatibility
+}
+
+function Get-RiskProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+        [Parameter(Mandatory)]
+        [hashtable]$Metrics
+    )
+    
+    # Implementation for calculating risk profile
+    $riskAnalysis = @{
+        OverallRisk = 0
+        Factors = @()
+        Mitigations = @()
+    }
+    
+    # Assess complexity risk
+    $complexityRisk = Get-ComplexityRisk -Metrics $Metrics
+    $riskAnalysis.Factors += @{
+        Type = "Complexity"
+        Score = $complexityRisk.Score
+        Details = $complexityRisk.Details
+    }
+    
+    # Assess dependency risk
+    $depRisk = Get-DependencyRisk -FilePath $FilePath
+    $riskAnalysis.Factors += @{
+        Type = "Dependencies"
+        Score = $depRisk.Score
+        Details = $depRisk.Details
+    }
+    
+    # Assess test coverage risk
+    $testRisk = Get-TestCoverageRisk -FilePath $FilePath
+    $riskAnalysis.Factors += @{
+        Type = "TestCoverage"
+        Score = $testRisk.Score
+        Details = $testRisk.Details
+    }
+    
+    # Calculate overall risk
+    $riskAnalysis.OverallRisk = ($riskAnalysis.Factors | Measure-Object -Property Score -Average).Average
+    
+    # Generate mitigation strategies
+    $riskAnalysis.Mitigations = Get-RiskMitigations -RiskProfile $riskAnalysis
+    
+    return $riskAnalysis
 }
 
 function Search-CodeIndex {

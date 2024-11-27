@@ -1,169 +1,157 @@
 {
+    "version": "2.0",
     "fileSystem": {
-        "paths": {
-            "templates": {
-                "report": "Templates/report.md",
-                "visualization": "Templates/visualization.html",
-                "analysis": {
-                    "directory": "Templates/Analysis/directory-analysis.md",
-                    "component": "Templates/Analysis/component-analysis.md",
-                    "security": "Templates/Analysis/security-analysis.md",
-                    "performance": "Templates/Analysis/performance-analysis.md",
-                    "refactoring": "Templates/Analysis/refactoring-recommendations.md",
-                    "dependency": "Templates/Analysis/dependency-analysis.md"
-                }
-            },
-            "output": {
-                "data": "Data/Analysis",
-                "logs": "Data/Logs",
-                "visualizations": "Data/Visualizations",
-                "search": "Data/Search",
-                "index": "Data/Index",
-                "models": "Data/Models",
-                "training": "Data/Training"
-            }
-        }
-    },
-    "codeAnalysis": {
-        "maxFileSize": "100MB",
+        "indexPath": "./index",
+        "cacheDirectory": "./cache",
+        "maxCacheSize": 1073741824,
         "excludePatterns": [
             "node_modules",
             "bin",
-            "obj"
-        ],
-        "securityThresholds": {
-            "high": 80,
-            "medium": 60,
-            "low": 40
-        }
-    },
-    "resourceManagement": {
-        "batchSize": 100,
-        "maxParallelism": 8,
-        "memoryThreshold": "1GB",
-        "timeoutMinutes": 30
-    },
-    "logging": {
-        "level": "INFO",
-        "maxFileSize": "10MB",
-        "retentionDays": 30,
-        "compressionEnabled": true
-    },
-    "visualization": {
-        "defaultFormat": "d3",
-        "colorScheme": {
-            "file": {
-                "highSecurity": "#4CAF50",
-                "mediumSecurity": "#FFC107",
-                "lowSecurity": "#F44336"
-            },
-            "pattern": "#9C27B0",
-            "securityIssue": "#FF5722"
-        },
-        "maxNodes": 1000
-    },
-    "templates": {
-        "placeholderPattern": "{{([^}]+)}}",
-        "dateFormat": "yyyy-MM-dd HH:mm:ss",
-        "reportSections": [
-            "overview",
-            "analysis",
-            "recommendations",
-            "metrics",
-            "visualizations"
+            "obj",
+            ".git"
         ]
     },
-    "storage": {
-        "database": {
-            "type": "sqlite",
-            "path": "./data/analysis.db",
-            "maxConnections": 10,
-            "timeout": "30s",
-            "vacuum": {
-                "enabled": true,
-                "interval": "7d"
+    "codeAnalysis": {
+        "maxFileSize": 1048576,
+        "batchSize": 100,
+        "timeout": 30000,
+        "languages": {
+            "powershell": {
+                "extensions": [".ps1", ".psm1", ".psd1"],
+                "parser": "PowerShell",
+                "cascadeCompatibility": "high"
+            },
+            "python": {
+                "extensions": [".py"],
+                "parser": "Python",
+                "cascadeCompatibility": "high"
+            },
+            "javascript": {
+                "extensions": [".js", ".jsx"],
+                "parser": "JavaScript",
+                "cascadeCompatibility": "medium"
+            },
+            "typescript": {
+                "extensions": [".ts", ".tsx"],
+                "parser": "TypeScript",
+                "cascadeCompatibility": "medium"
             }
-        },
-        "indexing": {
-            "maxResults": 100,
-            "updateInterval": "1h",
-            "enableFullTextSearch": true,
-            "maxSize": "1GB"
-        },
-        "retention": {
-            "maxAge": "30d",
-            "cleanupInterval": "1d"
         }
     },
-    "machineLearning": {
-        "modelPath": "./models",
-        "trainingPath": "./training",
-        "embeddingSize": 768,
-        "batchSize": 32,
-        "models": {
-            "patterns": {
-                "type": "transformer",
-                "architecture": "bert-base",
-                "layers": 12,
-                "heads": 8
+    "cascade": {
+        "automation": {
+            "maxComplexity": 50,
+            "minTestCoverage": 80,
+            "maxDependencies": 20,
+            "safetyThresholds": {
+                "high": 90,
+                "medium": 70,
+                "low": 50
             },
-            "dependencies": {
-                "type": "graph-neural-network",
-                "layers": 6,
-                "embedding": 256
+            "toolPreferences": {
+                "edit_file": {
+                    "priority": 1,
+                    "maxChangesPerFile": 50,
+                    "requiresValidation": true
+                },
+                "view_file": {
+                    "priority": 2,
+                    "maxLinesPerView": 200
+                }
             }
         },
-        "training": {
-            "epochs": 100,
-            "learningRate": 1e-4,
+        "refactoring": {
+            "strategies": {
+                "split_function": {
+                    "maxFunctionSize": 50,
+                    "minExtractSize": 10,
+                    "requiresTests": true
+                },
+                "rename_symbol": {
+                    "requiresTypeInfo": true,
+                    "scopeAnalysis": true
+                },
+                "extract_component": {
+                    "minComplexity": 15,
+                    "requiresDependencyAnalysis": true
+                }
+            },
             "validation": {
-                "split": 0.2,
-                "metric": "f1"
+                "required": ["syntax", "compilation"],
+                "recommended": ["unit_tests", "integration_tests"],
+                "optional": ["performance_tests"]
+            },
+            "rollback": {
+                "enabled": true,
+                "checkpoints": ["pre_change", "post_change", "post_validation"],
+                "maxAttempts": 3
+            }
+        },
+        "analysis": {
+            "symbolGraph": {
+                "enabled": true,
+                "maxDepth": 5,
+                "includeDependencies": true
+            },
+            "impactAnalysis": {
+                "enabled": true,
+                "scope": ["direct", "indirect", "cascading"],
+                "maxDepth": 3
+            },
+            "metrics": {
+                "complexity": {
+                    "cyclomatic": true,
+                    "cognitive": true,
+                    "halstead": false
+                },
+                "dependencies": {
+                    "direct": true,
+                    "indirect": true,
+                    "external": true
+                },
+                "testing": {
+                    "coverage": true,
+                    "assertions": true,
+                    "mutations": false
+                }
             }
         },
         "optimization": {
-            "enabled": true,
-            "method": "quantization",
-            "precision": "fp16",
-            "pruning": {
+            "caching": {
                 "enabled": true,
-                "threshold": 0.01
+                "strategy": "lru",
+                "maxSize": 536870912
+            },
+            "parallelization": {
+                "enabled": true,
+                "maxWorkers": 4,
+                "chunkSize": 25
+            },
+            "batching": {
+                "enabled": true,
+                "maxSize": 50,
+                "timeout": 5000
             }
         }
     },
-    "astAnalysis": {
-        "parsers": {
-            "python": "ast",
-            "javascript": "esprima",
-            "typescript": "typescript",
-            "powershell": "System.Management.Automation.Language.Parser",
-            "csharp": "Microsoft.CodeAnalysis.CSharp",
-            "go": "go/parser"
-        },
-        "cacheSize": 1000,
-        "indexPath": "./data/ast_index"
-    },
-    "search": {
-        "enabled": true,
-        "types": [
-            "ast",
-            "symbols",
-            "dependencies",
-            "patterns"
-        ],
-        "updateInterval": "1h",
-        "maxIndexSize": "1GB",
-        "engine": "lucene.net",
-        "shards": 4,
-        "indexPerformance": {
-            "maxParallelism": 8,
-            "chunkSize": "1MB",
-            "timeoutSeconds": 300
+    "storage": {
+        "type": "file",
+        "path": "./data",
+        "compression": true,
+        "backup": {
+            "enabled": true,
+            "interval": 86400,
+            "retention": 7
         }
     },
-    "caching": {
-        "enabled": true,
-        "maxSize": "500MB",
-        "ttl": "24h"
+    "astAnalysis": {
+        "maxNodes": 10000,
+        "timeout": 30000,
+        "features": {
+            "symbols": true,
+            "references": true,
+            "dependencies": true,
+            "types": true
+        }
     }
 }
