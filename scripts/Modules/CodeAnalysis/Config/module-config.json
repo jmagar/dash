@@ -11,6 +11,11 @@
             ".git"
         ]
     },
+    "resourceManagement": {
+        "memoryThreshold": 1073741824,
+        "batchSize": 100,
+        "maxParallelism": 4
+    },
     "codeAnalysis": {
         "maxFileSize": 1048576,
         "batchSize": 100,
