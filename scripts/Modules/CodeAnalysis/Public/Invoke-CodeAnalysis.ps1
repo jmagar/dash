@@ -1,15 +1,4 @@
-# Custom validation attributes
-class ValidPath : System.Management.Automation.ValidateArgumentsAttribute {
-    [void]Validate([object]$element) {
-        if (-not (Test-Path $element)) {
-            throw [CodeAnalysisException]::new(
-                "Path '$element' does not exist",
-                "InvalidPath"
-            )
-        }
-    }
-}
-
+# Custom exceptions for code analysis
 class CodeAnalysisException : Exception {
     [string]$Category
     
@@ -119,7 +108,7 @@ function Invoke-CodeAnalysis {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, Position = 0)]
-        [ValidPath()]
+        [ValidateScript({Test-Path $_})]
         [string]$Path,
         
         [Parameter(Position = 1)]
