@@ -40,7 +40,7 @@ class CodeAnalysisException : Exception {
 
 .PARAMETER FileExtensions
     Array of file extensions to analyze. Supports common programming languages.
-    Default: @('.js', '.ts', '.py', '.ps1')
+    Default: @('.js', '.ts', '.py', '.ps1', '.go')
 
 .PARAMETER BatchSize
     Number of files to process in each batch for parallel processing.
@@ -49,6 +49,12 @@ class CodeAnalysisException : Exception {
 .PARAMETER MaxParallelism
     Maximum number of parallel operations to run.
     Default: 8
+
+.PARAMETER SkipCache
+    Switch to skip caching analysis results.
+
+.PARAMETER Force
+    Switch to force analysis even if resource thresholds are exceeded.
 
 .EXAMPLE
     Invoke-CodeAnalysis -Path ./src -OutputName "weekly-scan"
@@ -61,16 +67,44 @@ class CodeAnalysisException : Exception {
 .OUTPUTS
     Returns a hashtable containing analysis results with the following structure:
     {
-        totalFiles = <int>
-        languages = @{ <language> = <count> }
-        patterns = @{
-            total = <int>
-            byCategory = @{ <category> = <count> }
+        summary = @{
+            totalFiles = <int>
+            analyzedFiles = <int>
+            patterns = @{
+                <pattern> = <count>
+            }
+            security = @{
+                highSeverity = <int>
+                mediumSeverity = <int>
+                lowSeverity = <int>
+                averageScore = <float>
+            }
+            performance = @{
+                averageComplexity = <float>
+                hotspots = @(
+                    @{
+                        file = <string>
+                        complexity = <int>
+                    }
+                )
+            }
         }
-        security = @{
-            averageScore = <float>
-            highRiskFiles = @( <file paths> )
+        files = @{
+            <file> = @{
+                patterns = @{
+                    <pattern> = @{
+                        count = <int>
+                    }
+                }
+                security = @{
+                    severity = <string>
+                }
+                performance = @{
+                    complexity = <int>
+                }
+            }
         }
+        timestamp = <string>
     }
 
 .NOTES
@@ -89,60 +123,48 @@ function Invoke-CodeAnalysis {
         [string]$Path,
         
         [Parameter(Position = 1)]
-        [string]$OutputName = (Get-Date -Format "yyyyMMdd-HHmmss"),
+        [string]$OutputName = [DateTime]::Now.ToString("yyyyMMdd_HHmmss"),
         
         [Parameter(Position = 2)]
         [ValidateSet('.js', '.ts', '.py', '.ps1', '.go')]
-        [string[]]$FileExtensions = @('.js', '.ts', '.py', '.ps1'),
+        [string[]]$FileExtensions = @('.js', '.ts', '.py', '.ps1', '.go'),
         
         [Parameter()]
-        [ValidateRange(1, 1000)]
-        [int]$BatchSize = 100,
+        [switch]$SkipCache,
         
         [Parameter()]
-        [ValidateRange(1, 32)]
-        [int]$MaxParallelism = 8
+        [switch]$Force
     )
     
     begin {
-        try {
-            # Load module configuration
-            $moduleConfig = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
-            
-            # Set up output paths
-            $outputRoot = Join-Path $PSScriptRoot "../$($moduleConfig.paths.output.data)"
-            $outputPath = Join-Path $outputRoot $OutputName
-            
-            Start-ScriptLogging -ScriptName "CodeAnalysis-$OutputName"
-            Write-StructuredLog -Message "Starting code analysis" -Level INFO -Properties @{
-                path = $Path
-                outputPath = $outputPath
-                extensions = $FileExtensions
-            }
-            
-            # Create output directories
-            $directories = @(
-                $outputPath,
-                "$outputPath/metrics",
-                "$outputPath/patterns",
-                "$outputPath/security",
-                "$outputPath/recommendations"
-            )
-            
-            foreach ($dir in $directories) {
-                if (-not (Test-Path $dir)) {
-                    New-Item -ItemType Directory -Path $dir -Force | Out-Null
-                    Write-StructuredLog -Message "Created directory: $dir" -Level INFO
+        # Start resource monitoring
+        $monitoringJob = Start-ResourceMonitoring -IntervalSeconds 5
+        
+        # Ensure output directories exist
+        $outputPath = Join-Path $PSScriptRoot "../Data/Analysis/$OutputName"
+        if (-not (Test-Path $outputPath)) {
+            New-Item -Path $outputPath -ItemType Directory -Force | Out-Null
+        }
+        
+        # Initialize results collection
+        $results = @{
+            summary = @{
+                totalFiles = 0
+                analyzedFiles = 0
+                patterns = @{}
+                security = @{
+                    highSeverity = 0
+                    mediumSeverity = 0
+                    lowSeverity = 0
+                    averageScore = 0
+                }
+                performance = @{
+                    averageComplexity = 0
+                    hotspots = @()
                 }
             }
-        }
-        catch {
-            $ex = [CodeAnalysisException]::new(
-                "Failed to initialize analysis: $_",
-                "Initialization"
-            )
-            Write-ErrorLog -ErrorRecord $ex
-            throw $ex
+            files = @{}
+            timestamp = [DateTime]::UtcNow.ToString('o')
         }
     }
     
@@ -152,179 +174,131 @@ function Invoke-CodeAnalysis {
             if (-not (Test-SecurityPreconditions -Path $Path)) {
                 throw [CodeAnalysisException]::new(
                     "Security validation failed for path: $Path",
-                    "Security"
+                    "SecurityValidation"
                 )
             }
             
-            # Process files
-            $results = Invoke-LargeDirectoryProcessing -Path $Path -BatchSize $BatchSize -MaxParallelism $MaxParallelism -Include $FileExtensions -ProcessBlock {
-                param($file)
-                
-                try {
-                    $content = Get-Content $file -Raw
-                    $language = Get-FileLanguage -Extension ([System.IO.Path]::GetExtension($file))
-                    $patterns = Get-CodePatterns -FilePath $file -Content $content -Language $language
-                    $metrics = Get-PatternMetrics -Patterns $patterns
-                    $security = Get-SecurityScore -Path $file -Metrics $metrics
+            # Get all files to analyze
+            $files = Get-ChildItem -Path $Path -Recurse -File |
+                Where-Object { $FileExtensions -contains $_.Extension }
+            
+            $results.summary.totalFiles = $files.Count
+            
+            # Get optimal batch size and parallelism
+            $batchSize = Get-OptimalBatchSize -TotalItems $files.Count
+            $maxParallelism = Get-OptimalParallelism
+            
+            Write-Verbose "Processing with batch size: $batchSize, parallelism: $maxParallelism"
+            
+            # Process files in parallel with resource monitoring
+            $processedFiles = Invoke-LargeDirectoryProcessing -Path $Path `
+                -Include $FileExtensions `
+                -BatchSize $batchSize `
+                -MaxParallelism $maxParallelism `
+                -ProcessBlock {
+                    param($file)
                     
-                    return @{
-                        file = $file
-                        language = $language
-                        patterns = $patterns
-                        metrics = $metrics
-                        security = $security
-                    }
-                }
-                catch {
-                    Write-ErrorLog $_
-                    return $null
-                }
-            }
-            
-            if (-not $results -or $results.Count -eq 0) {
-                throw [CodeAnalysisException]::new(
-                    "No files were processed successfully",
-                    "Processing"
-                )
-            }
-            
-            # Generate summary
-            $summary = @{
-                totalFiles = $results.Count
-                languages = @{}
-                patterns = @{
-                    total = 0
-                    byCategory = @{}
-                }
-                security = @{
-                    averageScore = 0
-                    highRiskFiles = @()
-                }
-                recommendations = @()
-            }
-            
-            # Process results
-            foreach ($result in $results.Values) {
-                # Language stats
-                if (-not $summary.languages.ContainsKey($result.language)) {
-                    $summary.languages[$result.language] = 0
-                }
-                $summary.languages[$result.language]++
-                
-                # Pattern stats
-                $summary.patterns.total += $result.metrics.totalPatterns
-                foreach ($category in $result.metrics.categories.Keys) {
-                    if (-not $summary.patterns.byCategory.ContainsKey($category)) {
-                        $summary.patterns.byCategory[$category] = 0
-                    }
-                    $summary.patterns.byCategory[$category] += $result.metrics.categories[$category].count
-                }
-                
-                # Security stats
-                $summary.security.averageScore += $result.security
-                if ($result.security -lt $moduleConfig.analysis.securityThresholds.medium) {
-                    $summary.security.highRiskFiles += $result.file
-                }
-                
-                # Generate recommendations
-                if ($result.metrics.complexity -gt $moduleConfig.analysis.securityThresholds.high -or 
-                    $result.security -lt $moduleConfig.analysis.securityThresholds.medium) {
-                    $summary.recommendations += @{
-                        file = $result.file
-                        type = if ($result.metrics.complexity -gt $moduleConfig.analysis.securityThresholds.high) { "complexity" } else { "security" }
-                        severity = if ($result.security -lt $moduleConfig.analysis.securityThresholds.low) { "high" } else { "medium" }
-                        suggestions = @(
-                            if ($result.metrics.complexity -gt $moduleConfig.analysis.securityThresholds.high) {
-                                "Consider refactoring to reduce complexity"
+                    try {
+                        # Check resource availability
+                        if (-not (Test-ResourceAvailability)) {
+                            Write-Warning "Resource threshold exceeded, reducing batch size"
+                            return $null
+                        }
+                        
+                        # Try to get from cache if enabled
+                        if (-not $SkipCache) {
+                            $cacheKey = New-CacheKey -FilePath $file -AnalysisType "Full"
+                            $cachedResults = Get-CacheItem -Key $cacheKey
+                            if ($cachedResults) {
+                                Write-Verbose "Retrieved analysis from cache for $file"
+                                return $cachedResults
                             }
-                            if ($result.security -lt $moduleConfig.analysis.securityThresholds.medium) {
-                                "Review security patterns and implement fixes"
-                            }
-                        )
+                        }
+                        
+                        # Perform analysis
+                        $content = Get-Content $file -Raw
+                        $language = Get-FileLanguage -Extension $file.Extension
+                        
+                        $fileAnalysis = @{
+                            patterns = Get-CodePatterns -FilePath $file -Content $content -Language $language
+                            security = Get-SecurityIssues -FilePath $file -Content $content -Language $language
+                            performance = Get-PerformanceMetrics -FilePath $file -Content $content -Language $language
+                        }
+                        
+                        # Cache results if enabled
+                        if (-not $SkipCache) {
+                            Set-CacheItem -Key $cacheKey -Data $fileAnalysis
+                        }
+                        
+                        return $fileAnalysis
+                    }
+                    catch {
+                        Write-Error "Failed to analyze file $file : $_"
+                        return $null
+                    }
+                }
+            
+            # Update results
+            foreach ($file in $processedFiles.GetEnumerator()) {
+                $results.files[$file.Key] = $file.Value
+                $results.summary.analyzedFiles++
+                
+                # Update pattern statistics
+                foreach ($pattern in $file.Value.patterns.Keys) {
+                    if (-not $results.summary.patterns[$pattern]) {
+                        $results.summary.patterns[$pattern] = 0
+                    }
+                    $results.summary.patterns[$pattern] += $file.Value.patterns[$pattern].Count
+                }
+                
+                # Update security statistics
+                switch ($file.Value.security.severity) {
+                    'high' { $results.summary.security.highSeverity++ }
+                    'medium' { $results.summary.security.mediumSeverity++ }
+                    'low' { $results.summary.security.lowSeverity++ }
+                }
+                
+                # Update performance statistics
+                if ($file.Value.performance.complexity -gt 10) {
+                    $results.summary.performance.hotspots += @{
+                        file = $file.Key
+                        complexity = $file.Value.performance.complexity
                     }
                 }
             }
             
-            # Finalize averages
-            if ($results.Count -gt 0) {
-                $summary.security.averageScore = $summary.security.averageScore / $results.Count
+            # Calculate averages
+            if ($results.summary.analyzedFiles -gt 0) {
+                $results.summary.security.averageScore = (
+                    ($results.summary.security.highSeverity * 100) +
+                    ($results.summary.security.mediumSeverity * 50) +
+                    ($results.summary.security.lowSeverity * 25)
+                ) / $results.summary.analyzedFiles
+                
+                $results.summary.performance.averageComplexity = (
+                    $results.files.Values.performance.complexity | Measure-Object -Average
+                ).Average
             }
             
             # Export results
-            $summary | ConvertTo-Json -Depth 10 | Out-File "$outputPath/summary.json"
-            $results | ConvertTo-Json -Depth 10 | Out-File "$outputPath/details.json"
+            $results | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outputPath "analysis.json")
             
-            # Load report template
-            $reportTemplate = Get-Content "$PSScriptRoot/../$($moduleConfig.paths.templates.report)" -Raw
+            # Generate reports
+            Export-AnalysisReports -Results $results -OutputPath $outputPath
             
-            # Replace placeholders
-            $reportContent = $reportTemplate -replace '{{totalFiles}}', $summary.totalFiles `
-                                          -replace '{{averageSecurityScore}}', ([Math]::Round($summary.security.averageScore, 2)) `
-                                          -replace '{{totalPatterns}}', $summary.patterns.total
-            
-            # Generate language distribution section
-            $languageSection = $summary.languages.GetEnumerator() | ForEach-Object {
-                "- $($_.Key): $($_.Value)"
-            }
-            $reportContent = $reportContent -replace '{{#each languages}}[\s\S]*?{{/each}}', ($languageSection -join "`n")
-            
-            # Generate pattern categories section
-            $patternSection = $summary.patterns.byCategory.GetEnumerator() | ForEach-Object {
-                "- $($_.Key): $($_.Value)"
-            }
-            $reportContent = $reportContent -replace '{{#each patterns.byCategory}}[\s\S]*?{{/each}}', ($patternSection -join "`n")
-            
-            # Generate security section
-            $securitySection = $summary.security.highRiskFiles | ForEach-Object {
-                "- $_"
-            }
-            $reportContent = $reportContent -replace '{{#each security.highRiskFiles}}[\s\S]*?{{/each}}', ($securitySection -join "`n")
-            
-            # Generate recommendations section
-            $recommendationSection = $summary.recommendations | ForEach-Object {
-                @"
-### $($_.file)
-- Type: $($_.type)
-- Severity: $($_.severity)
-- Suggestions:
-$(($_.suggestions | ForEach-Object { "  - $_" }) -join "`n")
-
-"@
-            }
-            $reportContent = $reportContent -replace '{{#each recommendations}}[\s\S]*?{{/each}}', ($recommendationSection -join "`n")
-            
-            $reportContent | Out-File "$outputPath/report.md"
-            
-            Write-StructuredLog -Message "Analysis complete" -Level INFO -Properties @{
-                totalFiles = $summary.totalFiles
-                patterns = $summary.patterns.total
-                recommendations = $summary.recommendations.Count
-                outputPath = $outputPath
-            }
-            
-            return @{
-                summary = $summary
-                outputPath = $outputPath
-            }
+            return $results
         }
         catch {
-            if ($_ -is [CodeAnalysisException]) {
-                Write-ErrorLog $_
-                throw
-            }
-            else {
-                $ex = [CodeAnalysisException]::new(
-                    "Analysis failed: $_",
-                    "Processing"
-                )
-                Write-ErrorLog -ErrorRecord $ex
-                throw $ex
-            }
+            Write-Error "Analysis failed: $_"
+            throw
         }
     }
     
     end {
-        Stop-ScriptLogging -ScriptName "CodeAnalysis-$OutputName"
+        # Stop resource monitoring
+        if ($monitoringJob) {
+            Stop-ResourceMonitoring -Job $monitoringJob
+        }
     }
 }
 

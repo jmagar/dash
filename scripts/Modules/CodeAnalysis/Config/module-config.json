@@ -1,24 +1,30 @@
 {
-    "paths": {
-        "templates": {
-            "report": "Templates/report.md",
-            "visualization": "Templates/visualization.html",
-            "analysis": {
-                "directory": "Templates/Analysis/directory-analysis.md",
-                "component": "Templates/Analysis/component-analysis.md",
-                "security": "Templates/Analysis/security-analysis.md",
-                "performance": "Templates/Analysis/performance-analysis.md",
-                "refactoring": "Templates/Analysis/refactoring-recommendations.md",
-                "dependency": "Templates/Analysis/dependency-analysis.md"
+    "fileSystem": {
+        "paths": {
+            "templates": {
+                "report": "Templates/report.md",
+                "visualization": "Templates/visualization.html",
+                "analysis": {
+                    "directory": "Templates/Analysis/directory-analysis.md",
+                    "component": "Templates/Analysis/component-analysis.md",
+                    "security": "Templates/Analysis/security-analysis.md",
+                    "performance": "Templates/Analysis/performance-analysis.md",
+                    "refactoring": "Templates/Analysis/refactoring-recommendations.md",
+                    "dependency": "Templates/Analysis/dependency-analysis.md"
+                }
+            },
+            "output": {
+                "data": "Data/Analysis",
+                "logs": "Data/Logs",
+                "visualizations": "Data/Visualizations",
+                "search": "Data/Search",
+                "index": "Data/Index",
+                "models": "Data/Models",
+                "training": "Data/Training"
             }
-        },
-        "output": {
-            "data": "Data/Analysis",
-            "logs": "Data/Logs",
-            "visualizations": "Data/Visualizations"
         }
     },
-    "analysis": {
+    "codeAnalysis": {
         "maxFileSize": "100MB",
         "excludePatterns": [
             "node_modules",
@@ -31,7 +37,7 @@
             "low": 40
         }
     },
-    "performance": {
+    "resourceManagement": {
         "batchSize": 100,
         "maxParallelism": 8,
         "memoryThreshold": "1GB",
@@ -66,5 +72,98 @@
             "metrics",
             "visualizations"
         ]
+    },
+    "storage": {
+        "database": {
+            "type": "sqlite",
+            "path": "./data/analysis.db",
+            "maxConnections": 10,
+            "timeout": "30s",
+            "vacuum": {
+                "enabled": true,
+                "interval": "7d"
+            }
+        },
+        "indexing": {
+            "maxResults": 100,
+            "updateInterval": "1h",
+            "enableFullTextSearch": true,
+            "maxSize": "1GB"
+        },
+        "retention": {
+            "maxAge": "30d",
+            "cleanupInterval": "1d"
+        }
+    },
+    "machineLearning": {
+        "modelPath": "./models",
+        "trainingPath": "./training",
+        "embeddingSize": 768,
+        "batchSize": 32,
+        "models": {
+            "patterns": {
+                "type": "transformer",
+                "architecture": "bert-base",
+                "layers": 12,
+                "heads": 8
+            },
+            "dependencies": {
+                "type": "graph-neural-network",
+                "layers": 6,
+                "embedding": 256
+            }
+        },
+        "training": {
+            "epochs": 100,
+            "learningRate": 1e-4,
+            "validation": {
+                "split": 0.2,
+                "metric": "f1"
+            }
+        },
+        "optimization": {
+            "enabled": true,
+            "method": "quantization",
+            "precision": "fp16",
+            "pruning": {
+                "enabled": true,
+                "threshold": 0.01
+            }
+        }
+    },
+    "astAnalysis": {
+        "parsers": {
+            "python": "ast",
+            "javascript": "esprima",
+            "typescript": "typescript",
+            "powershell": "System.Management.Automation.Language.Parser",
+            "csharp": "Microsoft.CodeAnalysis.CSharp",
+            "go": "go/parser"
+        },
+        "cacheSize": 1000,
+        "indexPath": "./data/ast_index"
+    },
+    "search": {
+        "enabled": true,
+        "types": [
+            "ast",
+            "symbols",
+            "dependencies",
+            "patterns"
+        ],
+        "updateInterval": "1h",
+        "maxIndexSize": "1GB",
+        "engine": "lucene.net",
+        "shards": 4,
+        "indexPerformance": {
+            "maxParallelism": 8,
+            "chunkSize": "1MB",
+            "timeoutSeconds": 300
+        }
+    },
+    "caching": {
+        "enabled": true,
+        "maxSize": "500MB",
+        "ttl": "24h"
     }
 }

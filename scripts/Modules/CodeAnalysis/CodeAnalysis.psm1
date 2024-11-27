@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $modulePath = $PSScriptRoot
 
 # Import configuration
-$script:Config = Get-Content "$modulePath/Config/metrics.json" | ConvertFrom-Json
+$script:Config = Get-Content "$modulePath/Config/module-config.json" | ConvertFrom-Json
 $script:Patterns = Get-Content "$modulePath/Config/patterns.json" | ConvertFrom-Json
 
 # Import all private functions
