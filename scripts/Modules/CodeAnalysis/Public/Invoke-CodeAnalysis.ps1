@@ -1,6 +1,6 @@
 # Custom validation attributes
 class ValidPath : System.Management.Automation.ValidateArgumentsAttribute {
-    [void]ValidateElement($element) {
+    [void]Validate([object]$element) {
         if (-not (Test-Path $element)) {
             throw [CodeAnalysisException]::new(
                 "Path '$element' does not exist",
