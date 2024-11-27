@@ -1,0 +1,70 @@
+{
+    "paths": {
+        "templates": {
+            "report": "Templates/report.md",
+            "visualization": "Templates/visualization.html",
+            "analysis": {
+                "directory": "Templates/Analysis/directory-analysis.md",
+                "component": "Templates/Analysis/component-analysis.md",
+                "security": "Templates/Analysis/security-analysis.md",
+                "performance": "Templates/Analysis/performance-analysis.md",
+                "refactoring": "Templates/Analysis/refactoring-recommendations.md",
+                "dependency": "Templates/Analysis/dependency-analysis.md"
+            }
+        },
+        "output": {
+            "data": "Data/Analysis",
+            "logs": "Data/Logs",
+            "visualizations": "Data/Visualizations"
+        }
+    },
+    "analysis": {
+        "maxFileSize": "100MB",
+        "excludePatterns": [
+            "node_modules",
+            "bin",
+            "obj"
+        ],
+        "securityThresholds": {
+            "high": 80,
+            "medium": 60,
+            "low": 40
+        }
+    },
+    "performance": {
+        "batchSize": 100,
+        "maxParallelism": 8,
+        "memoryThreshold": "1GB",
+        "timeoutMinutes": 30
+    },
+    "logging": {
+        "level": "INFO",
+        "maxFileSize": "10MB",
+        "retentionDays": 30,
+        "compressionEnabled": true
+    },
+    "visualization": {
+        "defaultFormat": "d3",
+        "colorScheme": {
+            "file": {
+                "highSecurity": "#4CAF50",
+                "mediumSecurity": "#FFC107",
+                "lowSecurity": "#F44336"
+            },
+            "pattern": "#9C27B0",
+            "securityIssue": "#FF5722"
+        },
+        "maxNodes": 1000
+    },
+    "templates": {
+        "placeholderPattern": "{{([^}]+)}}",
+        "dateFormat": "yyyy-MM-dd HH:mm:ss",
+        "reportSections": [
+            "overview",
+            "analysis",
+            "recommendations",
+            "metrics",
+            "visualizations"
+        ]
+    }
+}

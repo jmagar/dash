@@ -1,0 +1,41 @@
+{
+    "complexity": {
+        "maxAllowed": 20,
+        "warning": 15,
+        "patterns": [
+            "if\\s*\\(",
+            "else\\s*{",
+            "while\\s*\\(",
+            "for\\s*\\(",
+            "foreach\\s*\\(",
+            "catch\\s*{",
+            "\\?\\s*.",
+            "\\|\\|",
+            "&&"
+        ]
+    },
+    "logging": {
+        "maxFileSize": "10MB",
+        "retentionDays": 30,
+        "compressionEnabled": true,
+        "levels": ["DEBUG", "INFO", "WARN", "ERROR"]
+    },
+    "performance": {
+        "batchSize": 100,
+        "maxParallelism": 8,
+        "memoryThreshold": "1GB"
+    },
+    "security": {
+        "allowedPaths": [
+            "./src",
+            "./test",
+            "./scripts"
+        ],
+        "suspiciousPatterns": [
+            "eval\\(",
+            "exec\\(",
+            "\\bpassword\\b",
+            "\\bsecret\\b"
+        ]
+    }
+}

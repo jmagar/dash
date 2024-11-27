@@ -1,0 +1,65 @@
+{
+    "languages": {
+        ".go": {
+            "interfaces": "^\\s*type\\s+\\w+\\s+interface\\s*{",
+            "goroutines": "\\bgo\\s+\\w+",
+            "channels": "\\bchan\\b|\\<-",
+            "errorHandling": "if\\s+err\\s*[!:]?=|return\\s+.*,\\s*err",
+            "structTags": "`[^`]+`",
+            "testing": "^func\\s+Test\\w+\\s*\\(t\\s*\\*testing\\.T\\)",
+            "deferStatements": "\\bdefer\\s+",
+            "contexts": "context\\.Context|WithContext|ctx\\s+context\\.",
+            "mutexes": "sync\\.Mutex|RWMutex|Lock\\(\\)|Unlock\\(\\)",
+            "embedding": "^type\\s+\\w+\\s+struct\\s*{\\s*\\w+\\s*$"
+        },
+        ".js|.ts": {
+            "modulePatterns": "(?:import|export)\\s+(?:{[^}]*}|\\*|\\w+)",
+            "reactHooks": "use[A-Z]\\w+",
+            "asyncAwait": "async|await",
+            "promises": "\\.then\\(|\\.catch\\(|Promise\\.",
+            "typeAnnotations": ":\\s*[A-Z]\\w+(?:<.*>)?"
+        },
+        ".py": {
+            "decorators": "@\\w+",
+            "typeHints": ":\\s*\\w+(?:\\[.*\\])?",
+            "comprehensions": "\\[.*for.*in.*\\]|\\{.*for.*in.*\\}",
+            "asyncIO": "async\\s+def|await",
+            "contextManagers": "with\\s+.*:"
+        },
+        ".ps1": {
+            "cmdletBinding": "\\[CmdletBinding.*\\]",
+            "parameters": "\\[Parameter.*\\]",
+            "errorHandling": "try|catch|finally|throw",
+            "pipelineInput": "\\{\\s*process\\s*\\{",
+            "advancedFunctions": "function\\s+\\w+-\\w+"
+        }
+    },
+    "common": {
+        "documentation": {
+            "xmlDocs": "\\/\\/\\/|\"\"\"|'''|#\\s*\\w+:",
+            "inlineComments": "(?:\\/\\/|\\#|')\\s*\\w+",
+            "todos": "(?:\\/\\/|\\#|')\\s*TODO:",
+            "fixmes": "(?:\\/\\/|\\#|')\\s*FIXME:"
+        },
+        "security": {
+            "hardcodedSecrets": "(?i)password|secret|key|token|credential",
+            "sqlInjection": "(?i)select\\s+.*from|insert\\s+into|update\\s+.*set|delete\\s+from",
+            "unsafeInput": "(?i)eval\\(|exec\\(|system\\("
+        },
+        "performance": {
+            "nestedLoops": "(?:for|while).*(?:for|while)",
+            "largeCollections": "\\[\\d{4,}\\]|\\{\\d{4,}\\}",
+            "resourceLeaks": "open\\(|new\\s+\\w+\\("
+        },
+        "testing": {
+            "unitTests": "test|spec|should",
+            "mocking": "mock|stub|fake",
+            "assertions": "assert|expect|should"
+        },
+        "architecture": {
+            "dependencyInjection": "inject|provider|container",
+            "factory": "factory|create\\w+|build\\w+",
+            "singleton": "instance|shared|global"
+        }
+    }
+}
