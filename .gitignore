@@ -50,4 +50,30 @@ data/
 .eslintcache
 .aider.input.history
 .aider.chat.history.md
-.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*;
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Code Analysis Module Environment
+scripts/Modules/CodeAnalysis/env/
