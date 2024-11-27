@@ -13,11 +13,25 @@ $script:DataConfig = @{
 # Initialize SQLite for fast searching
 function Initialize-SearchDatabase {
     [CmdletBinding()]
-    param()
+    param(
+        [switch]$Force
+    )
     
     try {
-        # Create SQLite database for indexing
+        # Check if database already exists and is valid
         $dbPath = Join-Path $script:DataConfig.SearchPath "analysis.db"
+        if (-not $Force -and (Test-Path $dbPath)) {
+            try {
+                # Test the database with a simple query
+                $null = Invoke-SqliteQuery -DataSource $dbPath -Query "SELECT 1;"
+                return # Database exists and is valid
+            }
+            catch {
+                Write-Verbose "Existing database appears corrupted, recreating..."
+            }
+        }
+
+        # Create SQLite database for indexing
         $null = New-Item -Path $script:DataConfig.SearchPath -ItemType Directory -Force
         
         $query = @"
@@ -49,13 +63,37 @@ CREATE TABLE IF NOT EXISTS metrics_index (
 
 CREATE INDEX IF NOT EXISTS idx_file_path ON analysis_index(file_path);
 CREATE INDEX IF NOT EXISTS idx_pattern_name ON pattern_index(pattern_name);
-CREATE INDEX IF NOT EXISTS idx_metric_name ON metrics_index(metric_name);
 "@
-        
         Invoke-SqliteQuery -DataSource $dbPath -Query $query
+        Write-Verbose "Search database initialized successfully"
     }
     catch {
         Write-Error "Failed to initialize search database: $_"
+        throw
+    }
+}
+
+# Helper function to ensure database is initialized
+function Assert-DatabaseInitialized {
+    [CmdletBinding()]
+    param()
+    
+    try {
+        $dbPath = Join-Path $script:DataConfig.SearchPath "analysis.db"
+        if (-not (Test-Path $dbPath)) {
+            Initialize-SearchDatabase
+        }
+        else {
+            try {
+                $null = Invoke-SqliteQuery -DataSource $dbPath -Query "SELECT 1;"
+            }
+            catch {
+                Initialize-SearchDatabase -Force
+            }
+        }
+    }
+    catch {
+        Write-Error "Failed to ensure database is initialized: $_"
         throw
     }
 }
@@ -74,6 +112,7 @@ function Add-AnalysisData {
     )
     
     try {
+        Assert-DatabaseInitialized
         $id = [Guid]::NewGuid().ToString()
         $timestamp = [DateTime]::UtcNow
         
@@ -183,6 +222,7 @@ function Search-AnalysisData {
     )
     
     try {
+        Assert-DatabaseInitialized
         $dbPath = Join-Path $script:DataConfig.SearchPath "analysis.db"
         
         $whereClause = New-Object System.Collections.Generic.List[string]
@@ -273,6 +313,7 @@ function Get-AnalysisData {
     )
     
     try {
+        Assert-DatabaseInitialized
         $dbPath = Join-Path $script:DataConfig.SearchPath "analysis.db"
         
         # Get file path from index
@@ -301,6 +342,7 @@ function Remove-OldAnalysisData {
     )
     
     try {
+        Assert-DatabaseInitialized
         $dbPath = Join-Path $script:DataConfig.SearchPath "analysis.db"
         $cutoffDate = [DateTime]::UtcNow.AddDays(-$RetentionDays)
         
@@ -335,9 +377,6 @@ function Remove-OldAnalysisData {
         throw
     }
 }
-
-# Initialize on module load
-Initialize-SearchDatabase
 
 # Export functions
 Export-ModuleMember -Function @(
