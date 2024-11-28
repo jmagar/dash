@@ -1,7 +1,9 @@
-# Machine Learning module for pattern analysis and prediction
 using namespace System.Collections.Generic
 using namespace System.IO
 using namespace System.Text.Json
+
+# Import Logging module
+. $PSScriptRoot/Logging.ps1
 
 # ML Configuration
 $script:MLConfig = @{
@@ -23,14 +25,36 @@ function Initialize-MLEnvironment {
     param()
     
     try {
+        Write-StructuredLog -Message "Initializing ML environment" -Level INFO
+        
         # Ensure Python environment exists
         $pythonPath = Join-Path $PSScriptRoot "../env/python"
         if (-not (Test-Path $pythonPath)) {
-            Write-Verbose "Creating Python virtual environment..."
-            python -m venv $pythonPath
+            Write-StructuredLog -Message "Creating Python virtual environment" -Level INFO
+            
+            # Create virtual environment
+            $process = Start-Process -FilePath "python" -ArgumentList "-m", "venv", $pythonPath -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+                throw "Failed to create virtual environment"
+            }
             
             # Install required packages
-            & "$pythonPath/Scripts/pip" install torch transformers sentence-transformers scikit-learn numpy pandas
+            $packages = @(
+                "torch",
+                "transformers",
+                "sentence-transformers",
+                "scikit-learn",
+                "numpy",
+                "pandas"
+            )
+            
+            foreach ($package in $packages) {
+                Write-StructuredLog -Message "Installing package: $package" -Level INFO
+                $process = Start-Process -FilePath "$pythonPath/Scripts/pip" -ArgumentList "install", $package -Wait -PassThru
+                if ($process.ExitCode -ne 0) {
+                    throw "Failed to install package: $package"
+                }
+            }
         }
         
         # Create model directories
@@ -46,265 +70,248 @@ function Initialize-MLEnvironment {
             }
         }
         
+        Write-StructuredLog -Message "ML environment initialized successfully" -Level INFO
         return $true
     }
     catch {
-        Write-Error "Failed to initialize ML environment: $_"
+        Write-ErrorLog -ErrorRecord $_
         return $false
     }
 }
 
-# Convert code patterns to vector embeddings
-function Get-PatternEmbeddings {
+function Get-CodeEmbedding {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Content,
-        
+        [string]$Code,
         [Parameter()]
-        [string]$Language
+        [string]$ModelName = $script:MLConfig.Embeddings.ModelName
     )
     
     try {
-        # Use sentence-transformers to get embeddings
+        # Check cache first
+        $cacheKey = [System.BitConverter]::ToString(
+            [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+                [System.Text.Encoding]::UTF8.GetBytes($Code)
+            )
+        ).Replace("-", "")
+        
+        $cached = Get-FromCache -CacheType 'Pattern' -Key $cacheKey
+        if ($cached) { return $cached }
+        
+        # Generate embedding using Python
         $pythonScript = @"
 from sentence_transformers import SentenceTransformer
 import torch
-import json
 import sys
+import json
 
-def get_embeddings(text, model_name='$($script:MLConfig.Embeddings.ModelName)'):
+def get_embedding(text, model_name):
     model = SentenceTransformer(model_name)
-    embeddings = model.encode(text, convert_to_tensor=True)
-    return embeddings.tolist()
+    with torch.no_grad():
+        embedding = model.encode(text)
+    return embedding.tolist()
 
-content = sys.argv[1]
-embeddings = get_embeddings(content)
-print(json.dumps(embeddings))
+code = sys.argv[1]
+model_name = sys.argv[2]
+embedding = get_embedding(code, model_name)
+print(json.dumps(embedding))
 "@
         
-        $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
         $tempScript = [Path]::GetTempFileName()
         $pythonScript | Set-Content $tempScript
         
-        $embeddings = & $pythonPath $tempScript $Content | ConvertFrom-Json
-        Remove-Item $tempScript -Force
+        $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
+        $process = Start-Process -FilePath $pythonPath -ArgumentList $tempScript, $Code, $ModelName -Wait -PassThru -RedirectStandardOutput ([Path]::GetTempFileName())
         
-        return $embeddings
+        if ($process.ExitCode -ne 0) {
+            throw "Failed to generate embedding"
+        }
+        
+        $embedding = Get-Content $process.StandardOutput.Path | ConvertFrom-Json
+        
+        # Cache the result
+        Add-ToCache -CacheType 'Pattern' -Key $cacheKey -Value $embedding
+        
+        return $embedding
     }
     catch {
-        Write-Error "Failed to get pattern embeddings: $_"
+        Write-ErrorLog -ErrorRecord $_
         return $null
+    }
+    finally {
+        if ($tempScript -and (Test-Path $tempScript)) {
+            Remove-Item $tempScript -Force
+        }
     }
 }
 
-# Train pattern recognition model
-function Update-PatternModel {
+function Update-MLModel {
     [CmdletBinding()]
     param(
         [Parameter()]
-        [int]$MinSamples = $script:MLConfig.MinSamplesForTraining
+        [string]$ModelType = 'pattern',
+        [Parameter()]
+        [string]$ModelName = $script:MLConfig.Embeddings.ModelName
     )
     
     try {
-        # Get historical pattern data
-        $patterns = Search-AnalysisData -MaxResults 1000 | Where-Object {
-            $_.patterns -and $_.patterns.Count -gt 0
+        Write-StructuredLog -Message "Updating ML model" -Level INFO -Properties @{
+            modelType = $ModelType
+            modelName = $ModelName
         }
         
-        if ($patterns.Count -lt $MinSamples) {
-            Write-Warning "Insufficient samples for training ($($patterns.Count) < $MinSamples)"
+        # Check if we have enough training data
+        $trainingPath = Join-Path $script:MLConfig.TrainingPath $ModelType
+        $trainingFiles = Get-ChildItem $trainingPath -Filter "*.json" -File
+        
+        if ($trainingFiles.Count -lt $script:MLConfig.MinSamplesForTraining) {
+            Write-StructuredLog -Message "Insufficient training data" -Level WARN -Properties @{
+                samplesNeeded = $script:MLConfig.MinSamplesForTraining
+                samplesAvailable = $trainingFiles.Count
+            }
             return $false
         }
         
         # Prepare training data
-        $trainingData = @()
-        foreach ($analysis in $patterns) {
-            foreach ($pattern in $analysis.patterns) {
-                $trainingData += @{
-                    pattern = $pattern.pattern_name
-                    context = $pattern.context
-                    language = $analysis.language
-                    embedding = Get-PatternEmbeddings -Content $pattern.context -Language $analysis.language
-                }
-            }
+        $trainingData = foreach ($file in $trainingFiles) {
+            Get-Content $file.FullName -Raw | ConvertFrom-Json
         }
         
-        # Train classifier using scikit-learn
+        # Train model using Python
         $pythonScript = @"
-from sklearn.ensemble import RandomForestClassifier
-import numpy as np
-import pickle
+from sentence_transformers import SentenceTransformer, InputExample, losses
+from torch.utils.data import DataLoader
+import torch
 import json
 import sys
 
-# Load training data
+def train_model(data, model_name, output_path):
+    model = SentenceTransformer(model_name)
+    
+    # Prepare training examples
+    train_examples = [
+        InputExample(texts=[d['input']], label=d['label'])
+        for d in data
+    ]
+    
+    train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
+    train_loss = losses.CosineSimilarityLoss(model)
+    
+    # Train the model
+    model.fit(train_dataloader=train_dataloader,
+              epochs=1,
+              warmup_steps=100,
+              show_progress_bar=True)
+    
+    # Save the model
+    model.save(output_path)
+    return True
+
 data = json.loads(sys.argv[1])
-X = np.array([d['embedding'] for d in data])
-y = np.array([d['pattern'] for d in data])
+model_name = sys.argv[2]
+output_path = sys.argv[3]
 
-# Train model
-clf = RandomForestClassifier(n_estimators=100, random_state=42)
-clf.fit(X, y)
-
-# Save model
-with open(sys.argv[2], 'wb') as f:
-    pickle.dump(clf, f)
+success = train_model(data, model_name, output_path)
+print(json.dumps({'success': success}))
 "@
         
-        $modelPath = Join-Path $script:MLConfig.ModelPath "pattern_classifier.pkl"
         $tempScript = [Path]::GetTempFileName()
         $pythonScript | Set-Content $tempScript
         
+        $modelPath = Join-Path $script:MLConfig.ModelPath "$ModelType-$([DateTime]::Now.ToString('yyyyMMdd'))"
         $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
-        & $pythonPath $tempScript ($trainingData | ConvertTo-Json -Compress) $modelPath
-        Remove-Item $tempScript -Force
         
-        # Save training metadata
-        $metadata = @{
-            timestamp = [DateTime]::UtcNow.ToString('o')
-            samples = $patterns.Count
-            patterns = @($trainingData | Group-Object pattern | Select-Object Name, Count)
-            languages = @($trainingData | Group-Object language | Select-Object Name, Count)
+        $process = Start-Process -FilePath $pythonPath -ArgumentList @(
+            $tempScript,
+            ($trainingData | ConvertTo-Json -Compress),
+            $ModelName,
+            $modelPath
+        ) -Wait -PassThru -RedirectStandardOutput ([Path]::GetTempFileName())
+        
+        if ($process.ExitCode -ne 0) {
+            throw "Failed to train model"
         }
         
-        $metadata | ConvertTo-Json | Set-Content (Join-Path $script:MLConfig.ModelPath "metadata.json")
+        $result = Get-Content $process.StandardOutput.Path | ConvertFrom-Json
         
-        return $true
+        Write-StructuredLog -Message "Model training completed" -Level INFO -Properties @{
+            modelPath = $modelPath
+            success = $result.success
+        }
+        
+        return $result.success
     }
     catch {
-        Write-Error "Failed to update pattern model: $_"
+        Write-ErrorLog -ErrorRecord $_
         return $false
     }
+    finally {
+        if ($tempScript -and (Test-Path $tempScript)) {
+            Remove-Item $tempScript -Force
+        }
+    }
 }
 
-# Predict patterns in new code
-function Get-PredictedPatterns {
+function Add-TrainingData {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Content,
-        
-        [Parameter()]
-        [string]$Language,
-        
-        [Parameter()]
-        [double]$Threshold = 0.5
+        [string]$ModelType,
+        [Parameter(Mandatory)]
+        [object]$InputData,
+        [Parameter(Mandatory)]
+        [object]$Label
     )
     
     try {
-        # Get embeddings for new content
-        $embeddings = Get-PatternEmbeddings -Content $Content -Language $Language
-        
-        # Use model to predict patterns
-        $pythonScript = @"
-import pickle
-import numpy as np
-import json
-import sys
-
-# Load model
-with open(sys.argv[1], 'rb') as f:
-    clf = pickle.load(f)
-
-# Get predictions
-embeddings = np.array(json.loads(sys.argv[2])).reshape(1, -1)
-probabilities = clf.predict_proba(embeddings)[0]
-classes = clf.classes_
-
-# Get predictions above threshold
-threshold = float(sys.argv[3])
-predictions = []
-for i, prob in enumerate(probabilities):
-    if prob >= threshold:
-        predictions.append({
-            'pattern': classes[i],
-            'confidence': float(prob)
-        })
-
-print(json.dumps(predictions))
-"@
-        
-        $modelPath = Join-Path $script:MLConfig.ModelPath "pattern_classifier.pkl"
-        if (-not (Test-Path $modelPath)) {
-            Write-Warning "No trained model found. Run Update-PatternModel first."
-            return @()
+        $trainingPath = Join-Path $script:MLConfig.TrainingPath $ModelType
+        if (-not (Test-Path $trainingPath)) {
+            New-Item -Path $trainingPath -ItemType Directory -Force | Out-Null
         }
         
-        $tempScript = [Path]::GetTempFileName()
-        $pythonScript | Set-Content $tempScript
-        
-        $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
-        $predictions = & $pythonPath $tempScript $modelPath ($embeddings | ConvertTo-Json -Compress) $Threshold |
-            ConvertFrom-Json
-        
-        Remove-Item $tempScript -Force
-        
-        return $predictions
-    }
-    catch {
-        Write-Error "Failed to predict patterns: $_"
-        return @()
-    }
-}
-
-# Learn from feedback
-function Add-PatternFeedback {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Content,
-        
-        [Parameter(Mandatory)]
-        [string]$Pattern,
-        
-        [Parameter()]
-        [string]$Language,
-        
-        [Parameter()]
-        [bool]$IsCorrect
-    )
-    
-    try {
-        # Store feedback for next training
-        $feedback = @{
-            content = $Content
-            pattern = $Pattern
-            language = $Language
-            isCorrect = $IsCorrect
+        $trainingItem = @{
             timestamp = [DateTime]::UtcNow.ToString('o')
+            input = $InputData
+            label = $Label
         }
         
-        $feedbackPath = Join-Path $script:MLConfig.TrainingPath "feedback.jsonl"
-        $feedback | ConvertTo-Json -Compress | Add-Content $feedbackPath
+        $fileName = [guid]::NewGuid().ToString() + ".json"
+        $filePath = Join-Path $trainingPath $fileName
         
-        # Check if we should retrain
-        $lastTraining = Get-Content (Join-Path $script:MLConfig.ModelPath "metadata.json") -Raw |
-            ConvertFrom-Json |
-            Select-Object @{N='timestamp';E={[DateTime]::Parse($_.timestamp)}}
+        $trainingItem | ConvertTo-Json -Depth 10 | Set-Content $filePath
         
-        if ((-not $lastTraining) -or
-            ([DateTime]::UtcNow - $lastTraining.timestamp) -gt $script:MLConfig.UpdateInterval) {
-            Write-Verbose "Retraining model with new feedback..."
-            Update-PatternModel
+        Write-StructuredLog -Message "Added training data" -Level INFO -Properties @{
+            modelType = $ModelType
+            filePath = $filePath
         }
         
         return $true
     }
     catch {
-        Write-Error "Failed to add pattern feedback: $_"
+        Write-ErrorLog -ErrorRecord $_
         return $false
     }
 }
 
-# Initialize on module load
-if (-not (Initialize-MLEnvironment)) {
-    Write-Warning "Failed to initialize ML environment. Some features may be unavailable."
+# Start background model update job
+$script:ModelUpdateJob = Start-Job -ScriptBlock {
+    param($MLConfig)
+    
+    while ($true) {
+        Start-Sleep -Seconds $MLConfig.UpdateInterval.TotalSeconds
+        
+        # Update models if needed
+        foreach ($modelType in @('pattern', 'security', 'performance')) {
+            Update-MLModel -ModelType $modelType
+        }
+    }
+} -ArgumentList $script:MLConfig
+
+# Cleanup on module unload
+$ExecutionContext.SessionState.Module.OnRemove = {
+    Stop-Job -Job $script:ModelUpdateJob
+    Remove-Job -Job $script:ModelUpdateJob
 }
 
-# Export functions
-Export-ModuleMember -Function @(
-    'Update-PatternModel',
-    'Get-PredictedPatterns',
-    'Add-PatternFeedback'
-)
+Export-ModuleMember -Function Initialize-MLEnvironment, Get-CodeEmbedding, Update-MLModel, Add-TrainingData

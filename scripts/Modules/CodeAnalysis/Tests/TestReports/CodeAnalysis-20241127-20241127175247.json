@@ -1,0 +1,343 @@
+{
+  "Duration": 0.5923531,
+  "TestName": "CodeAnalysis-20241127",
+  "MemoryUsed": 11106304,
+  "Timestamp": "2024-11-27 17:52:47",
+  "Results": {
+    "Mixed": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {
+          "mixed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "empty.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "malformed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "empty.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          }
+        }
+      },
+      "Performance": {
+        "MemoryUsage": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "malformed.go": null,
+          "empty.tsx": null,
+          "malformed.tsx": null
+        },
+        "Duration": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "malformed.go": null,
+          "empty.tsx": null,
+          "malformed.tsx": null
+        }
+      },
+      "Frontend": {}
+    },
+    "Complex": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {
+          "mixed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "complex.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "empty.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "malformed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "empty.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "complex.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          }
+        }
+      },
+      "Performance": {
+        "MemoryUsage": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "empty.tsx": null,
+          "complex.go": null,
+          "complex.tsx": null,
+          "malformed.go": null,
+          "malformed.tsx": null
+        },
+        "Duration": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "empty.tsx": null,
+          "complex.go": null,
+          "complex.tsx": null,
+          "malformed.go": null,
+          "malformed.tsx": null
+        }
+      },
+      "Frontend": {}
+    },
+    "Standard": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {},
+        "Backend": {}
+      },
+      "Performance": {
+        "MemoryUsage": {},
+        "Duration": {}
+      },
+      "Frontend": {}
+    },
+    "Empty": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {
+          "empty.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          }
+        },
+        "Backend": {
+          "empty.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          }
+        }
+      },
+      "Performance": {
+        "MemoryUsage": {
+          "empty.go": null,
+          "empty.tsx": null
+        },
+        "Duration": {
+          "empty.go": null,
+          "empty.tsx": null
+        }
+      },
+      "Frontend": {}
+    },
+    "Large": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {
+          "mixed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "complex.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "empty.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "large.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "malformed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "empty.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "complex.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "large.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          }
+        }
+      },
+      "Performance": {
+        "MemoryUsage": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "large.tsx": null,
+          "large.go": null,
+          "empty.tsx": null,
+          "complex.go": null,
+          "complex.tsx": null,
+          "malformed.go": null,
+          "malformed.tsx": null
+        },
+        "Duration": {
+          "mixed.tsx": null,
+          "empty.go": null,
+          "large.tsx": null,
+          "large.go": null,
+          "empty.tsx": null,
+          "complex.go": null,
+          "complex.tsx": null,
+          "malformed.go": null,
+          "malformed.tsx": null
+        }
+      },
+      "Frontend": {}
+    },
+    "Malformed": {
+      "Backend": {},
+      "Patterns": {
+        "Frontend": {
+          "malformed.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          },
+          "empty.tsx": {
+            "SecurityPatterns": null,
+            "Hooks": null,
+            "APIPatterns": null,
+            "StateManagement": null,
+            "PerformancePatterns": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          },
+          "empty.go": {
+            "Database": null,
+            "Security": null,
+            "Performance": null,
+            "API": null,
+            "Monitoring": null
+          }
+        }
+      },
+      "Performance": {
+        "MemoryUsage": {
+          "empty.go": null,
+          "malformed.go": null,
+          "empty.tsx": null,
+          "malformed.tsx": null
+        },
+        "Duration": {
+          "empty.go": null,
+          "malformed.go": null,
+          "empty.tsx": null,
+          "malformed.tsx": null
+        }
+      },
+      "Frontend": {}
+    }
+  }
+}

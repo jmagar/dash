@@ -49,25 +49,39 @@ function Get-OptimalBatchSize {
         [int]$TotalItems,
         
         [Parameter()]
-        [int]$TargetBatchCount = 10
+        [int]$DefaultBatchSize = $script:PerformanceConfig.BatchSize,
+        
+        [Parameter()]
+        [int]$MinBatchSize = 10
     )
     
-    $resources = Get-SystemResources
-    if (-not $resources) { return $script:PerformanceConfig.BatchSize }
-    
-    # Adjust batch size based on available memory
-    $memoryFactor = [Math]::Min(1, $resources.MemoryAvailable / (2GB))
-    $cpuFactor = [Math]::Min(1, (100 - $resources.CpuUsage) / 100)
-    
-    $adjustedBatchSize = [Math]::Max(
-        10,  # Minimum batch size
-        [Math]::Min(
-            $script:PerformanceConfig.BatchSize,
-            [int]($TotalItems / $TargetBatchCount * $memoryFactor * $cpuFactor)
+    try {
+        $resources = Get-SystemResources
+        if (-not $resources) { return $DefaultBatchSize }
+        
+        # Calculate batch size based on available memory
+        $memoryRatio = $resources.MemoryAvailable / $script:PerformanceConfig.MemoryThreshold
+        $cpuRatio = ($script:PerformanceConfig.CpuThreshold - $resources.CpuUsage) / $script:PerformanceConfig.CpuThreshold
+        
+        # Use the more conservative ratio
+        $ratio = [Math]::Min($memoryRatio, $cpuRatio)
+        
+        # Calculate optimal batch size
+        $optimalSize = [Math]::Max(
+            $MinBatchSize,
+            [Math]::Min(
+                [int]($DefaultBatchSize * $ratio),
+                [int]($TotalItems / $script:PerformanceConfig.MaxParallelism)
+            )
         )
-    )
-    
-    return $adjustedBatchSize
+        
+        Write-Verbose "Optimal batch size calculated: $optimalSize (Memory: $([Math]::Round($memoryRatio, 2)), CPU: $([Math]::Round($cpuRatio, 2)))"
+        return $optimalSize
+    }
+    catch {
+        Write-Warning "Failed to calculate optimal batch size: $_"
+        return $DefaultBatchSize
+    }
 }
 
 function Get-OptimalParallelism {

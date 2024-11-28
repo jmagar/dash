@@ -27,9 +27,7 @@
     },
     "security": {
         "allowedPaths": [
-            "./src",
-            "./test",
-            "./scripts"
+            "C:/Users/jmaga/code/dash/scripts/Modules/CodeAnalysis"
         ],
         "suspiciousPatterns": [
             "eval\\(",

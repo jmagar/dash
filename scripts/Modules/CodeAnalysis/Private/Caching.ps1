@@ -1,158 +1,202 @@
-# Module-level cache configuration
+using namespace System.Collections.Concurrent
+using namespace System.Threading
+using namespace System.IO
+
+# Import configuration
+$script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
+
+# Cache configuration
 $script:CacheConfig = @{
-    Enabled = $true
-    Directory = Join-Path $PSScriptRoot "../Data/Cache"
-    MaxAge = [TimeSpan]::FromDays(7)
+    MaxItems = 10000
+    DefaultTTL = [TimeSpan]::FromHours(1)
+    CleanupInterval = [TimeSpan]::FromMinutes(5)
+    MaxMemoryUsage = 512MB # 512 MB max cache size
 }
 
-# Cache key generation and validation
-function New-CacheKey {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$FilePath,
-        
-        [Parameter(Mandatory)]
-        [string]$AnalysisType
-    )
+# Initialize thread-safe caches
+$script:FileCache = [ConcurrentDictionary[string, object]]::new()
+$script:MetricsCache = [ConcurrentDictionary[string, object]]::new()
+$script:PatternCache = [ConcurrentDictionary[string, object]]::new()
+
+# Cache item wrapper
+class CacheItem {
+    [object]$Value
+    [datetime]$ExpiresAt
+    [long]$Size
     
-    try {
-        # Get file hash and last write time
-        $fileHash = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
-        $lastWrite = (Get-Item $FilePath).LastWriteTimeUtc.Ticks
-        
-        # Combine with analysis type for unique key
-        $keyComponents = @($fileHash, $lastWrite, $AnalysisType)
-        $combinedKey = $keyComponents -join "|"
-        
-        # Create final hash
-        $keyHash = [System.BitConverter]::ToString(
-            [System.Security.Cryptography.SHA256]::Create().ComputeHash(
-                [System.Text.Encoding]::UTF8.GetBytes($combinedKey)
-            )
-        ).Replace("-", "")
-        
-        return $keyHash
+    CacheItem([object]$value, [TimeSpan]$ttl, [long]$size) {
+        $this.Value = $value
+        $this.ExpiresAt = (Get-Date).Add($ttl)
+        $this.Size = $size
     }
-    catch {
-        Write-Warning "Failed to generate cache key for $FilePath : $_"
-        return $null
+    
+    [bool]IsExpired() {
+        return (Get-Date) -gt $this.ExpiresAt
     }
 }
 
-function Get-CacheItem {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Key
-    )
+# Start background cleanup job
+$script:CleanupJob = Start-Job -ScriptBlock {
+    param($CacheConfig)
     
-    if (-not $script:CacheConfig.Enabled) { return $null }
-    
-    $cachePath = Join-Path $script:CacheConfig.Directory "$Key.json"
-    if (-not (Test-Path $cachePath)) { return $null }
-    
-    try {
-        $cacheItem = Get-Content $cachePath -Raw | ConvertFrom-Json
+    while ($true) {
+        Start-Sleep -Seconds $CacheConfig.CleanupInterval.TotalSeconds
         
-        # Check if cache is expired
-        $cacheAge = [DateTime]::UtcNow - [DateTime]::Parse($cacheItem.timestamp)
-        if ($cacheAge -gt $script:CacheConfig.MaxAge) {
-            Remove-Item $cachePath -Force
-            return $null
+        # Cleanup expired items
+        foreach ($cache in @($FileCache, $MetricsCache, $PatternCache)) {
+            foreach ($key in $cache.Keys) {
+                $item = $cache[$key]
+                if ($item.IsExpired()) {
+                    $cache.TryRemove($key, [ref]$null)
+                }
+            }
         }
         
-        return $cacheItem.data
+        # Check memory usage
+        $totalSize = ($FileCache.Values + $MetricsCache.Values + $PatternCache.Values | 
+            Measure-Object -Property Size -Sum).Sum
+        
+        if ($totalSize -gt $CacheConfig.MaxMemoryUsage) {
+            # Remove oldest items until under limit
+            $items = $FileCache.Values + $MetricsCache.Values + $PatternCache.Values |
+                Sort-Object ExpiresAt
+            
+            foreach ($item in $items) {
+                if ($totalSize -le $CacheConfig.MaxMemoryUsage) { break }
+                $key = $FileCache.Keys.Where({ $FileCache[$_] -eq $item })[0]
+                if ($key) {
+                    $FileCache.TryRemove($key, [ref]$null)
+                    $totalSize -= $item.Size
+                }
+            }
+        }
     }
-    catch {
-        Write-Warning "Failed to retrieve cache item $Key : $_"
-        return $null
-    }
-}
+} -ArgumentList $script:CacheConfig
 
-function Set-CacheItem {
+function Add-ToCache {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        [ValidateSet('File', 'Metrics', 'Pattern')]
+        [string]$CacheType,
+        
         [Parameter(Mandatory)]
         [string]$Key,
         
         [Parameter(Mandatory)]
-        [object]$Data
+        [object]$Value,
+        
+        [Parameter()]
+        [TimeSpan]$TTL = $script:CacheConfig.DefaultTTL
     )
     
-    if (-not $script:CacheConfig.Enabled) { return }
-    
     try {
-        # Ensure cache directory exists
-        if (-not (Test-Path $script:CacheConfig.Directory)) {
-            New-Item -Path $script:CacheConfig.Directory -ItemType Directory -Force | Out-Null
+        # Calculate size of value
+        $size = 0
+        if ($Value -is [string]) {
+            $size = [System.Text.Encoding]::UTF8.GetByteCount($Value)
+        }
+        elseif ($Value -is [byte[]]) {
+            $size = $Value.Length
+        }
+        else {
+            $size = [System.Text.Encoding]::UTF8.GetByteCount(($Value | ConvertTo-Json -Compress))
         }
         
-        $cacheItem = @{
-            timestamp = [DateTime]::UtcNow.ToString("o")
-            data = $Data
+        $item = [CacheItem]::new($Value, $TTL, $size)
+        
+        switch ($CacheType) {
+            'File' { $script:FileCache[$Key] = $item }
+            'Metrics' { $script:MetricsCache[$Key] = $item }
+            'Pattern' { $script:PatternCache[$Key] = $item }
         }
         
-        $cachePath = Join-Path $script:CacheConfig.Directory "$Key.json"
-        $cacheItem | ConvertTo-Json -Depth 10 | Set-Content $cachePath -Force
+        Write-StructuredLog -Message "Added item to $CacheType cache" -Level INFO -Properties @{
+            key = $Key
+            size = $size
+            ttl = $TTL.TotalSeconds
+        }
+        
+        return $true
     }
     catch {
-        Write-Warning "Failed to cache item $Key : $_"
+        Write-ErrorLog -ErrorRecord $_
+        return $false
     }
 }
 
-function Clear-CacheItems {
+function Get-FromCache {
     [CmdletBinding()]
     param(
-        [switch]$Force
+        [Parameter(Mandatory)]
+        [ValidateSet('File', 'Metrics', 'Pattern')]
+        [string]$CacheType,
+        
+        [Parameter(Mandatory)]
+        [string]$Key
     )
     
-    if (-not $script:CacheConfig.Enabled) { return }
-    
     try {
-        if (-not (Test-Path $script:CacheConfig.Directory)) { return }
+        $cache = switch ($CacheType) {
+            'File' { $script:FileCache }
+            'Metrics' { $script:MetricsCache }
+            'Pattern' { $script:PatternCache }
+        }
         
-        $cacheFiles = Get-ChildItem $script:CacheConfig.Directory -Filter "*.json"
-        foreach ($file in $cacheFiles) {
-            if ($Force) {
-                Remove-Item $file.FullName -Force
-                continue
-            }
-            
-            try {
-                $cacheItem = Get-Content $file.FullName -Raw | ConvertFrom-Json
-                $cacheAge = [DateTime]::UtcNow - [DateTime]::Parse($cacheItem.timestamp)
-                if ($cacheAge -gt $script:CacheConfig.MaxAge) {
-                    Remove-Item $file.FullName -Force
+        if ($cache.ContainsKey($Key)) {
+            $item = $cache[$Key]
+            if (-not $item.IsExpired()) {
+                Write-StructuredLog -Message "Cache hit for $CacheType" -Level DEBUG -Properties @{
+                    key = $Key
                 }
+                return $item.Value
             }
-            catch {
-                Write-Warning "Failed to process cache file $($file.Name) : $_"
-                # Remove corrupted cache files
-                Remove-Item $file.FullName -Force
+            else {
+                $cache.TryRemove($Key, [ref]$null)
             }
         }
+        
+        Write-StructuredLog -Message "Cache miss for $CacheType" -Level DEBUG -Properties @{
+            key = $Key
+        }
+        return $null
     }
     catch {
-        Write-Warning "Failed to clear cache : $_"
+        Write-ErrorLog -ErrorRecord $_
+        return $null
     }
 }
 
-# Initialize cache on module load
-if ($script:CacheConfig.Enabled) {
-    # Create cache directory if it doesn't exist
-    if (-not (Test-Path $script:CacheConfig.Directory)) {
-        New-Item -Path $script:CacheConfig.Directory -ItemType Directory -Force | Out-Null
-    }
+function Clear-Cache {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [ValidateSet('File', 'Metrics', 'Pattern')]
+        [string[]]$CacheTypes = @('File', 'Metrics', 'Pattern')
+    )
     
-    # Clear expired cache items on module load
-    Clear-CacheItems
+    try {
+        foreach ($type in $CacheTypes) {
+            switch ($type) {
+                'File' { $script:FileCache.Clear() }
+                'Metrics' { $script:MetricsCache.Clear() }
+                'Pattern' { $script:PatternCache.Clear() }
+            }
+            
+            Write-StructuredLog -Message "Cleared $type cache" -Level INFO
+        }
+        return $true
+    }
+    catch {
+        Write-ErrorLog -ErrorRecord $_
+        return $false
+    }
 }
 
-# Export functions
-Export-ModuleMember -Function @(
-    'New-CacheKey',
-    'Get-CacheItem',
-    'Set-CacheItem',
-    'Clear-CacheItems'
-)
+# Cleanup on module unload
+$ExecutionContext.SessionState.Module.OnRemove = {
+    Stop-Job -Job $script:CleanupJob
+    Remove-Job -Job $script:CleanupJob
+}
+
+Export-ModuleMember -Function Add-ToCache, Get-FromCache, Clear-Cache

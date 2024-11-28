@@ -1,5 +1,5 @@
 # Import configuration
-$script:Config = Get-Content "$PSScriptRoot/../Config/metrics.json" | ConvertFrom-Json
+$script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
 
 function Test-SecurityPreconditions {
     [CmdletBinding()]
@@ -10,12 +10,15 @@ function Test-SecurityPreconditions {
     )
     
     try {
+        # Get the full path and ensure it exists
+        $item = Get-Item $Path -ErrorAction Stop
+        $fullPath = $item.FullName
+        
         # Validate path is within allowed boundaries
-        $fullPath = Resolve-Path $Path -ErrorAction Stop
         $allowed = $false
         foreach ($allowedPath in $script:Config.security.allowedPaths) {
-            $resolvedAllowedPath = Resolve-Path $allowedPath -ErrorAction SilentlyContinue
-            if ($resolvedAllowedPath -and $fullPath.Path.StartsWith($resolvedAllowedPath)) {
+            $resolvedAllowedPath = Get-Item $allowedPath -ErrorAction SilentlyContinue
+            if ($resolvedAllowedPath -and $fullPath.StartsWith($resolvedAllowedPath.FullName)) {
                 $allowed = $true
                 break
             }
@@ -25,13 +28,40 @@ function Test-SecurityPreconditions {
             throw "Path '$Path' is outside allowed boundaries"
         }
         
-        # Skip content check if requested or if file doesn't exist
-        if ($SkipContentCheck -or -not (Test-Path $Path -PathType Leaf)) {
+        # Skip content check if requested or if not a file
+        if ($SkipContentCheck -or -not $item.PSIsContainer) {
             return $true
         }
         
-        # Check for suspicious patterns
-        $content = Get-Content $Path -Raw
+        # Check if file should be excluded based on patterns
+        $excludePatterns = $script:Config.fileSystem.excludePatterns
+        $shouldExclude = $false
+        
+        foreach ($pattern in $excludePatterns) {
+            if ($pattern.StartsWith("*")) {
+                # Handle file extension/wildcard patterns
+                if ($fullPath -like "*$pattern") {
+                    $shouldExclude = $true
+                    break
+                }
+            }
+            elseif ($fullPath -match $pattern) {
+                $shouldExclude = $true
+                break
+            }
+        }
+        
+        if ($shouldExclude) {
+            Write-Verbose "Path '$Path' matches exclude pattern"
+            return $false
+        }
+        
+        # Check for suspicious patterns if it's a file
+        if ($item.PSIsContainer) {
+            return $true
+        }
+        
+        $content = Get-Content $fullPath -Raw
         foreach ($pattern in $script:Config.security.suspiciousPatterns) {
             if ($content -match $pattern) {
                 Write-Warning "Suspicious pattern '$pattern' found in $Path"

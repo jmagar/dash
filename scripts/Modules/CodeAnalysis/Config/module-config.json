@@ -1,20 +1,41 @@
 {
     "version": "2.0",
     "fileSystem": {
-        "indexPath": "./index",
-        "cacheDirectory": "./cache",
+        "outputDirectory": "./Output",
+        "indexPath": "./Output/index",
+        "cacheDirectory": "./Output/cache",
+        "logsPath": "./Output/logs",
         "maxCacheSize": 1073741824,
         "excludePatterns": [
             "node_modules",
             "bin",
             "obj",
-            ".git"
+            ".git",
+            ".vs",
+            "dist"
         ]
     },
     "resourceManagement": {
         "memoryThreshold": 1073741824,
         "batchSize": 100,
-        "maxParallelism": 4
+        "maxParallelism": 4,
+        "cpuThreshold": 80,
+        "diskSpaceThreshold": 1073741824
+    },
+    "security": {
+        "allowedPaths": [
+            "C:/Users/jmaga/code/dash/scripts/Modules/CodeAnalysis",
+            "C:/Users/jmaga/code/dash/src/client"
+        ],
+        "suspiciousPatterns": [
+            "eval\\(",
+            "exec\\(",
+            "\\bpassword\\b",
+            "\\bsecret\\b",
+            "\\btoken\\b",
+            "\\bapi[_-]?key\\b"
+        ],
+        "maxFileSize": 5242880
     },
     "codeAnalysis": {
         "maxFileSize": 1048576,
@@ -24,139 +45,187 @@
             "powershell": {
                 "extensions": [".ps1", ".psm1", ".psd1"],
                 "parser": "PowerShell",
-                "cascadeCompatibility": "high"
+                "cascadeCompatibility": "high",
+                "confidenceWeight": 0.95,
+                "metrics": {
+                    "maxFunctions": 20,
+                    "maxComplexity": 15,
+                    "maxDepth": 5
+                }
             },
             "python": {
                 "extensions": [".py"],
                 "parser": "Python",
-                "cascadeCompatibility": "high"
+                "cascadeCompatibility": "high",
+                "confidenceWeight": 0.90,
+                "metrics": {
+                    "maxFunctions": 30,
+                    "maxComplexity": 20,
+                    "maxDepth": 6
+                }
             },
             "javascript": {
                 "extensions": [".js", ".jsx"],
                 "parser": "JavaScript",
-                "cascadeCompatibility": "medium"
+                "cascadeCompatibility": "medium",
+                "confidenceWeight": 0.85,
+                "metrics": {
+                    "maxFunctions": 25,
+                    "maxComplexity": 18,
+                    "maxDepth": 4
+                }
             },
             "typescript": {
                 "extensions": [".ts", ".tsx"],
                 "parser": "TypeScript",
-                "cascadeCompatibility": "medium"
+                "cascadeCompatibility": "high",
+                "confidenceWeight": 0.90,
+                "metrics": {
+                    "maxFunctions": 25,
+                    "maxComplexity": 18,
+                    "maxDepth": 4
+                },
+                "patterns": {
+                    "react": {
+                        "hooks": {
+                            "naming": "^use[A-Z]",
+                            "maxDependencies": 5,
+                            "recommendedPatterns": ["useCallback", "useMemo", "useEffect"]
+                        },
+                        "components": {
+                            "naming": "^[A-Z]",
+                            "maxProps": 15,
+                            "recommendedPatterns": ["memo", "forwardRef"]
+                        },
+                        "state": {
+                            "patterns": ["useState", "useReducer", "useContext", "Redux", "MobX"],
+                            "recommendations": {
+                                "local": "useState",
+                                "complex": "useReducer",
+                                "global": "Redux"
+                            }
+                        }
+                    },
+                    "api": {
+                        "patterns": {
+                            "rest": ["fetch", "axios", "http"],
+                            "graphql": ["useQuery", "useMutation", "gql"]
+                        },
+                        "security": {
+                            "required": ["authentication", "validation"],
+                            "recommended": ["rate-limiting", "error-handling"]
+                        }
+                    },
+                    "performance": {
+                        "patterns": {
+                            "memoization": ["useMemo", "useCallback", "memo"],
+                            "lazyLoading": ["lazy", "Suspense"],
+                            "optimization": ["windowing", "virtualization"]
+                        }
+                    }
+                }
+            },
+            "go": {
+                "extensions": [".go"],
+                "parser": "Go",
+                "cascadeCompatibility": "high",
+                "confidenceWeight": 0.90,
+                "metrics": {
+                    "maxFunctions": 30,
+                    "maxComplexity": 15,
+                    "maxDepth": 5
+                },
+                "patterns": {
+                    "concurrency": {
+                        "goroutines": {
+                            "patterns": ["go func()", "go routine"],
+                            "recommendations": {
+                                "errorHandling": "use error channels",
+                                "contextCancellation": "use context.Context"
+                            }
+                        },
+                        "channels": {
+                            "patterns": ["make(chan", "<-chan", "chan<-"],
+                            "recommendations": {
+                                "buffering": "use buffered channels for known workloads",
+                                "closing": "always close sender side"
+                            }
+                        }
+                    },
+                    "api": {
+                        "patterns": {
+                            "rest": ["http.HandleFunc", "mux.Router"],
+                            "middleware": ["negroni", "chi"]
+                        },
+                        "security": {
+                            "required": ["authentication", "validation"],
+                            "recommended": ["rate-limiting", "CORS"]
+                        }
+                    },
+                    "performance": {
+                        "patterns": {
+                            "pooling": ["sync.Pool"],
+                            "caching": ["cache", "redis"],
+                            "database": ["sql.DB", "mongo"]
+                        }
+                    },
+                    "agent": {
+                        "patterns": {
+                            "communication": ["websocket", "grpc"],
+                            "monitoring": ["prometheus", "metrics"],
+                            "logging": ["zap", "logrus"]
+                        },
+                        "security": {
+                            "required": ["tls", "authentication"],
+                            "recommended": ["encryption", "secure-headers"]
+                        }
+                    }
+                }
             }
+        },
+        "visualization": {
+            "library": "d3",
+            "outputFormat": "html",
+            "outputPath": "./Output/visualization",
+            "interactiveMode": true,
+            "colorScheme": "solarized",
+            "maxNodes": 100
         }
     },
-    "cascade": {
-        "automation": {
-            "maxComplexity": 50,
-            "minTestCoverage": 80,
-            "maxDependencies": 20,
-            "safetyThresholds": {
-                "high": 90,
-                "medium": 70,
-                "low": 50
-            },
-            "toolPreferences": {
-                "edit_file": {
-                    "priority": 1,
-                    "maxChangesPerFile": 50,
-                    "requiresValidation": true
-                },
-                "view_file": {
-                    "priority": 2,
-                    "maxLinesPerView": 200
-                }
-            }
+    "machineLearning": {
+        "modelPath": "./Output/models",
+        "trainingPath": "./Output/training",
+        "minSamplesForTraining": 100,
+        "updateInterval": "24:00:00",
+        "embeddings": {
+            "modelName": "all-MiniLM-L6-v2",
+            "maxTokens": 512,
+            "batchSize": 32
         },
-        "refactoring": {
-            "strategies": {
-                "split_function": {
-                    "maxFunctionSize": 50,
-                    "minExtractSize": 10,
-                    "requiresTests": true
-                },
-                "rename_symbol": {
-                    "requiresTypeInfo": true,
-                    "scopeAnalysis": true
-                },
-                "extract_component": {
-                    "minComplexity": 15,
-                    "requiresDependencyAnalysis": true
-                }
+        "confidenceThresholds": {
+            "high": 0.8,
+            "medium": 0.6,
+            "low": 0.4
+        }
+    },
+    "database": {
+        "type": "sqlite",
+        "path": "./Output/data/analysis.db",
+        "maxSize": 1073741824,
+        "retentionDays": 30,
+        "tables": {
+            "analysis": {
+                "maxRows": 1000000,
+                "indexes": ["timestamp", "language", "pattern"]
             },
-            "validation": {
-                "required": ["syntax", "compilation"],
-                "recommended": ["unit_tests", "integration_tests"],
-                "optional": ["performance_tests"]
-            },
-            "rollback": {
-                "enabled": true,
-                "checkpoints": ["pre_change", "post_change", "post_validation"],
-                "maxAttempts": 3
-            }
-        },
-        "analysis": {
-            "symbolGraph": {
-                "enabled": true,
-                "maxDepth": 5,
-                "includeDependencies": true
-            },
-            "impactAnalysis": {
-                "enabled": true,
-                "scope": ["direct", "indirect", "cascading"],
-                "maxDepth": 3
+            "patterns": {
+                "maxRows": 10000,
+                "indexes": ["name", "language"]
             },
             "metrics": {
-                "complexity": {
-                    "cyclomatic": true,
-                    "cognitive": true,
-                    "halstead": false
-                },
-                "dependencies": {
-                    "direct": true,
-                    "indirect": true,
-                    "external": true
-                },
-                "testing": {
-                    "coverage": true,
-                    "assertions": true,
-                    "mutations": false
-                }
+                "maxRows": 1000000,
+                "indexes": ["timestamp", "type"]
             }
-        },
-        "optimization": {
-            "caching": {
-                "enabled": true,
-                "strategy": "lru",
-                "maxSize": 536870912
-            },
-            "parallelization": {
-                "enabled": true,
-                "maxWorkers": 4,
-                "chunkSize": 25
-            },
-            "batching": {
-                "enabled": true,
-                "maxSize": 50,
-                "timeout": 5000
-            }
-        }
-    },
-    "storage": {
-        "type": "file",
-        "path": "./data",
-        "compression": true,
-        "backup": {
-            "enabled": true,
-            "interval": 86400,
-            "retention": 7
-        }
-    },
-    "astAnalysis": {
-        "maxNodes": 10000,
-        "timeout": 30000,
-        "features": {
-            "symbols": true,
-            "references": true,
-            "dependencies": true,
-            "types": true
         }
     }
 }

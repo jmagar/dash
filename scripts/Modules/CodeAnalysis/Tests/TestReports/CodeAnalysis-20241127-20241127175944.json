@@ -1,0 +1,775 @@
+{
+  "MemoryUsed": 10184480,
+  "TestName": "CodeAnalysis-20241127",
+  "Results": {
+    "Mixed": {
+      "Performance": {
+        "Duration": {
+          "empty.tsx": {
+            "Ticks": 125023,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 502,
+            "Nanoseconds": 300,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.447025462962963E-07,
+            "TotalHours": 3.472861111111111E-06,
+            "TotalMilliseconds": 12.5023,
+            "TotalMicroseconds": 12502.3,
+            "TotalNanoseconds": 12502300.0,
+            "TotalMinutes": 0.00020837166666666667,
+            "TotalSeconds": 0.0125023
+          },
+          "empty.go": {
+            "Ticks": 115697,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 11,
+            "Microseconds": 569,
+            "Nanoseconds": 700,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.3390856481481482E-07,
+            "TotalHours": 3.2138055555555558E-06,
+            "TotalMilliseconds": 11.5697,
+            "TotalMicroseconds": 11569.7,
+            "TotalNanoseconds": 11569700.0,
+            "TotalMinutes": 0.00019282833333333332,
+            "TotalSeconds": 0.0115697
+          },
+          "malformed.tsx": {
+            "Ticks": 124546,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 454,
+            "Nanoseconds": 600,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.4415046296296297E-07,
+            "TotalHours": 3.4596111111111113E-06,
+            "TotalMilliseconds": 12.4546,
+            "TotalMicroseconds": 12454.6,
+            "TotalNanoseconds": 12454600.0,
+            "TotalMinutes": 0.00020757666666666667,
+            "TotalSeconds": 0.0124546
+          },
+          "malformed.go": {
+            "Ticks": 123401,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 340,
+            "Nanoseconds": 100,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.4282523148148148E-07,
+            "TotalHours": 3.4278055555555557E-06,
+            "TotalMilliseconds": 12.3401,
+            "TotalMicroseconds": 12340.1,
+            "TotalNanoseconds": 12340100.0,
+            "TotalMinutes": 0.00020566833333333334,
+            "TotalSeconds": 0.0123401
+          },
+          "mixed.tsx": {
+            "Ticks": 136471,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 647,
+            "Nanoseconds": 100,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.5795254629629629E-07,
+            "TotalHours": 3.7908611111111113E-06,
+            "TotalMilliseconds": 13.6471,
+            "TotalMicroseconds": 13647.1,
+            "TotalNanoseconds": 13647100.0,
+            "TotalMinutes": 0.00022745166666666666,
+            "TotalSeconds": 0.0136471
+          }
+        },
+        "MemoryUsage": {
+          "empty.tsx": 9684000,
+          "empty.go": 9715568,
+          "malformed.tsx": 9686792,
+          "malformed.go": 9718320,
+          "mixed.tsx": 9708144
+        }
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {
+          "empty.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "malformed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "mixed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "empty.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          }
+        }
+      },
+      "Backend": {}
+    },
+    "Standard": {
+      "Performance": {
+        "Duration": {},
+        "MemoryUsage": {}
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {},
+        "Backend": {}
+      },
+      "Backend": {}
+    },
+    "Empty": {
+      "Performance": {
+        "Duration": {
+          "empty.tsx": {
+            "Ticks": 887197,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 88,
+            "Microseconds": 719,
+            "Nanoseconds": 700,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.0268483796296296E-06,
+            "TotalHours": 2.464436111111111E-05,
+            "TotalMilliseconds": 88.7197,
+            "TotalMicroseconds": 88719.7,
+            "TotalNanoseconds": 88719700.0,
+            "TotalMinutes": 0.0014786616666666666,
+            "TotalSeconds": 0.0887197
+          },
+          "empty.go": {
+            "Ticks": 249100,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 24,
+            "Microseconds": 910,
+            "Nanoseconds": 0,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.883101851851852E-07,
+            "TotalHours": 6.919444444444444E-06,
+            "TotalMilliseconds": 24.91,
+            "TotalMicroseconds": 24910.0,
+            "TotalNanoseconds": 24910000.0,
+            "TotalMinutes": 0.00041516666666666666,
+            "TotalSeconds": 0.02491
+          }
+        },
+        "MemoryUsage": {
+          "empty.tsx": 9568480,
+          "empty.go": 9622608
+        }
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {
+          "empty.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          }
+        },
+        "Backend": {
+          "empty.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          }
+        }
+      },
+      "Backend": {}
+    },
+    "Malformed": {
+      "Performance": {
+        "Duration": {
+          "empty.tsx": {
+            "Ticks": 199447,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 19,
+            "Microseconds": 944,
+            "Nanoseconds": 700,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.3084143518518518E-07,
+            "TotalHours": 5.540194444444445E-06,
+            "TotalMilliseconds": 19.9447,
+            "TotalMicroseconds": 19944.7,
+            "TotalNanoseconds": 19944700.0,
+            "TotalMinutes": 0.00033241166666666665,
+            "TotalSeconds": 0.0199447
+          },
+          "empty.go": {
+            "Ticks": 138730,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 873,
+            "Nanoseconds": 0,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.6056712962962964E-07,
+            "TotalHours": 3.853611111111111E-06,
+            "TotalMilliseconds": 13.873,
+            "TotalMicroseconds": 13873.0,
+            "TotalNanoseconds": 13873000.0,
+            "TotalMinutes": 0.00023121666666666666,
+            "TotalSeconds": 0.013873
+          },
+          "malformed.tsx": {
+            "Ticks": 128112,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 811,
+            "Nanoseconds": 200,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.4827777777777777E-07,
+            "TotalHours": 3.5586666666666665E-06,
+            "TotalMilliseconds": 12.8112,
+            "TotalMicroseconds": 12811.2,
+            "TotalNanoseconds": 12811200.0,
+            "TotalMinutes": 0.00021352,
+            "TotalSeconds": 0.0128112
+          },
+          "malformed.go": {
+            "Ticks": 131283,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 128,
+            "Nanoseconds": 300,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.5194791666666667E-07,
+            "TotalHours": 3.64675E-06,
+            "TotalMilliseconds": 13.1283,
+            "TotalMicroseconds": 13128.3,
+            "TotalNanoseconds": 13128300.0,
+            "TotalMinutes": 0.000218805,
+            "TotalSeconds": 0.0131283
+          }
+        },
+        "MemoryUsage": {
+          "empty.tsx": 9665576,
+          "empty.go": 9673960,
+          "malformed.tsx": 9668680,
+          "malformed.go": 9677224
+        }
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {
+          "malformed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "empty.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          }
+        },
+        "Backend": {
+          "malformed.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "empty.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          }
+        }
+      },
+      "Backend": {}
+    },
+    "Large": {
+      "Performance": {
+        "Duration": {
+          "large.tsx": {
+            "Ticks": 137388,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 738,
+            "Nanoseconds": 800,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.5901388888888888E-07,
+            "TotalHours": 3.816333333333334E-06,
+            "TotalMilliseconds": 13.7388,
+            "TotalMicroseconds": 13738.8,
+            "TotalNanoseconds": 13738800.0,
+            "TotalMinutes": 0.00022898,
+            "TotalSeconds": 0.0137388
+          },
+          "complex.tsx": {
+            "Ticks": 245414,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 24,
+            "Microseconds": 541,
+            "Nanoseconds": 400,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.8404398148148146E-07,
+            "TotalHours": 6.8170555555555555E-06,
+            "TotalMilliseconds": 24.5414,
+            "TotalMicroseconds": 24541.4,
+            "TotalNanoseconds": 24541400.0,
+            "TotalMinutes": 0.0004090233333333333,
+            "TotalSeconds": 0.0245414
+          },
+          "empty.go": {
+            "Ticks": 154774,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 15,
+            "Microseconds": 477,
+            "Nanoseconds": 400,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.7913657407407408E-07,
+            "TotalHours": 4.299277777777778E-06,
+            "TotalMilliseconds": 15.4774,
+            "TotalMicroseconds": 15477.4,
+            "TotalNanoseconds": 15477400.0,
+            "TotalMinutes": 0.0002579566666666667,
+            "TotalSeconds": 0.0154774
+          },
+          "large.go": {
+            "Ticks": 143415,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 14,
+            "Microseconds": 341,
+            "Nanoseconds": 500,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.6598958333333334E-07,
+            "TotalHours": 3.98375E-06,
+            "TotalMilliseconds": 14.3415,
+            "TotalMicroseconds": 14341.5,
+            "TotalNanoseconds": 14341500.0,
+            "TotalMinutes": 0.000239025,
+            "TotalSeconds": 0.0143415
+          },
+          "malformed.tsx": {
+            "Ticks": 226917,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 22,
+            "Microseconds": 691,
+            "Nanoseconds": 700,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.626354166666667E-07,
+            "TotalHours": 6.30325E-06,
+            "TotalMilliseconds": 22.6917,
+            "TotalMicroseconds": 22691.7,
+            "TotalNanoseconds": 22691700.0,
+            "TotalMinutes": 0.000378195,
+            "TotalSeconds": 0.0226917
+          },
+          "malformed.go": {
+            "Ticks": 179792,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 17,
+            "Microseconds": 979,
+            "Nanoseconds": 200,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.080925925925926E-07,
+            "TotalHours": 4.994222222222222E-06,
+            "TotalMilliseconds": 17.9792,
+            "TotalMicroseconds": 17979.2,
+            "TotalNanoseconds": 17979200.0,
+            "TotalMinutes": 0.00029965333333333336,
+            "TotalSeconds": 0.0179792
+          },
+          "empty.tsx": {
+            "Ticks": 134839,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 483,
+            "Nanoseconds": 900,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.560636574074074E-07,
+            "TotalHours": 3.7455277777777777E-06,
+            "TotalMilliseconds": 13.4839,
+            "TotalMicroseconds": 13483.9,
+            "TotalNanoseconds": 13483900.0,
+            "TotalMinutes": 0.00022473166666666665,
+            "TotalSeconds": 0.0134839
+          },
+          "mixed.tsx": {
+            "Ticks": 148003,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 14,
+            "Microseconds": 800,
+            "Nanoseconds": 300,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.712997685185185E-07,
+            "TotalHours": 4.111194444444444E-06,
+            "TotalMilliseconds": 14.8003,
+            "TotalMicroseconds": 14800.3,
+            "TotalNanoseconds": 14800300.0,
+            "TotalMinutes": 0.00024667166666666665,
+            "TotalSeconds": 0.0148003
+          },
+          "complex.go": {
+            "Ticks": 139578,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 957,
+            "Nanoseconds": 800,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.615486111111111E-07,
+            "TotalHours": 3.8771666666666665E-06,
+            "TotalMilliseconds": 13.9578,
+            "TotalMicroseconds": 13957.8,
+            "TotalNanoseconds": 13957800.0,
+            "TotalMinutes": 0.00023263,
+            "TotalSeconds": 0.0139578
+          }
+        },
+        "MemoryUsage": {
+          "large.tsx": 9904312,
+          "complex.tsx": 9849672,
+          "empty.go": 9919296,
+          "large.go": 9922040,
+          "malformed.tsx": 9908264,
+          "malformed.go": 9971944,
+          "empty.tsx": 9918896,
+          "mixed.tsx": 9910968,
+          "complex.go": 9916064
+        }
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {
+          "empty.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "complex.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "malformed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "large.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "mixed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          }
+        },
+        "Backend": {
+          "large.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "empty.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "complex.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "malformed.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          }
+        }
+      },
+      "Backend": {}
+    },
+    "Complex": {
+      "Performance": {
+        "Duration": {
+          "complex.tsx": {
+            "Ticks": 174195,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 17,
+            "Microseconds": 419,
+            "Nanoseconds": 500,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 2.0161458333333334E-07,
+            "TotalHours": 4.83875E-06,
+            "TotalMilliseconds": 17.4195,
+            "TotalMicroseconds": 17419.5,
+            "TotalNanoseconds": 17419500.0,
+            "TotalMinutes": 0.000290325,
+            "TotalSeconds": 0.0174195
+          },
+          "empty.go": {
+            "Ticks": 151390,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 15,
+            "Microseconds": 139,
+            "Nanoseconds": 0,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.752199074074074E-07,
+            "TotalHours": 4.205277777777777E-06,
+            "TotalMilliseconds": 15.139,
+            "TotalMicroseconds": 15139.0,
+            "TotalNanoseconds": 15139000.0,
+            "TotalMinutes": 0.0002523166666666667,
+            "TotalSeconds": 0.015139
+          },
+          "malformed.tsx": {
+            "Ticks": 132865,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 286,
+            "Nanoseconds": 500,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.537789351851852E-07,
+            "TotalHours": 3.6906944444444444E-06,
+            "TotalMilliseconds": 13.2865,
+            "TotalMicroseconds": 13286.5,
+            "TotalNanoseconds": 13286500.0,
+            "TotalMinutes": 0.00022144166666666668,
+            "TotalSeconds": 0.0132865
+          },
+          "malformed.go": {
+            "Ticks": 124686,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 468,
+            "Nanoseconds": 600,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.443125E-07,
+            "TotalHours": 3.4635E-06,
+            "TotalMilliseconds": 12.4686,
+            "TotalMicroseconds": 12468.6,
+            "TotalNanoseconds": 12468600.0,
+            "TotalMinutes": 0.00020781,
+            "TotalSeconds": 0.0124686
+          },
+          "empty.tsx": {
+            "Ticks": 261493,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 26,
+            "Microseconds": 149,
+            "Nanoseconds": 300,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 3.026539351851852E-07,
+            "TotalHours": 7.263694444444444E-06,
+            "TotalMilliseconds": 26.1493,
+            "TotalMicroseconds": 26149.3,
+            "TotalNanoseconds": 26149300.0,
+            "TotalMinutes": 0.00043582166666666667,
+            "TotalSeconds": 0.0261493
+          },
+          "mixed.tsx": {
+            "Ticks": 127468,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 12,
+            "Microseconds": 746,
+            "Nanoseconds": 800,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.475324074074074E-07,
+            "TotalHours": 3.5407777777777776E-06,
+            "TotalMilliseconds": 12.7468,
+            "TotalMicroseconds": 12746.8,
+            "TotalNanoseconds": 12746800.0,
+            "TotalMinutes": 0.00021244666666666667,
+            "TotalSeconds": 0.0127468
+          },
+          "complex.go": {
+            "Ticks": 130226,
+            "Days": 0,
+            "Hours": 0,
+            "Milliseconds": 13,
+            "Microseconds": 22,
+            "Nanoseconds": 600,
+            "Minutes": 0,
+            "Seconds": 0,
+            "TotalDays": 1.5072453703703703E-07,
+            "TotalHours": 3.617388888888889E-06,
+            "TotalMilliseconds": 13.0226,
+            "TotalMicroseconds": 13022.6,
+            "TotalNanoseconds": 13022600.0,
+            "TotalMinutes": 0.00021704333333333334,
+            "TotalSeconds": 0.0130226
+          }
+        },
+        "MemoryUsage": {
+          "complex.tsx": 9734040,
+          "empty.go": 9772856,
+          "malformed.tsx": 9739544,
+          "malformed.go": 9776576,
+          "empty.tsx": 9736792,
+          "mixed.tsx": 9742584,
+          "complex.go": 9747696
+        }
+      },
+      "Frontend": {},
+      "Patterns": {
+        "Frontend": {
+          "empty.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "complex.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "malformed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          },
+          "mixed.tsx": {
+            "PerformancePatterns": null,
+            "StateManagement": null,
+            "APIPatterns": null,
+            "SecurityPatterns": null,
+            "Hooks": null
+          }
+        },
+        "Backend": {
+          "empty.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "complex.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          },
+          "malformed.go": {
+            "API": null,
+            "Security": null,
+            "Database": null,
+            "Monitoring": null,
+            "Performance": null
+          }
+        }
+      },
+      "Backend": {}
+    }
+  },
+  "Timestamp": "2024-11-27 17:59:44",
+  "Duration": 0.9506769
+}

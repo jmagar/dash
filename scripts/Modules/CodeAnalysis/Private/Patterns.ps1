@@ -178,54 +178,57 @@ function Get-CodePatterns {
 function Get-PowerShellAstPatterns {
     [CmdletBinding()]
     param([Parameter(Mandatory)][object]$Ast)
-    
+
     $patterns = @{}
     
-    # Define AST-based patterns
-    $astPatterns = @{
-        'security.injection.invoke' = {
-            param($node)
-            $node -is [CommandAst] -and
-            $node.CommandElements[0].Value -eq 'Invoke-Expression'
-        }
-        'security.credentials.plain' = {
-            param($node)
-            $node -is [CommandParameterAst] -and
-            $node.ParameterName -match '^pass(word)?$' -and
-            $node.Argument -is [StringConstantExpressionAst]
-        }
-        'performance.pipeline.measure' = {
-            param($node)
-            $node -is [PipelineAst] -and
-            $node.PipelineElements.Count -gt 5
-        }
-        'style.scriptblock.empty' = {
-            param($node)
-            $node -is [ScriptBlockExpressionAst] -and
-            $node.ScriptBlock.EndBlock.Statements.Count -eq 0
-        }
-    }
-    
-    # Find patterns in AST
-    foreach ($patternName in $astPatterns.Keys) {
-        $patterns[$patternName] = @()
-        $visitor = {
-            param($node)
-            
-            if (& $astPatterns[$patternName] $node) {
-                $patterns[$patternName] += @{
-                    value = $node.Extent.Text
-                    line = $node.Extent.StartLineNumber
-                    index = $node.Extent.StartOffset
-                    confidence = 1.0
-                    type = 'ast'
+    # Visit each node in the AST
+    $Ast.Visit([ScriptBlockAst]{
+        param($node)
+        
+        # Check for command patterns
+        if ($node -is [CommandAst]) {
+            $commandName = $node.GetCommandName()
+            if ($commandName) {
+                $patterns[$commandName] = @{
+                    Type = "Command"
+                    Location = $node.Extent
+                    Metadata = @{
+                        Parameters = $node.CommandElements | Where-Object { $_ -is [CommandParameterAst] } | ForEach-Object { $_.ParameterName }
+                    }
                 }
             }
-            return $true
         }
         
-        $Ast.Visit($visitor)
-    }
+        # Check for variable patterns
+        elseif ($node -is [VariableExpressionAst]) {
+            $varName = $node.VariablePath.UserPath
+            if (-not $patterns.ContainsKey($varName)) {
+                $patterns[$varName] = @{
+                    Type = "Variable"
+                    Location = $node.Extent
+                    Metadata = @{
+                        Scope = if ($node.VariablePath.IsScript) { "Script" } else { "Local" }
+                    }
+                }
+            }
+        }
+        
+        # Check for function definitions
+        elseif ($node -is [FunctionDefinitionAst]) {
+            $patterns[$node.Name] = @{
+                Type = "Function"
+                Location = $node.Extent
+                Metadata = @{
+                    Parameters = $node.Parameters.Name.VariablePath.UserPath
+                    HasBegin = $null -ne $node.Body.BeginBlock
+                    HasProcess = $null -ne $node.Body.ProcessBlock
+                    HasEnd = $null -ne $node.Body.EndBlock
+                }
+            }
+        }
+        
+        return $true  # Continue visiting nodes
+    })
     
     return $patterns
 }
