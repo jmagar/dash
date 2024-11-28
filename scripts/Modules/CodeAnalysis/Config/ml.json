@@ -1,0 +1,19 @@
+{
+    "modelPath": "../Models",
+    "vectorPath": "../Vectors",
+    "trainingPath": "../Training",
+    "updateInterval": "7.00:00:00",
+    "minSamplesForTraining": 100,
+    "embeddings": {
+        "modelName": "text-embedding-ada-002",
+        "dimensions": 1536,
+        "maxTokens": 8191
+    },
+    "python": {
+        "envPath": "../env/python",
+        "requirementsFile": "../requirements.txt"
+    },
+    "useGPU": false,
+    "batchSize": 32,
+    "maxParallelism": 4
+}

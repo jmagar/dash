@@ -1,317 +1,309 @@
 using namespace System.Collections.Generic
 using namespace System.IO
 using namespace System.Text.Json
+using namespace System.Collections.Concurrent
+using namespace System.Management.Automation.Language
 
-# Import Logging module
+# Import configuration from JSON
+$script:MLConfig = Get-Content "$PSScriptRoot/../Config/ml.json" | ConvertFrom-Json
+
+# Ensure paths are absolute
+$script:MLConfig.modelPath = Join-Path $PSScriptRoot $script:MLConfig.modelPath
+$script:MLConfig.vectorPath = Join-Path $PSScriptRoot $script:MLConfig.vectorPath
+$script:MLConfig.trainingPath = Join-Path $PSScriptRoot $script:MLConfig.trainingPath
+$script:MLConfig.python.envPath = Join-Path $PSScriptRoot $script:MLConfig.python.envPath
+$script:MLConfig.python.requirementsFile = Join-Path $PSScriptRoot $script:MLConfig.python.requirementsFile
+
+# Import modules
 . $PSScriptRoot/Logging.ps1
+. $PSScriptRoot/Configuration.ps1
+. $PSScriptRoot/DataManagement.ps1
 
-# ML Configuration
-$script:MLConfig = @{
-    ModelPath = Join-Path $PSScriptRoot "../Data/Models"
-    VectorPath = Join-Path $PSScriptRoot "../Data/Vectors"
-    TrainingPath = Join-Path $PSScriptRoot "../Data/Training"
-    MinSamplesForTraining = 100
-    UpdateInterval = [TimeSpan]::FromHours(24)
-    Embeddings = @{
-        ModelName = "all-MiniLM-L6-v2"
-        MaxTokens = 512
-        BatchSize = 32
+$script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
+
+function New-MLResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Operation,
+        [Parameter(Mandatory)]
+        [string]$ModelType,
+        [Parameter()]
+        [string]$Identifier = ""
+    )
+    
+    return @{
+        metadata = @{
+            operation = $Operation
+            model_type = $ModelType
+            identifier = $Identifier
+            timestamp = Get-Date -Format "o"
+            version = "1.0"
+            start_time = $null
+            end_time = $null
+        }
+        model = @{
+            type = $ModelType
+            name = ""
+            version = ""
+            framework = ""
+            parameters = @{}
+        }
+        prediction = @{
+            confidence = 0.0
+            labels = @()
+            scores = @()
+            threshold = 0.0
+        }
+        metrics = @{
+            duration_ms = 0
+            memory_mb = 0
+            items_processed = 0
+            batch_size = 0
+        }
+        resources = @{
+            cpu_percent = 0
+            memory_percent = 0
+            gpu_utilization = 0
+            threads = 0
+            start_usage = $null
+            end_usage = $null
+        }
+        status = @{
+            success = $true
+            initialized = $false
+            warnings = @()
+            errors = @()
+        }
     }
 }
 
-# Initialize Python environment for ML
-function Initialize-MLEnvironment {
+function Initialize-PythonEnvironment {
     [CmdletBinding()]
     param()
     
     try {
-        Write-StructuredLog -Message "Initializing ML environment" -Level INFO
+        Write-StructuredLog -Message "Initializing Python environment" -Level INFO
+        $startTime = Get-Date
         
-        # Ensure Python environment exists
-        $pythonPath = Join-Path $PSScriptRoot "../env/python"
-        if (-not (Test-Path $pythonPath)) {
-            Write-StructuredLog -Message "Creating Python virtual environment" -Level INFO
-            
-            # Create virtual environment
-            $process = Start-Process -FilePath "python" -ArgumentList "-m", "venv", $pythonPath -Wait -PassThru
-            if ($process.ExitCode -ne 0) {
-                throw "Failed to create virtual environment"
-            }
-            
-            # Install required packages
-            $packages = @(
-                "torch",
-                "transformers",
-                "sentence-transformers",
-                "scikit-learn",
-                "numpy",
-                "pandas"
-            )
-            
-            foreach ($package in $packages) {
-                Write-StructuredLog -Message "Installing package: $package" -Level INFO
-                $process = Start-Process -FilePath "$pythonPath/Scripts/pip" -ArgumentList "install", $package -Wait -PassThru
-                if ($process.ExitCode -ne 0) {
-                    throw "Failed to install package: $package"
-                }
-            }
+        $result = New-MLResult -Operation "initialize" -ModelType "environment"
+        $result.metadata.start_time = $startTime.ToString("o")
+        
+        # Check Python installation
+        $pythonPath = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $pythonPath) {
+            throw "Python not found in PATH"
         }
         
-        # Create model directories
-        $directories = @(
-            $script:MLConfig.ModelPath,
-            $script:MLConfig.VectorPath,
-            $script:MLConfig.TrainingPath
+        # Check required packages
+        $requiredPackages = @(
+            "numpy",
+            "pandas",
+            "scikit-learn",
+            "torch"
         )
         
-        foreach ($dir in $directories) {
-            if (-not (Test-Path $dir)) {
-                New-Item -Path $dir -ItemType Directory -Force | Out-Null
+        $installedPackages = python -m pip list 2>$null
+        foreach ($package in $requiredPackages) {
+            if ($installedPackages -notmatch $package) {
+                $result.status.warnings += "Package not found: $package"
             }
         }
         
-        Write-StructuredLog -Message "ML environment initialized successfully" -Level INFO
-        return $true
-    }
-    catch {
-        Write-ErrorLog -ErrorRecord $_
-        return $false
-    }
-}
-
-function Get-CodeEmbedding {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Code,
-        [Parameter()]
-        [string]$ModelName = $script:MLConfig.Embeddings.ModelName
-    )
-    
-    try {
-        # Check cache first
-        $cacheKey = [System.BitConverter]::ToString(
-            [System.Security.Cryptography.SHA256]::Create().ComputeHash(
-                [System.Text.Encoding]::UTF8.GetBytes($Code)
-            )
-        ).Replace("-", "")
-        
-        $cached = Get-FromCache -CacheType 'Pattern' -Key $cacheKey
-        if ($cached) { return $cached }
-        
-        # Generate embedding using Python
+        # Initialize Python process
         $pythonScript = @"
-from sentence_transformers import SentenceTransformer
-import torch
 import sys
 import json
+import numpy as np
+import pandas as pd
+from sklearn.base import BaseEstimator
+import torch
 
-def get_embedding(text, model_name):
-    model = SentenceTransformer(model_name)
-    with torch.no_grad():
-        embedding = model.encode(text)
-    return embedding.tolist()
-
-code = sys.argv[1]
-model_name = sys.argv[2]
-embedding = get_embedding(code, model_name)
-print(json.dumps(embedding))
+print(json.dumps({
+    'python_version': sys.version,
+    'numpy_version': np.__version__,
+    'pandas_version': pd.__version__,
+    'torch_version': torch.__version__,
+    'cuda_available': torch.cuda.is_available()
+}))
 "@
         
-        $tempScript = [Path]::GetTempFileName()
-        $pythonScript | Set-Content $tempScript
+        $envInfo = python -c $pythonScript | ConvertFrom-Json
         
-        $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
-        $process = Start-Process -FilePath $pythonPath -ArgumentList $tempScript, $Code, $ModelName -Wait -PassThru -RedirectStandardOutput ([Path]::GetTempFileName())
-        
-        if ($process.ExitCode -ne 0) {
-            throw "Failed to generate embedding"
-        }
-        
-        $embedding = Get-Content $process.StandardOutput.Path | ConvertFrom-Json
-        
-        # Cache the result
-        Add-ToCache -CacheType 'Pattern' -Key $cacheKey -Value $embedding
-        
-        return $embedding
-    }
-    catch {
-        Write-ErrorLog -ErrorRecord $_
-        return $null
-    }
-    finally {
-        if ($tempScript -and (Test-Path $tempScript)) {
-            Remove-Item $tempScript -Force
-        }
-    }
-}
-
-function Update-MLModel {
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        [string]$ModelType = 'pattern',
-        [Parameter()]
-        [string]$ModelName = $script:MLConfig.Embeddings.ModelName
-    )
-    
-    try {
-        Write-StructuredLog -Message "Updating ML model" -Level INFO -Properties @{
-            modelType = $ModelType
-            modelName = $ModelName
-        }
-        
-        # Check if we have enough training data
-        $trainingPath = Join-Path $script:MLConfig.TrainingPath $ModelType
-        $trainingFiles = Get-ChildItem $trainingPath -Filter "*.json" -File
-        
-        if ($trainingFiles.Count -lt $script:MLConfig.MinSamplesForTraining) {
-            Write-StructuredLog -Message "Insufficient training data" -Level WARN -Properties @{
-                samplesNeeded = $script:MLConfig.MinSamplesForTraining
-                samplesAvailable = $trainingFiles.Count
+        $result.model = @{
+            type = "environment"
+            name = "python"
+            version = $envInfo.python_version
+            framework = "mixed"
+            parameters = @{
+                numpy_version = $envInfo.numpy_version
+                pandas_version = $envInfo.pandas_version
+                torch_version = $envInfo.torch_version
+                cuda_available = $envInfo.cuda_available
             }
-            return $false
         }
         
-        # Prepare training data
-        $trainingData = foreach ($file in $trainingFiles) {
-            Get-Content $file.FullName -Raw | ConvertFrom-Json
+        $result.status.initialized = $true
+        $result.metadata.end_time = (Get-Date).ToString("o")
+        $result.metrics.duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        
+        Write-StructuredLog -Message "Python environment initialized" -Level INFO -Properties @{
+            python_version = $envInfo.python_version
+            cuda_available = $envInfo.cuda_available
+            duration_ms = $result.metrics.duration_ms
         }
         
-        # Train model using Python
-        $pythonScript = @"
-from sentence_transformers import SentenceTransformer, InputExample, losses
-from torch.utils.data import DataLoader
-import torch
-import json
-import sys
-
-def train_model(data, model_name, output_path):
-    model = SentenceTransformer(model_name)
-    
-    # Prepare training examples
-    train_examples = [
-        InputExample(texts=[d['input']], label=d['label'])
-        for d in data
-    ]
-    
-    train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
-    train_loss = losses.CosineSimilarityLoss(model)
-    
-    # Train the model
-    model.fit(train_dataloader=train_dataloader,
-              epochs=1,
-              warmup_steps=100,
-              show_progress_bar=True)
-    
-    # Save the model
-    model.save(output_path)
-    return True
-
-data = json.loads(sys.argv[1])
-model_name = sys.argv[2]
-output_path = sys.argv[3]
-
-success = train_model(data, model_name, output_path)
-print(json.dumps({'success': success}))
-"@
-        
-        $tempScript = [Path]::GetTempFileName()
-        $pythonScript | Set-Content $tempScript
-        
-        $modelPath = Join-Path $script:MLConfig.ModelPath "$ModelType-$([DateTime]::Now.ToString('yyyyMMdd'))"
-        $pythonPath = Join-Path $PSScriptRoot "../env/python/Scripts/python"
-        
-        $process = Start-Process -FilePath $pythonPath -ArgumentList @(
-            $tempScript,
-            ($trainingData | ConvertTo-Json -Compress),
-            $ModelName,
-            $modelPath
-        ) -Wait -PassThru -RedirectStandardOutput ([Path]::GetTempFileName())
-        
-        if ($process.ExitCode -ne 0) {
-            throw "Failed to train model"
-        }
-        
-        $result = Get-Content $process.StandardOutput.Path | ConvertFrom-Json
-        
-        Write-StructuredLog -Message "Model training completed" -Level INFO -Properties @{
-            modelPath = $modelPath
-            success = $result.success
-        }
-        
-        return $result.success
+        return $result
     }
     catch {
-        Write-ErrorLog -ErrorRecord $_
-        return $false
-    }
-    finally {
-        if ($tempScript -and (Test-Path $tempScript)) {
-            Remove-Item $tempScript -Force
-        }
+        Write-StructuredLog -Message "Failed to initialize Python environment: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        $result.metadata.end_time = (Get-Date).ToString("o")
+        return $result
     }
 }
 
-function Add-TrainingData {
+function Invoke-MLPrediction {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$ModelType,
+        [string]$ModelPath,
         [Parameter(Mandatory)]
         [object]$InputData,
-        [Parameter(Mandatory)]
-        [object]$Label
+        [Parameter()]
+        [hashtable]$Parameters = @{}
     )
     
     try {
-        $trainingPath = Join-Path $script:MLConfig.TrainingPath $ModelType
-        if (-not (Test-Path $trainingPath)) {
-            New-Item -Path $trainingPath -ItemType Directory -Force | Out-Null
+        Write-StructuredLog -Message "Running ML prediction" -Level INFO
+        $startTime = Get-Date
+        
+        $result = New-MLResult -Operation "predict" -ModelType "classifier"
+        $result.metadata.start_time = $startTime.ToString("o")
+        
+        # Validate model exists
+        if (-not (Test-Path $ModelPath)) {
+            throw "Model file not found: $ModelPath"
         }
         
-        $trainingItem = @{
-            timestamp = [DateTime]::UtcNow.ToString('o')
-            input = $InputData
-            label = $Label
+        # Prepare input data
+        $inputJson = $InputData | ConvertTo-Json -Depth 10 -Compress
+        
+        # Run prediction script
+        $pythonScript = @"
+import sys
+import json
+import torch
+import numpy as np
+from time import time
+import psutil
+
+def load_model(path):
+    return torch.load(path)
+
+def preprocess_input(data):
+    # Add your preprocessing logic here
+    return np.array(data)
+
+def get_resource_usage():
+    process = psutil.Process()
+    return {
+        'cpu_percent': process.cpu_percent(),
+        'memory_percent': process.memory_percent(),
+        'threads': process.num_threads()
+    }
+
+try:
+    # Load input data
+    input_data = json.loads('''$inputJson''')
+    
+    # Track resources
+    start_time = time()
+    start_resources = get_resource_usage()
+    
+    # Load model and make prediction
+    model = load_model('$ModelPath')
+    processed_input = preprocess_input(input_data)
+    
+    with torch.no_grad():
+        output = model(torch.tensor(processed_input))
+        probabilities = torch.nn.functional.softmax(output, dim=1)
+    
+    # Get predictions
+    predictions = probabilities.numpy()
+    
+    # Track final resources
+    end_resources = get_resource_usage()
+    duration = (time() - start_time) * 1000  # ms
+    
+    # Prepare result
+    result = {
+        'predictions': predictions.tolist(),
+        'duration_ms': duration,
+        'resources': {
+            'start': start_resources,
+            'end': end_resources
+        }
+    }
+    
+    print(json.dumps(result))
+    sys.exit(0)
+except Exception as e:
+    print(json.dumps({'error': str(e)}))
+    sys.exit(1)
+"@
+        
+        $predictionOutput = python -c $pythonScript | ConvertFrom-Json
+        
+        if ($predictionOutput.error) {
+            throw $predictionOutput.error
         }
         
-        $fileName = [guid]::NewGuid().ToString() + ".json"
-        $filePath = Join-Path $trainingPath $fileName
-        
-        $trainingItem | ConvertTo-Json -Depth 10 | Set-Content $filePath
-        
-        Write-StructuredLog -Message "Added training data" -Level INFO -Properties @{
-            modelType = $ModelType
-            filePath = $filePath
+        # Update result with prediction data
+        $result.prediction = @{
+            confidence = ($predictionOutput.predictions | Measure-Object -Maximum).Maximum
+            scores = $predictionOutput.predictions
+            threshold = $Parameters.threshold ?? 0.5
+            labels = @()  # Add label mapping if available
         }
         
-        return $true
+        # Update metrics and timing
+        $result.metadata.end_time = (Get-Date).ToString("o")
+        $result.metrics = @{
+            duration_ms = $predictionOutput.duration_ms
+            memory_mb = [Math]::Round(($predictionOutput.resources.end.memory_percent * (Get-Process -Id $PID).WorkingSet64 / 1MB), 2)
+            items_processed = 1
+            batch_size = 1
+        }
+        
+        # Update resource usage with start and end metrics
+        $result.resources = @{
+            cpu_percent = $predictionOutput.resources.end.cpu_percent
+            memory_percent = $predictionOutput.resources.end.memory_percent
+            gpu_utilization = 0  # Add GPU tracking if needed
+            threads = $predictionOutput.resources.end.threads
+            start_usage = $predictionOutput.resources.start
+            end_usage = $predictionOutput.resources.end
+        }
+        
+        Write-StructuredLog -Message "ML prediction completed" -Level INFO -Properties @{
+            duration_ms = $result.metrics.duration_ms
+            confidence = $result.prediction.confidence
+            cpu_percent = $result.resources.cpu_percent
+            memory_mb = $result.metrics.memory_mb
+            total_duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        }
+        
+        return $result
     }
     catch {
-        Write-ErrorLog -ErrorRecord $_
-        return $false
+        Write-StructuredLog -Message "Failed to run ML prediction: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        $result.metadata.end_time = (Get-Date).ToString("o")
+        return $result
     }
 }
 
-# Start background model update job
-$script:ModelUpdateJob = Start-Job -ScriptBlock {
-    param($MLConfig)
-    
-    while ($true) {
-        Start-Sleep -Seconds $MLConfig.UpdateInterval.TotalSeconds
-        
-        # Update models if needed
-        foreach ($modelType in @('pattern', 'security', 'performance')) {
-            Update-MLModel -ModelType $modelType
-        }
-    }
-} -ArgumentList $script:MLConfig
-
-# Cleanup on module unload
-$ExecutionContext.SessionState.Module.OnRemove = {
-    Stop-Job -Job $script:ModelUpdateJob
-    Remove-Job -Job $script:ModelUpdateJob
-}
-
-Export-ModuleMember -Function Initialize-MLEnvironment, Get-CodeEmbedding, Update-MLModel, Add-TrainingData
+Export-ModuleMember -Function Initialize-PythonEnvironment, Invoke-MLPrediction

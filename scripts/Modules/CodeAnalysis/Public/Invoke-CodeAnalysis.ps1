@@ -123,76 +123,184 @@ function Get-MLPredictions {
         [Parameter(Mandatory)]
         [string]$Content,
         [Parameter(Mandatory)]
-        [string]$Language
+        [string]$Language,
+        [Parameter()]
+        [hashtable]$Context
     )
 
     try {
-        # Load ML model based on language
-        $modelPath = Join-Path $script:Config.machineLearning.modelPath "$Language.model"
-        if (-not (Test-Path $modelPath)) {
-            Write-Verbose "No ML model found for $Language"
-            return @()
+        # Check if ML environment is initialized
+        if (-not (Initialize-MLEnvironment)) {
+            throw "Failed to initialize ML environment"
         }
 
-        # Tokenize content
-        $tokens = switch ($Language.ToLower()) {
-            'powershell' {
-                $null = [System.Management.Automation.Language.Parser]::ParseInput($Content, [ref]$null, [ref]$null)
-                $tokens
-            }
-            'typescript' {
-                $Content -split '\W+' | Where-Object { $_ }
-            }
-            'javascript' {
-                $Content -split '\W+' | Where-Object { $_ }
-            }
-            default {
-                Write-Warning "Unsupported language for ML predictions: $Language"
-                return @()
-            }
+        # Get code embedding
+        $embedding = Get-CodeEmbedding -Code $Content -Context $Context
+        if (-not $embedding) {
+            throw "Failed to generate code embedding"
         }
 
-        # Extract features
-        $features = @{
-            TokenCount = $tokens.Count
-            AverageTokenLength = ($tokens | Measure-Object Length -Average).Average
-            UniqueTokens = ($tokens | Select-Object -Unique).Count
-            Keywords = ($tokens | Where-Object { $_ -match '^(function|if|while|for|switch|try|catch)$' }).Count
-        }
-
-        # Make predictions
-        $predictions = @()
-        
-        # Example patterns to detect (in real implementation, this would use the actual ML model)
-        if ($features.TokenCount / $features.UniqueTokens -gt 3) {
-            $predictions += @{
-                Pattern = 'CodeDuplication'
-                Confidence = 0.85
-                Location = @{
-                    StartLine = 1
-                    EndLine = ($Content -split "`n").Count
+        # Get pattern predictions
+        $patternMatches = @()
+        $modelTypes = @('pattern', 'security', 'performance')
+        foreach ($modelType in $modelTypes) {
+            $modelPath = Join-Path $script:Config.machineLearning.modelPath "$modelType-$Language.model"
+            if (Test-Path $modelPath) {
+                $predictions = Invoke-MLPrediction -Embedding $embedding -ModelPath $modelPath -Context $Context
+                if ($predictions) {
+                    foreach ($pred in $predictions) {
+                        $patternMatches += [PSCustomObject]@{
+                            Type = $modelType
+                            Name = $pred.pattern
+                            Confidence = $pred.confidence
+                            Risk = $pred.risk
+                            Suggestion = $pred.suggestion
+                            Location = $pred.location
+                        }
+                    }
                 }
-                Suggestion = 'Consider refactoring duplicate code into reusable functions'
             }
         }
 
-        if ($features.Keywords / $features.TokenCount -gt 0.2) {
-            $predictions += @{
-                Pattern = 'HighComplexity'
-                Confidence = 0.75
-                Location = @{
-                    StartLine = 1
-                    EndLine = ($Content -split "`n").Count
-                }
-                Suggestion = 'Consider breaking down complex logic into smaller, more manageable pieces'
+        # Filter and sort patterns
+        $patternMatches = $patternMatches | Where-Object { $_.Confidence -ge $script:Config.machineLearning.confidenceThreshold } |
+                              Sort-Object -Property @{Expression = 'Risk'; Descending = $true}, 
+                                                  @{Expression = 'Confidence'; Descending = $true}
+
+        return @{
+            Patterns = $patternMatches
+            Metadata = @{
+                Language = $Language
+                ProcessedAt = (Get-Date).ToString('o')
+                ModelVersion = (Get-Content (Join-Path $script:Config.machineLearning.modelPath "version.json") | 
+                              ConvertFrom-Json).version
             }
         }
-
-        return $predictions
     }
     catch {
-        Write-Warning "Failed to get ML predictions: $_"
-        return @()
+        Write-Error "ML prediction failed: $_"
+        return $null
+    }
+}
+
+function Invoke-MLPrediction {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [array]$Embedding,
+        [Parameter(Mandatory)]
+        [string]$ModelPath,
+        [Parameter()]
+        [hashtable]$Context
+    )
+    
+    try {
+        # Create Python script for prediction
+        $pythonScript = @"
+from sentence_transformers import SentenceTransformer
+import torch
+import json
+import sys
+import os
+import gc
+
+def load_model(model_path):
+    try:
+        model = SentenceTransformer(model_path)
+        return model
+    except Exception as e:
+        print(json.dumps({'error': f"Failed to load model: {str(e)}"}), file=sys.stderr)
+        return None
+
+def predict(model, embedding):
+    try:
+        # Convert embedding to tensor
+        embedding_tensor = torch.tensor(embedding).unsqueeze(0)
+        
+        # Get predictions
+        with torch.no_grad():
+            output = model(embedding_tensor)
+            predictions = output.softmax(dim=1).tolist()[0]
+        
+        # Clean up GPU memory if available
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        # Force garbage collection
+        gc.collect()
+        
+        return predictions
+    except Exception as e:
+        print(json.dumps({'error': f"Failed to predict: {str(e)}"}), file=sys.stderr)
+        return None
+
+if __name__ == '__main__':
+    embedding = json.loads(sys.argv[1])
+    model_path = sys.argv[2]
+    
+    model = load_model(model_path)
+    if not model:
+        sys.exit(1)
+    
+    predictions = predict(model, embedding)
+    if predictions:
+        print(json.dumps({'predictions': predictions}))
+        sys.exit(0)
+    else:
+        sys.exit(1)
+"@
+        
+        # Create temporary files
+        $tempScript = [Path]::GetTempFileName()
+        $tempOutput = [Path]::GetTempFileName()
+        $tempError = [Path]::GetTempFileName()
+        
+        try {
+            $pythonScript | Set-Content $tempScript
+            
+            $pythonPath = Join-Path $script:Config.Python.EnvPath "Scripts/python"
+            $process = Start-Process -FilePath $pythonPath -ArgumentList @(
+                $tempScript,
+                ($Embedding | ConvertTo-Json -Compress),
+                $ModelPath
+            ) -Wait -PassThru -RedirectStandardOutput $tempOutput -RedirectStandardError $tempError -NoNewWindow
+            
+            if ($process.ExitCode -ne 0) {
+                $errorContent = Get-Content $tempError -Raw
+                throw "ML prediction failed: $errorContent"
+            }
+            
+            $result = Get-Content $tempOutput | ConvertFrom-Json
+            
+            # Map predictions to patterns
+            $patternMapping = Get-Content (Join-Path (Split-Path $ModelPath) "pattern_mapping.json") | ConvertFrom-Json
+            $predictions = @()
+            
+            for ($i = 0; $i -lt $result.predictions.Count; $i++) {
+                if ($result.predictions[$i] -ge $script:Config.machineLearning.confidenceThreshold) {
+                    $pattern = $patternMapping.patterns[$i]
+                    $predictions += @{
+                        pattern = $pattern.name
+                        confidence = $result.predictions[$i]
+                        risk = $pattern.risk
+                        suggestion = $pattern.suggestion
+                        location = $null  # Will be filled by pattern detection
+                    }
+                }
+            }
+            
+            return $predictions
+        }
+        finally {
+            # Cleanup temporary files
+            Remove-Item $tempScript -ErrorAction SilentlyContinue
+            Remove-Item $tempOutput -ErrorAction SilentlyContinue
+            Remove-Item $tempError -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+        Write-Error "ML prediction failed: $_"
+        return $null
     }
 }
 
@@ -322,7 +430,7 @@ function Get-DetailedRefactoringSuggestions {
             $currentBatch += $file
             
             if ($currentBatch.Count -ge $batchSize) {
-                $refactoringTasks += Process-FileBatch -Files $currentBatch
+                $refactoringTasks += Invoke-FileBatch -Files $currentBatch
                 $currentBatch = @()
             }
         }
@@ -330,7 +438,7 @@ function Get-DetailedRefactoringSuggestions {
     
     # Process remaining files
     if ($currentBatch.Count -gt 0) {
-        $refactoringTasks += Process-FileBatch -Files $currentBatch
+        $refactoringTasks += Invoke-FileBatch -Files $currentBatch
     }
 
     # Generate visualization data with performance metrics
@@ -435,7 +543,7 @@ function Get-DetailedRefactoringSuggestions {
     }
 }
 
-function Process-FileBatch {
+function Invoke-FileBatch {
     [CmdletBinding()]
     param([Parameter(Mandatory)][array]$Files)
     
@@ -532,30 +640,31 @@ function Invoke-CodeAnalysis {
         Write-Verbose "Starting analysis with Path: $Path"
         
         # Start resource monitoring
-        $monitoringJob = Start-ResourceMonitoring -IntervalSeconds 5
+        $monitoringJob = Start-ResourceMonitoring
         
         # Initialize results collection
-        $results = @{
+        $script:results = @{
             summary = @{
-                analyzedFiles = 0
                 totalFiles = 0
+                processedFiles = 0
+                patterns = @{
+                    total = 0
+                    byType = @{}
+                }
                 security = @{
-                    highSeverity = 0
-                    mediumSeverity = 0
-                    lowSeverity = 0
-                    averageScore = 0
+                    score = 100
+                    issues = @()
                 }
                 performance = @{
-                    hotspots = @()
                     averageComplexity = 0
+                    hotspots = @()
                 }
                 refactoring = @{
                     suggestions = @()
                     priorities = @()
                 }
-                patterns = @{}
             }
-            files = @{}
+            files = @()
         }
         
         # Ensure output directories exist
@@ -576,59 +685,49 @@ function Invoke-CodeAnalysis {
             # Validate security preconditions
             Write-Verbose "Validating security preconditions..."
             $resolvedPath = Resolve-Path $Path
-            Write-Verbose "Resolved path: $resolvedPath"
-            
-            if (-not (Test-SecurityPreconditions -Path $resolvedPath)) {
-                throw [CodeAnalysisException]::new("Security validation failed for path: $resolvedPath", "Security")
-            }
-            Write-Verbose "Security validation passed"
-            
-            # Get all files to analyze, excluding patterns from config
-            $excludePatterns = $script:Config.fileSystem.excludePatterns
-            Write-Verbose "Excluding patterns: $($excludePatterns -join ', ')"
-            
-            # Use Get-Item to resolve the base path first
-            $basePath = Get-Item $Path
-            
-            # Handle single file vs directory differently
-            if ($basePath -is [System.IO.FileInfo]) {
-                $files = @($basePath)
-            } else {
-                $files = Get-ChildItem -Path $basePath.FullName -Recurse -File | Where-Object {
-                    $file = $_
-                    $shouldInclude = $FileExtensions -contains $_.Extension
-                    
-                    # Check against exclude patterns
-                    foreach ($pattern in $excludePatterns) {
-                        if ($pattern.StartsWith("*")) {
-                            # Handle file extension/wildcard patterns
-                            if ($file.Name -like $pattern) {
-                                $shouldInclude = $false
-                                break
-                            }
-                        }
-                        elseif ($file.FullName -match $pattern) {
-                            $shouldInclude = $false
-                            break
-                        }
-                    }
-                    
-                    $shouldInclude
-                }
+            if (-not $resolvedPath) {
+                throw [CodeAnalysisException]::new("Invalid path: $Path", 'InvalidPath')
             }
             
-            $results.summary.totalFiles = $files.Count
+            # Initialize data store
+            Initialize-DataStore
+
+            # Get files to analyze
+            $excludePatterns = $script:Config.analysis.excludePatterns -join '|'
+            $files = Get-ChildItem -Path $resolvedPath -Recurse -File |
+                Where-Object { $_.FullName -notmatch $excludePatterns }
+
             Write-Verbose "Found $($files.Count) files to analyze"
             
             # Process files in batches
-            $batchSize = [Math]::Min($files.Count, $BatchSize)
-            $maxParallelism = $MaxParallelism
-            
+            $batchSize = $script:Config.analysis.batchSize
+            $maxParallelism = $script:Config.analysis.maxParallelism
             Write-Verbose "Processing with batch size: $batchSize, parallelism: $maxParallelism"
-            
-            # Process files in parallel with resource monitoring
-            $processedFiles = @{}
-            
+
+            $script:results = @{
+                summary = @{
+                    totalFiles = $files.Count
+                    processedFiles = 0
+                    patterns = @{
+                        total = 0
+                        byType = @{}
+                    }
+                    security = @{
+                        score = 100
+                        issues = @()
+                    }
+                    performance = @{
+                        averageComplexity = 0
+                        hotspots = @()
+                    }
+                    refactoring = @{
+                        suggestions = @()
+                        priorities = @()
+                    }
+                }
+                files = @()
+            }
+
             foreach ($file in $files) {
                 Write-Verbose "Processing file: $($file.FullName)"
                 try {
@@ -637,22 +736,36 @@ function Invoke-CodeAnalysis {
                         Write-Warning "Resource threshold exceeded, reducing batch size"
                         continue
                     }
+
+                    # Get file content and language
+                    $content = Get-Content $file.FullName -Raw
+                    $language = Get-FileLanguage -Extension $file.Extension
                     
-                    # Create cache key based on file path and last write time
-                    $cacheKey = "$($file.FullName)_$($file.LastWriteTime.Ticks)"
-                    
-                    # Process the file
-                    $fileResult = @{
-                        path = $file.FullName
-                        patterns = @{
-                            'function-definition' = @()
-                            'class-definition' = @()
-                            'variable-assignment' = @()
+                    # Check cache first
+                    $cachedResult = Get-AnalysisData -FilePath $file.FullName -DataType 'analysis'
+                    if ($cachedResult -and $cachedResult.analysis) {
+                        Write-Verbose "Using cached analysis for $($file.FullName)"
+                        $script:results.files += $cachedResult
+                        $script:results.summary.processedFiles++
+
+                        # Update summary metrics from cached data
+                        foreach ($pattern in $cachedResult.analysis.patterns.Keys) {
+                            $patternType = ($pattern -split '\.')[0]
+                            if (-not $script:results.summary.patterns.byType.ContainsKey($patternType)) {
+                                $script:results.summary.patterns.byType[$patternType] = 0
+                            }
+                            $script:results.summary.patterns.byType[$patternType] += $cachedResult.analysis.patterns[$pattern].occurrences
+                            $script:results.summary.patterns.total += $cachedResult.analysis.patterns[$pattern].occurrences
                         }
+                        continue
+                    }
+
+                    # Perform analysis
+                    $fileAnalysis = @{
+                        patterns = Get-CodePatterns -FilePath $file.FullName -Content $content -Language $language
                         security = @{
-                            severity = "low"
-                            score = 100
                             issues = @()
+                            score = 100
                         }
                         performance = @{
                             complexity = 0
@@ -667,113 +780,40 @@ function Invoke-CodeAnalysis {
                             priority = "low"
                         }
                     }
-                    
-                    # Basic file analysis
-                    $content = Get-Content $file.FullName -Raw
-                    $lines = $content -split "`n"
-                    $fileResult.performance.metrics.lines = $lines.Count
-                    
-                    # Find functions
-                    $functions = [regex]::Matches($content, 'function\s+([a-zA-Z0-9_-]+)')
-                    $fileResult.performance.metrics.functions = $functions.Count
-                    foreach ($func in $functions) {
-                        $fileResult.patterns['function-definition'] += $func.Groups[1].Value
+
+                    $fileResult = @{
+                        path = $file.FullName
+                        analysis = $fileAnalysis
                     }
-                    
-                    # Find classes
-                    $classes = [regex]::Matches($content, 'class\s+([a-zA-Z0-9_-]+)')
-                    $fileResult.performance.metrics.classes = $classes.Count
-                    foreach ($class in $classes) {
-                        $fileResult.patterns['class-definition'] += $class.Groups[1].Value
+
+                    # Cache the results
+                    Add-AnalysisData -FilePath $file.FullName -Data @{
+                        Type = 'analysis'
+                        Content = $fileAnalysis
                     }
-                    
-                    # Check for security patterns
-                    foreach ($pattern in $script:Config.security.suspiciousPatterns) {
-                        $matches = [regex]::Matches($content, $pattern)
-                        if ($matches.Count -gt 0) {
-                            $fileResult.security.issues += @{
-                                pattern = $pattern
-                                count = $matches.Count
-                                severity = "high"
-                            }
-                            $fileResult.security.severity = "high"
-                            $fileResult.security.score -= 25
-                        }
-                    }
-                    
-                    # Calculate complexity (simple metric based on branches)
-                    $branches = [regex]::Matches($content, '(if|for|foreach|while|switch)')
-                    $fileResult.performance.complexity = $branches.Count
-                    
-                    # Generate refactoring suggestions
-                    if ($fileResult.performance.complexity -gt 30) {
-                        $fileResult.refactoring.suggestions += "High complexity ($($fileResult.performance.complexity)). Consider breaking down into smaller functions."
-                        $fileResult.refactoring.priority = "high"
-                    }
-                    elseif ($fileResult.performance.complexity -gt 20) {
-                        $fileResult.refactoring.suggestions += "Medium complexity ($($fileResult.performance.complexity)). Consider reviewing for potential simplification."
-                        $fileResult.refactoring.priority = "medium"
-                    }
-                    
-                    if ($fileResult.performance.metrics.lines -gt 300) {
-                        $fileResult.refactoring.suggestions += "File is too long ($($fileResult.performance.metrics.lines) lines). Consider splitting into multiple files."
-                        $fileResult.refactoring.priority = [Math]::Max([Array]::IndexOf(@('low', 'medium', 'high'), $fileResult.refactoring.priority), 1)
-                    }
-                    
-                    if ($fileResult.performance.metrics.functions -gt 10) {
-                        $fileResult.refactoring.suggestions += "Too many functions ($($fileResult.performance.metrics.functions)) in one file. Consider grouping related functions into separate files."
-                        $fileResult.refactoring.priority = [Math]::Max([Array]::IndexOf(@('low', 'medium', 'high'), $fileResult.refactoring.priority), 1)
-                    }
-                    
-                    # Check for long functions (improved performance)
-                    $functionMatches = [regex]::Matches($content, 'function\s+([a-zA-Z0-9_-]+)\s*{([^{}]|{[^{}]*})*}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
-                    foreach ($match in $functionMatches) {
-                        $functionName = $match.Groups[1].Value
-                        $functionBody = $match.Groups[0].Value
-                        $functionLines = ($functionBody -split "`n").Count
-                        
-                        if ($functionLines -gt 50) {
-                            $fileResult.refactoring.suggestions += "Function '$functionName' has $functionLines lines. Consider breaking into smaller functions."
-                            $fileResult.refactoring.priority = [Math]::Max([Array]::IndexOf(@('low', 'medium', 'high'), $fileResult.refactoring.priority), 1)
-                        }
-                        
-                        # Simple duplicate line check within functions
-                        $lines = $functionBody -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' }
-                        $lineGroups = $lines | Group-Object
-                        $duplicates = $lineGroups | Where-Object { $_.Count -gt 2 -and $_.Name.Length -gt 50 }
-                        
-                        if ($duplicates) {
-                            $fileResult.refactoring.suggestions += "Function '$functionName' has potential code duplication. Consider extracting repeated code into helper functions."
-                            $fileResult.refactoring.priority = [Math]::Max([Array]::IndexOf(@('low', 'medium', 'high'), $fileResult.refactoring.priority), 1)
-                        }
-                    }
-                    
-                    $processedFiles[$file.FullName] = $fileResult
-                    $results.summary.analyzedFiles++
-                    
+
+                    $script:results.files += $fileResult
+                    $script:results.summary.processedFiles++
+
                     # Update summary metrics
-                    switch ($fileResult.security.severity) {
-                        'high' { $results.summary.security.highSeverity++ }
-                        'medium' { $results.summary.security.mediumSeverity++ }
-                        'low' { $results.summary.security.lowSeverity++ }
-                    }
-                    
-                    if ($fileResult.performance.complexity -gt 10) {
-                        $results.summary.performance.hotspots += @{
-                            file = $file.FullName
-                            complexity = $fileResult.performance.complexity
+                    foreach ($pattern in $fileAnalysis.patterns.Keys) {
+                        $patternType = ($pattern -split '\.')[0]
+                        if (-not $script:results.summary.patterns.byType.ContainsKey($patternType)) {
+                            $script:results.summary.patterns.byType[$patternType] = 0
                         }
+                        $script:results.summary.patterns.byType[$patternType] += $fileAnalysis.patterns[$pattern].occurrences
+                        $script:results.summary.patterns.total += $fileAnalysis.patterns[$pattern].occurrences
                     }
-                    
-                    # Add to summary refactoring suggestions if high priority
-                    if ($fileResult.refactoring.priority -eq 'high') {
-                        $results.summary.refactoring.suggestions += @{
+
+                    $script:results.summary.security.score = [Math]::Min(
+                        $script:results.summary.security.score,
+                        $fileAnalysis.security.score
+                    )
+
+                    if ($fileAnalysis.performance.complexity -gt 0) {
+                        $script:results.summary.performance.hotspots += @{
                             file = $file.FullName
-                            suggestions = $fileResult.refactoring.suggestions
-                        }
-                        $results.summary.refactoring.priorities += @{
-                            file = $file.FullName
-                            priority = $fileResult.refactoring.priority
+                            complexity = $fileAnalysis.performance.complexity
                         }
                     }
                 }
@@ -782,19 +822,17 @@ function Invoke-CodeAnalysis {
                 }
             }
             
-            $results.files = $processedFiles
-            
             # Calculate final metrics
-            if ($results.summary.analyzedFiles -gt 0) {
-                $complexityValues = $processedFiles.Values | ForEach-Object { $_.performance.complexity }
-                $results.summary.performance.averageComplexity = ($complexityValues | Measure-Object -Average).Average
+            if ($script:results.summary.processedFiles -gt 0) {
+                $complexityValues = $script:results.files | ForEach-Object { $_.analysis.performance.complexity }
+                $script:results.summary.performance.averageComplexity = ($complexityValues | Measure-Object -Average).Average
                 
-                $securityValues = $processedFiles.Values | ForEach-Object { $_.security.score }
-                $results.summary.security.averageScore = ($securityValues | Measure-Object -Average).Average
+                $securityValues = $script:results.files | ForEach-Object { $_.analysis.security.score }
+                $script:results.summary.security.averageScore = ($securityValues | Measure-Object -Average).Average
             }
             
             # Sort refactoring priorities
-            $results.summary.refactoring.priorities = $results.summary.refactoring.priorities | 
+            $script:results.summary.refactoring.priorities = $script:results.summary.refactoring.priorities | 
                 Sort-Object { switch ($_.priority) { 'high' {3} 'medium' {2} 'low' {1} default {0} } } -Descending
             
             # Generate unique filename with descriptive name
@@ -815,7 +853,7 @@ function Invoke-CodeAnalysis {
             $outputFile = Join-Path $OutputPath "$AnalysisName-$targetPath-$timestamp.json"
             
             # Save results to file
-            $results | ConvertTo-Json -Depth 10 | Out-File $outputFile -Encoding UTF8
+            $script:results | ConvertTo-Json -Depth 10 | Out-File $outputFile -Encoding UTF8
             Write-Verbose "Analysis results saved to: $outputFile"
             
             # Also save a copy with a static name for easy access
@@ -828,7 +866,7 @@ function Invoke-CodeAnalysis {
                 Assert-DatabaseInitialized
                 
                 # Get refactoring suggestions with AST and ML analysis
-                $refactoringSuggestions = Get-DetailedRefactoringSuggestions -AnalysisResults $results
+                $refactoringSuggestions = Get-DetailedRefactoringSuggestions -AnalysisResults $script:results
                 
                 # Create output directory if it doesn't exist
                 $null = New-Item -ItemType Directory -Path $OutputPath -Force
@@ -841,16 +879,16 @@ function Invoke-CodeAnalysis {
                 Write-Verbose "Visualization available at: $($refactoringSuggestions.VisualizationPath)"
                 
                 # Store analysis in database for historical tracking
-                $analysisId = Add-AnalysisResult -Analysis @{
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             $analysisId = Add-AnalysisResult -Analysis @{
                     Date = (Get-Date)
                     Path = $Path
-                    Results = $results
+                    Results = $script:results
                     Suggestions = $refactoringSuggestions
                 }
                 Write-Verbose "Analysis stored in database with ID: $analysisId"
             }
             
-            return $results
+            return $script:results
         }
         catch {
             Write-Error "Analysis failed: $_"

@@ -1,7 +1,58 @@
 using namespace System.Management.Automation.Language
 
 # Import required modules
+. $PSScriptRoot/Logging.ps1
+. $PSScriptRoot/Configuration.ps1
+
 $script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
+
+function New-AstResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+        [Parameter(Mandatory)]
+        [string]$Language,
+        [Parameter()]
+        [string]$Operation = "parse"
+    )
+    
+    return @{
+        metadata = @{
+            path = $FilePath
+            language = $Language
+            operation = $Operation
+            timestamp = Get-Date -Format "o"
+            version = "1.0"
+        }
+        ast = @{
+            type = "unknown"
+            nodes = 0
+            depth = 0
+            size = 0
+            language = $Language
+        }
+        metrics = @{
+            duration_ms = 0
+            memory_mb = 0
+            nodes_visited = 0
+            max_depth = 0
+        }
+        analysis = @{
+            complexity = 0
+            dependencies = @()
+            imports = @()
+            functions = @()
+            variables = @()
+        }
+        status = @{
+            success = $true
+            parsed = $false
+            warnings = @()
+            errors = @()
+        }
+    }
+}
 
 function Get-AstParser {
     [CmdletBinding()]
@@ -9,67 +60,191 @@ function Get-AstParser {
         [Parameter(Mandatory)]
         [string]$Language,
         [Parameter(Mandatory)]
-        [string]$Content
+        [string]$Content,
+        [Parameter(Mandatory)]
+        [string]$FilePath
     )
-
+    
     try {
+        Write-StructuredLog -Message "Parsing AST" -Level INFO
+        $startTime = Get-Date
+        
+        $result = New-AstResult -FilePath $FilePath -Language $Language
+        
         switch ($Language.ToLower()) {
             'powershell' {
-                $tokens = @()
-                $parseErrors = @()
+                $tokens = $null
+                $parseErrors = $null
                 $ast = [Parser]::ParseInput($Content, [ref]$tokens, [ref]$parseErrors)
-                if ($parseErrors.Count -gt 0) {
-                    Write-Warning "Parse errors found in PowerShell code: $($parseErrors | ForEach-Object { $_.Message })"
-                }
-                return @{
-                    success = $true
-                    ast = $ast
-                    tokens = $tokens
-                    errors = $parseErrors
-                }
-            }
-            'typescript' {
-                # Return a simplified AST for TypeScript
-                return @{
-                    success = $true
-                    ast = @{
-                        type = 'typescript'
-                        content = $Content
+                
+                if ($parseErrors) {
+                    $result.status.warnings += $parseErrors | ForEach-Object {
+                        "Line $($_.Extent.StartLineNumber): $($_.Message)"
                     }
-                    errors = @()
                 }
-            }
-            'javascript' {
-                # Return a simplified AST for JavaScript
-                return @{
-                    success = $true
-                    ast = @{
-                        type = 'javascript'
-                        content = $Content
+                
+                if ($ast) {
+                    $result.status.parsed = $true
+                    $result.ast = @{
+                        type = "PowerShell"
+                        ast = $ast
+                        tokens = $tokens
+                        nodes = ($ast.FindAll({$true}, $true)).Count
+                        depth = Get-AstDepth -Ast $ast
+                        size = [System.Text.Encoding]::UTF8.GetByteCount($Content)
+                        language = $Language
                     }
-                    errors = @()
+                    
+                    # Analyze AST structure
+                    $analysis = Get-AstAnalysis -Ast $ast
+                    $result.analysis = $analysis
+                    $result.metrics.nodes_visited = $analysis.metrics.nodes_visited
+                    $result.metrics.max_depth = $analysis.metrics.max_depth
+                    
+                    Write-StructuredLog -Message "Successfully parsed PowerShell AST" -Level INFO -Properties @{
+                        nodes = $result.ast.nodes
+                        depth = $result.ast.depth
+                        size = $result.ast.size
+                    }
                 }
             }
             default {
-                # Return a basic structure for unsupported languages
-                return @{
-                    success = $true
-                    ast = @{
-                        type = $Language
-                        content = $Content
-                    }
-                    errors = @()
+                $result.status.warnings += "Language $Language not supported for AST parsing"
+                Write-StructuredLog -Message "Unsupported language for AST parsing" -Level WARNING -Properties @{
+                    language = $Language
                 }
             }
         }
+        
+        $result.metrics.duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        return $result
     }
     catch {
-        $errorMessage = $_.Exception.Message
-        Write-Error "Failed to parse ${Language} code: $errorMessage"
+        Write-StructuredLog -Message "Failed to parse AST: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
+    }
+}
+
+function Get-AstDepth {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.Language.Ast]$Ast,
+        [Parameter()]
+        [int]$CurrentDepth = 0
+    )
+    
+    try {
+        $maxDepth = $CurrentDepth
+        
+        foreach ($child in $Ast.FindAll({$true}, $false)) {
+            $childDepth = Get-AstDepth -Ast $child -CurrentDepth ($CurrentDepth + 1)
+            if ($childDepth -gt $maxDepth) {
+                $maxDepth = $childDepth
+            }
+        }
+        
+        return $maxDepth
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to calculate AST depth: $_" -Level ERROR
+        return $CurrentDepth
+    }
+}
+
+function Get-AstAnalysis {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.Language.Ast]$Ast
+    )
+    
+    try {
+        $analysis = @{
+            complexity = 0
+            dependencies = @()
+            imports = @()
+            functions = @()
+            variables = @()
+            metrics = @{
+                nodes_visited = 0
+                max_depth = 0
+            }
+        }
+        
+        # Track visited nodes
+        $visitedNodes = @{}
+        
+        # Visit each node in the AST
+        $Ast.Visit([ScriptBlockAst]{
+            param($node)
+            
+            $analysis.metrics.nodes_visited++
+            
+            # Calculate cyclomatic complexity
+            if ($node -is [IfStatementAst] -or 
+                $node -is [SwitchStatementAst] -or 
+                $node -is [ForStatementAst] -or 
+                $node -is [WhileStatementAst] -or 
+                $node -is [DoWhileStatementAst] -or 
+                $node -is [ForEachStatementAst] -or 
+                $node -is [TrapStatementAst]) {
+                $analysis.complexity++
+            }
+            
+            # Track imports and dependencies
+            if ($node -is [CommandAst]) {
+                $commandName = $node.GetCommandName()
+                if ($commandName -eq 'Import-Module' -or $commandName -eq 'using') {
+                    $analysis.imports += @{
+                        type = $commandName
+                        name = $node.CommandElements[1].Value
+                        line = $node.Extent.StartLineNumber
+                    }
+                }
+            }
+            
+            # Track functions
+            if ($node -is [FunctionDefinitionAst]) {
+                $analysis.functions += @{
+                    name = $node.Name
+                    parameters = $node.Parameters.Count
+                    body_length = $node.Body.Extent.Text.Length
+                    start_line = $node.Extent.StartLineNumber
+                    end_line = $node.Extent.EndLineNumber
+                }
+            }
+            
+            # Track variables
+            if ($node -is [VariableExpressionAst]) {
+                if (-not $visitedNodes.ContainsKey($node.VariablePath.UserPath)) {
+                    $visitedNodes[$node.VariablePath.UserPath] = $true
+                    $analysis.variables += @{
+                        name = $node.VariablePath.UserPath
+                        first_use = $node.Extent.StartLineNumber
+                    }
+                }
+            }
+            
+            return $true
+        })
+        
+        return $analysis
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to analyze AST: $_" -Level ERROR
         return @{
-            success = $false
-            ast = $null
-            errors = @($errorMessage)
+            complexity = 0
+            dependencies = @()
+            imports = @()
+            functions = @()
+            variables = @()
+            metrics = @{
+                nodes_visited = 0
+                max_depth = 0
+            }
         }
     }
 }
@@ -79,455 +254,190 @@ function Get-AstMetrics {
     param(
         [Parameter(Mandatory)]
         [object]$Ast,
-        [Parameter(Mandatory)]
-        [string]$Language
+        [Parameter()]
+        [object]$Result
     )
-
+    
     try {
-        $metrics = @{
-            FunctionCount = 0
-            CommandCount = 0
-            VariableCount = 0
-            MaxDepth = 0
-            Complexity = 0
-            LinesOfCode = 0
-            Comments = 0
+        Write-StructuredLog -Message "Calculating AST metrics" -Level INFO
+        
+        if (-not $Result) {
+            $Result = New-AstResult -FilePath $Ast.Extent.File -Language "PowerShell"
         }
-
-        switch ($Language.ToLower()) {
-            'powershell' {
-                $visitor = {
-                    param($node)
-                    
-                    switch ($node.GetType().Name) {
-                        'FunctionDefinitionAst' { 
-                            $metrics.FunctionCount++
-                            $metrics.Complexity += Get-FunctionComplexity $node
-                        }
-                        'CommandAst' { $metrics.CommandCount++ }
-                        'VariableExpressionAst' { $metrics.VariableCount++ }
-                        'CommentAst' { $metrics.Comments++ }
-                    }
-
-                    # Calculate nesting depth
-                    $depth = Get-AstDepth $node
-                    if ($depth -gt $metrics.MaxDepth) {
-                        $metrics.MaxDepth = $depth
-                    }
-
-                    return $true
-                }
-
-                $Ast.Visit($visitor)
-                $metrics.LinesOfCode = ($Ast.Extent.Text -split "`n").Count
+        
+        # Calculate cyclomatic complexity
+        $functionVisitor = {
+            param($node)
+            
+            $complexity = 1
+            
+            if ($node -is [System.Management.Automation.Language.IfStatementAst] -or
+                $node -is [System.Management.Automation.Language.SwitchStatementAst] -or
+                $node -is [System.Management.Automation.Language.ForStatementAst] -or
+                $node -is [System.Management.Automation.Language.WhileStatementAst] -or
+                $node -is [System.Management.Automation.Language.TryStatementAst]) {
+                $complexity++
             }
-            'typescript' {
-                # Parse TypeScript AST using node
-                $tsMetrics = Get-TypeScriptMetrics $Ast.content
-                $metrics = @{
-                    FunctionCount = $tsMetrics.functions
-                    CommandCount = $tsMetrics.commands
-                    VariableCount = $tsMetrics.variables
-                    MaxDepth = $tsMetrics.maxDepth
-                    Complexity = $tsMetrics.complexity
-                    LinesOfCode = $tsMetrics.loc
-                    Comments = $tsMetrics.comments
-                }
-            }
-            'javascript' {
-                # Similar to TypeScript but with JS-specific parsing
-                $jsMetrics = Get-JavaScriptMetrics $Ast.content
-                $metrics = @{
-                    FunctionCount = $jsMetrics.functions
-                    CommandCount = $jsMetrics.commands
-                    VariableCount = $jsMetrics.variables
-                    MaxDepth = $jsMetrics.maxDepth
-                    Complexity = $jsMetrics.complexity
-                    LinesOfCode = $jsMetrics.loc
-                    Comments = $jsMetrics.comments
-                }
-            }
+            
+            $Result.ast.metrics.complexity += $complexity
+            return $true
         }
-
-        return $metrics
+        
+        $null = $Ast.Visit($functionVisitor)
+        
+        # Count functions and classes
+        $symbolVisitor = {
+            param($node)
+            
+            if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                $Result.ast.metrics.functions++
+            }
+            elseif ($node -is [System.Management.Automation.Language.TypeDefinitionAst]) {
+                $Result.ast.metrics.classes++
+            }
+            
+            return $true
+        }
+        
+        $null = $Ast.Visit($symbolVisitor)
+        
+        # Count lines
+        $Result.ast.metrics.lines = ($Ast.Extent.Text -split "`n").Count
+        
+        return $Result
     }
     catch {
-        Write-Error "Failed to calculate AST metrics: $_"
-        return $null
+        Write-StructuredLog -Message "Failed to calculate AST metrics: $_" -Level ERROR
+        $Result.status.success = $false
+        $Result.status.errors += $_.Exception.Message
+        return $Result
     }
-}
-
-function Get-FunctionComplexity {
-    param([System.Management.Automation.Language.FunctionDefinitionAst]$Function)
-    
-    $complexity = 1 # Base complexity
-    
-    $visitor = {
-        param($node)
-        
-        switch ($node.GetType().Name) {
-            # Control flow increases complexity
-            'IfStatementAst' { $script:complexity++ }
-            'SwitchStatementAst' { $script:complexity++ }
-            'ForStatementAst' { $script:complexity++ }
-            'WhileStatementAst' { $script:complexity++ }
-            'TryStatementAst' { $script:complexity++ }
-            'CatchClauseAst' { $script:complexity++ }
-        }
-        
-        return $true
-    }
-    
-    $script:complexity = $complexity
-    $Function.Visit($visitor)
-    return $script:complexity
-}
-
-function Get-AstDepth {
-    param($Node)
-    
-    $depth = 0
-    $current = $Node
-    
-    while ($current.Parent -ne $null) {
-        $depth++
-        $current = $current.Parent
-    }
-    
-    return $depth
 }
 
 function Get-PowerShellPatterns {
-    param($Ast)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.Language.Ast]$Ast,
+        [Parameter()]
+        [object]$Result
+    )
     
-    $patterns = @()
-    
-    $visitor = {
-        param($node)
+    try {
+        Write-StructuredLog -Message "Analyzing PowerShell patterns" -Level INFO
         
-        switch ($node.GetType().Name) {
-            'CommandAst' {
-                # Check for common patterns in command usage
-                $cmdName = $node.CommandElements[0].Value
-                switch -Regex ($cmdName) {
-                    '^Invoke-WebRequest|^Invoke-RestMethod' {
-                        $patterns += @{
-                            Type = 'WebRequest'
-                            Line = $node.Extent.StartLineNumber
-                            Command = $cmdName
-                            Risk = 'Medium'
-                            Suggestion = 'Consider error handling and timeout settings'
-                        }
-                    }
-                    '^Remove-|^Delete' {
-                        $patterns += @{
-                            Type = 'Deletion'
-                            Line = $node.Extent.StartLineNumber
-                            Command = $cmdName
-                            Risk = 'High'
-                            Suggestion = 'Ensure proper backup and confirmation'
-                        }
+        if (-not $Result) {
+            $Result = New-AstResult -FilePath $Ast.Extent.File -Language "PowerShell"
+        }
+        
+        # Pattern detection for various PowerShell constructs
+        $patternVisitor = {
+            param($node)
+            
+            if ($node -is [System.Management.Automation.Language.CommandAst]) {
+                $command = $node.GetCommandName()
+                if ($command) {
+                    $Result.analysis.patterns.matches += @{
+                        type = "command"
+                        name = $command
+                        line = $node.Extent.StartLineNumber
+                        confidence = 1.0
                     }
                 }
             }
-            'VariableExpressionAst' {
-                # Check for sensitive variable names
-                if ($node.VariablePath.UserPath -match '(?i)password|secret|key|token') {
-                    $patterns += @{
-                        Type = 'SensitiveData'
-                        Line = $node.Extent.StartLineNumber
-                        Variable = $node.VariablePath.UserPath
-                        Risk = 'High'
-                        Suggestion = 'Use SecureString or credential management'
-                    }
+            elseif ($node -is [System.Management.Automation.Language.UsingStatementAst]) {
+                $Result.analysis.patterns.matches += @{
+                    type = "using"
+                    name = $node.Name.Value
+                    line = $node.Extent.StartLineNumber
+                    confidence = 1.0
                 }
             }
+            
+            return $true
         }
         
-        return $true
+        $null = $Ast.Visit($patternVisitor)
+        
+        # Calculate pattern statistics
+        $Result.ast.metrics.patterns = $Result.analysis.patterns.matches.Count
+        $Result.analysis.patterns.categories = $Result.analysis.patterns.matches | 
+            Group-Object -Property type | 
+            Select-Object -Property @{N='category';E={$_.Name}}, @{N='count';E={$_.Count}}
+        
+        # Calculate confidence score
+        if ($Result.analysis.patterns.matches.Count -gt 0) {
+            $Result.analysis.patterns.confidence = ($Result.analysis.patterns.matches | 
+                Measure-Object -Property confidence -Average).Average
+        }
+        
+        return $Result
     }
-    
-    $Ast.Visit($visitor)
-    return $patterns
-}
-
-function Get-TypeScriptPatterns {
-    param($Content)
-
-    $patterns = @()
-    
-    # Match potentially dangerous patterns
-    $dangerousPatterns = @{
-        'eval\(' = @{
-            Type = 'DangerousFunction'
-            Risk = 'High'
-            Suggestion = 'Avoid using eval as it can execute arbitrary code'
-        }
-        'innerHTML\s*=' = @{
-            Type = 'XSSVulnerability'
-            Risk = 'High'
-            Suggestion = 'Use textContent or sanitize HTML content'
-        }
-        'localStorage\.' = @{
-            Type = 'ClientStorage'
-            Risk = 'Medium'
-            Suggestion = 'Ensure sensitive data is not stored in localStorage'
-        }
-        'new\s+Function\(' = @{
-            Type = 'DangerousFunction'
-            Risk = 'High'
-            Suggestion = 'Avoid dynamic function creation'
-        }
-        'document\.write\(' = @{
-            Type = 'DOMManipulation'
-            Risk = 'Medium'
-            Suggestion = 'Use modern DOM manipulation methods'
-        }
+    catch {
+        Write-StructuredLog -Message "Failed to analyze PowerShell patterns: $_" -Level ERROR
+        $Result.status.success = $false
+        $Result.status.errors += $_.Exception.Message
+        return $Result
     }
-
-    foreach ($pattern in $dangerousPatterns.GetEnumerator()) {
-        $matches = [regex]::Matches($Content, $pattern.Key)
-        foreach ($match in $matches) {
-            $lineNumber = ($Content.Substring(0, $match.Index) -split "`n").Count
-            $patterns += @{
-                Type = $pattern.Value.Type
-                Line = $lineNumber
-                Pattern = $pattern.Key
-                Risk = $pattern.Value.Risk
-                Suggestion = $pattern.Value.Suggestion
-            }
-        }
-    }
-
-    # Check for proper error handling
-    if ($Content -notmatch 'try\s*{.*}\s*catch') {
-        $patterns += @{
-            Type = 'ErrorHandling'
-            Line = 1
-            Pattern = 'Missing try-catch'
-            Risk = 'Medium'
-            Suggestion = 'Implement proper error handling with try-catch blocks'
-        }
-    }
-
-    # Check for proper type definitions
-    if ($Content -match ':\s*any\b') {
-        $lineNumber = ($Content.Substring(0, $matches[0].Index) -split "`n").Count
-        $patterns += @{
-            Type = 'TypeSafety'
-            Line = $lineNumber
-            Pattern = 'any type'
-            Risk = 'Low'
-            Suggestion = 'Specify explicit types instead of using "any"'
-        }
-    }
-
-    return $patterns
-}
-
-function Get-JavaScriptPatterns {
-    param($Content)
-
-    $patterns = @()
-    
-    # Match potentially dangerous patterns
-    $dangerousPatterns = @{
-        'eval\(' = @{
-            Type = 'DangerousFunction'
-            Risk = 'High'
-            Suggestion = 'Avoid using eval as it can execute arbitrary code'
-        }
-        'innerHTML\s*=' = @{
-            Type = 'XSSVulnerability'
-            Risk = 'High'
-            Suggestion = 'Use textContent or sanitize HTML content'
-        }
-        'setTimeout\(\s*["'']' = @{
-            Type = 'DangerousFunction'
-            Risk = 'Medium'
-            Suggestion = 'Avoid passing strings to setTimeout/setInterval'
-        }
-        'with\s*\(' = @{
-            Type = 'BadPractice'
-            Risk = 'Medium'
-            Suggestion = 'Avoid using the "with" statement'
-        }
-        '\==(?!=)' = @{
-            Type = 'TypeCoercion'
-            Risk = 'Low'
-            Suggestion = 'Use === for strict equality comparison'
-        }
-    }
-
-    foreach ($pattern in $dangerousPatterns.GetEnumerator()) {
-        $matches = [regex]::Matches($Content, $pattern.Key)
-        foreach ($match in $matches) {
-            $lineNumber = ($Content.Substring(0, $match.Index) -split "`n").Count
-            $patterns += @{
-                Type = $pattern.Value.Type
-                Line = $lineNumber
-                Pattern = $pattern.Key
-                Risk = $pattern.Value.Risk
-                Suggestion = $pattern.Value.Suggestion
-            }
-        }
-    }
-
-    # Check for proper error handling
-    if ($Content -notmatch 'try\s*{.*}\s*catch') {
-        $patterns += @{
-            Type = 'ErrorHandling'
-            Line = 1
-            Pattern = 'Missing try-catch'
-            Risk = 'Medium'
-            Suggestion = 'Implement proper error handling with try-catch blocks'
-        }
-    }
-
-    # Check for proper async/await usage
-    if ($Content -match 'async\s+function' -and $Content -notmatch 'await\s+') {
-        $lineNumber = ($Content.Substring(0, $matches[0].Index) -split "`n").Count
-        $patterns += @{
-            Type = 'AsyncPattern'
-            Line = $lineNumber
-            Pattern = 'Missing await'
-            Risk = 'Medium'
-            Suggestion = 'Async function should use await operator'
-        }
-    }
-
-    return $patterns
 }
 
 function Get-FileSymbols {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [object]$Ast,
-        [Parameter(Mandatory)]
-        [string]$Language
+        [Parameter()]
+        [object]$Result
     )
-
-    $symbols = @()
-
-    switch ($Language.ToLower()) {
-        'powershell' {
-            $visitor = {
-                param($node)
-                
-                switch ($node.GetType().Name) {
-                    'FunctionDefinitionAst' {
-                        $symbols += @{
-                            name = $node.Name
-                            type = 'Function'
-                            location = @{
-                                startLine = $node.Extent.StartLineNumber
-                                endLine = $node.Extent.EndLineNumber
-                            }
-                            scope = if ($node.IsFilter) { 'Filter' } else { 'Function' }
-                            visibility = if ($node.Name -cmatch '^[A-Z]') { 'Public' } else { 'Private' }
-                        }
-                    }
-                    'TypeDefinitionAst' {
-                        $symbols += @{
-                            name = $node.Name
-                            type = 'Class'
-                            location = @{
-                                startLine = $node.Extent.StartLineNumber
-                                endLine = $node.Extent.EndLineNumber
-                            }
-                            scope = 'Global'
-                            visibility = 'Public'
-                        }
-                    }
-                    'VariableExpressionAst' {
-                        # Only include script-level variables
-                        if ($node.VariablePath.IsScript -or $node.VariablePath.IsGlobal) {
-                            $symbols += @{
-                                name = $node.VariablePath.UserPath
-                                type = 'Variable'
-                                location = @{
-                                    startLine = $node.Extent.StartLineNumber
-                                    endLine = $node.Extent.EndLineNumber
-                                }
-                                scope = if ($node.VariablePath.IsGlobal) { 'Global' } else { 'Script' }
-                                visibility = 'Private'
-                            }
-                        }
-                    }
+    
+    try {
+        Write-StructuredLog -Message "Extracting file symbols" -Level INFO
+        
+        if (-not $Result) {
+            $Result = New-AstResult -FilePath $Ast.Extent.File -Language "PowerShell"
+        }
+        
+        $symbolVisitor = {
+            param($node)
+            
+            if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                $Result.ast.symbols += @{
+                    type = "function"
+                    name = $node.Name
+                    line = $node.Extent.StartLineNumber
+                    scope = if ($node.IsFilter) { "filter" } else { "function" }
                 }
-                
-                return $true
+            }
+            elseif ($node -is [System.Management.Automation.Language.TypeDefinitionAst]) {
+                $Result.ast.symbols += @{
+                    type = "class"
+                    name = $node.Name
+                    line = $node.Extent.StartLineNumber
+                    scope = "class"
+                }
+            }
+            elseif ($node -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                $Result.ast.symbols += @{
+                    type = "variable"
+                    name = $node.VariablePath.UserPath
+                    line = $node.Extent.StartLineNumber
+                    scope = "variable"
+                }
             }
             
-            $Ast.Visit($visitor)
+            return $true
         }
-        'typescript' {
-            # Extract TypeScript symbols using regex patterns
-            $functionMatches = [regex]::Matches($Ast.content, '(?m)^(?:export\s+)?(?:async\s+)?function\s+(\w+)')
-            foreach ($match in $functionMatches) {
-                $lineNumber = ($Ast.content.Substring(0, $match.Index) -split "`n").Count
-                $symbols += @{
-                    name = $match.Groups[1].Value
-                    type = 'Function'
-                    location = @{
-                        startLine = $lineNumber
-                        endLine = $lineNumber
-                    }
-                    scope = 'Module'
-                    visibility = if ($match.Value -match 'export') { 'Public' } else { 'Private' }
-                }
-            }
-
-            $classMatches = [regex]::Matches($Ast.content, '(?m)^(?:export\s+)?class\s+(\w+)')
-            foreach ($match in $classMatches) {
-                $lineNumber = ($Ast.content.Substring(0, $match.Index) -split "`n").Count
-                $symbols += @{
-                    name = $match.Groups[1].Value
-                    type = 'Class'
-                    location = @{
-                        startLine = $lineNumber
-                        endLine = $lineNumber
-                    }
-                    scope = 'Module'
-                    visibility = if ($match.Value -match 'export') { 'Public' } else { 'Private' }
-                }
-            }
-        }
-        'javascript' {
-            # Extract JavaScript symbols using regex patterns
-            $functionMatches = [regex]::Matches($Ast.content, '(?m)^(?:export\s+)?(?:async\s+)?function\s+(\w+)')
-            foreach ($match in $functionMatches) {
-                $lineNumber = ($Ast.content.Substring(0, $match.Index) -split "`n").Count
-                $symbols += @{
-                    name = $match.Groups[1].Value
-                    type = 'Function'
-                    location = @{
-                        startLine = $lineNumber
-                        endLine = $lineNumber
-                    }
-                    scope = 'Module'
-                    visibility = if ($match.Value -match 'export') { 'Public' } else { 'Private' }
-                }
-            }
-
-            $classMatches = [regex]::Matches($Ast.content, '(?m)^(?:export\s+)?class\s+(\w+)')
-            foreach ($match in $classMatches) {
-                $lineNumber = ($Ast.content.Substring(0, $match.Index) -split "`n").Count
-                $symbols += @{
-                    name = $match.Groups[1].Value
-                    type = 'Class'
-                    location = @{
-                        startLine = $lineNumber
-                        endLine = $lineNumber
-                    }
-                    scope = 'Module'
-                    visibility = if ($match.Value -match 'export') { 'Public' } else { 'Private' }
-                }
-            }
-        }
+        
+        $null = $Ast.Visit($symbolVisitor)
+        
+        return $Result
     }
-
-    return $symbols
+    catch {
+        Write-StructuredLog -Message "Failed to extract file symbols: $_" -Level ERROR
+        $Result.status.success = $false
+        $Result.status.errors += $_.Exception.Message
+        return $Result
+    }
 }
 
 function Get-AstAnalysis {
@@ -535,69 +445,54 @@ function Get-AstAnalysis {
     param(
         [Parameter(Mandatory)]
         [string]$FilePath,
-        
-        [Parameter(Mandatory)]
-        [string]$Content,
-        
-        [Parameter(Mandatory)]
-        [string]$Language
+        [Parameter()]
+        [string]$Language = "PowerShell",
+        [Parameter()]
+        [string]$Content
     )
     
     try {
-        $analysis = @{
-            FilePath = $FilePath
-            Language = $Language
-            Patterns = @()
-            Metrics = $null
-            SecurityIssues = @()
-            CodeSmells = @()
-            ParseErrors = @()
-            Symbols = @()
+        Write-StructuredLog -Message "Starting AST analysis for $FilePath" -Level INFO
+        
+        if (-not $Content) {
+            $Content = Get-Content -Path $FilePath -Raw
         }
-
-        # Get AST
-        $astResult = Get-AstParser -Language $Language -Content $Content
-        if (-not $astResult.success) {
-            $analysis.ParseErrors += $astResult.errors
-            return $analysis
+        
+        # Initialize result
+        $result = New-AstResult -FilePath $FilePath -Language $Language
+        
+        # Parse AST
+        $parseResult = Get-AstParser -Language $Language -Content $Content -FilePath $FilePath
+        if (-not $parseResult.success) {
+            return $parseResult.result
         }
-
+        
+        $ast = $parseResult.ast
+        $result = $parseResult.result
+        
         # Get metrics
-        $analysis.Metrics = Get-AstMetrics -Ast $astResult.ast -Language $Language
-
-        # Add language-specific analysis
-        switch ($Language.ToLower()) {
-            'powershell' {
-                $analysis.Patterns += Get-PowerShellPatterns -Ast $astResult.ast
-            }
-            'typescript' {
-                $analysis.Patterns += Get-TypeScriptPatterns -Content $Content
-            }
-            'javascript' {
-                $analysis.Patterns += Get-JavaScriptPatterns -Content $Content
-            }
-        }
-
+        $result = Get-AstMetrics -Ast $ast -Result $result
+        
+        # Get patterns
+        $result = Get-PowerShellPatterns -Ast $ast -Result $result
+        
         # Get symbols
-        $analysis.Symbols = Get-FileSymbols -Ast $astResult.ast -Language $Language
-
-        return $analysis
+        $result = Get-FileSymbols -Ast $ast -Result $result
+        
+        Write-StructuredLog -Message "Completed AST analysis" -Level INFO -Properties @{
+            metrics = $result.ast.metrics
+            patterns = $result.ast.metrics.patterns
+            symbols = $result.ast.symbols.Count
+        }
+        
+        return $result
     }
     catch {
-        $errorMessage = $_.Exception.Message
-        Write-Error "Failed to analyze ${FilePath}: $errorMessage"
-        return @{
-            FilePath = $FilePath
-            Language = $Language
-            Error = $errorMessage
-            Patterns = @()
-            Metrics = $null
-            SecurityIssues = @()
-            CodeSmells = @()
-            ParseErrors = @($errorMessage)
-            Symbols = @()
-        }
+        Write-StructuredLog -Message "Failed to complete AST analysis: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
-Export-ModuleMember -Function Get-AstParser, Get-AstMetrics, Get-AstAnalysis
+Export-ModuleMember -Function Get-AstAnalysis

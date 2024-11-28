@@ -2,12 +2,59 @@
 using namespace System.Collections.Concurrent
 using namespace System.Management.Automation.Language
 
+# Import required modules
+. $PSScriptRoot/Logging.ps1
+. $PSScriptRoot/Configuration.ps1
+
 # Configuration
 $script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
 
-# Thread-safe data storage
-$script:DataStore = [ConcurrentDictionary[string, object]]::new()
-$script:AnalysisResults = [ConcurrentDictionary[string, object]]::new()
+# Initialize thread-safe storage
+$script:DataStore = [ConcurrentDictionary[string,object]]::new()
+$script:AnalysisResults = [ConcurrentDictionary[string,object]]::new()
+
+function New-DataResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Operation,
+        [Parameter(Mandatory)]
+        [string]$DataType,
+        [Parameter()]
+        [string]$Identifier = ""
+    )
+    
+    return @{
+        metadata = @{
+            operation = $Operation
+            type = $DataType
+            identifier = $Identifier
+            timestamp = Get-Date -Format "o"
+            version = "1.0"
+        }
+        data = @{
+            type = $DataType
+            size = 0
+            format = "unknown"
+            last_modified = Get-Date -Format "o"
+        }
+        storage = @{
+            location = "memory"
+            persistence = "temporary"
+            compression = "none"
+        }
+        metrics = @{
+            duration_ms = 0
+            memory_mb = 0
+            items_processed = 0
+        }
+        status = @{
+            success = $true
+            warnings = @()
+            errors = @()
+        }
+    }
+}
 
 function Initialize-DataStore {
     [CmdletBinding()]
@@ -16,23 +63,35 @@ function Initialize-DataStore {
     )
     
     try {
-        # Initialize the data stores if they don't exist or if Force is specified
+        Write-StructuredLog -Message "Initializing data store" -Level INFO
+        $result = New-DataResult -Operation "initialize" -DataType "store"
+        
         if ($Force -or -not $script:DataStore) {
             $script:DataStore = [ConcurrentDictionary[string, object]]::new()
+            $result.storage.location = "memory"
+            $result.storage.format = "concurrent_dictionary"
         }
+        
         if ($Force -or -not $script:AnalysisResults) {
             $script:AnalysisResults = [ConcurrentDictionary[string, object]]::new()
         }
 
         # Initialize search database
-        Initialize-SearchDatabase -Force:$Force
-
-        Write-Verbose "Successfully initialized data store"
-        return $true
+        $dbResult = Initialize-SearchDatabase -Force:$Force
+        if (-not $dbResult.status.success) {
+            $result.status.success = $false
+            $result.status.errors += $dbResult.status.errors
+            return $result
+        }
+        
+        Write-StructuredLog -Message "Successfully initialized data store" -Level INFO
+        return $result
     }
     catch {
-        Write-Error "Failed to initialize data store: $_"
-        return $false
+        Write-StructuredLog -Message "Failed to initialize data store: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
@@ -43,16 +102,19 @@ function Initialize-SearchDatabase {
     )
     
     try {
-        # Check if database already exists and is valid
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory "analysis.db"
+        Write-StructuredLog -Message "Initializing search database" -Level INFO
+        $result = New-DataResult -Operation "initialize" -DataType "database"
+        
+        $dbPath = Get-DatabasePath
         if (-not $Force -and (Test-Path $dbPath)) {
             try {
-                # Test the database with a simple query
                 $null = Invoke-SqliteQuery -DataSource $dbPath -Query "SELECT 1;"
-                return # Database exists and is valid
+                $result.metrics.readCount++
+                return $result
             }
             catch {
-                Write-Verbose "Existing database appears corrupted, recreating..."
+                Write-StructuredLog -Message "Existing database appears corrupted, recreating..." -Level WARN
+                $result.status.warnings += "Database corrupted, recreating"
             }
         }
 
@@ -94,14 +156,65 @@ function Initialize-SearchDatabase {
 
         foreach ($query in $queries) {
             Invoke-SqliteQuery -DataSource $dbPath -Query $query
+            $result.metrics.writeCount++
         }
 
-        Write-Verbose "Successfully initialized search database at $dbPath"
-        return $true
+        $result.storage.location = $dbPath
+        $result.storage.format = "sqlite"
+        Write-StructuredLog -Message "Successfully initialized search database" -Level INFO
+        return $result
     }
     catch {
-        Write-Error "Failed to initialize search database: $_"
-        return $false
+        Write-StructuredLog -Message "Failed to initialize search database: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
+    }
+}
+
+function Get-DatabasePath {
+    return Join-Path (Split-Path $PSScriptRoot -Parent) 'Data/analysis.db'
+}
+
+function Connect-Database {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [int]$MaxRetries = 3,
+        [Parameter()]
+        [int]$RetryDelayMs = 1000
+    )
+    
+    try {
+        Write-StructuredLog -Message "Connecting to database" -Level INFO
+        $result = New-DataResult -Operation "connect" -DataType "connection"
+        
+        $retryCount = 0
+        while ($retryCount -lt $MaxRetries) {
+            try {
+                $dbPath = Get-DatabasePath
+                $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
+                $conn.Open()
+                
+                $result.data.content = $conn
+                $result.metrics.readCount++
+                return $result
+            }
+            catch {
+                $retryCount++
+                if ($retryCount -ge $MaxRetries) {
+                    throw "Failed to connect after $MaxRetries attempts"
+                }
+                Start-Sleep -Milliseconds $RetryDelayMs
+                $result.status.warnings += "Retry attempt $retryCount"
+            }
+        }
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to connect to database: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
@@ -113,170 +226,126 @@ function Add-AnalysisData {
         [Parameter(Mandatory)]
         [hashtable]$Data
     )
-
+    
     try {
-        # Connect to SQLite database
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory 'analysis.db'
-        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
-        $conn.Open()
+        Write-StructuredLog -Message "Adding analysis data for $FilePath" -Level INFO
+        $result = New-DataResult -Operation "add" -DataType "analysis"
+        
+        # Validate data structure
+        if (-not ($Data.Content -and 
+                  $Data.Content.patterns -is [System.Collections.IDictionary] -and
+                  $Data.Content.security -is [System.Collections.IDictionary] -and
+                  $Data.Content.performance -is [System.Collections.IDictionary] -and
+                  $Data.Content.refactoring -is [System.Collections.IDictionary])) {
+            throw [System.ArgumentException]::new("Invalid analysis data structure")
+        }
 
-        # Create tables if they don't exist
-        $createTableCmd = $conn.CreateCommand()
-        $createTableCmd.CommandText = @"
-CREATE TABLE IF NOT EXISTS analysis_data (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_path TEXT NOT NULL,
-    data_type TEXT NOT NULL,
-    data_json TEXT NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_file_path ON analysis_data(file_path);
-CREATE INDEX IF NOT EXISTS idx_data_type ON analysis_data(data_type);
+        # Create database entry
+        $connResult = Connect-Database
+        if (-not $connResult.status.success) {
+            $result.status.success = $false
+            $result.status.errors += $connResult.status.errors
+            return $result
+        }
+        
+        $conn = $connResult.data.content
+        try {
+            $timestamp = (Get-Date).ToString('o')
+            $dataJson = $Data | ConvertTo-Json -Depth 10 -Compress
+            
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = @"
+                INSERT OR REPLACE INTO analysis_index 
+                (id, file_path, language, analysis_type, timestamp, data) 
+                VALUES (@id, @path, @language, @type, @timestamp, @data)
 "@
-        $createTableCmd.ExecuteNonQuery()
+            $cmd.Parameters.AddWithValue("@id", [guid]::NewGuid().ToString())
+            $cmd.Parameters.AddWithValue("@path", $FilePath)
+            $cmd.Parameters.AddWithValue("@language", $Data.Language)
+            $cmd.Parameters.AddWithValue("@type", "analysis")
+            $cmd.Parameters.AddWithValue("@timestamp", $timestamp)
+            $cmd.Parameters.AddWithValue("@data", $dataJson)
 
-        # Insert or update data
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandText = @"
-INSERT OR REPLACE INTO analysis_data (file_path, data_type, data_json)
-VALUES (@path, @type, @data)
-"@
-        $cmd.Parameters.AddWithValue("@path", $FilePath)
-        $cmd.Parameters.AddWithValue("@type", $Data.Type)
-        $cmd.Parameters.AddWithValue("@data", (ConvertTo-Json $Data -Depth 10 -Compress))
-        $cmd.ExecuteNonQuery()
-
-        $conn.Close()
-        return $true
+            $cmd.ExecuteNonQuery()
+            $result.metrics.writeCount++
+            
+            Write-StructuredLog -Message "Successfully added analysis data" -Level INFO
+            return $result
+        }
+        finally {
+            $conn.Close()
+        }
     }
     catch {
-        Write-Error "Failed to add analysis data: $_"
-        if ($conn) { $conn.Close() }
-        return $false
+        Write-StructuredLog -Message "Failed to add analysis data: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
-function Search-AnalysisData {
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        [string]$FilePath,
-        [Parameter()]
-        [string]$DataType,
-        [Parameter()]
-        [string]$Query,
-        [Parameter()]
-        [int]$MaxResults = 100
-    )
-
-    try {
-        # Connect to SQLite database
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory 'analysis.db'
-        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
-        $conn.Open()
-
-        # Build query
-        $whereClause = @()
-        $parameters = @{}
-
-        if ($FilePath) {
-            $whereClause += "file_path = @path"
-            $parameters['@path'] = $FilePath
-        }
-        if ($DataType) {
-            $whereClause += "data_type = @type"
-            $parameters['@type'] = $DataType
-        }
-        if ($Query) {
-            $whereClause += "data_json LIKE @query"
-            $parameters['@query'] = "%$Query%"
-        }
-
-        $sql = "SELECT * FROM analysis_data"
-        if ($whereClause) {
-            $sql += " WHERE " + ($whereClause -join " AND ")
-        }
-        $sql += " ORDER BY timestamp DESC LIMIT @limit"
-        $parameters['@limit'] = $MaxResults
-
-        # Execute query
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandText = $sql
-        foreach ($param in $parameters.GetEnumerator()) {
-            $cmd.Parameters.AddWithValue($param.Key, $param.Value)
-        }
-
-        $reader = $cmd.ExecuteReader()
-        $results = @()
-        while ($reader.Read()) {
-            $results += @{
-                FilePath = $reader["file_path"]
-                Type = $reader["data_type"]
-                Data = ConvertFrom-Json $reader["data_json"]
-                Timestamp = $reader["timestamp"]
-            }
-        }
-
-        $conn.Close()
-        return $results
-    }
-    catch {
-        Write-Error "Failed to search analysis data: $_"
-        if ($conn) { $conn.Close() }
-        return @()
-    }
-}
-
-function Get-AnalysisResult {
+function Get-AnalysisData {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [string]$FilePath,
         [Parameter()]
-        [string]$DataType
+        [string]$Language,
+        [Parameter()]
+        [string]$Type
     )
-
+    
     try {
-        # Connect to SQLite database
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory 'analysis.db'
-        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
-        $conn.Open()
-
-        # Build query
-        $sql = "SELECT * FROM analysis_data WHERE file_path = @path"
-        if ($DataType) {
-            $sql += " AND data_type = @type"
+        Write-StructuredLog -Message "Retrieving analysis data for $FilePath" -Level INFO
+        $result = New-DataResult -Operation "get" -DataType "query"
+        
+        $connResult = Connect-Database
+        if (-not $connResult.status.success) {
+            $result.status.success = $false
+            $result.status.errors += $connResult.status.errors
+            return $result
         }
-        $sql += " ORDER BY timestamp DESC LIMIT 1"
-
-        # Execute query
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandText = $sql
-        $cmd.Parameters.AddWithValue("@path", $FilePath)
-        if ($DataType) {
-            $cmd.Parameters.AddWithValue("@type", $DataType)
-        }
-
-        $reader = $cmd.ExecuteReader()
-        if ($reader.Read()) {
-            $result = @{
-                FilePath = $reader["file_path"]
-                Type = $reader["data_type"]
-                Data = ConvertFrom-Json $reader["data_json"]
-                Timestamp = $reader["timestamp"]
+        
+        $conn = $connResult.data.content
+        try {
+            $query = "SELECT * FROM analysis_index WHERE file_path = @path"
+            $params = @{ "@path" = $FilePath }
+            
+            if ($Language) {
+                $query += " AND language = @language"
+                $params["@language"] = $Language
             }
+            if ($Type) {
+                $query += " AND analysis_type = @type"
+                $params["@type"] = $Type
+            }
+            
+            $query += " ORDER BY timestamp DESC LIMIT 1"
+            
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = $query
+            foreach ($param in $params.GetEnumerator()) {
+                $cmd.Parameters.AddWithValue($param.Key, $param.Value)
+            }
+            
+            $reader = $cmd.ExecuteReader()
+            if ($reader.Read()) {
+                $data = $reader["data"] | ConvertFrom-Json -AsHashtable
+                $result.data.content = $data
+                $result.metrics.readCount++
+            }
+            
+            return $result
         }
-        else {
-            $result = $null
+        finally {
+            $conn.Close()
         }
-
-        $conn.Close()
-        return $result
     }
     catch {
-        Write-Error "Failed to get analysis result: $_"
-        if ($conn) { $conn.Close() }
-        return $null
+        Write-StructuredLog -Message "Failed to retrieve analysis data: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
@@ -286,79 +355,61 @@ function Remove-AnalysisData {
         [Parameter(Mandatory)]
         [string]$FilePath,
         [Parameter()]
-        [string]$DataType
+        [string]$Language,
+        [Parameter()]
+        [string]$Type
     )
-
+    
     try {
-        # Connect to SQLite database
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory 'analysis.db'
-        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
-        $conn.Open()
-
-        # Build query
-        $sql = "DELETE FROM analysis_data WHERE file_path = @path"
-        if ($DataType) {
-            $sql += " AND data_type = @type"
-        }
-
-        # Execute query
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandText = $sql
-        $cmd.Parameters.AddWithValue("@path", $FilePath)
-        if ($DataType) {
-            $cmd.Parameters.AddWithValue("@type", $DataType)
-        }
-
-        $rowsAffected = $cmd.ExecuteNonQuery()
-        $conn.Close()
+        Write-StructuredLog -Message "Removing analysis data for $FilePath" -Level INFO
+        $result = New-DataResult -Operation "remove" -DataType "delete"
         
-        Write-Verbose "Removed $rowsAffected analysis data entries"
-        return $true
+        $connResult = Connect-Database
+        if (-not $connResult.status.success) {
+            $result.status.success = $false
+            $result.status.errors += $connResult.status.errors
+            return $result
+        }
+        
+        $conn = $connResult.data.content
+        try {
+            $query = "DELETE FROM analysis_index WHERE file_path = @path"
+            $params = @{ "@path" = $FilePath }
+            
+            if ($Language) {
+                $query += " AND language = @language"
+                $params["@language"] = $Language
+            }
+            if ($Type) {
+                $query += " AND analysis_type = @type"
+                $params["@type"] = $Type
+            }
+            
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = $query
+            foreach ($param in $params.GetEnumerator()) {
+                $cmd.Parameters.AddWithValue($param.Key, $param.Value)
+            }
+            
+            $rowsAffected = $cmd.ExecuteNonQuery()
+            $result.metrics.writeCount = $rowsAffected
+            
+            Write-StructuredLog -Message "Successfully removed analysis data" -Level INFO -Properties @{
+                rowsAffected = $rowsAffected
+            }
+            
+            return $result
+        }
+        finally {
+            $conn.Close()
+        }
     }
     catch {
-        Write-Error "Failed to remove analysis data: $_"
-        if ($conn) { $conn.Close() }
-        return $false
+        Write-StructuredLog -Message "Failed to remove analysis data: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
-function Clear-AnalysisData {
-    [CmdletBinding()]
-    param()
-
-    try {
-        # Connect to SQLite database
-        $dbPath = Join-Path $script:Config.fileSystem.outputDirectory 'analysis.db'
-        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
-        $conn.Open()
-
-        # Delete all data
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandText = "DELETE FROM analysis_data"
-        $rowsAffected = $cmd.ExecuteNonQuery()
-
-        $conn.Close()
-        Write-Verbose "Cleared $rowsAffected analysis data entries"
-        return $true
-    }
-    catch {
-        Write-Error "Failed to clear analysis data: $_"
-        if ($conn) { $conn.Close() }
-        return $false
-    }
-}
-
-# Initialize data store on module load
-Initialize-DataStore
-
-# Export functions
-Export-ModuleMember -Function @(
-    'Add-AnalysisData',
-    'Search-AnalysisData',
-    'Get-AnalysisData',
-    'Remove-OldAnalysisData',
-    'Add-AnalysisResult',
-    'Get-AnalysisResult',
-    'Get-AnalysisStatistics',
-    'Clear-OldResults'
-)
+Export-ModuleMember -Function Initialize-DataStore, Add-AnalysisData, Get-AnalysisData, Remove-AnalysisData

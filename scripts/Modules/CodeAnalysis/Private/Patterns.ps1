@@ -1,8 +1,69 @@
 using namespace System.Management.Automation.Language
 
+# Import required modules
+. $PSScriptRoot/Logging.ps1
+. $PSScriptRoot/DataManagement.ps1
+
 # Import configuration and patterns
 $script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | ConvertFrom-Json
 $script:Patterns = Get-Content "$PSScriptRoot/../Config/patterns.json" | ConvertFrom-Json
+
+function New-PatternResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+        [Parameter(Mandatory)]
+        [string]$Language,
+        [Parameter()]
+        [string]$Operation = "detection"
+    )
+    
+    return @{
+        metadata = @{
+            path = $FilePath
+            language = $Language
+            operation = $Operation
+            timestamp = Get-Date -Format "o"
+            version = "1.0"
+        }
+        file = @{
+            path = $FilePath
+            language = $Language
+            size = (Get-Item $FilePath).Length
+            last_modified = (Get-Item $FilePath).LastWriteTime.ToString('o')
+            hash = (Get-FileHash $FilePath).Hash
+        }
+        patterns = @{
+            detected = @{}
+            statistics = @{
+                total = 0
+                by_type = @{}
+                by_priority = @{}
+                by_compatibility = @{}
+            }
+            suggestions = @()
+        }
+        cascade = @{
+            compatibility = "unknown"
+            automation_level = "none"
+            priority = "low"
+            score = 0.0
+        }
+        metrics = @{
+            duration_ms = 0
+            memory_mb = 0
+            patterns_analyzed = 0
+            nodes_visited = 0
+        }
+        status = @{
+            success = $true
+            parsed = $false
+            warnings = @()
+            errors = @()
+        }
+    }
+}
 
 function Get-FileLanguage {
     [CmdletBinding()]
@@ -11,13 +72,28 @@ function Get-FileLanguage {
         [string]$Extension
     )
     
-    switch -Regex ($Extension) {
-        '\.go$' { return 'go' }
-        '\.(?:js|jsx)$' { return 'javascript' }
-        '\.(?:ts|tsx)$' { return 'typescript' }
-        '\.py$' { return 'python' }
-        '\.ps1$' { return 'powershell' }
-        default { return 'unknown' }
+    try {
+        Write-StructuredLog -Message "Detecting file language" -Level INFO
+        
+        $language = switch -Regex ($Extension) {
+            '\.go$' { 'go' }
+            '\.(?:js|jsx)$' { 'javascript' }
+            '\.(?:ts|tsx)$' { 'typescript' }
+            '\.py$' { 'python' }
+            '\.ps1$' { 'powershell' }
+            default { 'unknown' }
+        }
+        
+        Write-StructuredLog -Message "Language detected" -Level INFO -Properties @{
+            extension = $Extension
+            language = $language
+        }
+        
+        return $language
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to detect language: $_" -Level ERROR
+        return 'unknown'
     }
 }
 
@@ -33,276 +109,255 @@ function Get-CodePatterns {
     )
     
     try {
-        # Try to get from cache first
-        $cacheKey = New-CacheKey -FilePath $FilePath -AnalysisType "Patterns"
-        $cachedResults = Get-CacheItem -Key $cacheKey
-        if ($cachedResults) {
-            Write-Verbose "Retrieved pattern results from cache for $FilePath"
-            return $cachedResults
-        }
+        Write-StructuredLog -Message "Analyzing patterns" -Level INFO
+        $startTime = Get-Date
         
-        $patternResults = @{}
+        # Create new pattern result
+        $result = New-PatternResult -FilePath $FilePath -Language $Language
         
         # Get patterns for Cascade optimization
         $cascadePatterns = $script:Patterns.cascadeOptimization.patternTypes
         
-        # Get AST-based patterns with Cascade metadata
-        $astResult = Get-AstParser -Language $Language -Content $Content
-        if ($astResult -and $astResult.ast) {
-            # Get metrics for indexing and analysis
-            $astMetrics = Get-AstMetrics -Ast $astResult.ast -Language $Language
+        # Get AST-based patterns
+        $astResult = Get-AstParser -Language $Language -Content $Content -FilePath $FilePath
+        if ($astResult.success) {
+            $result.status.parsed = $true
+            Write-StructuredLog -Message "Successfully parsed AST" -Level INFO
             
-            # Add file to index with metrics for future reference
-            $indexResult = Add-FileToIndex -FilePath $FilePath -Content $Content -Metrics $astMetrics -Language $Language
-            if (-not $indexResult) {
-                Write-Warning "Failed to index file $FilePath"
-            }
-            
-            # Use AST patterns based on language with Cascade metadata
-            switch ($Language) {
+            # Process AST patterns based on language
+            switch ($Language.ToLower()) {
                 'powershell' {
                     $astPatterns = Get-PowerShellAstPatterns -Ast $astResult.ast
-                    foreach ($pattern in $astPatterns.GetEnumerator()) {
+                    foreach ($pattern in $astPatterns.patterns.GetEnumerator()) {
                         $patternType = ($pattern.Key -split '\.')[0]
                         $cascadeInfo = $cascadePatterns[$patternType]
                         
-                        $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
-                            $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
-                                priority = $cascadeInfo.priority
-                                compatibility = $cascadeInfo.cascadeCompatibility
-                                automation = $cascadeInfo.automationLevel
-                                toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
-                                    Where-Object { $pattern.Key -match $_.patterns[0] } |
-                                    Select-Object -First 1
-                            } -PassThru
-                        }
-                    }
-                }
-                'python' {
-                    if ($astResult.success) {
-                        $astPatterns = Get-PythonAstPatterns -AstDump $astResult.ast
-                        foreach ($pattern in $astPatterns.GetEnumerator()) {
-                            $patternType = ($pattern.Key -split '\.')[0]
-                            $cascadeInfo = $cascadePatterns[$patternType]
-                            
-                            $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
-                                $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
+                        if ($cascadeInfo) {
+                            $result.patterns.detected[$pattern.Key] = @{
+                                type = $patternType
+                                count = $pattern.Value.Count
+                                locations = $pattern.Value.Location | ForEach-Object {
+                                    @{
+                                        start_line = $_.StartLineNumber
+                                        end_line = $_.EndLineNumber
+                                        text = $_.Text
+                                        context = Get-LineContext -Content $Content -LineNumber $_.StartLineNumber
+                                    }
+                                }
+                                metadata = @{
                                     priority = $cascadeInfo.priority
                                     compatibility = $cascadeInfo.cascadeCompatibility
                                     automation = $cascadeInfo.automationLevel
-                                    toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
-                                        Where-Object { $pattern.Key -match $_.patterns[0] } |
-                                        Select-Object -First 1
-                                } -PassThru
+                                    category = $cascadeInfo.category
+                                    impact = $cascadeInfo.impact
+                                }
+                            }
+                            
+                            # Update statistics
+                            $result.patterns.statistics.total += $pattern.Value.Count
+                            
+                            # Update by_type statistics
+                            if (-not $result.patterns.statistics.by_type[$patternType]) {
+                                $result.patterns.statistics.by_type[$patternType] = 0
+                            }
+                            $result.patterns.statistics.by_type[$patternType] += $pattern.Value.Count
+                            
+                            # Update by_priority statistics
+                            if (-not $result.patterns.statistics.by_priority[$cascadeInfo.priority]) {
+                                $result.patterns.statistics.by_priority[$cascadeInfo.priority] = 0
+                            }
+                            $result.patterns.statistics.by_priority[$cascadeInfo.priority] += $pattern.Value.Count
+                            
+                            # Update by_compatibility statistics
+                            if (-not $result.patterns.statistics.by_compatibility[$cascadeInfo.cascadeCompatibility]) {
+                                $result.patterns.statistics.by_compatibility[$cascadeInfo.cascadeCompatibility] = 0
+                            }
+                            $result.patterns.statistics.by_compatibility[$cascadeInfo.cascadeCompatibility] += $pattern.Value.Count
+                            
+                            # Update Cascade compatibility
+                            if ($cascadeInfo.cascadeCompatibility -eq "high") {
+                                $result.cascade.compatibility = "high"
+                                if ($cascadeInfo.priority -eq "high") {
+                                    $result.cascade.priority = "high"
+                                }
+                            }
+                            
+                            # Add suggestions if available
+                            if ($cascadeInfo.suggestions) {
+                                foreach ($suggestion in $cascadeInfo.suggestions) {
+                                    $result.patterns.suggestions += @{
+                                        pattern = $pattern.Key
+                                        type = $patternType
+                                        text = $suggestion.text
+                                        priority = $suggestion.priority
+                                        impact = $suggestion.impact
+                                    }
+                                }
                             }
                         }
                     }
+                    
+                    # Calculate Cascade score
+                    $result.cascade.score = Get-CascadeScore -Patterns $result.patterns.detected
                 }
-                'javascript' {
-                    if ($astResult.success) {
-                        $astPatterns = Get-JavaScriptAstPatterns -AstJson $astResult.ast
-                        foreach ($pattern in $astPatterns.GetEnumerator()) {
-                            $patternType = ($pattern.Key -split '\.')[0]
-                            $cascadeInfo = $cascadePatterns[$patternType]
-                            
-                            $patternResults[$pattern.Key] = $pattern.Value | ForEach-Object {
-                                $_ | Add-Member -NotePropertyName 'cascadeMetadata' -NotePropertyValue @{
-                                    priority = $cascadeInfo.priority
-                                    compatibility = $cascadeInfo.cascadeCompatibility
-                                    automation = $cascadeInfo.automationLevel
-                                    toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
-                                        Where-Object { $pattern.Key -match $_.patterns[0] } |
-                                        Select-Object -First 1
-                                } -PassThru
-                            }
-                        }
+                default {
+                    $result.status.warnings += "Language $Language has limited pattern support"
+                    Write-StructuredLog -Message "Language has limited pattern support" -Level WARNING -Properties @{
+                        language = $Language
                     }
                 }
             }
         }
-        
-        # Get ML-based pattern predictions with Cascade metadata
-        $mlPredictions = Get-PredictedPatterns -Content $Content -Language $Language
-        foreach ($prediction in $mlPredictions) {
-            if (-not $patternResults[$prediction.pattern]) {
-                $patternResults[$prediction.pattern] = @()
-            }
-            
-            $patternType = ($prediction.pattern -split '\.')[0]
-            $cascadeInfo = $cascadePatterns[$patternType]
-            
-            # Find actual occurrences of the predicted pattern
-            $pattern = $script:Patterns.languages.$Language.patterns.$($prediction.pattern)
-            if ($pattern) {
-                $patternMatches = [regex]::Matches($Content, $pattern.regex)
-                if ($patternMatches.Count -gt 0) {
-                    $patternResults[$prediction.pattern] += @($patternMatches | ForEach-Object {
-                        @{
-                            value = $_.Value
-                            line = ($Content.Substring(0, $_.Index).Split("`n")).Count
-                            index = $_.Index
-                            confidence = $prediction.confidence
-                            type = $pattern.type
-                            cascadeMetadata = @{
-                                priority = $cascadeInfo.priority
-                                compatibility = $cascadeInfo.cascadeCompatibility
-                                automation = $cascadeInfo.automationLevel
-                                toolMapping = $script:Patterns.cascadeOptimization.toolMappings | 
-                                    Where-Object { $prediction.pattern -match $_.patterns[0] } |
-                                    Select-Object -First 1
-                                action = $pattern.cascadeAction
-                            }
-                        }
-                    })
-                }
+        else {
+            $result.status.warnings += "Failed to parse AST: $($astResult.errors -join ', ')"
+            Write-StructuredLog -Message "Failed to parse AST" -Level WARNING -Properties @{
+                errors = $astResult.errors
             }
         }
         
-        # Sort patterns by Cascade priority
-        $patternResults = $patternResults.GetEnumerator() | Sort-Object {
-            $cascadeInfo = $cascadePatterns[($_.Key -split '\.')[0]]
-            $cascadeInfo.priority
-        } | ForEach-Object { @{$_.Key = $_.Value} }
+        # Update metrics
+        $result.metrics.duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        $result.metrics.patterns_analyzed = $result.patterns.statistics.total
+        $result.metrics.nodes_visited = $astResult.metrics.nodes_visited
         
-        # Cache the results
-        Set-CacheItem -Key $cacheKey -Data $patternResults
+        Write-StructuredLog -Message "Pattern analysis completed" -Level INFO -Properties @{
+            duration_ms = $result.metrics.duration_ms
+            total_patterns = $result.patterns.statistics.total
+            compatibility = $result.cascade.compatibility
+            score = $result.cascade.score
+        }
         
-        return $patternResults
+        return $result
     }
     catch {
-        Write-Error "Failed to analyze patterns in $FilePath : $_"
-        return @{}
+        Write-StructuredLog -Message "Failed to analyze patterns: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
 function Get-PowerShellAstPatterns {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][object]$Ast)
-
-    $patterns = @{}
-    
-    # Visit each node in the AST
-    $Ast.Visit([ScriptBlockAst]{
-        param($node)
-        
-        # Check for command patterns
-        if ($node -is [CommandAst]) {
-            $commandName = $node.GetCommandName()
-            if ($commandName) {
-                $patterns[$commandName] = @{
-                    Type = "Command"
-                    Location = $node.Extent
-                    Metadata = @{
-                        Parameters = $node.CommandElements | Where-Object { $_ -is [CommandParameterAst] } | ForEach-Object { $_.ParameterName }
-                    }
-                }
-            }
-        }
-        
-        # Check for variable patterns
-        elseif ($node -is [VariableExpressionAst]) {
-            $varName = $node.VariablePath.UserPath
-            if (-not $patterns.ContainsKey($varName)) {
-                $patterns[$varName] = @{
-                    Type = "Variable"
-                    Location = $node.Extent
-                    Metadata = @{
-                        Scope = if ($node.VariablePath.IsScript) { "Script" } else { "Local" }
-                    }
-                }
-            }
-        }
-        
-        # Check for function definitions
-        elseif ($node -is [FunctionDefinitionAst]) {
-            $patterns[$node.Name] = @{
-                Type = "Function"
-                Location = $node.Extent
-                Metadata = @{
-                    Parameters = $node.Parameters.Name.VariablePath.UserPath
-                    HasBegin = $null -ne $node.Body.BeginBlock
-                    HasProcess = $null -ne $node.Body.ProcessBlock
-                    HasEnd = $null -ne $node.Body.EndBlock
-                }
-            }
-        }
-        
-        return $true  # Continue visiting nodes
-    })
-    
-    return $patterns
-}
-
-function Get-PythonAstPatterns {
-    [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$AstDump
+        [object]$Ast
     )
     
     $patterns = @{}
+    $nodesVisited = 0
     
-    # Parse the AST dump and look for patterns
-    # Example patterns:
-    if ($AstDump -match 'Exec\(') {
-        $patterns['security.injection.exec'] = @{
-            value = $matches[0]
-            line = 0  # We'd need to parse the AST dump more carefully to get the line
-            index = $matches.Index
-            confidence = 1.0
-            type = 'ast'
-        }
-    }
-    
-    return $patterns
-}
-
-function Get-JavaScriptAstPatterns {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [object]$AstJson
-    )
-    
-    $patterns = @{}
-    
-    # Recursively search the AST JSON for patterns
-    function Search-Node {
-        param($Node)
-        
-        if ($Node.type -eq 'CallExpression' -and
-            $Node.callee.type -eq 'Identifier' -and
-            $Node.callee.name -eq 'eval') {
+    try {
+        # Visit each node in the AST
+        $Ast.Visit([ScriptBlockAst]{
+            param($node)
             
-            $patterns['security.injection.eval'] += @{
-                value = 'eval'
-                line = $Node.loc.start.line
-                index = $Node.range[0]
-                confidence = 1.0
-                type = 'ast'
+            $nodesVisited++
+            
+            # Check for command patterns
+            if ($node -is [CommandAst]) {
+                $commandName = $node.GetCommandName()
+                if ($commandName) {
+                    $patternKey = "command.$commandName"
+                    if (-not $patterns[$patternKey]) {
+                        $patterns[$patternKey] = @{
+                            Type = "Command"
+                            Count = 0
+                            Location = @()
+                        }
+                    }
+                    $patterns[$patternKey].Count++
+                    $patterns[$patternKey].Location += $node.Extent
+                }
             }
-        }
-        
-        # Recurse through properties
-        foreach ($prop in $Node.PSObject.Properties) {
-            if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-                Search-Node $prop.Value
-            }
-            elseif ($prop.Value -is [array]) {
-                foreach ($item in $prop.Value) {
-                    if ($item -is [System.Management.Automation.PSCustomObject]) {
-                        Search-Node $item
+            
+            # Check for variable patterns
+            elseif ($node -is [VariableExpressionAst]) {
+                $varName = $node.VariablePath.UserPath
+                $patternKey = "variable.$varName"
+                if (-not $patterns[$patternKey]) {
+                    $patterns[$patternKey] = @{
+                        Type = "Variable"
+                        Count = 0
+                        Location = @()
                     }
                 }
+                $patterns[$patternKey].Count++
+                $patterns[$patternKey].Location += $node.Extent
+            }
+            
+            # Check for function patterns
+            elseif ($node -is [FunctionDefinitionAst]) {
+                $funcName = $node.Name
+                $patternKey = "function.$funcName"
+                if (-not $patterns[$patternKey]) {
+                    $patterns[$patternKey] = @{
+                        Type = "Function"
+                        Count = 0
+                        Location = @()
+                    }
+                }
+                $patterns[$patternKey].Count++
+                $patterns[$patternKey].Location += $node.Extent
+            }
+            
+            # Continue visiting child nodes
+            return $true
+        })
+        
+        return @{
+            patterns = $patterns
+            metrics = @{
+                nodes_visited = $nodesVisited
             }
         }
     }
-    
-    Search-Node $AstJson
-    return $patterns
+    catch {
+        Write-StructuredLog -Message "Failed to analyze PowerShell AST patterns: $_" -Level ERROR
+        return @{
+            patterns = @{}
+            metrics = @{
+                nodes_visited = $nodesVisited
+            }
+            error = $_.Exception.Message
+        }
+    }
 }
 
-function Get-PatternMetrics {
+function Get-LineContext {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Content,
+        [Parameter(Mandatory)]
+        [int]$LineNumber,
+        [Parameter()]
+        [int]$ContextLines = 2
+    )
+    
+    try {
+        $lines = $Content -split "`n"
+        $start = [Math]::Max(0, $LineNumber - $ContextLines - 1)
+        $end = [Math]::Min($lines.Count - 1, $LineNumber + $ContextLines - 1)
+        
+        $context = @()
+        for ($i = $start; $i -le $end; $i++) {
+            $context += @{
+                line_number = $i + 1
+                content = $lines[$i].TrimEnd()
+                is_target = $i -eq ($LineNumber - 1)
+            }
+        }
+        
+        return $context
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to get line context: $_" -Level ERROR
+        return @()
+    }
+}
+
+function Get-CascadeScore {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -310,72 +365,32 @@ function Get-PatternMetrics {
     )
     
     try {
-        $metrics = @{
-            totalPatterns = 0
-            categories = @{}
-            complexity = 0
-            security = @{
-                issues = 0
-                severity = 'unknown'
+        $score = 0.0
+        $weights = @{
+            compatibility = @{
+                high = 1.0
+                medium = 0.5
+                low = 0.2
+            }
+            priority = @{
+                high = 1.0
+                medium = 0.5
+                low = 0.2
             }
         }
         
-        foreach ($pattern in $Patterns.GetEnumerator()) {
-            $metrics.totalPatterns += $pattern.Value.Count
-            
-            # Calculate weighted metrics based on ML confidence
-            $avgConfidence = ($pattern.Value | Measure-Object -Property confidence -Average).Average
-            
-            if ($pattern.Key -match 'security|vulnerability|exploit') {
-                $metrics.security.issues += [Math]::Round($pattern.Value.Count * $avgConfidence)
-            }
-            elseif ($pattern.Key -match 'complexity|cyclomatic|cognitive') {
-                $metrics.complexity += [Math]::Round(($pattern.Value | 
-                    Measure-Object -Property { [int]$_.value } -Sum).Sum * $avgConfidence)
-            }
-            
-            $category = switch -Regex ($pattern.Key) {
-                'security|auth|crypto' { 'Security' }
-                'performance|memory|cpu' { 'Performance' }
-                'style|format|lint' { 'Style' }
-                'bug|error|exception' { 'Bugs' }
-                default { 'Other' }
-            }
-            
-            if (-not $metrics.categories[$category]) {
-                $metrics.categories[$category] = @{
-                    count = 0
-                    confidence = 0
-                }
-            }
-            
-            $metrics.categories[$category].count += $pattern.Value.Count
-            $metrics.categories[$category].confidence = [Math]::Max(
-                $metrics.categories[$category].confidence,
-                $avgConfidence
-            )
+        foreach ($pattern in $Patterns.Values) {
+            $compatWeight = $weights.compatibility[$pattern.metadata.compatibility]
+            $prioWeight = $weights.priority[$pattern.metadata.priority]
+            $score += $pattern.count * $compatWeight * $prioWeight
         }
         
-        # Set overall security severity
-        $metrics.security.severity = switch ($metrics.security.issues) {
-            { $_ -gt 10 } { 'high' }
-            { $_ -gt 5 } { 'medium' }
-            { $_ -gt 0 } { 'low' }
-            default { 'none' }
-        }
-        
-        return $metrics
+        return [Math]::Round($score, 2)
     }
     catch {
-        Write-Error "Failed to calculate pattern metrics: $_"
-        return @{
-            totalPatterns = 0
-            categories = @{}
-            complexity = 0
-            security = @{ issues = 0; severity = 'unknown' }
-        }
+        Write-StructuredLog -Message "Failed to calculate Cascade score: $_" -Level ERROR
+        return 0.0
     }
 }
 
-# Export functions
-Export-ModuleMember -Function Get-FileLanguage, Get-CodePatterns, Get-PatternMetrics
+Export-ModuleMember -Function Get-FileLanguage, Get-CodePatterns

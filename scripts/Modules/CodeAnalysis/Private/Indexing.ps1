@@ -7,6 +7,54 @@ $script:Config = Get-Content "$PSScriptRoot/../Config/module-config.json" | Conv
 # Thread-safe index storage
 $script:AstCache = [ConcurrentDictionary[string,object]]::new()
 $script:DependencyGraph = [ConcurrentDictionary[string,object]]::new()
+$script:MLPredictionCache = [ConcurrentDictionary[string,object]]::new()
+
+function New-IndexResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Operation,
+        [Parameter(Mandatory)]
+        [string]$IndexType,
+        [Parameter()]
+        [string]$Identifier = ""
+    )
+    
+    return @{
+        metadata = @{
+            operation = $Operation
+            type = $IndexType
+            identifier = $Identifier
+            timestamp = Get-Date -Format "o"
+            version = "1.0"
+        }
+        index = @{
+            type = $IndexType
+            entries = 0
+            size = 0
+            last_modified = Get-Date -Format "o"
+            format = "unknown"
+        }
+        metrics = @{
+            duration_ms = 0
+            memory_mb = 0
+            items_processed = 0
+            batch_size = 0
+        }
+        files = @{
+            total = 0
+            indexed = 0
+            failed = 0
+            skipped = 0
+        }
+        status = @{
+            success = $true
+            indexed = $false
+            warnings = @()
+            errors = @()
+        }
+    }
+}
 
 function Initialize-CodeIndex {
     [CmdletBinding()]
@@ -16,43 +64,93 @@ function Initialize-CodeIndex {
     )
 
     try {
+        Write-StructuredLog -Message "Initializing code index" -Level INFO
+        $result = New-IndexResult -Operation "initialize" -IndexType "code"
+        
         # Ensure all output directories exist
         $outputDir = Join-Path $PSScriptRoot "../Output"
         $indexPath = Join-Path $outputDir "index"
         $cachePath = Join-Path $outputDir "cache"
         $logsPath = Join-Path $outputDir "logs"
+        $mlPath = Join-Path $outputDir "ml"
 
-        foreach ($path in @($outputDir, $indexPath, $cachePath, $logsPath)) {
+        foreach ($path in @($outputDir, $indexPath, $cachePath, $logsPath, $mlPath)) {
             if (-not (Test-Path $path)) {
                 New-Item -Path $path -ItemType Directory -Force | Out-Null
             }
         }
 
         # Initialize SQLite database
-        Initialize-SearchDatabase -Force
+        $dbPath = Join-Path $indexPath "codeindex.db"
+        $result.storage.location = $dbPath
+        
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
+        $conn.Open()
 
-        # Initialize logging
-        $logFile = Join-Path $logsPath "indexing.log"
-        Start-Transcript -Path $logFile -Append
+        # Create tables if not exist
+        $createTablesQuery = @"
+CREATE TABLE IF NOT EXISTS analysis_index (
+    id TEXT PRIMARY KEY,
+    file_path TEXT NOT NULL,
+    language TEXT NOT NULL,
+    analysis_type TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    data TEXT
+);
 
-        # Clear caches
-        $script:AstCache.Clear()
-        $script:DependencyGraph.Clear()
+CREATE TABLE IF NOT EXISTS pattern_index (
+    id TEXT NOT NULL,
+    pattern_name TEXT NOT NULL,
+    pattern_type TEXT NOT NULL,
+    line_number INTEGER NOT NULL,
+    risk_level TEXT,
+    suggestion TEXT,
+    context TEXT,
+    confidence REAL,
+    ml_prediction BOOLEAN,
+    FOREIGN KEY (id) REFERENCES analysis_index(id)
+);
 
-        # Store root path for later use
-        $script:RootPath = $RootPath
+CREATE TABLE IF NOT EXISTS metrics_index (
+    id TEXT NOT NULL,
+    metric_name TEXT NOT NULL,
+    metric_value REAL NOT NULL,
+    confidence REAL,
+    ml_prediction BOOLEAN,
+    FOREIGN KEY (id) REFERENCES analysis_index(id)
+);
 
-        Write-Verbose "Initialized code index at $indexPath"
-        Write-Verbose "Logs will be written to $logFile"
-        return $true
+CREATE TABLE IF NOT EXISTS ml_predictions (
+    id TEXT NOT NULL,
+    model_type TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    prediction_data TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (id) REFERENCES analysis_index(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pattern_type ON pattern_index(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_risk_level ON pattern_index(risk_level);
+CREATE INDEX IF NOT EXISTS idx_ml_prediction ON pattern_index(ml_prediction);
+CREATE INDEX IF NOT EXISTS idx_confidence ON pattern_index(confidence);
+CREATE INDEX IF NOT EXISTS idx_model_type ON ml_predictions(model_type);
+CREATE INDEX IF NOT EXISTS idx_model_version ON ml_predictions(model_version);
+"@
+
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = $createTablesQuery
+        $cmd.ExecuteNonQuery()
+
+        $conn.Close()
+        Write-StructuredLog -Message "Successfully initialized code index" -Level INFO
+        return $result
     }
     catch {
-        $errorMessage = $_.Exception.Message
-        Write-Error "Failed to initialize code index: $errorMessage"
-        return $false
-    }
-    finally {
-        Stop-Transcript
+        Write-StructuredLog -Message "Failed to initialize code index: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
     }
 }
 
@@ -68,11 +166,10 @@ function Add-FileToIndex {
     )
 
     try {
-        Write-StructuredLog -Message "Adding file to index" -Level INFO -Properties @{
-            filePath = $FilePath
-            language = $Language
-        }
-
+        Write-StructuredLog -Message "Adding file to index" -Level INFO
+        $result = New-IndexResult -Operation "add" -IndexType "file"
+        $startTime = Get-Date
+        
         # Read file content if AST not provided
         if (-not $Ast) {
             $content = Get-Content -Path $FilePath -Raw
@@ -97,60 +194,166 @@ function Add-FileToIndex {
 
         # Connect to SQLite database
         $dbPath = Join-Path $script:Config.fileSystem.outputDirectory "analysis.db"
+        $result.storage.location = $dbPath
         
-        # Add to analysis_index
-        $analysisQuery = @"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
+        $conn.Open()
+
+        try {
+            # Add to analysis_index
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = @"
 INSERT INTO analysis_index (id, file_path, language, analysis_type, timestamp, data)
 VALUES (@id, @filePath, @language, 'file', @timestamp, @data);
 "@
-        $analysisParams = @{
-            id = $id
-            filePath = $FilePath
-            language = $Language
-            timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-            data = ($metrics | ConvertTo-Json -Compress)
-        }
-        Invoke-SqliteQuery -DataSource $dbPath -Query $analysisQuery -SqlParameters $analysisParams
-
-        # Add patterns to pattern_index
-        foreach ($pattern in $patterns) {
-            $patternQuery = @"
-INSERT INTO pattern_index (id, pattern_name, pattern_type, line_number, context)
-VALUES (@id, @name, @type, @lineNumber, @context);
-"@
-            $patternParams = @{
+            $cmd.Parameters.AddWithValue("@id", $id)
+            $cmd.Parameters.AddWithValue("@filePath", $FilePath)
+            $cmd.Parameters.AddWithValue("@language", $Language)
+            $cmd.Parameters.AddWithValue("@timestamp", (Get-Date).ToString('o'))
+            $cmd.Parameters.AddWithValue("@data", ($metrics | ConvertTo-Json -Compress))
+            $cmd.ExecuteNonQuery()
+            
+            $result.index.entries += @{
                 id = $id
-                name = $pattern.name
-                type = $pattern.type
-                lineNumber = $pattern.lineNumber
-                context = $pattern.context
+                path = $FilePath
+                language = $Language
+                metrics = $metrics
             }
-            Invoke-SqliteQuery -DataSource $dbPath -Query $patternQuery -SqlParameters $patternParams
-        }
-
-        # Add metrics to metrics_index
-        foreach ($metric in $metrics.GetEnumerator()) {
-            $metricQuery = @"
-INSERT INTO metrics_index (id, metric_name, metric_value)
-VALUES (@id, @name, @value);
+            
+            # Add patterns to pattern_index
+            foreach ($pattern in $patterns) {
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = @"
+INSERT INTO pattern_index (id, pattern_name, pattern_type, line_number, risk_level, suggestion, context, confidence, ml_prediction)
+VALUES (@id, @name, @type, @lineNumber, @risk, @suggestion, @context, @confidence, @mlPrediction);
 "@
-            $metricParams = @{
-                id = $id
-                name = $metric.Key
-                value = $metric.Value
+                $cmd.Parameters.AddWithValue("@id", $id)
+                $cmd.Parameters.AddWithValue("@name", $pattern.Name)
+                $cmd.Parameters.AddWithValue("@type", $pattern.Type)
+                $cmd.Parameters.AddWithValue("@lineNumber", $pattern.Line)
+                $cmd.Parameters.AddWithValue("@risk", $pattern.Risk)
+                $cmd.Parameters.AddWithValue("@suggestion", $pattern.Suggestion)
+                $cmd.Parameters.AddWithValue("@context", $pattern.Context)
+                $cmd.Parameters.AddWithValue("@confidence", 1.0)
+                $cmd.Parameters.AddWithValue("@mlPrediction", $false)
+                $cmd.ExecuteNonQuery()
+                
+                $result.index.patterns += $pattern
             }
-            Invoke-SqliteQuery -DataSource $dbPath -Query $metricQuery -SqlParameters $metricParams
+            
+            # Add metrics to metrics_index
+            foreach ($metric in $metrics.GetEnumerator()) {
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = @"
+INSERT INTO metrics_index (id, metric_name, metric_value, confidence, ml_prediction)
+VALUES (@id, @name, @value, @confidence, @mlPrediction);
+"@
+                $cmd.Parameters.AddWithValue("@id", $id)
+                $cmd.Parameters.AddWithValue("@name", $metric.Key)
+                $cmd.Parameters.AddWithValue("@value", $metric.Value)
+                $cmd.Parameters.AddWithValue("@confidence", 1.0)
+                $cmd.Parameters.AddWithValue("@mlPrediction", $false)
+                $cmd.ExecuteNonQuery()
+                
+                $result.index.metrics += @{
+                    name = $metric.Key
+                    value = $metric.Value
+                }
+            }
+            
+            # Update metrics
+            $result.metrics.duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+            $result.metrics.memory_mb = [Math]::Round((Get-Process -Id $PID).WorkingSet64 / 1MB, 2)
+            $result.metrics.items_processed = 1
+            $result.metrics.batch_size = 100
+            
+            $result.files.total = 1
+            $result.files.indexed = 1
+            $result.files.failed = 0
+            $result.files.skipped = 0
+            
+            Write-StructuredLog -Message "Successfully added file to index" -Level INFO -Properties @{
+                patterns = $patterns.Count
+                metrics = $metrics.Count
+                duration_ms = $result.metrics.duration_ms
+            }
+            
+            return $result
+        }
+        finally {
+            $conn.Close()
+        }
+    }
+    catch {
+        Write-StructuredLog -Message "Failed to add file to index: $_" -Level ERROR
+        $result.status.success = $false
+        $result.status.errors += $_.Exception.Message
+        return $result
+    }
+}
+
+function Add-MLPredictionToIndex {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Id,
+        [Parameter(Mandatory)]
+        [string]$ModelType,
+        [Parameter(Mandatory)]
+        [object]$Predictions,
+        [Parameter(Mandatory)]
+        [double]$Confidence
+    )
+
+    try {
+        $dbPath = Join-Path (Join-Path $PSScriptRoot "../Output/index") "codeindex.db"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath")
+        $conn.Open()
+
+        # Add ML prediction
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = @"
+INSERT INTO ml_predictions (id, model_type, model_version, prediction_data, confidence, timestamp)
+VALUES (@id, @modelType, @modelVersion, @predictionData, @confidence, @timestamp);
+"@
+        $cmd.Parameters.AddWithValue("@id", $Id)
+        $cmd.Parameters.AddWithValue("@modelType", $ModelType)
+        $cmd.Parameters.AddWithValue("@modelVersion", (Get-Content (Join-Path $script:Config.machineLearning.modelPath "version.json") | ConvertFrom-Json).version)
+        $cmd.Parameters.AddWithValue("@predictionData", ($Predictions | ConvertTo-Json -Compress))
+        $cmd.Parameters.AddWithValue("@confidence", $Confidence)
+        $cmd.Parameters.AddWithValue("@timestamp", [DateTime]::UtcNow.ToString('o'))
+        $cmd.ExecuteNonQuery()
+
+        # Add patterns from ML predictions
+        foreach ($prediction in $Predictions) {
+            $lineNumber = 0
+            if ($prediction.Location -and $prediction.Location.LineNumber) {
+                $lineNumber = $prediction.Location.LineNumber
+            }
+
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = @"
+INSERT INTO pattern_index (id, pattern_name, pattern_type, line_number, risk_level, suggestion, context, confidence, ml_prediction)
+VALUES (@id, @name, @type, @lineNumber, @risk, @suggestion, @context, @confidence, @mlPrediction);
+"@
+            $cmd.Parameters.AddWithValue("@id", $Id)
+            $cmd.Parameters.AddWithValue("@name", $prediction.Name)
+            $cmd.Parameters.AddWithValue("@type", $ModelType)
+            $cmd.Parameters.AddWithValue("@lineNumber", $lineNumber)
+            $cmd.Parameters.AddWithValue("@risk", $prediction.Risk)
+            $cmd.Parameters.AddWithValue("@suggestion", $prediction.Suggestion)
+            $cmd.Parameters.AddWithValue("@context", ($prediction | ConvertTo-Json -Compress))
+            $cmd.Parameters.AddWithValue("@confidence", $prediction.Confidence)
+            $cmd.Parameters.AddWithValue("@mlPrediction", $true)
+            $cmd.ExecuteNonQuery()
         }
 
-        Write-StructuredLog -Message "Successfully added file to index" -Level INFO -Properties @{
-            filePath = $FilePath
-            id = $id
-        }
-
+        $conn.Close()
         return $true
     }
     catch {
         Write-ErrorLog -ErrorRecord $_
+        if ($conn) { $conn.Close() }
         return $false
     }
 }
@@ -622,5 +825,6 @@ Export-ModuleMember -Function @(
     'Add-FileToIndex',
     'Add-PatternToIndex',
     'Search-Index',
-    'Update-Index'
+    'Update-Index',
+    'Add-MLPredictionToIndex'
 )

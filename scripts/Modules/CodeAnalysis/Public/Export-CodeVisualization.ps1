@@ -34,13 +34,15 @@ function Format-Template {
     # Handle each blocks
     $eachMatches = [regex]::Matches($result, '{{#each ([^}]+)}}(.*?){{/each}}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     foreach ($match in $eachMatches) {
-        $arrayName = $match.Groups[1].Value
-        $template = $match.Groups[2].Value.Trim()
-        $array = $Data[$arrayName]
+        $regexGroups = @{
+            arrayName = $match.Groups[1].Value
+            template = $match.Groups[2].Value.Trim()
+        }
+        $array = $Data[$regexGroups.arrayName]
         
         if ($array) {
             $replacement = ($array | ForEach-Object {
-                $itemTemplate = $template
+                $itemTemplate = $regexGroups.template
                 if ($_ -is [hashtable]) {
                     foreach ($key in $_.Keys) {
                         $itemTemplate = $itemTemplate.Replace("{{$key}}", $_[$key])
@@ -60,11 +62,13 @@ function Format-Template {
     # Handle if blocks
     $ifMatches = [regex]::Matches($result, '{{#if ([^}]+)}}(.*?){{/if}}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     foreach ($match in $ifMatches) {
-        $condition = $match.Groups[1].Value
-        $content = $match.Groups[2].Value
+        $regexGroups = @{
+            condition = $match.Groups[1].Value
+            content = $match.Groups[2].Value
+        }
         
-        if ($Data[$condition]) {
-            $result = $result.Replace($match.Value, $content)
+        if ($Data[$regexGroups.condition]) {
+            $result = $result.Replace($match.Value, $regexGroups.content)
         } else {
             $result = $result.Replace($match.Value, "")
         }

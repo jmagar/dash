@@ -1,0 +1,30 @@
+﻿{
+    "summary":  {
+                    "patterns":  {
+
+                                 },
+                    "security":  {
+                                     "lowSeverity":  0,
+                                     "averageScore":  0,
+                                     "mediumSeverity":  0,
+                                     "highSeverity":  0
+                                 },
+                    "refactoring":  {
+                                        "suggestions":  [
+
+                                                        ],
+                                        "priorities":  null
+                                    },
+                    "totalFiles":  1,
+                    "performance":  {
+                                        "hotspots":  [
+
+                                                     ],
+                                        "averageComplexity":  0
+                                    },
+                    "analyzedFiles":  0
+                },
+    "files":  {
+
+              }
+}
