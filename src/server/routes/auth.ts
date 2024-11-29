@@ -6,8 +6,9 @@ import { logger } from '../utils/logger';
 import config from '../config';
 import type { 
   User, 
-  AuthenticatedUser, 
-  TokenPayload 
+  AuthenticatedUserDto,
+  AccessTokenPayloadDto,
+  RefreshTokenPayloadDto
 } from '../../types/auth';
 import type { LogMetadata } from '../../types/logger';
 
@@ -39,7 +40,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate tokens
-    const tokenPayload: Omit<TokenPayload, 'iat' | 'exp'> = {
+    const payload: AccessTokenPayloadDto | RefreshTokenPayloadDto = {
       id: user.id,
       userId: user.id,
       username: user.username,
@@ -47,9 +48,9 @@ router.post('/login', async (req, res) => {
       is_active: user.is_active,
       type: 'access'
     };
-    const token = await generateToken(tokenPayload);
+    const token = await generateToken(payload);
 
-    const refreshPayload: Omit<TokenPayload, 'type' | 'iat' | 'exp'> = {
+    const refreshPayload: Omit<AccessTokenPayloadDto | RefreshTokenPayloadDto, 'type' | 'iat' | 'exp'> = {
       id: user.id,
       userId: user.id,
       username: user.username,
@@ -72,7 +73,7 @@ router.post('/login', async (req, res) => {
 
     await cacheService.setSession(token, user, refreshToken);
 
-    const authenticatedUser = {
+    const authenticatedUser: AuthenticatedUserDto = {
       ...user,
       token,
       refreshToken,
@@ -160,7 +161,7 @@ router.get('/validate', async (req, res) => {
       updatedAt: new Date()
     };
 
-    const authenticatedUser = {
+    const authenticatedUser: AuthenticatedUserDto = {
       ...user,
       token,
       refreshToken: sessionData.refreshToken,
@@ -198,7 +199,7 @@ router.post('/refresh', async (req, res) => {
       });
     }
 
-    const decoded = await verifyToken(refreshToken) as TokenPayload;
+    const decoded = await verifyToken(refreshToken) as AccessTokenPayloadDto | RefreshTokenPayloadDto;
     if (!decoded || decoded.type !== 'refresh') {
       return res.status(401).json({
         success: false,
@@ -220,7 +221,7 @@ router.post('/refresh', async (req, res) => {
     };
 
     // Generate new tokens
-    const tokenPayload: Omit<TokenPayload, 'iat' | 'exp'> = {
+    const payload: AccessTokenPayloadDto | RefreshTokenPayloadDto = {
       id: user.id,
       userId: user.id,
       username: user.username,
@@ -228,9 +229,9 @@ router.post('/refresh', async (req, res) => {
       is_active: user.is_active,
       type: 'access'
     };
-    const newToken = await generateToken(tokenPayload);
+    const newToken = await generateToken(payload);
 
-    const refreshPayload: Omit<TokenPayload, 'type' | 'iat' | 'exp'> = {
+    const refreshPayload: Omit<AccessTokenPayloadDto | RefreshTokenPayloadDto, 'type' | 'iat' | 'exp'> = {
       id: user.id,
       userId: user.id,
       username: user.username,

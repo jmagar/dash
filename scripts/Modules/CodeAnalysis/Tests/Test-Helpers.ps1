@@ -5,16 +5,16 @@ using namespace System.Diagnostics
 function New-TestReport {
     param(
         [string]$TestName,
-        [hashtable]$Results,
+        [hashtable]$TestData,
         [TimeSpan]$Duration,
         [string]$OutputPath = "$PSScriptRoot/TestReports"
     )
 
-    $report = @{
+    $reportData = @{
         TestName = $TestName
         Timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
         Duration = $Duration.TotalSeconds
-        Results = $Results
+        Results = $TestData
         MemoryUsed = [System.GC]::GetTotalMemory($true)
     }
 
@@ -25,7 +25,7 @@ function New-TestReport {
 
     # Save JSON report
     $jsonPath = Join-Path $OutputPath "$TestName-$(Get-Date -Format 'yyyyMMddHHmmss').json"
-    $report | ConvertTo-Json -Depth 10 | Set-Content $jsonPath
+    $reportData | ConvertTo-Json -Depth 10 | Set-Content $jsonPath
 
     # Generate HTML report
     $htmlPath = $jsonPath -replace '\.json$', '.html'
@@ -45,15 +45,15 @@ function New-TestReport {
 <body>
     <h1>Test Report: $TestName</h1>
     <div class="metric">Duration: $($Duration.TotalSeconds) seconds</div>
-    <div class="metric">Memory Used: $([math]::Round($report.MemoryUsed / 1MB, 2)) MB</div>
+    <div class="metric">Memory Used: $([math]::Round($reportData.MemoryUsed / 1MB, 2)) MB</div>
     <h2>Results</h2>
-    <pre>$(($Results | ConvertTo-Json -Depth 10))</pre>
+    <pre>$(($TestData | ConvertTo-Json -Depth 10))</pre>
 </body>
 </html>
 "@
     $htmlContent | Set-Content $htmlPath
 
-    return $report
+    return $reportData
 }
 
 function Measure-CodeAnalysis {
@@ -65,11 +65,11 @@ function Measure-CodeAnalysis {
     )
 
     $sw = [Stopwatch]::StartNew()
-    $analysis = Get-ContextualizedAnalysis -Context $Context -FilePath $FilePath
+    $analysisData = Invoke-CodeAnalysis -Path $FilePath -OutputPath "$PSScriptRoot/../Output" -AnalysisName "test-analysis"
     $sw.Stop()
 
     return @{
-        Analysis = $analysis
+        Analysis = $analysisData
         Duration = $sw.Elapsed
         MemoryUsed = [System.GC]::GetTotalMemory($true)
     }
@@ -384,3 +384,5 @@ func (s *Service${i}) Process(ctx context.Context, data []byte) error {
 
     $services -join "`n"
 }
+
+Export-ModuleMember -Function New-TestReport, Measure-CodeAnalysis, New-MockDatabase, Get-TestFiles, Get-ComplexTypeScriptExample, Get-ComplexGoExample, Get-LargeTypeScriptExample, Get-LargeGoExample

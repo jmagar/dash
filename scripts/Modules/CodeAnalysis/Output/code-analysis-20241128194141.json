@@ -1,0 +1,168 @@
+{
+  "summary": {
+    "performance": {
+      "total": 0,
+      "byMetric": {
+        "complexity": 0
+      }
+    },
+    "totalFiles": 1,
+    "processedFiles": 1,
+    "totalScore": 0,
+    "patterns": {
+      "total": 0,
+      "byType": {}
+    },
+    "security": {
+      "total": 0,
+      "bySeverity": {
+        "critical": 0,
+        "high": 0,
+        "low": 0,
+        "medium": 0
+      }
+    },
+    "averageScore": 0
+  },
+  "timestamp": "2024-11-28T19:41:40.9542227-05:00",
+  "files": [
+    {
+      "security": [
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:40.9924101-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:41.0069573-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "score": 0,
+          "statistics": {
+            "total": 0,
+            "bySeverity": {
+              "critical": 0,
+              "high": 0,
+              "low": 0,
+              "medium": 0
+            }
+          },
+          "issues": [],
+          "status": {
+            "success": false,
+            "errors": [
+              "Method invocation failed because [System.Management.Automation.WildcardPattern] does not contain a method named 'ToRegex'."
+            ]
+          }
+        }
+      ],
+      "performance": [
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:41.0189493-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:41.0315502-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "score": 100,
+          "hotspots": [],
+          "status": {
+            "success": true,
+            "errors": []
+          },
+          "recommendations": [],
+          "metrics": {
+            "complexity": 0.0,
+            "functions": 0,
+            "lines": 2
+          }
+        }
+      ],
+      "path": "C:\\Users\\jmaga\\AppData\\Local\\Temp\\8e70dd7b-ee24-4a87-a8b4-83737c9f5b42\\TestData\\empty_test.ps1",
+      "timestamp": "2024-11-28T19:41:41.0380075-05:00",
+      "patterns": [
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:40.9619966-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ]
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:41:40.9761803-05:00",
+            "source": "Logging.ps1",
+            "level": "FATAL"
+          }
+        },
+        {
+          "status": {
+            "success": false,
+            "errors": [
+              "The property 'patterns' cannot be found on this object. Verify that the property exists."
+            ]
+          },
+          "patterns": {
+            "suggested": [],
+            "matched": [],
+            "statistics": {
+              "total": 0,
+              "byType": {}
+            }
+          }
+        }
+      ],
+      "language": "powershell"
+    }
+  ]
+}

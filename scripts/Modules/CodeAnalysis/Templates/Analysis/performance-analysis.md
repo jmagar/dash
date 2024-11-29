@@ -1,103 +1,101 @@
 # Performance Analysis Report
 
 ## Overview
-- Analysis Date: {{date}}
+- Analysis Date: {{analysisDate}}
 - Total Files Analyzed: {{totalFiles}}
 - Critical Issues: {{criticalIssues}}
 - Warnings: {{warnings}}
 - Overall Performance Score: {{performanceScore}}/100
+- Analysis Tool Version: {{toolVersion}}
 
 ## Performance Metrics
-### Load Time Analysis
-- Average Load Time: {{avgLoadTime}}ms
-- P95 Load Time: {{p95LoadTime}}ms
-- P99 Load Time: {{p99LoadTime}}ms
-- Time to First Byte: {{ttfb}}ms
-- Time to Interactive: {{tti}}ms
-
 ### Resource Usage
-- Memory Usage: {{memoryUsage}}
+- Memory Usage: {{memoryUsage}}/{{metrics.performance.memoryThreshold}}
 - CPU Utilization: {{cpuUtilization}}%
-- Network Requests: {{networkRequests}}
-- Bundle Size: {{bundleSize}}
+- Batch Processing: {{batchSize}}/{{metrics.performance.batchSize}}
+- Parallel Operations: {{parallelOps}}/{{metrics.performance.maxParallelism}}
+
+### Code Metrics
+- Average Complexity: {{complexity}}/{{metrics.complexity.maxAllowed}}
+- Warning Level: {{metrics.complexity.warning}}
+- Pattern Matches: {{patternMatches}}
+- Lines of Code: {{loc}}
 
 ## Critical Performance Issues
 {{#each criticalIssues}}
 ### {{file}}
 - Issue: {{description}}
 - Impact: {{impact}}
-- Line: {{line}}
+- Location: Line {{line}}
+- Pattern: {{pattern}}
 - Recommendation: {{recommendation}}
 - Estimated Improvement: {{improvement}}
+- Priority: {{priority}}
 {{/each}}
 
 ## Code Analysis
 ### Expensive Operations
 {{#each expensiveOperations}}
 - Location: {{location}}
-- Operation: {{operation}}
-- Cost: {{cost}}
-- Suggestion: {{suggestion}}
+- Operation Type: {{type}}
+- Cost Metric: {{cost}}
+- Memory Impact: {{memoryImpact}}
+- CPU Impact: {{cpuImpact}}
+- Optimization Strategy: {{optimization}}
+- Implementation:
+```{{language}}
+{{code}}
+```
 {{/each}}
 
-### Memory Leaks
-{{#each memoryLeaks}}
+### Memory Management
+{{#each memoryIssues}}
 - Component: {{component}}
 - Type: {{type}}
+- Current Usage: {{currentUsage}}
+- Threshold: {{threshold}}
 - Impact: {{impact}}
-- Fix: {{fix}}
+- Resolution: {{resolution}}
+- Implementation Details: {{details}}
 {{/each}}
 
-### Render Performance
-{{#each renderIssues}}
-- Component: {{component}}
-- Re-renders: {{reRenderCount}}
-- Cause: {{cause}}
-- Solution: {{solution}}
+### Processing Efficiency
+{{#each processingIssues}}
+- Operation: {{operation}}
+- Current Time: {{currentTime}}ms
+- Target Time: {{targetTime}}ms
+- Bottleneck: {{bottleneck}}
+- Optimization Strategy: {{strategy}}
+- Required Changes: {{changes}}
 {{/each}}
 
-## Bundle Analysis
-### Size by Entry Point
-{{#each bundleEntries}}
-- {{name}}: {{size}}
+## Resource Optimization
+### Memory Optimization
+{{#each memoryOptimizations}}
+- Target: {{target}}
+- Current Size: {{currentSize}}
+- Optimized Size: {{optimizedSize}}
+- Strategy: {{strategy}}
+- Implementation Priority: {{priority}}
 {{/each}}
 
-### Large Dependencies
-{{#each largeDependencies}}
-- {{name}}: {{size}}
-  - Usage: {{usage}}
-  - Alternative: {{alternative}}
+### CPU Optimization
+{{#each cpuOptimizations}}
+- Process: {{process}}
+- Current Load: {{currentLoad}}%
+- Target Load: {{targetLoad}}%
+- Optimization Method: {{method}}
+- Expected Improvement: {{improvement}}%
 {{/each}}
 
-### Code Splitting Opportunities
-{{#each codeSplitting}}
-- {{route}}: {{recommendation}}
-{{/each}}
-
-## Network Performance
-### API Calls
-{{#each apiCalls}}
-- Endpoint: {{endpoint}}
-- Average Response Time: {{responseTime}}ms
-- Cache Hit Rate: {{cacheRate}}%
-- Optimization: {{optimization}}
-{{/each}}
-
-### Asset Loading
-{{#each assets}}
-- Type: {{type}}
-- Size: {{size}}
-- Loading Strategy: {{strategy}}
-- Optimization: {{optimization}}
-{{/each}}
-
-## Database Performance
-{{#each databaseQueries}}
-### {{query}}
-- Average Execution Time: {{executionTime}}ms
-- Index Usage: {{indexUsage}}
-- Rows Examined: {{rowsExamined}}
-- Optimization: {{optimization}}
+### Batch Processing
+{{#each batchProcessing}}
+- Operation: {{operation}}
+- Current Batch Size: {{currentSize}}
+- Optimal Batch Size: {{optimalSize}}
+- Processing Time: {{time}}ms
+- Memory Usage: {{memory}}MB
+- Recommendations: {{recommendations}}
 {{/each}}
 
 ## Caching Analysis
@@ -106,31 +104,47 @@
 - Hit Rate: {{hitRate}}%
 - Miss Rate: {{missRate}}%
 - Eviction Rate: {{evictionRate}}%
-- Recommendations: {{recommendations}}
+- Cache Size: {{size}}
+- TTL: {{ttl}}
+- Optimization Suggestions:
+{{#each suggestions}}
+  - {{this}}
+{{/each}}
 {{/each}}
 
 ## Recommendations
 ### Immediate Actions
 {{#each immediateActions}}
-1. {{this}}
+1. {{description}}
+   - Impact: {{impact}}
+   - Effort: {{effort}}
+   - Priority: {{priority}}
 {{/each}}
 
-### Short Term
-{{#each shortTerm}}
-1. {{this}}
+### Short Term Optimizations
+{{#each shortTermOptimizations}}
+1. {{description}}
+   - Impact: {{impact}}
+   - Effort: {{effort}}
+   - Timeline: {{timeline}}
 {{/each}}
 
-### Long Term
-{{#each longTerm}}
-1. {{this}}
+### Long Term Improvements
+{{#each longTermImprovements}}
+1. {{description}}
+   - Impact: {{impact}}
+   - Effort: {{effort}}
+   - Dependencies: {{dependencies}}
 {{/each}}
 
-## Monitoring Recommendations
+## Performance Monitoring
 {{#each monitoring}}
-- Metric: {{metric}}
+### {{metric}}
 - Current Value: {{currentValue}}
 - Target Value: {{targetValue}}
 - Alert Threshold: {{threshold}}
+- Monitoring Interval: {{interval}}
+- Alert Conditions: {{conditions}}
 {{/each}}
 
 ## Performance Budget
@@ -139,4 +153,17 @@
 - Current: {{current}}
 - Budget: {{limit}}
 - Status: {{status}}
+- Trend: {{trend}}
+- Actions Required: {{actions}}
 {{/each}}
+
+## Analysis Configuration
+```json
+{{configJson}}
+```
+
+## Test Environment
+- Hardware: {{environment.hardware}}
+- OS: {{environment.os}}
+- Runtime: {{environment.runtime}}
+- Load Conditions: {{environment.load}}

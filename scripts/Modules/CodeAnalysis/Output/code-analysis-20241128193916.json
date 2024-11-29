@@ -1,0 +1,168 @@
+{
+  "summary": {
+    "processedFiles": 1,
+    "averageScore": 0,
+    "patterns": {
+      "byType": {},
+      "total": 0
+    },
+    "totalScore": 0,
+    "performance": {
+      "total": 0,
+      "byMetric": {
+        "complexity": 0
+      }
+    },
+    "security": {
+      "bySeverity": {
+        "low": 0,
+        "critical": 0,
+        "medium": 0,
+        "high": 0
+      },
+      "total": 0
+    },
+    "totalFiles": 1
+  },
+  "files": [
+    {
+      "performance": [
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4556615-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4662574-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "metrics": {
+            "functions": 0,
+            "lines": 2,
+            "complexity": 0.0
+          },
+          "hotspots": [],
+          "status": {
+            "errors": [],
+            "success": true
+          },
+          "recommendations": [],
+          "score": 100
+        }
+      ],
+      "patterns": [
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4047554-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4155440-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "The property 'patterns' cannot be found on this object. Verify that the property exists."
+            ],
+            "success": false
+          },
+          "patterns": {
+            "suggested": [],
+            "statistics": {
+              "byType": {},
+              "total": 0
+            },
+            "matched": []
+          }
+        }
+      ],
+      "timestamp": "2024-11-28T19:39:16.4791433-05:00",
+      "security": [
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4274100-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "metadata": {
+            "source": "Logging.ps1",
+            "level": "FATAL",
+            "timestamp": "2024-11-28T19:39:16.4417845-05:00"
+          },
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          }
+        },
+        {
+          "issues": [],
+          "statistics": {
+            "bySeverity": {
+              "low": 0,
+              "critical": 0,
+              "medium": 0,
+              "high": 0
+            },
+            "total": 0
+          },
+          "status": {
+            "errors": [
+              "Method invocation failed because [System.Management.Automation.WildcardPattern] does not contain a method named 'ToRegex'."
+            ],
+            "success": false
+          },
+          "score": 0
+        }
+      ],
+      "language": "powershell",
+      "path": "C:\\Users\\jmaga\\AppData\\Local\\Temp\\38c7aa22-da73-48b7-948c-2a9284726fb9\\TestData\\empty_test.ps1"
+    }
+  ],
+  "timestamp": "2024-11-28T19:39:16.3939698-05:00"
+}

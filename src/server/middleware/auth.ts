@@ -1,148 +1,151 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, TokenPayload } from '../utils/jwt';
+import { verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
-import { ApiError } from '../../types/error';
+import { ApiError } from '../types/errors';
+import { ApiErrorResponse } from '../types/common.dto';
+import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: TokenPayload;
-    }
-  }
+// Extend Express Request type
+export interface AuthenticatedRequest extends Request {
+  user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
 }
-
-type AuthenticatedRequest = Request & { user: TokenPayload };
 
 /**
  * Authenticate JWT token middleware
  */
-export async function authenticateToken(
+export function authenticateToken(
   req: Request,
   res: Response,
   next: NextFunction
-): Promise<void> {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new ApiError('No token provided', undefined, 401);
-    }
-
-    const token = authHeader.split(' ')[1];
-    const payload = await verifyToken(token);
-
-    if (payload.type !== 'access') {
-      throw new ApiError('Invalid token type', undefined, 401);
-    }
-
-    req.user = payload;
-    next();
-  } catch (error) {
-    logger.warn('Authentication failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      path: req.path,
-      method: req.method,
-      ip: req.ip,
-    });
-
-    if (error instanceof ApiError) {
-      res.status(error.status).json({
-        success: false,
-        error: error.message,
-      });
-      return;
-    }
-
-    res.status(401).json({
+): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    logger.warn('No token provided', { path: req.path });
+    const response: ApiErrorResponse = {
       success: false,
-      error: 'Authentication failed',
-    });
+      message: 'No token provided',
+      statusCode: 401,
+      requestId: req.requestId
+    };
+    res.status(401).json(response);
+    return;
   }
+
+  const token = authHeader.split(' ')[1];
+  void verifyToken(token)
+    .then(payload => {
+      if (payload.type !== 'access') {
+        throw ApiError.unauthorized('Invalid token type');
+      }
+      (req as AuthenticatedRequest).user = payload as AccessTokenPayloadDto | RefreshTokenPayloadDto;
+      next();
+    })
+    .catch(error => {
+      logger.warn('Authentication failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+      });
+
+      const response: ApiErrorResponse = {
+        success: false,
+        message: error instanceof ApiError ? error.message : 'Authentication failed',
+        statusCode: error instanceof ApiError ? error.status : 401,
+        requestId: req.requestId
+      };
+
+      res.status(response.statusCode).json(response);
+    });
 }
 
 /**
  * Check user role middleware
  */
 export function checkRole(requiredRole: string) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const user = (req as AuthenticatedRequest).user;
-      
-      if (!user) {
-        throw new ApiError('User not authenticated', undefined, 401);
-      }
-
-      if (user.role !== requiredRole) {
-        throw new ApiError('Insufficient permissions', undefined, 403);
-      }
-
-      next();
-    } catch (error) {
-      logger.warn('Role check failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        requiredRole,
-        userRole: (req as AuthenticatedRequest).user?.role,
-        path: req.path,
-      });
-
-      if (error instanceof ApiError) {
-        res.status(error.status).json({
-          success: false,
-          error: error.message,
-        });
-        return;
-      }
-
-      res.status(500).json({
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      const response: ApiErrorResponse = {
         success: false,
-        error: 'Role check failed',
-      });
+        message: 'User not authenticated',
+        statusCode: 401,
+        requestId: req.requestId
+      };
+      res.status(401).json(response);
+      return;
     }
+
+    if (user.role !== requiredRole) {
+      logger.warn('Insufficient role:', {
+        required: requiredRole,
+        actual: user.role,
+        userId: user.id,
+        path: req.path
+      });
+
+      const response: ApiErrorResponse = {
+        success: false,
+        message: 'Insufficient permissions',
+        statusCode: 403,
+        requestId: req.requestId
+      };
+      res.status(403).json(response);
+      return;
+    }
+
+    next();
   };
 }
 
 /**
  * Check if user is accessing their own resources
  */
-export function checkOwnership(userIdParam: string = 'userId') {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const user = (req as AuthenticatedRequest).user;
-      
-      if (!user) {
-        throw new ApiError('User not authenticated', undefined, 401);
-      }
+export function checkOwnership(userIdParam = 'userId') {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as AuthenticatedRequest).user;
+    const resourceUserId = req.params[userIdParam];
 
-      const resourceUserId = req.params[userIdParam];
-      if (!resourceUserId) {
-        throw new ApiError('User ID parameter not found', undefined, 400);
-      }
-
-      if (user.id !== resourceUserId) {
-        throw new ApiError('Access denied', undefined, 403);
-      }
-
-      next();
-    } catch (error) {
-      logger.warn('Ownership check failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId: (req as AuthenticatedRequest).user?.id,
-        resourceId: req.params[userIdParam],
-        path: req.path,
-      });
-
-      if (error instanceof ApiError) {
-        res.status(error.status).json({
-          success: false,
-          error: error.message,
-        });
-        return;
-      }
-
-      res.status(500).json({
+    if (!user) {
+      const response: ApiErrorResponse = {
         success: false,
-        error: 'Ownership check failed',
-      });
+        message: 'User not authenticated',
+        statusCode: 401,
+        requestId: req.requestId
+      };
+      res.status(401).json(response);
+      return;
     }
+
+    if (!resourceUserId) {
+      const response: ApiErrorResponse = {
+        success: false,
+        message: 'User ID parameter not found',
+        statusCode: 400,
+        requestId: req.requestId
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (user.id !== resourceUserId && user.role !== 'admin') {
+      logger.warn('Unauthorized resource access:', {
+        userId: user.id,
+        resourceUserId,
+        path: req.path
+      });
+
+      const response: ApiErrorResponse = {
+        success: false,
+        message: 'Access denied',
+        statusCode: 403,
+        requestId: req.requestId
+      };
+      res.status(403).json(response);
+      return;
+    }
+
+    next();
   };
 }
 

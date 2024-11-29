@@ -1,8 +1,8 @@
-import { TokenPayload } from './auth';
+import { AccessTokenPayloadDto| RefreshTokenPayloadDto } from './auth';
 
 declare module 'express-serve-static-core' {
   interface Request {
-    user?: TokenPayload;
+    user?: AccessTokenPayloadDto| RefreshTokenPayloadDto;
   }
 }
 

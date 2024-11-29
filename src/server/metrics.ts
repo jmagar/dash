@@ -1,86 +1,72 @@
 import type { Application, Request, Response, NextFunction } from 'express';
-import { Server as SocketServer } from 'socket.io';
-import { createServer } from 'http';
+import type { Server as SocketServer } from 'socket.io';
 import {
   Registry,
   collectDefaultMetrics,
   Counter,
   Histogram,
   Gauge,
-  LabelValues,
-  MetricConfiguration,
 } from 'prom-client';
 import { logger } from './utils/logger';
-
-// Define metric label types
-interface MetricLabels {
-  method: string;
-  route: string;
-  status_code: string;
-}
-
-interface ErrorLabels {
-  method: string;
-  route: string;
-  error_type: string;
-}
-
-interface ConnectionLabels {
-  status: 'connected' | 'disconnected';
-}
-
-interface HostMetricLabels {
-  host_id: string;
-  metric_type: string;
-}
 
 // Create a new registry
 const register = new Registry();
 
-// Create metric instances with proper typing
-const httpRequestDuration = new Histogram<keyof MetricLabels>({
+// Enable default metrics collection
+collectDefaultMetrics({ register });
+
+// Define metric types
+type MetricLabels = {
+  method: string;
+  route: string;
+  status_code: string;
+};
+
+type ErrorLabels = {
+  method: string;
+  route: string;
+  error_type: string;
+};
+
+type HostMetricLabels = {
+  host_id: string;
+  metric_type: string;
+};
+
+// Create metrics with proper typing
+const httpRequestDuration = new Histogram({
   name: 'http_request_duration_seconds',
   help: 'Duration of HTTP requests in seconds',
   labelNames: ['method', 'route', 'status_code'],
   buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10],
   registers: [register],
-} as MetricConfiguration<keyof MetricLabels>);
+});
 
-const apiErrors = new Counter<keyof ErrorLabels>({
+const apiErrors = new Counter({
   name: 'api_errors_total',
   help: 'Total number of API errors',
   labelNames: ['method', 'route', 'error_type'],
   registers: [register],
-} as MetricConfiguration<keyof ErrorLabels>);
+});
 
-const activeConnections = new Counter<keyof ConnectionLabels>({
-  name: 'websocket_connections_total',
-  help: 'Total number of WebSocket connections',
-  labelNames: ['status'],
-  registers: [register],
-} as MetricConfiguration<keyof ConnectionLabels>);
-
-const hostMetrics = new Gauge<keyof HostMetricLabels>({
+const hostMetrics = new Gauge({
   name: 'host_metrics',
   help: 'Host system metrics',
   labelNames: ['host_id', 'metric_type'],
   registers: [register],
-} as MetricConfiguration<keyof HostMetricLabels>);
+});
 
 /**
- * Setup application metrics
+ * Setup application metrics middleware
  */
-export function setupMetrics(app: Application): void {
-  // Enable the collection of default metrics
-  collectDefaultMetrics({ register });
-
+export function setupMetrics(app: Application, io: SocketServer): void {
   // Add request metrics middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
 
     res.on('finish', () => {
       const duration = Date.now() - start;
-      const labels: LabelValues<keyof MetricLabels> = {
+      const labels: MetricLabels = {
         method: req.method,
         route: req.path,
         status_code: res.statusCode.toString(),
@@ -89,7 +75,7 @@ export function setupMetrics(app: Application): void {
       httpRequestDuration.observe(labels, duration / 1000);
 
       if (res.statusCode >= 400) {
-        const errorLabels: LabelValues<keyof ErrorLabels> = {
+        const errorLabels: ErrorLabels = {
           method: req.method,
           route: req.path,
           error_type: res.statusCode >= 500 ? 'server_error' : 'client_error',
@@ -101,93 +87,67 @@ export function setupMetrics(app: Application): void {
     next();
   });
 
-  // Setup WebSocket metrics with proper HTTP server
-  const httpServer = createServer(app);
-  const io = new SocketServer(httpServer);
-
+  // Setup WebSocket metrics using existing Socket.IO instance
   io.on('connection', (socket) => {
-    const connectedLabel: LabelValues<keyof ConnectionLabels> = {
-      status: 'connected',
-    };
-    activeConnections.inc(connectedLabel);
+    const hostId = socket.handshake.query.hostId as string;
+    if (hostId) {
+      hostMetrics.set({ host_id: hostId, metric_type: 'connected' }, 1);
 
-    socket.on('disconnect', () => {
-      const disconnectedLabel: LabelValues<keyof ConnectionLabels> = {
-        status: 'disconnected',
-      };
-      activeConnections.inc(disconnectedLabel);
-    });
-  });
-
-  // Start the HTTP server
-  const port = process.env.METRICS_PORT || 9090;
-  httpServer.listen(port, () => {
-    logger.info(`Metrics server listening on port ${port}`);
+      socket.on('disconnect', () => {
+        handleSocketDisconnect(hostId);
+      });
+    }
   });
 
   // Expose metrics endpoint
-  app.get('/metrics', async (_req: Request, res: Response) => {
-    try {
-      const metrics = await register.metrics();
-      res.set('Content-Type', register.contentType);
-      res.send(metrics);
-    } catch (error) {
-      logger.error('Error generating metrics', {
-        error: error instanceof Error ? error.message : 'Unknown error'
+  app.get('/metrics', (req: Request, res: Response) => {
+    register.metrics()
+      .then(metrics => {
+        res.set('Content-Type', register.contentType);
+        res.send(metrics);
+      })
+      .catch(error => {
+        logger.error('Error generating metrics', {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).send('Error generating metrics');
       });
-      res.status(500).send('Error generating metrics');
-    }
   });
 
   logger.info('Metrics setup complete');
 }
 
-// Export metrics interface with proper typing
-export interface MetricsInterface {
-  httpRequestDuration: Histogram<keyof MetricLabels>;
-  apiErrors: Counter<keyof ErrorLabels>;
-  activeConnections: Counter<keyof ConnectionLabels>;
-  hostMetrics: Gauge<keyof HostMetricLabels>;
-  register: Registry;
+// Handle socket disconnect
+function handleSocketDisconnect(hostId: string): void {
+  try {
+    hostMetrics.set({ host_id: hostId, metric_type: 'connected' }, 0);
+  } catch (error) {
+    logger.error('Error handling socket disconnect', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      hostId
+    });
+  }
 }
 
-// Export metrics instance
-export const metrics: MetricsInterface = {
+// Export metrics interface
+export const metrics = {
   httpRequestDuration,
   apiErrors,
-  activeConnections,
   hostMetrics,
   register,
 };
 
-// Helper functions with proper typing
+// Helper functions
 export function recordHostMetric(hostId: string, metricType: string, value: number): void {
-  const labels: LabelValues<keyof HostMetricLabels> = {
-    host_id: hostId,
-    metric_type: metricType,
-  };
-  hostMetrics.set(labels, value);
+  hostMetrics.set({ host_id: hostId, metric_type: metricType }, value);
 }
 
 export function incrementApiError(method: string, route: string, errorType: string): void {
-  const labels: LabelValues<keyof ErrorLabels> = {
-    method,
-    route,
-    error_type: errorType,
-  };
-  apiErrors.inc(labels);
+  apiErrors.inc({ method, route, error_type: errorType });
 }
 
 export function observeRequestDuration(method: string, route: string, statusCode: string, duration: number): void {
-  const labels: LabelValues<keyof MetricLabels> = {
-    method,
-    route,
-    status_code: statusCode,
-  };
-  httpRequestDuration.observe(labels, duration);
+  httpRequestDuration.observe({ method, route, status_code: statusCode }, duration);
 }
 
-export function trackWebSocketConnection(status: 'connected' | 'disconnected'): void {
-  const labels: LabelValues<keyof ConnectionLabels> = { status };
-  activeConnections.inc(labels);
-}
+export type { MetricLabels, ErrorLabels, HostMetricLabels };

@@ -1,157 +1,167 @@
 {
-    "version": "1.0",
-    "cascadeOptimization": {
-        "patternTypes": {
-            "refactoring": {
-                "priority": 1,
-                "cascadeCompatibility": "high",
-                "automationLevel": "full"
-            },
-            "style": {
-                "priority": 2,
-                "cascadeCompatibility": "high",
-                "automationLevel": "full"
-            },
-            "performance": {
-                "priority": 3,
-                "cascadeCompatibility": "medium",
-                "automationLevel": "assisted"
-            },
-            "security": {
-                "priority": 4,
-                "cascadeCompatibility": "low",
-                "automationLevel": "review"
-            }
-        },
-        "toolMappings": {
-            "edit_file": {
-                "patterns": ["style.*", "refactoring.*"],
-                "confidence": 0.9
-            },
-            "view_file": {
-                "patterns": ["security.*", "performance.*"],
-                "confidence": 0.7
-            }
-        }
-    },
+    "version": "2.0",
     "languages": {
-        ".go": {
-            "interfaces": "^\\s*type\\s+\\w+\\s+interface\\s*{",
-            "goroutines": "\\bgo\\s+\\w+",
-            "channels": "\\bchan\\b|\\<-",
-            "errorHandling": "if\\s+err\\s*[!:]?=|return\\s+.*,\\s*err",
-            "structTags": "`[^`]+`",
-            "testing": "^func\\s+Test\\w+\\s*\\(t\\s*\\*testing\\.T\\)",
-            "deferStatements": "\\bdefer\\s+",
-            "contexts": "context\\.Context|WithContext|ctx\\s+context\\.",
-            "mutexes": "sync\\.Mutex|RWMutex|Lock\\(\\)|Unlock\\(\\)",
-            "embedding": "^type\\s+\\w+\\s+struct\\s*{\\s*\\w+\\s*$"
-        },
-        ".js|.ts": {
-            "modulePatterns": "(?:import|export)\\s+(?:{[^}]*}|\\*|\\w+)",
-            "reactHooks": "use[A-Z]\\w+",
-            "asyncAwait": "async|await",
-            "promises": "\\.then\\(|\\.catch\\(|Promise\\.",
-            "typeAnnotations": ":\\s*[A-Z]\\w+(?:<.*>)?"
-        },
-        ".py": {
-            "decorators": "@\\w+",
-            "typeHints": ":\\s*\\w+(?:\\[.*\\])?",
-            "comprehensions": "\\[.*for.*in.*\\]|\\{.*for.*in.*\\}",
-            "asyncIO": "async\\s+def|await",
-            "contextManagers": "with\\s+.*:"
-        },
-        ".ps1": {
-            "cmdletBinding": "\\[CmdletBinding.*\\]",
-            "parameters": "\\[Parameter.*\\]",
-            "errorHandling": "try|catch|finally|throw",
-            "pipelineInput": "\\{\\s*process\\s*\\{",
-            "advancedFunctions": "function\\s+\\w+-\\w+"
-        },
-        "powershell": {
-            "patterns": {
-                "refactoring.function.complexity": {
-                    "regex": "function\\s+[\\w-]+\\s*{[^}]{500,}}",
-                    "type": "refactoring",
-                    "cascadeAction": {
-                        "tool": "edit_file",
-                        "strategy": "split_function",
-                        "validation": "unit_test"
-                    }
+        "typescript": {
+            "patterns": [
+                {
+                    "name": "useEffect-missing-deps",
+                    "type": "react-hooks",
+                    "regex": "useEffect\\([^,]+,\\s*\\[\\s*\\]\\s*\\)",
+                    "severity": "warning",
+                    "description": "useEffect with empty dependency array",
+                    "recommendation": "Add dependencies or use useLayoutEffect if intentional"
                 },
-                "style.naming.pascal": {
-                    "regex": "function\\s+[a-z]\\w+",
-                    "type": "style",
-                    "cascadeAction": {
-                        "tool": "edit_file",
-                        "strategy": "rename_pascal",
-                        "validation": "syntax"
-                    }
+                {
+                    "name": "useState-callback",
+                    "type": "react-hooks",
+                    "regex": "useState\\(\\s*\\([^)]+\\)\\s*=>",
+                    "severity": "info",
+                    "description": "useState with callback initializer",
+                    "recommendation": "Consider if callback is necessary for performance"
                 },
-                "performance.pipeline.optimization": {
-                    "regex": "\\|\\s*ForEach-Object\\s*{[^}]+}\\s*\\|\\s*Where-Object",
-                    "type": "performance",
-                    "cascadeAction": {
-                        "tool": "edit_file",
-                        "strategy": "pipeline_optimize",
-                        "validation": "benchmark"
-                    }
+                {
+                    "name": "unhandled-promise",
+                    "type": "async",
+                    "regex": "\\bawait\\s+[^.]+\\s*(?!\\.catch|\\.then)",
+                    "severity": "warning",
+                    "description": "Unhandled Promise rejection",
+                    "recommendation": "Add error handling with try/catch or .catch()"
                 }
-            }
-        },
-        "python": {
-            "patterns": {
-                "refactoring.class.large": {
-                    "regex": "class\\s+\\w+[^}]{1000,}}",
-                    "type": "refactoring",
-                    "cascadeAction": {
-                        "tool": "edit_file",
-                        "strategy": "split_class",
-                        "validation": "unit_test"
-                    }
-                }
-            }
+            ]
         },
         "javascript": {
-            "patterns": {
-                "refactoring.component.props": {
-                    "regex": "function\\s+\\w+\\s*\\(\\s*props\\s*\\)",
-                    "type": "refactoring",
-                    "cascadeAction": {
-                        "tool": "edit_file",
-                        "strategy": "destructure_props",
-                        "validation": "typescript"
-                    }
+            "patterns": [
+                {
+                    "name": "console-log",
+                    "type": "debugging",
+                    "regex": "console\\.log\\(",
+                    "severity": "info",
+                    "description": "Console.log statement",
+                    "recommendation": "Remove debug logs in production"
+                },
+                {
+                    "name": "eval-usage",
+                    "type": "security",
+                    "regex": "\\beval\\(",
+                    "severity": "critical",
+                    "description": "Use of eval()",
+                    "recommendation": "Avoid eval for security reasons"
                 }
-            }
+            ]
+        },
+        "powershell": {
+            "patterns": [
+                {
+                    "name": "invoke-expression",
+                    "type": "security",
+                    "regex": "Invoke-Expression",
+                    "severity": "high",
+                    "description": "Use of Invoke-Expression",
+                    "recommendation": "Avoid Invoke-Expression for security reasons"
+                },
+                {
+                    "name": "write-verbose",
+                    "type": "logging",
+                    "regex": "Write-Verbose",
+                    "severity": "info",
+                    "description": "Verbose logging statement",
+                    "recommendation": "Ensure consistent logging level usage"
+                }
+            ]
         }
     },
-    "common": {
-        "documentation": {
-            "xmlDocs": "\\/\\/\\/|\"\"\"|'''|#\\s*\\w+:",
-            "inlineComments": "(?:\\/\\/|\\#|')\\s*\\w+",
-            "todos": "(?:\\/\\/|\\#|')\\s*TODO:",
-            "fixmes": "(?:\\/\\/|\\#|')\\s*FIXME:"
+    "security": {
+        "typescript": {
+            "patterns": [
+                {
+                    "name": "sql-injection",
+                    "regex": "execute\\s*\\(\\s*['\"`]\\s*SELECT.*\\$\\{",
+                    "severity": "critical",
+                    "cvss": 9.8,
+                    "description": "Potential SQL injection vulnerability",
+                    "recommendation": "Use parameterized queries"
+                },
+                {
+                    "name": "xss",
+                    "regex": "dangerouslySetInnerHTML|innerHTML\\s*=",
+                    "severity": "high",
+                    "cvss": 7.5,
+                    "description": "Potential XSS vulnerability",
+                    "recommendation": "Use safe content rendering methods"
+                }
+            ]
         },
-        "security": {
-            "hardcodedSecrets": "(?i)password|secret|key|token|credential",
-            "sqlInjection": "(?i)select\\s+.*from|insert\\s+into|update\\s+.*set|delete\\s+from",
-            "unsafeInput": "(?i)eval\\(|exec\\(|system\\("
+        "javascript": {
+            "patterns": [
+                {
+                    "name": "hardcoded-secret",
+                    "regex": "(?i)(?:password|secret|key|token)\\s*=\\s*['\"][^'\"]+['\"]",
+                    "severity": "critical",
+                    "cvss": 9.1,
+                    "description": "Hardcoded secret detected",
+                    "recommendation": "Use environment variables or secure secret storage"
+                }
+            ]
         },
-        "performance": {
-            "nestedLoops": "(?:for|while).*(?:for|while)",
-            "largeCollections": "\\[\\d{4,}\\]|\\{\\d{4,}\\}",
-            "resourceLeaks": "open\\(|new\\s+\\w+\\("
+        "powershell": {
+            "patterns": [
+                {
+                    "name": "plaintext-password",
+                    "regex": "-Password\\s+['\"][^'\"]+['\"]",
+                    "severity": "critical",
+                    "cvss": 9.1,
+                    "description": "Plaintext password in command",
+                    "recommendation": "Use SecureString or credential objects"
+                }
+            ]
+        }
+    },
+    "performance": {
+        "typescript": {
+            "patterns": [
+                {
+                    "name": "array-in-loop",
+                    "regex": "for\\s*\\([^)]+\\)\\s*{[^}]*\\b(push|pop|shift|unshift)\\b",
+                    "severity": "warning",
+                    "impact": "high",
+                    "description": "Array modification in loop",
+                    "recommendation": "Consider using array methods or pre-allocation"
+                },
+                {
+                    "name": "nested-subscription",
+                    "regex": "useEffect\\([^}]+useEffect\\([^}]+\\}\\s*\\)",
+                    "severity": "warning",
+                    "impact": "medium",
+                    "description": "Nested effect subscriptions",
+                    "recommendation": "Combine effects or use custom hook"
+                }
+            ]
+        }
+    },
+    "suggestions": {
+        "Database": {
+            "SQL": {
+                "popularity": 0.8,
+                "description": "SQL database integration",
+                "documentation": "https://www.postgresql.org/docs/"
+            },
+            "MongoDB": {
+                "popularity": 0.7,
+                "description": "NoSQL database integration",
+                "documentation": "https://docs.mongodb.com/"
+            }
         },
-        "testing": {
-            "unitTests": "test|spec|should",
-            "mocking": "mock|stub|fake",
-            "assertions": "assert|expect|should"
-        },
-        "architecture": {
-            "dependencyInjection": "inject|provider|container",
-            "factory": "factory|create\\w+|build\\w+",
-            "singleton": "instance|shared|global"
+        "API": {
+            "REST": {
+                "popularity": 0.9,
+                "description": "RESTful API implementation",
+                "documentation": "https://docs.microsoft.com/en-us/azure/architecture/best-practices/api-design"
+            },
+            "GraphQL": {
+                "popularity": 0.6,
+                "description": "GraphQL API implementation",
+                "documentation": "https://graphql.org/learn/"
+            }
         }
     }
 }

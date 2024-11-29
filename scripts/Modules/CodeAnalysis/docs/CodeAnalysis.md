@@ -2,45 +2,83 @@
 
 ## Overview
 
-The Code Analysis module provides comprehensive static code analysis capabilities for PowerShell and other supported languages. It analyzes code for patterns, metrics, security issues, and performance concerns.
+The Code Analysis module provides comprehensive static code analysis capabilities with pattern detection, security scanning, and performance optimization features. It uses machine learning for advanced pattern recognition and provides detailed visualizations of analysis results.
 
 ## Key Features
 
 - Static code analysis with pattern matching
-- Performance metrics and optimization suggestions
-- Security vulnerability detection
-- Machine learning-based code recommendations
-- Visualization of code dependencies and metrics
+- Security vulnerability detection and CVSS scoring
+- Performance metrics and optimization recommendations
+- Machine learning-based pattern detection
+- Dependency analysis and visualization
+- Directory structure analysis
+- Comprehensive refactoring recommendations
 
-## Installation
+## Prerequisites
 
-1. Ensure PowerShell 5.1 or later is installed
-2. Install required modules:
-   ```powershell
-   Install-Module -Name PSSQLite
-   ```
-3. Copy the module to your PowerShell modules directory
+### System Requirements
+- PowerShell 5.1 or later
+- Visual C++ Build Tools (for Python packages)
+- .NET Framework 4.8 or later
+
+### Required PowerShell Modules
+```powershell
+Install-Module -Name PSSQLite -Scope CurrentUser
+```
+
+### Python Environment (for ML features)
+```powershell
+# Create virtual environment
+python -m venv venv
+
+# Activate environment
+.\venv\Scripts\Activate.ps1
+
+# Install requirements
+pip install -r requirements.txt
+```
 
 ## Module Structure
 
 ```
 CodeAnalysis/
-├── Public/
+├── Public/                      # Public module functions
 │   ├── Export-CodeVisualization.ps1
-│   ├── Invoke-CodeAnalysis.ps1
-│   └── ...
-├── Private/
-│   ├── AstAnalysis.ps1
-│   ├── Caching.ps1
-│   ├── DataManagement.ps1
-│   └── ...
-├── Templates/
+│   └── Invoke-CodeAnalysis.ps1
+├── Private/                     # Internal module functions
+│   ├── AstAnalysis.ps1         # AST parsing and analysis
+│   ├── BackendPatterns.ps1     # Backend-specific patterns
+│   ├── Caching.ps1            # Caching mechanisms
+│   ├── Configuration.ps1      # Configuration management
+│   ├── ContextManagement.ps1  # Analysis context handling
+│   ├── DataManagement.ps1     # Data storage and retrieval
+│   ├── Export-Visualizations.ps1
+│   ├── Indexing.ps1          # Code indexing
+│   ├── Logging.ps1           # Structured logging
+│   ├── MachineLearning.ps1   # ML integration
+│   ├── Patterns.ps1          # Pattern detection
+│   ├── Performance.ps1       # Performance analysis
+│   └── Security.ps1          # Security scanning
+├── Config/                     # Configuration files
+│   ├── metrics.json          # Metric thresholds
+│   ├── ml.json              # ML settings
+│   ├── module-config.json   # Core configuration
+│   └── patterns.json        # Pattern definitions
+├── Templates/                  # Analysis report templates
 │   └── Analysis/
 │       ├── component-analysis.md
-│       └── ...
-└── Config/
-    ├── module-config.json
-    └── patterns.json
+│       ├── dependency-analysis.md
+│       ├── directory-analysis.md
+│       ├── performance-analysis.md
+│       ├── refactoring-recommendations.md
+│       └── security-analysis.md
+├── Output/                     # Analysis output
+│   ├── cache/                # Cache storage
+│   ├── data/                 # Analysis data
+│   ├── logs/                 # Log files
+│   ├── models/               # ML models
+│   └── visualization/        # Generated visualizations
+└── docs/                      # Documentation
 ```
 
 ## Usage Examples
@@ -48,87 +86,188 @@ CodeAnalysis/
 ### Basic Code Analysis
 ```powershell
 # Analyze a single file
-Invoke-CodeAnalysis -Path ".\MyScript.ps1"
+Invoke-CodeAnalysis -Path .\src\MyScript.ps1
 
-# Analyze a directory
-Invoke-CodeAnalysis -Path ".\src" -Recurse
-```
+# Analyze a directory with specific settings
+Invoke-CodeAnalysis -Path .\src `
+                   -FileExtensions @('.ps1', '.psm1') `
+                   -BatchSize 100 `
+                   -MaxParallelism 4 `
+                   -IncludeRefactoringSuggestions
 
-### Generating Visualizations
-```powershell
-# Create a dependency diagram
-Export-CodeVisualization -AnalysisName "MyAnalysis" -Format mermaid
-
-# Generate an interactive visualization
-Export-CodeVisualization -AnalysisName "MyAnalysis" -Format d3
+# Export analysis visualizations
+Export-CodeVisualization -AnalysisName "MyAnalysis" `
+                        -Format "mermaid" `
+                        -AnalysisTypes @('component', 'dependency')
 ```
 
 ## Configuration
 
-The module uses several configuration files:
-
-- `module-config.json`: Core module settings
-- `patterns.json`: Code pattern definitions
-- `metrics.json`: Metric thresholds and weights
-
-### Example Configuration
+### Core Configuration (module-config.json)
 ```json
 {
-    "analysis": {
-        "maxFileSize": "10MB",
-        "excludePatterns": [
-            "*.min.js",
-            "node_modules"
-        ]
+    "fileSystem": {
+        "outputDirectory": "./Output",
+        "maxCacheSize": "1GB",
+        "excludePatterns": ["node_modules", "bin", "obj"]
     },
-    "performance": {
+    "resourceManagement": {
+        "memoryThreshold": "1GB",
         "batchSize": 100,
         "maxParallelism": 4
+    },
+    "security": {
+        "allowedPaths": ["./Output", "./Config", "./Data"],
+        "suspiciousPatterns": ["eval\\(", "exec\\("]
     }
 }
 ```
 
+### Metrics Configuration (metrics.json)
+```json
+{
+    "complexity": {
+        "maxAllowed": 15,
+        "warning": 10
+    },
+    "performance": {
+        "batchSize": 100,
+        "maxParallelism": 4,
+        "memoryThreshold": "1GB"
+    }
+}
+```
+
+### ML Configuration (ml.json)
+```json
+{
+    "modelPath": "./Output/models",
+    "embeddings": {
+        "modelName": "all-MiniLM-L6-v2",
+        "maxTokens": 512
+    },
+    "confidenceThresholds": {
+        "high": 0.8,
+        "medium": 0.6
+    }
+}
+```
+
+## Analysis Reports
+
+The module generates comprehensive reports in various formats:
+
+### Component Analysis
+- Code structure and metrics
+- Dependency relationships
+- State management
+- Performance profile
+- Security considerations
+
+### Security Analysis
+- Vulnerability detection
+- CVSS scoring
+- Access control analysis
+- Data protection assessment
+- Compliance status
+
+### Performance Analysis
+- Resource usage metrics
+- Optimization opportunities
+- Caching effectiveness
+- Load time analysis
+- Memory profiling
+
+### Dependency Analysis
+- Dependency graph
+- Version conflicts
+- Security vulnerabilities
+- Update impact analysis
+- License compliance
+
+### Directory Analysis
+- Structure metrics
+- File distribution
+- Code organization
+- Resource utilization
+- Pattern distribution
+
+### Refactoring Recommendations
+- Code improvements
+- Implementation steps
+- Risk assessment
+- Validation steps
+- Resource requirements
+
 ## Best Practices
 
-1. **Performance**
-   - Use caching for large codebases
-   - Enable batch processing for multiple files
-   - Configure appropriate memory thresholds
+### Performance Optimization
+- Enable caching for large codebases
+- Configure appropriate batch sizes
+- Monitor resource usage
+- Use parallel processing when appropriate
+- Regular cache cleanup
 
-2. **Security**
-   - Keep pattern definitions updated
-   - Use secure credential storage
-   - Enable audit logging
+### Security Considerations
+- Keep pattern definitions updated
+- Regular security scans
+- Proper access control
+- Secure credential handling
+- Audit logging
 
-3. **Maintenance**
-   - Regularly update ML models
-   - Clean up temporary files
-   - Monitor log files
+### Code Analysis
+- Regular pattern updates
+- Consistent coding standards
+- Comprehensive test coverage
+- Documentation maintenance
+- Regular refactoring
 
 ## Troubleshooting
 
-Common issues and solutions:
+### Common Issues
 
-1. **Performance Issues**
+1. Performance Problems
    - Check system resources
    - Adjust batch size
-   - Clear cache if needed
-
-2. **Analysis Errors**
-   - Verify file permissions
-   - Check file encoding
+   - Clear cache
+   - Monitor memory usage
    - Review log files
 
-3. **Visualization Problems**
-   - Ensure required packages
-   - Check browser compatibility
-   - Verify template files
+2. Analysis Errors
+   - Verify file permissions
+   - Check file encodings
+   - Validate configurations
+   - Review error logs
+   - Check dependencies
+
+3. ML-related Issues
+   - Verify Python environment
+   - Check model availability
+   - Validate embeddings
+   - Monitor GPU usage
+   - Review prediction logs
+
+### Logging
+
+The module uses structured logging with multiple levels:
+- DEBUG: Detailed debugging information
+- INFO: General operational information
+- WARN: Warning messages
+- ERROR: Error conditions
+- FATAL: Critical failures
+
+Logs are stored in:
+- `./Output/logs/code-analysis.log`: Main log file
+- `./Output/logs/error.log`: Error-specific log file
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Submit a pull request
+3. Make your changes
+4. Add/update tests
+5. Update documentation
+6. Submit a pull request
 
 ## License
 

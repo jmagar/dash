@@ -6,68 +6,45 @@ import { z } from 'zod';
 // Zod schema for agent info validation
 export const agentInfoSchema = z.object({
   id: z.string(),
-  hostname: z.string(),
-  platform: z.string(),
+  name: z.string(),
   version: z.string(),
-  arch: z.string(),
   status: z.nativeEnum(AgentStatus),
   lastSeen: z.date(),
-  metrics: z.record(z.number()).optional(),
+  metadata: z.record(z.unknown()),
 });
 
-export type AgentInfo = z.infer<typeof agentInfoSchema>;
+export interface AgentInfo {
+  id: string;
+  name: string;
+  version: string;
+  status: AgentStatus;
+  lastSeen: Date;
+  metadata: Record<string, unknown>;
+}
 
 export interface AgentState {
   info: AgentInfo;
-  connection: WebSocket | Socket;
-  connectionType: 'ws' | 'socketio';
-  lastHeartbeat: Date;
-  status: AgentStatus;
-}
-
-export interface AgentCommand {
-  id: string;
-  command: string;
-  args?: string[];
-  timeout?: number;
-}
-
-export interface InstallOptions {
-  version: string;
-  config: {
-    server_url: string;
-    agent_id: string;
-    labels?: Record<string, string>;
-  };
-}
-
-export interface SystemInfo {
-  os: 'windows' | 'linux';
-  arch: 'x64' | 'arm64' | 'arm';
+  connection: WebSocket;
+  lastSeen: number;
 }
 
 export interface AgentMetrics {
-  agentId: string;
-  metrics: {
-    cpu?: number;
-    memory?: number;
-    disk?: number;
-    [key: string]: number | undefined;
-  };
-  timestamp?: Date;
-}
-
-export interface ICacheService {
-  del(key: string): Promise<void>;
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T, ttl?: number): Promise<void>;
-  clear(): Promise<void>;
+  cpuUsage: number;
+  memoryUsage: number;
+  diskUsage: number;
+  networkIn: number;
+  networkOut: number;
+  timestamp: number;
 }
 
 export interface AgentServiceMetrics {
-  operationCount: number;
-  errorCount: number;
-  activeAgents: number;
-  lastError?: Error & { timestamp?: string };
-  uptime: number;
+  totalAgents: number;
+  connectedAgents: number;
+  disconnectedAgents: number;
+}
+
+export interface ICacheService {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T, ttl?: number): Promise<void>;
+  del(key: string): Promise<void>;
 }

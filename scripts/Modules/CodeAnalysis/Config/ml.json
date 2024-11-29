@@ -1,19 +1,58 @@
 {
-    "modelPath": "../Models",
-    "vectorPath": "../Vectors",
-    "trainingPath": "../Training",
-    "updateInterval": "7.00:00:00",
-    "minSamplesForTraining": 100,
+    "version": "0.1.0",
     "embeddings": {
-        "modelName": "text-embedding-ada-002",
-        "dimensions": 1536,
-        "maxTokens": 8191
+        "maxTokens": 512,
+        "model": "code-bert-base",
+        "dimension": 768,
+        "pooling": "mean",
+        "batchSize": 32
     },
-    "python": {
-        "envPath": "../env/python",
-        "requirementsFile": "../requirements.txt"
+    "confidenceThresholds": {
+        "high": 0.9,
+        "medium": 0.7,
+        "low": 0.5
     },
-    "useGPU": false,
-    "batchSize": 32,
-    "maxParallelism": 4
+    "patterns": {
+        "typescript": {
+            "React Hook": {
+                "indicators": ["useEffect", "useState", "useContext", "useReducer"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            },
+            "Redux Store": {
+                "indicators": ["dispatch", "reducer", "store", "action"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            }
+        },
+        "javascript": {
+            "Promise Chain": {
+                "indicators": ["then", "catch", "finally", "async", "await"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            },
+            "Event Handler": {
+                "indicators": ["addEventListener", "removeEventListener", "on", "emit"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            }
+        },
+        "powershell": {
+            "Pipeline": {
+                "indicators": ["|", "ForEach-Object", "Where-Object", "Select-Object"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            },
+            "Error Handling": {
+                "indicators": ["try", "catch", "finally", "trap"],
+                "minConfidence": 0.8,
+                "contextWindow": 5
+            }
+        }
+    },
+    "metrics": {
+        "duration_ms": true,
+        "tokens_processed": true,
+        "memory_used_mb": true
+    }
 }

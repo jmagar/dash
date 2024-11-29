@@ -24,6 +24,7 @@ export interface Config {
       refreshExpiration: string;
       sessionMaxAge: number;
       maxFileSize: number;
+      tokenRefreshInterval: number; // Added to match client config
     };
     redis: {
       host: string;

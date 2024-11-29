@@ -15,7 +15,7 @@ export interface AuthenticatedUser extends User {
   expiresAt: string;
 }
 
-export interface TokenPayload {
+export interface AccessTokenPayloadDto| RefreshTokenPayloadDto {
   id: string;
   userId: string;
   username: string;

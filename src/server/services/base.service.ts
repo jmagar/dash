@@ -13,17 +13,17 @@ import type { Pool, QueryResult } from 'pg';
 import type { Host } from '../../types/models-shared';
 import type { LogMetadata } from '../../types/logger';
 import type { ICacheService } from '../cache/types';
-import { TokenPayload } from '../utils/jwt';
+import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
 import { CommandResult } from '../../types/models-shared';
 import { ApiError } from '../../types/error';
 import { ContextProvider } from './context.provider';
 import type { ChatbotContext } from '../../types/chatbot';
-import { z } from 'zod';
 import { performance } from 'perf_hooks';
+import { z } from 'zod';
 
 // Service context interface
 export interface ServiceContext {
-  user?: TokenPayload;
+  user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
   requestId?: string;
   traceId?: string;
   spanId?: string;
@@ -479,7 +479,7 @@ export abstract class BaseService extends EventEmitter {
   /**
    * Authentication helper methods
    */
-  protected async withAuth<T>(operation: (user: TokenPayload) => Promise<T>): Promise<T> {
+  protected async withAuth<T>(operation: (user: import('../routes/auth/dto/auth.dto').AccessTokenPayloadDto | import('../routes/auth/dto/auth.dto').RefreshTokenPayloadDto) => Promise<T>): Promise<T> {
     const user = this.getCurrentUser();
     if (!user) {
       throw new ApiError('Unauthorized', undefined, 401);
@@ -487,7 +487,7 @@ export abstract class BaseService extends EventEmitter {
     return operation(user);
   }
 
-  protected getCurrentUser(): TokenPayload | undefined {
+  protected getCurrentUser(): import('../routes/auth/dto/auth.dto').AccessTokenPayloadDto | import('../routes/auth/dto/auth.dto').RefreshTokenPayloadDto | undefined {
     return this.context?.user;
   }
 

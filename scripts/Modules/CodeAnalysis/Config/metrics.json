@@ -1,39 +1,140 @@
 {
-    "complexity": {
-        "maxAllowed": 20,
-        "warning": 15,
-        "patterns": [
-            "if\\s*\\(",
-            "else\\s*{",
-            "while\\s*\\(",
-            "for\\s*\\(",
-            "foreach\\s*\\(",
-            "catch\\s*{",
-            "\\?\\s*.",
-            "\\|\\|",
-            "&&"
-        ]
+    "version": "0.1.0",
+    "metrics": {
+        "complexity": {
+            "cyclomatic": {
+                "thresholds": {
+                    "typescript": {
+                        "high": 20,
+                        "medium": 10,
+                        "low": 5
+                    },
+                    "javascript": {
+                        "high": 20,
+                        "medium": 10,
+                        "low": 5
+                    },
+                    "powershell": {
+                        "high": 15,
+                        "medium": 8,
+                        "low": 4
+                    }
+                },
+                "weights": {
+                    "if": 1,
+                    "else": 1,
+                    "while": 1,
+                    "for": 1,
+                    "foreach": 1,
+                    "switch": 1,
+                    "case": 1,
+                    "catch": 1,
+                    "ternary": 1,
+                    "logical": 0.5
+                }
+            },
+            "cognitive": {
+                "thresholds": {
+                    "typescript": {
+                        "high": 15,
+                        "medium": 8,
+                        "low": 4
+                    },
+                    "javascript": {
+                        "high": 15,
+                        "medium": 8,
+                        "low": 4
+                    },
+                    "powershell": {
+                        "high": 12,
+                        "medium": 6,
+                        "low": 3
+                    }
+                },
+                "weights": {
+                    "nesting": 1,
+                    "recursion": 2,
+                    "callback": 0.5,
+                    "async": 0.5
+                }
+            }
+        },
+        "maintainability": {
+            "thresholds": {
+                "typescript": {
+                    "high": 85,
+                    "medium": 65,
+                    "low": 50
+                },
+                "javascript": {
+                    "high": 85,
+                    "medium": 65,
+                    "low": 50
+                },
+                "powershell": {
+                    "high": 80,
+                    "medium": 60,
+                    "low": 45
+                }
+            },
+            "weights": {
+                "complexity": 0.3,
+                "loc": 0.2,
+                "comments": 0.1,
+                "dependencies": 0.2,
+                "duplication": 0.2
+            }
+        },
+        "performance": {
+            "thresholds": {
+                "memory": {
+                    "high": 1024,
+                    "medium": 512,
+                    "low": 256
+                },
+                "cpu": {
+                    "high": 80,
+                    "medium": 50,
+                    "low": 30
+                },
+                "io": {
+                    "high": 1000,
+                    "medium": 500,
+                    "low": 100
+                }
+            },
+            "weights": {
+                "memory": 0.4,
+                "cpu": 0.4,
+                "io": 0.2
+            }
+        },
+        "security": {
+            "thresholds": {
+                "critical": 90,
+                "high": 70,
+                "medium": 50,
+                "low": 30
+            },
+            "weights": {
+                "critical": 1.0,
+                "high": 0.8,
+                "medium": 0.5,
+                "low": 0.2
+            }
+        }
     },
-    "logging": {
-        "maxFileSize": "10MB",
-        "retentionDays": 30,
-        "compressionEnabled": true,
-        "levels": ["DEBUG", "INFO", "WARN", "ERROR"]
-    },
-    "performance": {
-        "batchSize": 100,
-        "maxParallelism": 8,
-        "memoryThreshold": "1GB"
-    },
-    "security": {
-        "allowedPaths": [
-            "C:/Users/jmaga/code/dash/scripts/Modules/CodeAnalysis"
-        ],
-        "suspiciousPatterns": [
-            "eval\\(",
-            "exec\\(",
-            "\\bpassword\\b",
-            "\\bsecret\\b"
-        ]
+    "aggregation": {
+        "methods": {
+            "sum": ["loc", "dependencies", "issues"],
+            "average": ["complexity", "maintainability", "performance"],
+            "weighted": ["security", "overall"]
+        },
+        "weights": {
+            "complexity": 0.25,
+            "maintainability": 0.25,
+            "performance": 0.25,
+            "security": 0.25
+        }
     }
 }

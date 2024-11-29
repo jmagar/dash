@@ -104,6 +104,12 @@ export class UnifiedAgentService extends BaseService {
         this.handleAgentDisconnection(ws);
       });
     });
+
+    this.wsServer.on('error', (error: Error) => {
+      logger.error('WebSocket server error', {
+        error: error.message,
+      });
+    });
   }
 
   /**
@@ -128,6 +134,12 @@ export class UnifiedAgentService extends BaseService {
             message: error instanceof Error ? error.message : 'Failed to send command'
           });
         }
+      });
+    });
+
+    this.browserNamespace.on('error', (error: Error) => {
+      logger.error('Socket.IO namespace error', {
+        error: error.message,
       });
     });
   }

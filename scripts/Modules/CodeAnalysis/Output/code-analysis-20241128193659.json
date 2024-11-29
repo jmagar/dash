@@ -1,0 +1,168 @@
+{
+  "timestamp": "2024-11-28T19:36:59.8762132-05:00",
+  "summary": {
+    "totalFiles": 1,
+    "security": {
+      "total": 0,
+      "bySeverity": {
+        "critical": 0,
+        "medium": 0,
+        "low": 0,
+        "high": 0
+      }
+    },
+    "performance": {
+      "total": 0,
+      "byMetric": {
+        "complexity": 0
+      }
+    },
+    "processedFiles": 1,
+    "patterns": {
+      "total": 0,
+      "byType": {}
+    },
+    "totalScore": 0,
+    "averageScore": 0
+  },
+  "files": [
+    {
+      "security": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.9039091-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.9144810-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "score": 0,
+          "statistics": {
+            "total": 0,
+            "bySeverity": {
+              "critical": 0,
+              "medium": 0,
+              "low": 0,
+              "high": 0
+            }
+          },
+          "issues": [],
+          "status": {
+            "errors": [
+              "Method invocation failed because [System.Management.Automation.WildcardPattern] does not contain a method named 'ToRegex'."
+            ],
+            "success": false
+          }
+        }
+      ],
+      "path": "C:\\Users\\jmaga\\AppData\\Local\\Temp\\594ca09d-ff0c-4570-a8dd-49fec23484b8\\TestData\\empty_test.ps1",
+      "timestamp": "2024-11-28T19:36:59.9518024-05:00",
+      "patterns": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.8822252-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.8942104-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "patterns": {
+            "suggested": [],
+            "statistics": {
+              "total": 0,
+              "byType": {}
+            },
+            "matched": []
+          },
+          "status": {
+            "errors": [
+              "The property 'patterns' cannot be found on this object. Verify that the property exists."
+            ],
+            "success": false
+          }
+        }
+      ],
+      "language": "powershell",
+      "performance": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.9250437-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:59.9396058-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "score": 100,
+          "metrics": {
+            "complexity": 0.0,
+            "lines": 2,
+            "functions": 0
+          },
+          "hotspots": [],
+          "status": {
+            "errors": [],
+            "success": true
+          },
+          "recommendations": []
+        }
+      ]
+    }
+  ]
+}

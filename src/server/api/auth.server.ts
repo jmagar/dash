@@ -3,13 +3,14 @@ import { Request, Response } from 'express';
 import { sign, verify } from 'jsonwebtoken';
 
 import type {
-  LoginResponse,
-  LogoutResponse,
-  ValidateResponse,
-  AuthenticatedUser,
-  RefreshTokenRequest,
-  RefreshTokenResponse,
-  TokenPayload,
+  LoginResponseDto,
+  LogoutResponseDto,
+  ValidateResponseDto,
+  AuthenticatedUserDto,
+  RefreshTokenRequestDto,
+  RefreshTokenResponseDto,
+  AccessTokenPayloadDto,
+  RefreshTokenPayloadDto,
 } from '../../types/auth';
 import config from '../config';
 import { db } from '../db';
@@ -26,7 +27,7 @@ interface UserRecord {
   updated_at: Date;
 }
 
-function isJwtPayload(payload: unknown): payload is TokenPayload {
+function isJwtPayload(payload: unknown): payload is AccessTokenPayloadDto | RefreshTokenPayloadDto {
   return (
     typeof payload === 'object' &&
     payload !== null &&
@@ -44,8 +45,8 @@ function isJwtPayload(payload: unknown): payload is TokenPayload {
 }
 
 export async function login(
-  req: Request<unknown, LoginResponse | { error: string }, { username: string; password: string }>,
-  res: Response<LoginResponse | { error: string }>
+  req: Request<unknown, LoginResponseDto | { error: string }, { username: string; password: string }>,
+  res: Response<LoginResponseDto | { error: string }>
 ): Promise<void> {
   try {
     const { username, password } = req.body;
@@ -108,7 +109,7 @@ export async function login(
       [user.id]
     );
 
-    const authenticatedUser: AuthenticatedUser = {
+    const authenticatedUser: AuthenticatedUserDto = {
       id: user.id,
       username: user.username,
       email: user.email,
@@ -139,7 +140,7 @@ export async function login(
 
 export async function logout(
   req: Request,
-  res: Response<LogoutResponse>
+  res: Response<LogoutResponseDto>
 ): Promise<void> {
   try {
     // In a real implementation, you might want to invalidate the token
@@ -161,7 +162,7 @@ export async function logout(
 
 export async function validate(
   req: Request,
-  res: Response<ValidateResponse | { error: string }>
+  res: Response<ValidateResponseDto | { error: string }>
 ): Promise<void> {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -226,7 +227,7 @@ export async function validate(
         { expiresIn: config.jwt.refreshExpiry }
       );
 
-      const authenticatedUser: AuthenticatedUser = {
+      const authenticatedUser: AuthenticatedUserDto = {
         id: user.id,
         username: user.username,
         email: user.email,
@@ -263,8 +264,8 @@ export async function validate(
 }
 
 export async function refresh(
-  req: Request<unknown, RefreshTokenResponse | { error: string }, RefreshTokenRequest>,
-  res: Response<RefreshTokenResponse | { error: string }>
+  req: Request<unknown, RefreshTokenResponseDto | { error: string }, RefreshTokenRequestDto>,
+  res: Response<RefreshTokenResponseDto | { error: string }>
 ): Promise<void> {
   try {
     const { refreshToken } = req.body;

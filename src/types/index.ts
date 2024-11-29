@@ -30,9 +30,8 @@ export type {
   ValidateResponse,
   RefreshTokenRequest,
   RefreshTokenResponse,
-  TokenPayload,
-  AccessTokenPayload,
-  RefreshTokenPayload,
+  AccessTokenPayloadDto,
+  RefreshTokenPayloadDto,
   AuthenticatedUser,
 } from './auth';
 

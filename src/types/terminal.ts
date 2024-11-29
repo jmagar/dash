@@ -1,10 +1,7 @@
 import { CacheCommand } from './cache';
 import { SSHClient, SSHStream } from './ssh';
-
-import type { TokenPayload } from './auth';
+import type { AccessTokenPayloadDto, RefreshTokenPayloadDto } from './auth';
 import type { Socket } from 'socket.io-client';
-
-
 
 export interface TerminalOptions extends TerminalSize {
   hostId: string;
@@ -20,7 +17,7 @@ export interface TerminalSize {
   rows: number;
 }
 
-export interface TerminalSession {
+export interface TerminalSession { 
   id: string;
   hostId: string;
   pid: number;
@@ -102,7 +99,7 @@ export interface CommandHistoryResponse {
 }
 
 export interface AuthenticatedSocket extends Omit<TerminalSocket, 'on'> {
-  user?: TokenPayload;
+  user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
   terminal?: {
     hostId: string;
     pid: number;

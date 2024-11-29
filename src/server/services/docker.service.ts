@@ -1,212 +1,179 @@
-import Docker from 'dockerode';
-import { EventEmitter } from 'events';
-import { logger } from '../utils/logger';
-import { BaseService } from './base.service';
-import type { Container, ContainerInfo, Network, Volume } from 'dockerode';
-import type { LogMetadata } from '../../types/logger';
+import { Service } from '../core/service';
+import { getAgentService } from './agent.service';
+import { getExecutionService } from './execution.service';
+import {
+  DockerServiceMetrics,
+  DockerContainerMetrics,
+  DockerVolumeMetrics,
+  DockerNetworkMetrics,
+  DockerEventMetrics,
+  DockerError,
+  DockerConfig,
+  DockerContainerCreateOptions,
+} from './docker.types';
 
-export interface DockerConfig {
-  socketPath?: string;
-  host?: string;
-  port?: number;
-  ca?: string;
-  cert?: string;
-  key?: string;
-}
-
-export class DockerService extends BaseService {
-  private readonly docker: Docker;
-
-  constructor(config: DockerConfig = {}) {
+export class DockerService extends Service {
+  constructor() {
     super();
-    this.docker = new Docker(config);
   }
 
-  // Container Operations
-  async listContainers(all = false) {
+  async getMetrics(hostId: string): Promise<DockerServiceMetrics> {
     try {
-      return await this.docker.listContainers({ all });
+      const agentService = getAgentService();
+      const result = await agentService.executeCommand(hostId, 'docker info --format "{{json .}}"');
+      const info = JSON.parse(result.stdout);
+      
+      return {
+        containers: info.Containers,
+        containersRunning: info.ContainersRunning,
+        containersPaused: info.ContainersPaused,
+        containersStopped: info.ContainersStopped,
+        images: info.Images,
+        memoryLimit: info.MemTotal,
+        cpuTotal: info.NCPU,
+        version: info.ServerVersion,
+      };
     } catch (error) {
-      this.handleError(error, { operation: 'list_containers' });
-      throw error;
+      throw this.handleError('Failed to get Docker metrics', error);
     }
   }
 
-  async getContainer(id: string) {
+  async listContainers(hostId: string, all = false): Promise<DockerContainerMetrics[]> {
     try {
-      return this.docker.getContainer(id);
+      const agentService = getAgentService();
+      const result = await agentService.executeCommand(
+        hostId,
+        `docker ps ${all ? '-a' : ''} --format "{{json .}}"`
+      );
+      
+      return result.stdout
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          const container = JSON.parse(line);
+          return {
+            id: container.ID,
+            name: container.Names,
+            image: container.Image,
+            status: container.Status,
+            state: container.State,
+            created: container.CreatedAt,
+            ports: this.parsePorts(container.Ports),
+            networks: container.Networks?.split(',') || [],
+            mounts: [],
+            labels: {},
+          };
+        });
     } catch (error) {
-      this.handleError(error, { operation: 'get_container', containerId: id });
-      throw error;
+      throw this.handleError('Failed to list containers', error);
     }
   }
 
-  async createContainer(options: Docker.ContainerCreateOptions) {
+  async createContainer(hostId: string, options: DockerContainerCreateOptions): Promise<{ id: string }> {
     try {
-      return await this.docker.createContainer(options);
-    } catch (error) {
-      this.handleError(error, { operation: 'create_container', options });
-      throw error;
-    }
-  }
+      const agentService = getAgentService();
+      const args = ['create'];
+      
+      if (options.name) {
+        args.push('--name', options.name);
+      }
 
-  // Image Operations
-  async listImages() {
-    try {
-      return await this.docker.listImages();
-    } catch (error) {
-      this.handleError(error, { operation: 'list_images' });
-      throw error;
-    }
-  }
+      if (options.Env?.length) {
+        options.Env.forEach(env => args.push('-e', env));
+      }
 
-  async pullImage(repoTag: string) {
-    try {
-      await new Promise((resolve, reject) => {
-        this.docker.pull(repoTag, (err: Error | null, stream: NodeJS.ReadableStream) => {
-          if (err) {
-            reject(err);
-            return;
-          }
+      if (options.HostConfig?.Binds?.length) {
+        options.HostConfig.Binds.forEach(bind => args.push('-v', bind));
+      }
 
-          this.docker.modem.followProgress(stream, (err: Error | null) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(undefined);
-            }
+      if (options.HostConfig?.PortBindings) {
+        Object.entries(options.HostConfig.PortBindings).forEach(([containerPort, hostPorts]) => {
+          hostPorts.forEach(({ HostPort }) => {
+            args.push('-p', `${HostPort}:${containerPort}`);
           });
         });
-      });
-    } catch (error) {
-      this.handleError(error, { operation: 'pull_image', repoTag });
-      throw error;
-    }
-  }
-
-  // Network Operations
-  async listNetworks() {
-    try {
-      return await this.docker.listNetworks();
-    } catch (error) {
-      this.handleError(error, { operation: 'list_networks' });
-      throw error;
-    }
-  }
-
-  async createNetwork(options: Docker.NetworkCreateOptions) {
-    try {
-      return await this.docker.createNetwork(options);
-    } catch (error) {
-      this.handleError(error, { operation: 'create_network', options });
-      throw error;
-    }
-  }
-
-  // Volume Operations
-  async listVolumes() {
-    try {
-      return await this.docker.listVolumes();
-    } catch (error) {
-      this.handleError(error, { operation: 'list_volumes' });
-      throw error;
-    }
-  }
-
-  async createVolume(options: Docker.VolumeCreateOptions) {
-    try {
-      return await this.docker.createVolume(options);
-    } catch (error) {
-      this.handleError(error, { operation: 'create_volume', options });
-      throw error;
-    }
-  }
-
-  // Utility Operations
-  async getInfo() {
-    try {
-      return await this.docker.info();
-    } catch (error) {
-      this.handleError(error, { operation: 'get_info' });
-      throw error;
-    }
-  }
-
-  async getVersion() {
-    try {
-      return await this.docker.version();
-    } catch (error) {
-      this.handleError(error, { operation: 'get_version' });
-      throw error;
-    }
-  }
-
-  // Event Streaming
-  async streamEvents(callback: (event: any) => void) {
-    try {
-      const stream = await this.docker.getEvents();
-      stream.on('data', (chunk) => {
-        try {
-          const event = JSON.parse(chunk.toString());
-          callback(event);
-        } catch (error) {
-          this.handleError(error, { operation: 'parse_event' });
-        }
-      });
-
-      stream.on('error', (error) => {
-        this.handleError(error, { operation: 'stream_events' });
-      });
-
-      return stream;
-    } catch (error) {
-      this.handleError(error, { operation: 'stream_events' });
-      throw error;
-    }
-  }
-
-  // Resource Cleanup
-  async cleanup(): Promise<void> {
-    try {
-      const containers = await this.listContainers(true);
-      for (const container of containers) {
-        if (container.Labels['managed-by'] === 'dash') {
-          const containerInstance = this.docker.getContainer(container.Id);
-          if (container.State === 'running') {
-            await containerInstance.stop();
-          }
-          await containerInstance.remove();
-        }
       }
 
-      const volumes = await this.listVolumes();
-      for (const volume of volumes.Volumes) {
-        if (volume.Labels && volume.Labels['managed-by'] === 'dash') {
-          const volumeInstance = this.docker.getVolume(volume.Name);
-          await volumeInstance.remove();
-        }
+      if (options.HostConfig?.RestartPolicy?.Name) {
+        args.push('--restart', options.HostConfig.RestartPolicy.Name);
       }
 
-      const networks = await this.listNetworks();
-      for (const network of networks) {
-        if (network.Labels && network.Labels['managed-by'] === 'dash') {
-          const networkInstance = this.docker.getNetwork(network.Id);
-          await networkInstance.remove();
-        }
+      args.push(options.Image);
+
+      if (options.Cmd?.length) {
+        args.push(...options.Cmd);
       }
+
+      const result = await agentService.executeCommand(hostId, 'docker', args);
+      return { id: result.stdout.trim() };
     } catch (error) {
-      this.handleError(error, { operation: 'cleanup' });
-      throw error;
+      throw this.handleError('Failed to create container', error);
     }
   }
-}
 
-// Export singleton instance
-let dockerServiceInstance: DockerService | null = null;
-
-export function getDockerService(config?: DockerConfig): DockerService {
-  if (!dockerServiceInstance) {
-    dockerServiceInstance = new DockerService(config);
+  async startContainer(hostId: string, id: string): Promise<void> {
+    try {
+      const agentService = getAgentService();
+      await agentService.executeCommand(hostId, 'docker', ['start', id]);
+    } catch (error) {
+      throw this.handleError(`Failed to start container ${id}`, error);
+    }
   }
-  return dockerServiceInstance;
+
+  async stopContainer(hostId: string, id: string): Promise<void> {
+    try {
+      const agentService = getAgentService();
+      await agentService.executeCommand(hostId, 'docker', ['stop', id]);
+    } catch (error) {
+      throw this.handleError(`Failed to stop container ${id}`, error);
+    }
+  }
+
+  async removeContainer(hostId: string, id: string, force = false): Promise<void> {
+    try {
+      const agentService = getAgentService();
+      const args = ['rm'];
+      if (force) {
+        args.push('-f');
+      }
+      args.push(id);
+      await agentService.executeCommand(hostId, 'docker', args);
+    } catch (error) {
+      throw this.handleError(`Failed to remove container ${id}`, error);
+    }
+  }
+
+  private parsePorts(portsString: string): Array<{
+    IP?: string;
+    PrivatePort: number;
+    PublicPort?: number;
+    Type: string;
+  }> {
+    if (!portsString) {
+      return [];
+    }
+
+    return portsString.split(', ').map(portMapping => {
+      const [hostPart, containerPart] = portMapping.split('->');
+      const [hostIp, hostPort] = (hostPart || '').split(':');
+      const [containerPort, proto] = (containerPart || hostPart).split('/');
+
+      return {
+        IP: hostIp || undefined,
+        PrivatePort: parseInt(containerPort, 10),
+        PublicPort: hostPort ? parseInt(hostPort, 10) : undefined,
+        Type: proto || 'tcp',
+      };
+    });
+  }
+
+  private handleError(message: string, error: unknown): DockerError {
+    const dockerError: DockerError = {
+      code: 'DOCKER_ERROR',
+      message: message,
+      details: error,
+    };
+    this.logger.error(message, { error });
+    return dockerError;
+  }
 }

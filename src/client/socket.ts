@@ -1,10 +1,10 @@
-import io from 'socket.io-client';
+import socketIO from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '../types/socket-events';
 import { config } from './config';
 import { logger } from './utils/frontendLogger';
 
-// Create a typed socket instance
-const socket = io<ServerToClientEvents, ClientToServerEvents>(config.websocketUrl, {
+// Socket configuration
+const socketConfig = {
   autoConnect: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
@@ -12,49 +12,111 @@ const socket = io<ServerToClientEvents, ClientToServerEvents>(config.websocketUr
   reconnectionDelayMax: 5000,
   timeout: 20000,
   transports: ['websocket'],
-});
+  // Align with server configuration
+  pingTimeout: 60000,
+  pingInterval: 25000
+};
 
-// Connection events with proper typing
-socket.on('connect', () => {
-  logger.info('Socket connected:', { id: socket.id });
-});
+// Create socket instance
+const socketInstance = socketIO(config.socketUrl, socketConfig);
 
-socket.on('disconnect', (reason: string) => {
-  logger.info('Socket disconnected:', { reason });
-});
+// Error formatting helper
+function formatError(error: unknown): { error: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      error: error.message,
+      stack: error.stack
+    };
+  }
+  return {
+    error: String(error)
+  };
+}
 
-socket.on('connect_error', (error: Error) => {
-  logger.error('Socket connection error:', { 
-    error: error.message,
-    stack: error.stack 
+// Basic socket events
+function setupBasicEvents(): void {
+  // Connection events
+  socketInstance.on('connect', () => {
+    const socketId = socketInstance.id;
+    logger.info('Socket connected:', { id: socketId });
   });
-});
 
-socket.on('error', (error: Error) => {
-  logger.error('Socket error:', { 
-    error: error.message,
-    stack: error.stack 
+  // Disconnection events
+  socketInstance.on('disconnect', () => {
+    logger.info('Socket disconnected');
   });
-});
+
+  // Error events
+  socketInstance.on('connect_error', () => {
+    logger.error('Socket connection error');
+  });
+
+  socketInstance.on('error', () => {
+    logger.error('Socket error');
+  });
+}
 
 // Reconnection events
-socket.io.on('reconnect', (attempt: number) => {
-  logger.info('Socket reconnected:', { attempt });
-});
-
-socket.io.on('reconnect_attempt', (attempt: number) => {
-  logger.info('Socket reconnection attempt:', { attempt });
-});
-
-socket.io.on('reconnect_error', (error: any) => {
-  logger.error('Socket reconnection error:', { 
-    error: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : undefined
+function setupReconnectionEvents(): void {
+  // Reconnection events using socket events
+  socketInstance.on('reconnect', () => {
+    logger.info('Socket reconnected');
   });
-});
 
-socket.io.on('reconnect_failed', () => {
-  logger.error('Socket reconnection failed');
-});
+  socketInstance.on('reconnect_attempt', () => {
+    logger.info('Socket reconnection attempt');
+  });
 
-export { socket };
+  socketInstance.on('reconnect_error', () => {
+    logger.error('Socket reconnection error');
+  });
+
+  socketInstance.on('reconnect_failed', () => {
+    logger.error('Socket reconnection failed');
+  });
+}
+
+// Initialize socket events
+setupBasicEvents();
+setupReconnectionEvents();
+
+// Type-safe event emitter with explicit typing
+function emit<T extends keyof ClientToServerEvents>(
+  event: T,
+  ...args: Parameters<ClientToServerEvents[T]>
+): void {
+  // Type assertion for the emit method
+  (socketInstance as unknown as {
+    emit(event: T, ...args: Parameters<ClientToServerEvents[T]>): void;
+  }).emit(event, ...args);
+}
+
+// Type-safe event listener with explicit typing
+function on<T extends keyof ServerToClientEvents>(
+  event: T,
+  handler: ServerToClientEvents[T]
+): void {
+  // Type assertion for the on method
+  (socketInstance as unknown as {
+    on(event: T, handler: ServerToClientEvents[T]): void;
+  }).on(event, handler);
+}
+
+// Type-safe event unsubscriber with explicit typing
+function off<T extends keyof ServerToClientEvents>(
+  event: T,
+  handler?: ServerToClientEvents[T]
+): void {
+  // Type assertion for the off method
+  (socketInstance as unknown as {
+    off(event: T, handler?: ServerToClientEvents[T]): void;
+  }).off(event, handler);
+}
+
+// Export the socket instance and helper functions
+export const socket = socketInstance;
+export {
+  emit,
+  on,
+  off
+};

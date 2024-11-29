@@ -24,7 +24,7 @@ import {
   CreateSpaceDto,
   UpdateSpaceDto,
 } from '../../routes/filesystem/dto/space.dto';
-import { Repository, InjectRepository } from '@nestjs/typeorm';
+import { Repository } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { logger } from '../../../logger';
@@ -40,9 +40,7 @@ export class FileSystemManager {
 
   constructor(
     private readonly agentService: AgentService,
-    @InjectRepository(FileSystemLocation)
     private readonly locationRepository: Repository<FileSystemLocation>,
-    @InjectRepository(Space)
     private readonly spaceRepository: Repository<Space>
   ) {}
 
@@ -51,193 +49,67 @@ export class FileSystemManager {
     credentials: FileSystemCredentials,
     host?: Host
   ): Promise<FileSystemProvider> {
-    let provider: FileSystemProvider;
+    try {
+      let provider: FileSystemProvider;
 
-    switch (type) {
-      case 'sftp':
-        if (host) {
-          try {
-            const agentStatus = await this.agentService.getAgentStatus(host.id);
-            if (agentStatus.connected) {
-              provider = new AgentSFTPProvider(this.agentService, host);
-              break;
-            }
-          } catch {}
-        }
-        provider = new SFTPProvider();
-        break;
+      switch (type) {
+        case 'sftp':
+          if (host && host.agentId) {
+            provider = new AgentSFTPProvider(this.agentService, host);
+          } else {
+            provider = new SFTPProvider();
+          }
+          break;
+        case 'smb':
+          provider = new SMBProvider();
+          break;
+        case 'webdav':
+          provider = new WebDAVProvider();
+          break;
+        case 'rclone':
+          provider = new RcloneProvider();
+          break;
+        default:
+          throw new Error(`Unsupported filesystem type: ${type}`);
+      }
 
-      case 'smb':
-        provider = new SMBProvider();
-        break;
+      await provider.connect(credentials);
+      return provider;
+    } catch (error) {
+      logger.error('Failed to create filesystem provider', {
+        error,
+        type,
+        host: host?.id,
+      });
+      throw error;
+    }
+  }
 
-      case 'webdav':
-        provider = new WebDAVProvider();
-        break;
-
-      case 'rclone':
-        provider = new RcloneProvider();
-        break;
-
-      default:
-        throw new Error(`Unsupported filesystem type: ${type}`);
+  async getProvider(locationId: string): Promise<FileSystemProvider> {
+    const provider = this.activeConnections.get(locationId);
+    if (provider) {
+      return provider;
     }
 
-    await provider.connect(credentials);
-    
-    // Store the connection with a unique key
-    const connectionKey = this.getConnectionKey(type, credentials, host);
-    this.activeConnections.set(connectionKey, provider);
+    const location = await this.locationRepository.findOne({ where: { id: locationId } });
+    if (!location) {
+      throw new NotFoundException(`Location not found: ${locationId}`);
+    }
 
+    const host = location.hostId ? await this.agentService.getAgent(location.hostId) : undefined;
+    const provider = await this.createProvider(location.type, location.credentials, host);
+    this.activeConnections.set(locationId, provider);
     return provider;
   }
 
-  async getProvider(
-    type: FileSystemType,
-    credentials: FileSystemCredentials,
-    host?: Host
-  ): Promise<FileSystemProvider> {
-    const connectionKey = this.getConnectionKey(type, credentials, host);
-    const existingProvider = this.activeConnections.get(connectionKey);
-
-    if (existingProvider) {
-      // Test the connection before returning
-      try {
-        if (await existingProvider.test?.()) {
-          return existingProvider;
-        }
-      } catch {}
-
-      // If test fails, remove the connection
-      await this.closeConnection(connectionKey);
-    }
-
-    // Create new provider if none exists or test failed
-    return this.createProvider(type, credentials, host);
-  }
-
-  async closeConnection(connectionKey: string): Promise<void> {
-    const provider = this.activeConnections.get(connectionKey);
-    if (provider) {
-      await provider.disconnect();
-      this.activeConnections.delete(connectionKey);
-    }
-  }
-
-  async closeAll(): Promise<void> {
-    const closePromises = Array.from(this.activeConnections.entries()).map(
-      async ([key, provider]) => {
-        await provider.disconnect();
-        this.activeConnections.delete(key);
-      }
-    );
-
-    await Promise.all(closePromises);
-  }
-
-  private getConnectionKey(
-    type: FileSystemType,
-    credentials: FileSystemCredentials,
-    host?: Host
-  ): string {
-    if (host) {
-      return `${type}:${host.id}`;
-    }
-    return `${type}:${credentials.host || ''}:${credentials.port || ''}:${
-      credentials.username || ''
-    }:${credentials.remoteName || ''}`;
-  }
-
-  // Location Management
-  async listLocations(): Promise<FileSystemLocation[]> {
-    return this.locationRepository.find();
-  }
-
-  async createLocation(dto: CreateLocationDto): Promise<FileSystemLocation> {
-    const location = this.locationRepository.create({
-      ...dto,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-
-    // Test the connection before saving
-    const provider = await this.createProvider(dto.type, dto.credentials, dto.hostId ? { id: dto.hostId } as Host : undefined);
-    await provider.disconnect();
-
-    return this.locationRepository.save(location);
-  }
-
-  async updateLocation(id: string, dto: UpdateLocationDto): Promise<FileSystemLocation> {
-    const location = await this.locationRepository.findOne({ where: { id } });
-    if (!location) {
-      throw new NotFoundException(`Location with id ${id} not found`);
-    }
-
-    // Test the connection before updating
-    const provider = await this.createProvider(
-      dto.type || location.type,
-      dto.credentials || location.credentials,
-      dto.hostId ? { id: dto.hostId } as Host : undefined
-    );
-    await provider.disconnect();
-
-    Object.assign(location, {
-      ...dto,
-      updatedAt: new Date()
-    });
-
-    return this.locationRepository.save(location);
-  }
-
-  async deleteLocation(id: string): Promise<void> {
-    const location = await this.locationRepository.findOne({ where: { id } });
-    if (!location) {
-      throw new NotFoundException(`Location with id ${id} not found`);
-    }
-
-    // Close any active connections
-    const connectionKey = this.getConnectionKey(
-      location.type,
-      location.credentials,
-      location.hostId ? { id: location.hostId } as Host : undefined
-    );
-    await this.closeConnection(connectionKey);
-
-    await this.locationRepository.remove(location);
-  }
-
-  private async getLocationById(id: string): Promise<FileSystemLocation> {
-    const location = await this.locationRepository.findOne({ where: { id } });
-    if (!location) {
-      throw new NotFoundException(`Location with id ${id} not found`);
-    }
-    return location;
-  }
-
-  private async getProviderForLocation(locationId: string): Promise<FileSystemProvider> {
-    const location = await this.getLocationById(locationId);
-    return this.getProvider(
-      location.type,
-      location.credentials,
-      location.hostId ? { id: location.hostId } as Host : undefined
-    );
-  }
-
-  // File Operations
   async listFiles(locationId: string, dto: ListFilesDto): Promise<FileListResponse> {
-    const provider = await this.getProviderForLocation(locationId);
-    
-    try {
-      logger.info('Listing files', {
-        locationId,
-        path: dto.path,
-        component: 'FileSystemManager'
-      });
+    const provider = await this.getProvider(locationId);
+    const path = sanitizePath(dto.path);
 
-      const files = await provider.listFiles(dto.path);
+    try {
+      const files = await provider.listFiles(path);
       return {
-        success: true,
+        path,
         files: files.map(file => ({
           name: file.name,
           path: file.path,
@@ -250,220 +122,134 @@ export class FileSystemManager {
         }))
       };
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        locationId,
-        path: dto.path,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to list files:', metadata);
-      throw new ApiError('Failed to list files', error, 500, metadata);
-    }
-  }
-
-  async createDownloadStream(locationId: string, path: string): Promise<NodeJS.ReadableStream> {
-    const provider = await this.getProviderForLocation(locationId);
-    
-    try {
-      logger.info('Creating download stream', {
+      logger.error('Failed to list files', {
+        error,
         locationId,
         path,
-        component: 'FileSystemManager'
-      });
-
-      return await provider.createReadStream(path);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        locationId,
-        path,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to create download stream:', metadata);
-      throw new ApiError('Failed to create download stream', error, 500, metadata);
-    }
-  }
-
-  async uploadFiles(locationId: string, path: string, files: Express.Multer.File[]): Promise<void> {
-    const provider = await this.getProviderForLocation(locationId);
-    const safePath = sanitizePath(path);
-
-    try {
-      logger.info('Starting file upload', {
-        locationId,
-        path: safePath,
-        fileCount: files.length,
-        component: 'FileSystemManager'
-      });
-
-      // Validate each file
-      files.forEach(file => validateFile(file));
-
-      // Upload files sequentially to prevent memory issues
-      for (const file of files) {
-        await provider.uploadFile(safePath, file);
-        logger.info('File uploaded successfully', {
-          locationId,
-          path: safePath,
-          filename: file.originalname,
-          size: file.size,
-          component: 'FileSystemManager'
-        });
-      }
-    } catch (error) {
-      logger.error('File upload failed', {
-        locationId,
-        path: safePath,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'FileSystemManager'
       });
       throw error;
     }
   }
 
-  async copyFiles(locationId: string, dto: CopyMoveDto): Promise<void> {
-    const provider = await this.getProviderForLocation(locationId);
-    const safeSourcePath = sanitizePath(dto.sourcePath);
-    const safeTargetPath = sanitizePath(dto.targetPath);
+  async readFile(locationId: string, path: string): Promise<NodeJS.ReadableStream> {
+    const provider = await this.getProvider(locationId);
+    path = sanitizePath(path);
 
     try {
-      logger.info('Starting file copy', {
-        locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        component: 'FileSystemManager'
-      });
-
-      await provider.copyFile(safeSourcePath, dto.targetLocationId, safeTargetPath, {
-        recursive: dto.recursive,
-        overwrite: dto.overwrite
-      });
-
-      logger.info('File copy completed', {
-        locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        component: 'FileSystemManager'
-      });
+      const buffer = await provider.readFile(path);
+      return buffer;
     } catch (error) {
-      logger.error('File copy failed', {
+      logger.error('Failed to read file', {
+        error,
         locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'FileSystemManager'
+        path,
       });
       throw error;
     }
   }
 
-  async moveFiles(locationId: string, dto: CopyMoveDto): Promise<void> {
-    const provider = await this.getProviderForLocation(locationId);
-    const safeSourcePath = sanitizePath(dto.sourcePath);
-    const safeTargetPath = sanitizePath(dto.targetPath);
+  async writeFile(locationId: string, path: string, file: Express.Multer.File): Promise<void> {
+    const provider = await this.getProvider(locationId);
+    path = sanitizePath(path);
 
     try {
-      logger.info('Starting file move', {
-        locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        component: 'FileSystemManager'
-      });
-
-      await provider.moveFile(safeSourcePath, dto.targetLocationId, safeTargetPath, {
-        recursive: dto.recursive,
-        overwrite: dto.overwrite
-      });
-
-      logger.info('File move completed', {
-        locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        component: 'FileSystemManager'
-      });
+      await validateFile(file);
+      await provider.writeFile(path, file.buffer);
     } catch (error) {
-      logger.error('File move failed', {
+      logger.error('Failed to write file', {
+        error,
         locationId,
-        sourcePath: safeSourcePath,
-        targetPath: safeTargetPath,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'FileSystemManager'
+        path,
+      });
+      throw error;
+    }
+  }
+
+  async copyFile(locationId: string, dto: CopyMoveDto): Promise<void> {
+    const provider = await this.getProvider(locationId);
+    const sourcePath = sanitizePath(dto.sourcePath);
+    const targetPath = sanitizePath(dto.targetPath);
+
+    try {
+      await provider.copyFile(sourcePath, targetPath);
+    } catch (error) {
+      logger.error('Failed to copy file', {
+        error,
+        locationId,
+        sourcePath,
+        targetPath,
+      });
+      throw error;
+    }
+  }
+
+  async moveFile(locationId: string, dto: CopyMoveDto): Promise<void> {
+    const provider = await this.getProvider(locationId);
+    const sourcePath = sanitizePath(dto.sourcePath);
+    const targetPath = sanitizePath(dto.targetPath);
+
+    try {
+      await provider.moveFile(sourcePath, targetPath);
+    } catch (error) {
+      logger.error('Failed to move file', {
+        error,
+        locationId,
+        sourcePath,
+        targetPath,
       });
       throw error;
     }
   }
 
   async createDirectory(locationId: string, dto: CreateDirectoryDto): Promise<void> {
-    const provider = await this.getProviderForLocation(locationId);
-    
-    try {
-      logger.info('Creating directory', {
-        locationId,
-        path: dto.path,
-        name: dto.name,
-        component: 'FileSystemManager'
-      });
+    const provider = await this.getProvider(locationId);
+    const path = sanitizePath(dto.path);
 
-      const dirPath = `${dto.path}/${dto.name}`;
-      await provider.mkdir(dirPath);
+    try {
+      await provider.mkdir(path);
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to create directory', {
+        error,
         locationId,
-        path: dto.path,
-        name: dto.name,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to create directory:', metadata);
-      throw new ApiError('Failed to create directory', error, 500, metadata);
+        path,
+      });
+      throw error;
     }
   }
 
   async deleteFiles(locationId: string, dto: DeleteFilesDto): Promise<void> {
-    const provider = await this.getProviderForLocation(locationId);
-    
-    try {
-      logger.info('Deleting files', {
-        locationId,
-        paths: dto.paths,
-        component: 'FileSystemManager'
-      });
+    const provider = await this.getProvider(locationId);
 
+    try {
       for (const path of dto.paths) {
-        const stats = await provider.stat(path);
+        const sanitizedPath = sanitizePath(path);
+        const stats = await provider.stat(sanitizedPath);
+
         if (stats.isDirectory) {
-          await provider.rmdir(path, { recursive: true });
+          await provider.rmdir(sanitizedPath);
         } else {
-          await provider.unlink(path);
+          await provider.unlink(sanitizedPath);
         }
       }
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to delete files', {
+        error,
         locationId,
         paths: dto.paths,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to delete files:', metadata);
-      throw new ApiError('Failed to delete files', error, 500, metadata);
+      });
+      throw error;
     }
   }
 
   async searchFiles(locationId: string, dto: SearchFilesDto): Promise<FileListResponse> {
-    const provider = await this.getProviderForLocation(locationId);
-    
-    try {
-      logger.info('Searching files', {
-        locationId,
-        path: dto.path,
-        query: dto.query,
-        component: 'FileSystemManager'
-      });
+    const provider = await this.getProvider(locationId);
+    const path = sanitizePath(dto.path);
 
-      const files = await provider.search(dto.path, dto.query);
+    try {
+      const searchResults = await provider.search(path, dto.query);
       return {
-        success: true,
-        files: files.map(file => ({
+        path,
+        files: searchResults.map(file => ({
           name: file.name,
           path: file.path,
           size: file.size,
@@ -475,257 +261,195 @@ export class FileSystemManager {
         }))
       };
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to search files', {
+        error,
         locationId,
-        path: dto.path,
+        path,
         query: dto.query,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to search files:', metadata);
-      throw new ApiError('Failed to search files', error, 500, metadata);
+      });
+      throw error;
     }
   }
 
-  // Spaces Management
-  async listSpaces(): Promise<Space[]> {
+  async createLocation(dto: CreateLocationDto): Promise<FileSystemLocation> {
     try {
-      logger.info('Listing spaces', {
-        component: 'FileSystemManager'
+      const location = this.locationRepository.create({
+        id: randomUUID(),
+        name: dto.name,
+        type: dto.type,
+        path: dto.path,
+        credentials: dto.credentials,
+        hostId: dto.hostId,
       });
 
-      return this.spaceRepository.find({
-        order: {
-          name: 'ASC'
-        }
-      });
+      await this.locationRepository.save(location);
+      return location;
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to list spaces:', metadata);
-      throw new ApiError('Failed to list spaces', error, 500, metadata);
+      logger.error('Failed to create location', {
+        error,
+        name: dto.name,
+        type: dto.type,
+      });
+      throw error;
     }
+  }
+
+  async updateLocation(id: string, dto: UpdateLocationDto): Promise<FileSystemLocation> {
+    try {
+      const location = await this.locationRepository.findOne({ where: { id } });
+      if (!location) {
+        throw new NotFoundException(`Location not found: ${id}`);
+      }
+
+      Object.assign(location, {
+        name: dto.name,
+        path: dto.path,
+        credentials: dto.credentials,
+        hostId: dto.hostId,
+      });
+
+      await this.locationRepository.save(location);
+      return location;
+    } catch (error) {
+      logger.error('Failed to update location', {
+        error,
+        id,
+      });
+      throw error;
+    }
+  }
+
+  async deleteLocation(id: string): Promise<void> {
+    try {
+      const location = await this.locationRepository.findOne({ where: { id } });
+      if (!location) {
+        throw new NotFoundException(`Location not found: ${id}`);
+      }
+
+      const provider = this.activeConnections.get(id);
+      if (provider) {
+        await provider.disconnect();
+        this.activeConnections.delete(id);
+      }
+
+      await this.locationRepository.remove(location);
+    } catch (error) {
+      logger.error('Failed to delete location', {
+        error,
+        id,
+      });
+      throw error;
+    }
+  }
+
+  async getLocation(id: string): Promise<FileSystemLocation> {
+    const location = await this.locationRepository.findOne({ where: { id } });
+    if (!location) {
+      throw new NotFoundException(`Location not found: ${id}`);
+    }
+    return location;
+  }
+
+  async getLocations(): Promise<FileSystemLocation[]> {
+    return this.locationRepository.find();
   }
 
   async createSpace(dto: CreateSpaceDto): Promise<Space> {
     try {
-      logger.info('Creating space', {
-        name: dto.name,
-        component: 'FileSystemManager'
-      });
-
       const space = this.spaceRepository.create({
-        ...dto,
         id: randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date()
+        name: dto.name,
+        description: dto.description,
+        locations: dto.locationIds.map(id => ({ id })),
       });
 
-      return this.spaceRepository.save(space);
+      await this.spaceRepository.save(space);
+      return space;
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to create space', {
+        error,
         name: dto.name,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to create space:', metadata);
-      throw new ApiError('Failed to create space', error, 500, metadata);
+      });
+      throw error;
     }
   }
 
   async updateSpace(id: string, dto: UpdateSpaceDto): Promise<Space> {
     try {
-      logger.info('Updating space', {
-        id,
-        component: 'FileSystemManager'
-      });
-
       const space = await this.spaceRepository.findOne({ where: { id } });
       if (!space) {
-        throw new NotFoundException(`Space with id ${id} not found`);
+        throw new NotFoundException(`Space not found: ${id}`);
       }
 
       Object.assign(space, {
-        ...dto,
-        updatedAt: new Date()
+        name: dto.name,
+        description: dto.description,
+        locations: dto.locationIds.map(id => ({ id })),
       });
 
-      return this.spaceRepository.save(space);
+      await this.spaceRepository.save(space);
+      return space;
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to update space', {
+        error,
         id,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to update space:', metadata);
-      throw new ApiError('Failed to update space', error, 500, metadata);
+      });
+      throw error;
     }
   }
 
   async deleteSpace(id: string): Promise<void> {
     try {
-      logger.info('Deleting space', {
-        id,
-        component: 'FileSystemManager'
-      });
-
       const space = await this.spaceRepository.findOne({ where: { id } });
       if (!space) {
-        throw new NotFoundException(`Space with id ${id} not found`);
+        throw new NotFoundException(`Space not found: ${id}`);
       }
 
       await this.spaceRepository.remove(space);
     } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      logger.error('Failed to delete space', {
+        error,
         id,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to delete space:', metadata);
-      throw new ApiError('Failed to delete space', error, 500, metadata);
+      });
+      throw error;
     }
   }
 
-  // Quick Access
+  async getSpace(id: string): Promise<Space> {
+    const space = await this.spaceRepository.findOne({ where: { id } });
+    if (!space) {
+      throw new NotFoundException(`Space not found: ${id}`);
+    }
+    return space;
+  }
+
+  async getSpaces(): Promise<Space[]> {
+    return this.spaceRepository.find();
+  }
+
   async getQuickAccess(): Promise<QuickAccessResponse> {
-    try {
-      logger.info('Getting quick access', {
-        component: 'FileSystemManager'
-      });
+    const recentFiles: FileItem[] = [];
+    const favoriteFiles: FileItem[] = [];
+    const sharedFiles: FileItem[] = [];
 
-      // Get recent files from database
-      const recentFiles = await this.locationRepository
-        .createQueryBuilder('location')
-        .orderBy('location.lastAccessed', 'DESC')
-        .limit(10)
-        .getMany();
-
-      // Get favorites from database
-      const favorites = await this.locationRepository
-        .createQueryBuilder('location')
-        .where('location.isFavorite = :isFavorite', { isFavorite: true })
-        .orderBy('location.name', 'ASC')
-        .getMany();
-
-      return {
-        recent: recentFiles.map(file => ({
-          locationId: file.id,
-          path: file.path,
-          name: file.name,
-          lastAccessed: file.lastAccessed
-        })),
-        favorites: favorites.map(file => ({
-          locationId: file.id,
-          path: file.path,
-          name: file.name,
-          lastAccessed: file.lastAccessed
-        }))
-      };
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to get quick access:', metadata);
-      throw new ApiError('Failed to get quick access', error, 500, metadata);
-    }
+    return {
+      recentFiles,
+      favoriteFiles,
+      sharedFiles,
+    };
   }
 
-  async addToFavorites(locationId: string, path: string): Promise<void> {
-    try {
-      logger.info('Adding to favorites', {
-        locationId,
-        path,
-        component: 'FileSystemManager'
-      });
-
-      const location = await this.locationRepository.findOne({ where: { id: locationId } });
-      if (!location) {
-        throw new NotFoundException(`Location with id ${locationId} not found`);
+  async cleanup(): Promise<void> {
+    for (const [id, provider] of this.activeConnections) {
+      try {
+        await provider.disconnect();
+      } catch (error) {
+        logger.error('Failed to disconnect provider during cleanup', {
+          error,
+          locationId: id,
+        });
       }
-
-      location.isFavorite = true;
-      location.lastAccessed = new Date();
-      await this.locationRepository.save(location);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        locationId,
-        path,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to add to favorites:', metadata);
-      throw new ApiError('Failed to add to favorites', error, 500, metadata);
     }
-  }
-
-  async removeFromFavorites(locationId: string, path: string): Promise<void> {
-    try {
-      logger.info('Removing from favorites', {
-        locationId,
-        path,
-        component: 'FileSystemManager'
-      });
-
-      const location = await this.locationRepository.findOne({ where: { id: locationId } });
-      if (!location) {
-        throw new NotFoundException(`Location with id ${locationId} not found`);
-      }
-
-      location.isFavorite = false;
-      await this.locationRepository.save(location);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        locationId,
-        path,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to remove from favorites:', metadata);
-      throw new ApiError('Failed to remove from favorites', error, 500, metadata);
-    }
-  }
-
-  async selectFiles(dto: SelectFilesDto): Promise<FileListResponse> {
-    try {
-      logger.info('Selecting files', {
-        paths: dto.paths,
-        component: 'FileSystemManager'
-      });
-
-      const files: FileItem[] = [];
-      for (const path of dto.paths) {
-        const location = await this.locationRepository.findOne({ where: { path } });
-        if (location) {
-          const provider = await this.getProviderForLocation(location.id);
-          const stats = await provider.stat(path);
-          files.push({
-            name: path.split('/').pop() || '',
-            path,
-            size: stats.size,
-            isDirectory: stats.isDirectory,
-            mode: stats.mode,
-            modTime: stats.modTime,
-            owner: stats.owner,
-            group: stats.group
-          });
-        }
-      }
-
-      return {
-        success: true,
-        files
-      };
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        paths: dto.paths,
-        component: 'FileSystemManager'
-      };
-      logger.error('Failed to select files:', metadata);
-      throw new ApiError('Failed to select files', error, 500, metadata);
-    }
+    this.activeConnections.clear();
   }
 }

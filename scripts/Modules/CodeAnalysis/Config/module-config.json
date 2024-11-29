@@ -1,231 +1,102 @@
 {
-    "version": "2.0",
+    "version": "0.1.0",
     "fileSystem": {
-        "outputDirectory": "./Output",
-        "indexPath": "./Output/index",
-        "cacheDirectory": "./Output/cache",
-        "logsPath": "./Output/logs",
-        "maxCacheSize": 1073741824,
-        "excludePatterns": [
-            "node_modules",
-            "bin",
-            "obj",
-            ".git",
-            ".vs",
-            "dist"
-        ]
+        "outputDirectory": "Output",
+        "indexPath": "index",
+        "cacheDirectory": "cache",
+        "logsPath": "logs",
+        "maxCacheSize": 1000
     },
     "resourceManagement": {
-        "memoryThreshold": 1073741824,
-        "batchSize": 100,
-        "maxParallelism": 4,
+        "memoryThreshold": 1024,
         "cpuThreshold": 80,
-        "diskSpaceThreshold": 1073741824
-    },
-    "security": {
-        "allowedPaths": [
-            "C:/Users/jmaga/code/dash/scripts/Modules/CodeAnalysis",
-            "C:/Users/jmaga/code/dash/src/client"
-        ],
-        "suspiciousPatterns": [
-            "eval\\(",
-            "exec\\(",
-            "\\bpassword\\b",
-            "\\bsecret\\b",
-            "\\btoken\\b",
-            "\\bapi[_-]?key\\b"
-        ],
-        "maxFileSize": 5242880
+        "monitoringInterval": 5
     },
     "codeAnalysis": {
-        "maxFileSize": 1048576,
-        "batchSize": 100,
-        "timeout": 30000,
         "languages": {
-            "powershell": {
-                "extensions": [".ps1", ".psm1", ".psd1"],
-                "parser": "PowerShell",
-                "cascadeCompatibility": "high",
-                "confidenceWeight": 0.95,
+            "typescript": {
                 "metrics": {
-                    "maxFunctions": 20,
-                    "maxComplexity": 15,
-                    "maxDepth": 5
-                }
-            },
-            "python": {
-                "extensions": [".py"],
-                "parser": "Python",
-                "cascadeCompatibility": "high",
-                "confidenceWeight": 0.90,
-                "metrics": {
-                    "maxFunctions": 30,
                     "maxComplexity": 20,
-                    "maxDepth": 6
+                    "maxFunctions": 50,
+                    "maxLines": 500
+                },
+                "patterns": {
+                    "enabled": true,
+                    "configPath": "Config/patterns.json"
                 }
             },
             "javascript": {
-                "extensions": [".js", ".jsx"],
-                "parser": "JavaScript",
-                "cascadeCompatibility": "medium",
-                "confidenceWeight": 0.85,
                 "metrics": {
-                    "maxFunctions": 25,
-                    "maxComplexity": 18,
-                    "maxDepth": 4
-                }
-            },
-            "typescript": {
-                "extensions": [".ts", ".tsx"],
-                "parser": "TypeScript",
-                "cascadeCompatibility": "high",
-                "confidenceWeight": 0.90,
-                "metrics": {
-                    "maxFunctions": 25,
-                    "maxComplexity": 18,
-                    "maxDepth": 4
+                    "maxComplexity": 20,
+                    "maxFunctions": 50,
+                    "maxLines": 500
                 },
                 "patterns": {
-                    "react": {
-                        "hooks": {
-                            "naming": "^use[A-Z]",
-                            "maxDependencies": 5,
-                            "recommendedPatterns": ["useCallback", "useMemo", "useEffect"]
-                        },
-                        "components": {
-                            "naming": "^[A-Z]",
-                            "maxProps": 15,
-                            "recommendedPatterns": ["memo", "forwardRef"]
-                        },
-                        "state": {
-                            "patterns": ["useState", "useReducer", "useContext", "Redux", "MobX"],
-                            "recommendations": {
-                                "local": "useState",
-                                "complex": "useReducer",
-                                "global": "Redux"
-                            }
-                        }
-                    },
-                    "api": {
-                        "patterns": {
-                            "rest": ["fetch", "axios", "http"],
-                            "graphql": ["useQuery", "useMutation", "gql"]
-                        },
-                        "security": {
-                            "required": ["authentication", "validation"],
-                            "recommended": ["rate-limiting", "error-handling"]
-                        }
-                    },
-                    "performance": {
-                        "patterns": {
-                            "memoization": ["useMemo", "useCallback", "memo"],
-                            "lazyLoading": ["lazy", "Suspense"],
-                            "optimization": ["windowing", "virtualization"]
-                        }
-                    }
+                    "enabled": true,
+                    "configPath": "Config/patterns.json"
                 }
             },
-            "go": {
-                "extensions": [".go"],
-                "parser": "Go",
-                "cascadeCompatibility": "high",
-                "confidenceWeight": 0.90,
+            "powershell": {
                 "metrics": {
-                    "maxFunctions": 30,
                     "maxComplexity": 15,
-                    "maxDepth": 5
+                    "maxFunctions": 30,
+                    "maxLines": 300
                 },
                 "patterns": {
-                    "concurrency": {
-                        "goroutines": {
-                            "patterns": ["go func()", "go routine"],
-                            "recommendations": {
-                                "errorHandling": "use error channels",
-                                "contextCancellation": "use context.Context"
-                            }
-                        },
-                        "channels": {
-                            "patterns": ["make(chan", "<-chan", "chan<-"],
-                            "recommendations": {
-                                "buffering": "use buffered channels for known workloads",
-                                "closing": "always close sender side"
-                            }
-                        }
-                    },
-                    "api": {
-                        "patterns": {
-                            "rest": ["http.HandleFunc", "mux.Router"],
-                            "middleware": ["negroni", "chi"]
-                        },
-                        "security": {
-                            "required": ["authentication", "validation"],
-                            "recommended": ["rate-limiting", "CORS"]
-                        }
-                    },
-                    "performance": {
-                        "patterns": {
-                            "pooling": ["sync.Pool"],
-                            "caching": ["cache", "redis"],
-                            "database": ["sql.DB", "mongo"]
-                        }
-                    },
-                    "agent": {
-                        "patterns": {
-                            "communication": ["websocket", "grpc"],
-                            "monitoring": ["prometheus", "metrics"],
-                            "logging": ["zap", "logrus"]
-                        },
-                        "security": {
-                            "required": ["tls", "authentication"],
-                            "recommended": ["encryption", "secure-headers"]
-                        }
-                    }
+                    "enabled": true,
+                    "configPath": "Config/patterns.json"
                 }
             }
-        },
-        "visualization": {
-            "library": "d3",
-            "outputFormat": "html",
-            "outputPath": "./Output/visualization",
-            "interactiveMode": true,
-            "colorScheme": "solarized",
-            "maxNodes": 100
         }
     },
     "machineLearning": {
-        "modelPath": "./Output/models",
-        "trainingPath": "./Output/training",
-        "minSamplesForTraining": 100,
-        "updateInterval": "24:00:00",
         "embeddings": {
-            "modelName": "all-MiniLM-L6-v2",
             "maxTokens": 512,
+            "modelPath": "models/embeddings",
             "batchSize": 32
         },
         "confidenceThresholds": {
-            "high": 0.8,
-            "medium": 0.6,
-            "low": 0.4
+            "high": 0.9,
+            "medium": 0.7,
+            "low": 0.5
         }
     },
-    "database": {
-        "type": "sqlite",
-        "path": "./Output/data/analysis.db",
-        "maxSize": 1073741824,
-        "retentionDays": 30,
-        "tables": {
-            "analysis": {
-                "maxRows": 1000000,
-                "indexes": ["timestamp", "language", "pattern"]
+    "security": {
+        "scanners": {
+            "enabled": true,
+            "configPath": "Config/security.json"
+        },
+        "thresholds": {
+            "critical": 90,
+            "high": 70,
+            "medium": 50,
+            "low": 30
+        }
+    },
+    "performance": {
+        "monitoring": {
+            "enabled": true,
+            "interval": 5,
+            "metrics": ["cpu", "memory", "io"]
+        },
+        "thresholds": {
+            "complexity": {
+                "high": 20,
+                "medium": 10,
+                "low": 5
             },
-            "patterns": {
-                "maxRows": 10000,
-                "indexes": ["name", "language"]
-            },
-            "metrics": {
-                "maxRows": 1000000,
-                "indexes": ["timestamp", "type"]
+            "memory": {
+                "high": 1024,
+                "medium": 512,
+                "low": 256
             }
         }
+    },
+    "logging": {
+        "level": "INFO",
+        "console": true,
+        "file": true,
+        "maxFiles": 10,
+        "maxSize": 10485760
     }
 }

@@ -1,408 +1,219 @@
-# Cascade Refactoring Plan
+# Refactoring Recommendations Report
 
-## Metadata
+## Overview
+- Analysis Date: {{analysisDate}}
+- Project: {{projectName}}
+- Files Analyzed: {{filesAnalyzed}}
+- Total Issues: {{totalIssues}}
+- Technical Debt: {{technicalDebt}} hours
+- Analysis Tool Version: {{toolVersion}}
+
+## Executive Summary
+- Critical Issues: {{criticalIssues}}
+- High Priority Issues: {{highPriorityIssues}}
+- Medium Priority Issues: {{mediumPriorityIssues}}
+- Low Priority Issues: {{lowPriorityIssues}}
+- Overall Code Health Score: {{codeHealthScore}}/100
+
+## Metrics Summary
 ```json
 {
-  "version": "1.0",
-  "analysisDate": "{{date}}",
-  "project": "{{projectName}}",
-  "stats": {
-    "filesAnalyzed": {{filesAnalyzed}},
-    "totalIssues": {{totalIssues}},
-    "estimatedTime": {{technicalDebt}}
+  "complexity": {
+    "average": {{metrics.complexity.average}},
+    "max": {{metrics.complexity.maxAllowed}},
+    "warning": {{metrics.complexity.warning}},
+    "filesExceedingThreshold": {{metrics.complexity.exceedingFiles}}
   },
-  "cascadeMetadata": {
-    "toolCompatibility": {
-      "requiredTools": ["edit_file", "view_file"],
-      "optionalTools": ["grep_search", "codebase_search"],
-      "fallbackTools": {
-        "edit_file": "write_to_file",
-        "view_file": "grep_search",
-        "codebase_search": "grep_search"
-      }
-    },
-    "executionPreferences": {
-      "parallelizable": false,
-      "requiresUserConfirmation": false,
-      "criticalSection": true,
-      "maxConcurrentTasks": 1,
-      "timeoutMinutes": 30
-    },
-    "environmentRequirements": {
-      "powershell": ">=5.1",
-      "dotnet": ">=6.0",
-      "git": ">=2.0"
-    }
+  "performance": {
+    "score": {{metrics.performance.score}},
+    "batchSize": {{metrics.performance.batchSize}},
+    "maxParallelism": {{metrics.performance.maxParallelism}},
+    "memoryUsage": {{metrics.performance.memoryUsage}}
+  },
+  "security": {
+    "score": {{metrics.security.score}},
+    "criticalIssues": {{metrics.security.criticalIssues}},
+    "highRiskPatterns": {{metrics.security.highRiskPatterns}}
   }
 }
 ```
 
 ## Refactoring Tasks
-Each task is structured as a complete, atomic operation for Cascade:
-
 {{#each refactoringTasks}}
-### Task: {{id}}
-```json
-{
-  "metadata": {
-    "id": "{{id}}",
-    "name": "{{name}}",
-    "priority": {{priority}},
-    "type": "{{type}}",
-    "complexity": {{complexity}},
-    "estimatedTime": {{timeInMinutes}},
-    "impact": {
-      "scope": "{{scope}}",
-      "risk": {{risk}},
-      "effort": {{effort}},
-      "benefits": [
-        {{#each benefits}}
-        "{{this}}"
-        {{/each}}
-      ]
-    }
-  },
-  "files": {
-    "primary": {
-      "path": "{{primaryFile}}",
-      "language": "{{language}}",
-      "encoding": "{{encoding}}",
-      "requiredAccess": ["read", "write"]
-    },
-    "related": [
-      {{#each relatedFiles}}
-      {
-        "path": "{{path}}",
-        "reason": "{{reason}}",
-        "requiredChanges": {{requiredChanges}},
-        "dependencies": {
-          "imports": {{imports}},
-          "exports": {{exports}},
-          "references": {{references}}
-        }
-      }
-      {{/each}}
-    ]
-  },
-  "patternContext": {
-    "codePattern": {
-      "before": {{escapeCode beforeContext}},
-      "target": {{escapeCode targetPattern}},
-      "after": {{escapeCode afterContext}},
-      "indentation": "{{indentation}}",
-      "lineEnding": "{{lineEnding}}"
-    },
-    "similarPatterns": [
-      {{#each similarPatterns}}
-      {
-        "pattern": {{escapeCode pattern}},
-        "confidence": {{confidence}},
-        "requiresReview": {{requiresReview}},
-        "locations": [
-          {{#each locations}}
-          {
-            "file": "{{file}}",
-            "line": {{line}},
-            "context": {{escapeCode context}}
-          }
-          {{/each}}
-        ]
-      }
-      {{/each}}
-    ],
-    "exclusions": [
-      {{#each exclusions}}
-      {
-        "pattern": "{{pattern}}",
-        "reason": "{{reason}}"
-      }
-      {{/each}}
-    ]
-  },
-  "changeStrategy": {
-    "approach": "{{approach}}",
-    "steps": [
-      {{#each steps}}
-      {
-        "order": {{order}},
-        "description": "{{description}}",
-        "toolCalls": [
-          {{#each toolCalls}}
-          {
-            "tool": "{{tool}}",
-            "params": {
-              "targetFile": "{{file}}",
-              "changes": [
-                {
-                  "type": "{{changeType}}",
-                  "content": {{escapeCode content}},
-                  "contextBefore": {{escapeCode contextBefore}},
-                  "contextAfter": {{escapeCode contextAfter}},
-                  "lineRange": {
-                    "start": {{startLine}},
-                    "end": {{endLine}}
-                  }
-                }
-              ],
-              "alternativeMatches": [
-                {{#each alternativeMatches}}
-                {
-                  "pattern": {{escapeCode pattern}},
-                  "replacement": {{escapeCode replacement}},
-                  "confidence": {{confidence}}
-                }
-                {{/each}}
-              ]
-            },
-            "errorHandling": {
-              "retryCount": {{retryCount}},
-              "retryDelayMs": {{retryDelayMs}},
-              "fallbackStrategy": "{{fallbackStrategy}}",
-              "validation": {
-                "type": "{{validationType}}",
-                "script": {{escapeCode validationScript}},
-                "expectedOutput": {{json expectedOutput}},
-                "timeout": {{timeout}}
-              }
-            }
-          }
-          {{/each}}
-        ],
-        "verificationStep": {
-          "type": "{{verificationType}}",
-          "command": "{{verificationCommand}}",
-          "expectedResult": {{json expectedResult}},
-          "continueOnSuccess": {{continueOnSuccess}}
-        }
-      }
-      {{/each}}
-    ]
-  },
-  "rollback": {
-    "strategy": "{{rollbackStrategy}}",
-    "steps": [
-      {{#each rollbackSteps}}
-      {
-        "order": {{order}},
-        "tool": "{{tool}}",
-        "params": {{json params}},
-        "verification": "{{verification}}"
-      }
-      {{/each}}
-    ],
-    "checkpoints": [
-      {{#each checkpoints}}
-      {
-        "id": "{{id}}",
-        "location": "{{location}}",
-        "type": "{{type}}"
-      }
-      {{/each}}
-    ]
-  },
-  "tests": {
-    "required": [
-      {{#each requiredTests}}
-      {
-        "type": "{{type}}",
-        "path": "{{path}}",
-        "setup": {{json setup}},
-        "assertions": [
-          {{#each assertions}}
-          {
-            "description": "{{description}}",
-            "code": {{escapeCode code}},
-            "expected": {{json expected}},
-            "cleanup": {{json cleanup}}
-          }
-          {{/each}}
-        ]
-      }
-      {{/each}}
-    ],
-    "optional": [
-      {{#each optionalTests}}
-      {
-        "type": "{{type}}",
-        "path": "{{path}}",
-        "priority": {{priority}},
-        "assertions": {{json assertions}}
-      }
-      {{/each}}
-    ]
-  },
-  "documentation": {
-    "changes": [
-      {{#each docChanges}}
-      {
-        "file": "{{file}}",
-        "section": "{{section}}",
-        "content": {{escapeCode content}}
-      }
-      {{/each}}
-    ],
-    "apiImpact": {
-      "breaking": {{breakingChanges}},
-      "deprecated": {{deprecatedApis}},
-      "new": {{newApis}}
-    }
-  }
-}
-```
-{{/each}}
-
-## Refactoring Recommendations
-
-{{#each refactoringTasks}}
-### {{name}}
+### Task {{id}}: {{name}}
 
 #### Context
-- **Location**: {{primaryFile}}
-- **Pattern Type**: {{type}}
-- **Priority**: {{priority}}
+- Priority: {{priority}}
+- Type: {{type}}
+- Complexity: {{complexity}}/{{../metrics.complexity.maxAllowed}}
+- Estimated Time: {{timeInMinutes}} minutes
+- Risk Level: {{risk}}
+
+#### Location
+- Primary File: {{primaryFile}}
+- Language: {{language}}
+- Lines: {{lineRange.start}} - {{lineRange.end}}
 
 #### Current Implementation
 ```{{language}}
 {{beforeContext}}
+{{targetPattern}}
+{{afterContext}}
 ```
 
-#### Suggested Improvement
-- **Description**: {{description}}
-- **Benefits**: {{benefits}}
-- **Potential Impact**: {{impact}}
+#### Issue Analysis
+- Pattern Type: {{pattern.type}}
+- Confidence: {{pattern.confidence}}
+- Impact:
+  - Performance: {{impact.performance}}
+  - Maintainability: {{impact.maintainability}}
+  - Security: {{impact.security}}
 
-#### Manual Implementation Steps
-1. {{#each steps}}
-   - {{this}}
-   {{/each}}
+#### Proposed Solution
+```{{language}}
+{{proposedImplementation}}
+```
+
+#### Benefits
+{{#each benefits}}
+- {{this}}
+{{/each}}
+
+#### Implementation Steps
+{{#each steps}}
+1. {{description}}
+   - Tool: {{tool}}
+   - Validation: {{validation}}
+   - Rollback: {{rollback}}
+{{/each}}
+
+#### Dependencies
+- Required Changes:
+{{#each dependencies}}
+  - {{file}}: {{change}}
+{{/each}}
+
+#### Testing Requirements
+- Unit Tests: {{testing.unit}}
+- Integration Tests: {{testing.integration}}
+- Performance Tests: {{testing.performance}}
 
 #### Validation Checklist
 - [ ] Code compiles successfully
-- [ ] Tests pass (if applicable)
-- [ ] No regression in functionality
-- [ ] Code review completed
+- [ ] All tests pass
+- [ ] Performance metrics within thresholds
+- [ ] Security checks passed
 - [ ] Documentation updated
-
-#### Related Components
-- **Affected Files**: {{relatedFiles}}
-- **Dependencies**: {{dependencies}}
+- [ ] Code review completed
 
 ---
 {{/each}}
 
+## Implementation Strategy
+### Phase 1: Critical Issues
+{{#each criticalPhase}}
+1. {{task}}
+   - Impact: {{impact}}
+   - Dependencies: {{dependencies}}
+   - Timeline: {{timeline}}
+{{/each}}
+
+### Phase 2: High Priority
+{{#each highPriorityPhase}}
+1. {{task}}
+   - Impact: {{impact}}
+   - Dependencies: {{dependencies}}
+   - Timeline: {{timeline}}
+{{/each}}
+
+### Phase 3: Medium Priority
+{{#each mediumPriorityPhase}}
+1. {{task}}
+   - Impact: {{impact}}
+   - Dependencies: {{dependencies}}
+   - Timeline: {{timeline}}
+{{/each}}
+
 ## Dependency Graph
-```json
-{
-  "taskDependencies": [
-    {{#each taskDependencies}}
-    {
-      "id": "{{id}}",
-      "dependsOn": [
-        {{#each dependencies}}
-        "{{this}}"
-        {{/each}}
-      ],
-      "blockedBy": [
-        {{#each blockers}}
-        {
-          "taskId": "{{taskId}}",
-          "reason": "{{reason}}",
-          "severity": "{{severity}}"
-        }
-        {{/each}}
-      ],
-      "parallelizable": {{parallelizable}},
-      "criticalPath": {{criticalPath}}
-    }
-    {{/each}}
-  ],
-  "executionPlan": {
-    "phases": [
-      {{#each phases}}
-      {
-        "name": "{{name}}",
-        "tasks": [
-          {{#each tasks}}
-          "{{this}}"
-          {{/each}}
-        ],
-        "requiredSuccess": {{requiredSuccess}},
-        "rollbackOnFailure": {{rollbackOnFailure}}
-      }
-      {{/each}}
-    ],
-    "fallbackPlans": [
-      {{#each fallbackPlans}}
-      {
-        "condition": "{{condition}}",
-        "tasks": {{json tasks}}
-      }
-      {{/each}}
-    ]
-  }
-}
+```mermaid
+{{dependencyGraph}}
 ```
 
-## Validation Plan
-```json
-{
-  "stages": [
-    {{#each validationStages}}
-    {
-      "name": "{{name}}",
-      "phase": "{{phase}}",
-      "checks": [
-        {{#each checks}}
-        {
-          "type": "{{type}}",
-          "command": {{escapeCode command}},
-          "expectedOutput": {{json expectedOutput}},
-          "errorThreshold": {{errorThreshold}},
-          "retryStrategy": {
-            "maxAttempts": {{maxAttempts}},
-            "delayMs": {{delayMs}},
-            "backoffFactor": {{backoffFactor}}
-          }
-        }
-        {{/each}}
-      ],
-      "dependencies": [
-        {{#each dependencies}}
-        "{{this}}"
-        {{/each}}
-      ],
-      "metrics": {
-        "performance": {{performanceMetrics}},
-        "quality": {{qualityMetrics}},
-        "coverage": {{coverageMetrics}}
-      }
-    }
-    {{/each}}
-  ],
-  "monitoring": {
-    "metrics": [
-      {{#each metrics}}
-      {
-        "name": "{{name}}",
-        "type": "{{type}}",
-        "threshold": {{threshold}},
-        "action": "{{action}}"
-      }
-      {{/each}}
-    ],
-    "alerts": [
-      {{#each alerts}}
-      {
-        "condition": "{{condition}}",
-        "severity": "{{severity}}",
-        "action": "{{action}}"
-      }
-      {{/each}}
-    ]
-  }
-}
+## Risk Assessment
+### High Risk Changes
+{{#each highRiskChanges}}
+- {{description}}
+  - Impact: {{impact}}
+  - Mitigation: {{mitigation}}
+  - Fallback: {{fallback}}
+{{/each}}
 
-## Additional Notes
-- **Testing Requirements**: {{TestingRequirements}}
-- **Documentation Updates**: {{DocumentationUpdates}}
-- **Review Notes**: {{ReviewNotes}}
+### Dependencies at Risk
+{{#each dependencyRisks}}
+- {{package}}
+  - Current Version: {{currentVersion}}
+  - Target Version: {{targetVersion}}
+  - Breaking Changes: {{breakingChanges}}
+  - Migration Path: {{migrationPath}}
+{{/each}}
+
+## Performance Impact
+### Before Refactoring
+{{#each beforeMetrics}}
+- {{metric}}: {{value}}
+{{/each}}
+
+### Projected After Refactoring
+{{#each projectedMetrics}}
+- {{metric}}: {{value}}
+{{/each}}
+
+## Monitoring Plan
+### Key Metrics
+{{#each monitoringMetrics}}
+- {{name}}
+  - Current: {{current}}
+  - Target: {{target}}
+  - Alert Threshold: {{threshold}}
+{{/each}}
+
+### Validation Tests
+{{#each validationTests}}
+- {{name}}
+  - Type: {{type}}
+  - Criteria: {{criteria}}
+  - Frequency: {{frequency}}
+{{/each}}
+
+## Resource Requirements
+- Development Time: {{resources.devTime}} hours
+- Testing Time: {{resources.testTime}} hours
+- Review Time: {{resources.reviewTime}} hours
+- Total Effort: {{resources.totalEffort}} hours
+
+## Documentation Updates
+### API Changes
+{{#each apiChanges}}
+- {{type}}
+  - Before: {{before}}
+  - After: {{after}}
+  - Migration Guide: {{migration}}
+{{/each}}
+
+### Required Updates
+{{#each documentationUpdates}}
+- {{file}}
+  - Section: {{section}}
+  - Changes: {{changes}}
+{{/each}}
+
+## Analysis Configuration
+```json
+{{configJson}}
+```
+
+## Scan Coverage
+- Files Scanned: {{coverage.filesScanned}}
+- Lines Analyzed: {{coverage.linesAnalyzed}}
+- Patterns Checked: {{coverage.patternsChecked}}
+- Analysis Duration: {{coverage.duration}}

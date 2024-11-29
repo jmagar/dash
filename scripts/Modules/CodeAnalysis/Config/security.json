@@ -1,0 +1,135 @@
+{
+    "version": "0.1.0",
+    "patterns": {
+        "typescript": {
+            "critical": [
+                {
+                    "name": "Eval Usage",
+                    "regex": "\\beval\\s*\\(",
+                    "description": "Using eval() can execute arbitrary code",
+                    "remediation": "Use safer alternatives like JSON.parse() for JSON data or Function constructor for dynamic code"
+                }
+            ],
+            "high": [
+                {
+                    "name": "innerHTML Usage",
+                    "regex": "\\.innerHTML\\s*=",
+                    "description": "Using innerHTML can lead to XSS vulnerabilities",
+                    "remediation": "Use textContent for text or createElement/appendChild for DOM manipulation"
+                },
+                {
+                    "name": "Hardcoded Secrets",
+                    "regex": "(password|secret|key|token)\\s*=\\s*['\"][^'\"]+['\"]",
+                    "description": "Hardcoded secrets detected",
+                    "remediation": "Use environment variables or secure secret management"
+                }
+            ],
+            "medium": [
+                {
+                    "name": "Insecure Random",
+                    "regex": "Math\\.random\\(\\)",
+                    "description": "Math.random() is not cryptographically secure",
+                    "remediation": "Use crypto.getRandomValues() for secure random numbers"
+                }
+            ],
+            "low": [
+                {
+                    "name": "Console Usage",
+                    "regex": "console\\.(log|debug|info)",
+                    "description": "Debug information might be exposed in production",
+                    "remediation": "Use proper logging system with different log levels"
+                }
+            ]
+        },
+        "javascript": {
+            "critical": [
+                {
+                    "name": "Eval Usage",
+                    "regex": "\\beval\\s*\\(",
+                    "description": "Using eval() can execute arbitrary code",
+                    "remediation": "Use safer alternatives like JSON.parse() for JSON data or Function constructor for dynamic code"
+                }
+            ],
+            "high": [
+                {
+                    "name": "innerHTML Usage",
+                    "regex": "\\.innerHTML\\s*=",
+                    "description": "Using innerHTML can lead to XSS vulnerabilities",
+                    "remediation": "Use textContent for text or createElement/appendChild for DOM manipulation"
+                },
+                {
+                    "name": "Hardcoded Secrets",
+                    "regex": "(password|secret|key|token)\\s*=\\s*['\"][^'\"]+['\"]",
+                    "description": "Hardcoded secrets detected",
+                    "remediation": "Use environment variables or secure secret management"
+                }
+            ],
+            "medium": [
+                {
+                    "name": "Insecure Random",
+                    "regex": "Math\\.random\\(\\)",
+                    "description": "Math.random() is not cryptographically secure",
+                    "remediation": "Use crypto.getRandomValues() for secure random numbers"
+                }
+            ],
+            "low": [
+                {
+                    "name": "Console Usage",
+                    "regex": "console\\.(log|debug|info)",
+                    "description": "Debug information might be exposed in production",
+                    "remediation": "Use proper logging system with different log levels"
+                }
+            ]
+        },
+        "powershell": {
+            "critical": [
+                {
+                    "name": "Invoke-Expression Usage",
+                    "regex": "\\bInvoke-Expression\\b",
+                    "description": "Using Invoke-Expression can execute arbitrary code",
+                    "remediation": "Use safer alternatives like Invoke-Command with proper parameter validation"
+                }
+            ],
+            "high": [
+                {
+                    "name": "Plain Text Credentials",
+                    "regex": "\\b(Password|Credential)\\s*=\\s*['\"][^'\"]+['\"]",
+                    "description": "Plain text credentials detected",
+                    "remediation": "Use SecureString or credential management system"
+                }
+            ],
+            "medium": [
+                {
+                    "name": "Unencrypted Network",
+                    "regex": "\\b(Net\\.WebClient|Invoke-WebRequest)\\b(?!.*-UseBasicParsing)",
+                    "description": "Network requests might not use encryption",
+                    "remediation": "Use -UseBasicParsing and ensure HTTPS is used"
+                }
+            ],
+            "low": [
+                {
+                    "name": "Write-Host Usage",
+                    "regex": "Write-Host",
+                    "description": "Write-Host bypasses output streams",
+                    "remediation": "Use Write-Output for pipeline output or Write-Information for informational messages"
+                }
+            ]
+        }
+    },
+    "exclusions": {
+        "files": [
+            "**/test/**",
+            "**/tests/**",
+            "**/spec/**",
+            "**/node_modules/**"
+        ],
+        "patterns": [
+            "TODO:",
+            "FIXME:"
+        ]
+    },
+    "customRules": {
+        "enabled": true,
+        "path": "Config/custom-security-rules.json"
+    }
+}

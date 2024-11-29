@@ -1,116 +1,140 @@
-BeforeAll {
-    # Import module
-    $modulePath = (Get-Item $PSScriptRoot).Parent.FullName
-    Import-Module $modulePath -Force
-    
-    # Create test data
-    $script:TestDataPath = Join-Path $PSScriptRoot "TestData"
-    if (-not (Test-Path $script:TestDataPath)) {
-        New-Item -ItemType Directory -Path $script:TestDataPath -Force
-    }
-    
-    # Create test files
-    @"
-function test() {
-    if (true) {
-        console.log('test');
-    }
-}
-"@ | Out-File (Join-Path $script:TestDataPath "test.js")
+# Import module for testing
+$ModuleRoot = Split-Path -Parent $PSScriptRoot
+$ModuleName = "CodeAnalysis"
+$ModuleManifestPath = Join-Path $ModuleRoot "$ModuleName.psd1"
 
-    @"
-def test():
-    if True:
-        print('test')
-"@ | Out-Path (Join-Path $script:TestDataPath "test.py")
+# Import Pester if not already imported
+if (-not (Get-Module -Name Pester -ErrorAction SilentlyContinue)) {
+    Import-Module Pester -ErrorAction Stop
 }
 
-Describe "CodeAnalysis Module" {
-    Context "Module Loading" {
-        It "Should import successfully" {
-            Get-Module CodeAnalysis | Should -Not -BeNullOrEmpty
-        }
-        
-        It "Should export required functions" {
-            @('Invoke-CodeAnalysis', 'Export-CodeVisualization') | ForEach-Object {
-                Get-Command -Module CodeAnalysis -Name $_ | Should -Not -BeNullOrEmpty
-            }
+# Remove module if already loaded
+Remove-Module $ModuleName -ErrorAction SilentlyContinue
+
+# Import the module
+Import-Module $ModuleManifestPath -Force -ErrorAction Stop
+
+Describe "CodeAnalysis Module Tests" {
+    BeforeEach {
+        # Create test data directory with absolute path
+        $script:TestDataPath = Join-Path $PSScriptRoot "TestData"
+        if (-not (Test-Path $script:TestDataPath)) {
+            New-Item -Path $script:TestDataPath -ItemType Directory -Force | Out-Null
         }
     }
     
-    Context "Invoke-CodeAnalysis" {
-        It "Should analyze valid paths" {
-            $outputPath = Join-Path $TestDrive "analysis"
-            $result = Invoke-CodeAnalysis -Path $script:TestDataPath -OutputPath $outputPath
-            $result | Should -Not -BeNullOrEmpty
-            $result.totalFiles | Should -BeGreaterThan 0
+    AfterEach {
+        # Clean up test data
+        if (Test-Path $script:TestDataPath) {
+            Remove-Item -Path $script:TestDataPath -Recurse -Force
         }
-        
-        It "Should handle invalid paths gracefully" {
-            { Invoke-CodeAnalysis -Path "./NonExistent" } | 
-                Should -Throw -ExpectedMessage "*Path not found*"
+    }
+    
+    Context "Individual Analysis Functions" {
+        BeforeEach {
+            # Create test file with known issues
+            $script:TestCode = @'
+function Test-Performance {
+    $items = 1..200
+    $testResults = @()
+    foreach ($item in $items) {
+        $testResults += $item # Array concatenation in loop
+    }
+    Invoke-Expression "$testResults" # Security issue
+    return $testResults
+}
+'@
         }
-        
-        It "Should respect file extensions filter" {
-            $outputPath = Join-Path $TestDrive "analysis-js"
-            $result = Invoke-CodeAnalysis -Path $script:TestDataPath -OutputPath $outputPath -FileExtensions @('.js')
-            $result.languages.Keys | Should -Contain 'javascript'
-            $result.languages.Keys | Should -Not -Contain 'python'
-        }
-        
-        It "Should generate required output files" {
-            $outputPath = Join-Path $TestDrive "analysis-full"
-            $null = Invoke-CodeAnalysis -Path $script:TestDataPath -OutputPath $outputPath
-            
-            @(
-                'summary.json',
-                'details.json',
-                'report.md'
-            ) | ForEach-Object {
-                Test-Path (Join-Path $outputPath $_) | Should -BeTrue
-            }
-        }
-        
+
         It "Should detect security issues" {
-            @"
-const password = 'hardcoded';
-eval('console.log("test")');
-"@ | Out-File (Join-Path $script:TestDataPath "security.js")
-            
-            $outputPath = Join-Path $TestDrive "analysis-security"
-            $result = Invoke-CodeAnalysis -Path $script:TestDataPath -OutputPath $outputPath
-            $result.security.highRiskFiles.Count | Should -BeGreaterThan 0
+            # Act
+            $result = Get-SecurityIssues -Content $script:TestCode
+
+            # Assert
+            $result | Should Not Be $null
+            $result.score | Should Be 80
+            $result.issues.Count | Should Be 1
+            $result.issues[0].name | Should Be "Use of Invoke-Expression"
+        }
+        
+        It "Should detect performance issues" {
+            # Act
+            $result = Get-PerformanceMetrics -Content $script:TestCode
+
+            # Assert
+            $result | Should Not Be $null
+            $result.score | Should Be 90
+            $result.metrics.Count | Should Be 1
+            $result.metrics[0].name | Should Be "Array concatenation"
+        }
+        
+        It "Should detect code patterns" {
+            # Act
+            $result = Get-CodePatterns -Content $script:TestCode
+
+            # Assert
+            $result | Should Not Be $null
+            $result.patterns.Count | Should Be 2
+            $result.matched.Count | Should Be 2
+            $result.matched.name -contains "Array concatenation" | Should Be $true
+            $result.matched.name -contains "Invoke-Expression" | Should Be $true
         }
     }
     
-    Context "Export-CodeVisualization" {
-        BeforeAll {
-            $script:AnalysisPath = Join-Path $TestDrive "viz-analysis"
-            $null = Invoke-CodeAnalysis -Path $script:TestDataPath -OutputPath $script:AnalysisPath
-        }
-        
-        It "Should generate Mermaid diagram" {
-            $outputPath = Join-Path $TestDrive "viz-mermaid"
-            Export-CodeVisualization -AnalysisPath $script:AnalysisPath -OutputPath $outputPath -Format 'mermaid'
-            Test-Path (Join-Path $outputPath "dependencies.mmd") | Should -BeTrue
-        }
-        
-        It "Should generate D3 visualization" {
-            $outputPath = Join-Path $TestDrive "viz-d3"
-            Export-CodeVisualization -AnalysisPath $script:AnalysisPath -OutputPath $outputPath -Format 'd3'
-            Test-Path (Join-Path $outputPath "visualization.html") | Should -BeTrue
-        }
-        
-        It "Should handle missing analysis data gracefully" {
-            { Export-CodeVisualization -AnalysisPath "./NonExistent" -OutputPath $TestDrive } |
-                Should -Throw -ExpectedMessage "*Analysis data not found*"
-        }
-    }
-}
+    Context "Full Code Analysis" {
+        BeforeEach {
+            # Create test data directory
+            $script:TestDataPath = Join-Path $PSScriptRoot "TestData"
+            if (-not (Test-Path $script:TestDataPath)) {
+                New-Item -Path $script:TestDataPath -ItemType Directory -Force | Out-Null
+            }
 
-AfterAll {
-    # Cleanup test data
-    if (Test-Path $script:TestDataPath) {
-        Remove-Item $script:TestDataPath -Recurse -Force
+            # Create test file with known issues
+            Set-Content -Path (Join-Path $script:TestDataPath "test.ps1") -Value $script:TestCode
+        }
+
+        AfterEach {
+            # Clean up test data
+            if (Test-Path $script:TestDataPath) {
+                Remove-Item -Path $script:TestDataPath -Recurse -Force
+            }
+        }
+
+        It "Should analyze code and calculate correct scores" {
+            # Act
+            $result = Invoke-CodeAnalysis -Path (Join-Path $script:TestDataPath "test.ps1")
+
+            # Assert
+            $result | Should Not Be $null
+            $result.files.Count | Should Be 1
+            $result.summary.processedFiles | Should Be 1
+            
+            # Check security score
+            $result.files[0].security.score | Should Be 80
+            $result.files[0].security.issues.Count | Should Be 1
+            
+            # Check performance score
+            $result.files[0].performance.score | Should Be 90
+            $result.files[0].performance.metrics.Count | Should Be 1
+            
+            # Check average score
+            $result.summary.averageScore | Should Be 85
+        }
+
+        It "Should handle empty files correctly" {
+            # Arrange
+            Set-Content -Path (Join-Path $script:TestDataPath "empty.ps1") -Value ""
+
+            # Act
+            $result = Invoke-CodeAnalysis -Path (Join-Path $script:TestDataPath "empty.ps1")
+
+            # Assert
+            $result | Should Not Be $null
+            $result.files.Count | Should Be 1
+            $result.summary.processedFiles | Should Be 1
+            $result.summary.averageScore | Should Be 100
+            $result.files[0].security.score | Should Be 100
+            $result.files[0].performance.score | Should Be 100
+        }
     }
 }

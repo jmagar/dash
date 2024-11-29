@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEmail, IsNotEmpty, MinLength, MaxLength, Matches, IsBoolean, IsEnum, IsDate, IsOptional, IsUUID, IsObject, ValidateNested } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, MinLength, MaxLength, Matches, IsBoolean, IsEnum, IsDate, IsOptional, IsUUID, IsObject, ValidateNested, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiResult } from '../../../../types/error';
 import { LogMetadata } from '../../../../types/logger';
@@ -29,13 +29,31 @@ export interface AuthMetadata {
 }
 
 /**
- * Base validation response
+ * Base response type
  */
-export interface ValidationResponse {
-  valid: boolean;
-  errors?: string[];
-  metadata?: AuthMetadata;
+export class BaseResponse<T> {
+  @ApiProperty({ description: 'Success status' })
+  success = false;
+
+  @ApiProperty({ description: 'Response data' })
+  data?: T;
+
+  @ApiProperty({ description: 'Error message if any' })
+  error?: string;
 }
+
+/**
+ * Base validation response class
+ */
+export class ValidationResponse<T> extends BaseResponse<T> {
+  @ApiProperty({ description: 'Validation status' })
+  valid = false;
+}
+
+/**
+ * Auth response type
+ */
+export class AuthResponse<T> extends BaseResponse<T> {}
 
 /**
  * DTO for user registration
@@ -47,12 +65,12 @@ export class RegisterDto {
   @MinLength(3)
   @MaxLength(20)
   @Matches(/^[a-zA-Z0-9_-]*$/, { message: 'Username can only contain letters, numbers, underscores and hyphens' })
-  username: string;
+  username = '';
 
   @ApiProperty({ description: 'Email address' })
   @IsEmail()
   @IsNotEmpty()
-  email: string;
+  email = '';
 
   @ApiProperty({ description: 'Password for the account' })
   @IsString()
@@ -61,12 +79,12 @@ export class RegisterDto {
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\w\W]{8,}$/, {
     message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
   })
-  password: string;
+  password = '';
 
   @ApiProperty({ description: 'Confirm password' })
   @IsString()
   @IsNotEmpty()
-  confirmPassword: string;
+  confirmPassword = '';
 
   @ApiPropertyOptional({ description: 'Registration metadata' })
   @IsOptional()
@@ -81,12 +99,12 @@ export class LoginDto {
   @ApiProperty({ description: 'Username or email' })
   @IsString()
   @IsNotEmpty()
-  username: string;
+  username = '';
 
   @ApiProperty({ description: 'Password' })
   @IsString()
   @IsNotEmpty()
-  password: string;
+  password = '';
 
   @ApiPropertyOptional({ description: 'Remember me option' })
   @IsOptional()
@@ -107,11 +125,11 @@ export class LoginDto {
 /**
  * DTO for refresh token request
  */
-export class RefreshTokenDto {
+export class RefreshTokenRequestDto {
   @ApiProperty({ description: 'Refresh token' })
   @IsString()
   @IsNotEmpty()
-  refreshToken: string;
+  refreshToken = '';
 
   @ApiPropertyOptional({ description: 'Device ID for multi-device support' })
   @IsOptional()
@@ -130,33 +148,33 @@ export class RefreshTokenDto {
 export class UserDto {
   @ApiProperty({ description: 'Unique identifier' })
   @IsUUID()
-  id: string;
+  id = '';
 
   @ApiProperty({ description: 'Username' })
   @IsString()
-  username: string;
+  username = '';
 
   @ApiProperty({ description: 'Email address' })
   @IsEmail()
-  email: string;
+  email = '';
 
   @ApiProperty({ description: 'User role', enum: UserRole })
   @IsEnum(UserRole)
-  role: UserRole;
+  role = UserRole.USER;
 
   @ApiProperty({ description: 'Account status' })
   @IsBoolean()
-  is_active: boolean;
+  is_active = false;
 
   @ApiProperty({ description: 'Account creation date' })
   @IsDate()
   @Type(() => Date)
-  createdAt: Date;
+  createdAt = new Date();
 
   @ApiProperty({ description: 'Account last update date' })
   @IsDate()
   @Type(() => Date)
-  updatedAt: Date;
+  updatedAt = new Date();
 
   @ApiPropertyOptional({ description: 'User preferences' })
   @IsOptional()
@@ -175,11 +193,11 @@ export class UserDto {
 export class AuthenticatedUserDto extends UserDto {
   @ApiProperty({ description: 'JWT access token' })
   @IsString()
-  token: string;
+  token = '';
 
   @ApiProperty({ description: 'JWT refresh token' })
   @IsString()
-  refreshToken: string;
+  refreshToken = '';
 
   @ApiPropertyOptional({ description: 'Token expiration' })
   @IsOptional()
@@ -195,195 +213,71 @@ export class AuthenticatedUserDto extends UserDto {
 }
 
 /**
- * Type for auth response with user data
- */
-export type AuthResponse<T> = ApiResult<T> & {
-  metadata?: LogMetadata & AuthMetadata;
-};
-
-/**
  * DTO for login response
  */
 export class LoginResponseDto extends AuthResponse<AuthenticatedUserDto> {
-  @ApiProperty({ description: 'Success status' })
-  success: boolean;
-
-  @ApiProperty({ description: 'User data' })
-  data: AuthenticatedUserDto;
-
   @ApiPropertyOptional({ description: 'Error message if login failed' })
   error?: string;
 
-  @ApiPropertyOptional({ description: 'Validation response' })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ValidationResponse)
-  validation?: ValidationResponse;
+  toValidationResponse(): ValidationResponse<AuthenticatedUserDto> {
+    const response = new ValidationResponse<AuthenticatedUserDto>();
+    response.success = this.success;
+    response.data = this.data;
+    response.error = this.error;
+    response.valid = this.success;
+    return response;
+  }
 }
 
 /**
  * DTO for logout response
  */
 export class LogoutResponseDto extends AuthResponse<null> {
-  @ApiProperty({ description: 'Success status' })
-  success: boolean;
-
   @ApiPropertyOptional({ description: 'Error message if logout failed' })
   error?: string;
 
-  @ApiPropertyOptional({ description: 'Logout metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: AuthMetadata;
+  toValidationResponse(): ValidationResponse<null> {
+    const response = new ValidationResponse<null>();
+    response.success = this.success;
+    response.error = this.error;
+    response.valid = this.success;
+    return response;
+  }
 }
 
 /**
- * DTO for token validation response
- */
-export class ValidateResponseDto extends AuthResponse<AuthenticatedUserDto> {
-  @ApiProperty({ description: 'Success status' })
-  success: boolean;
-
-  @ApiProperty({ description: 'Token validity' })
-  valid: boolean;
-
-  @ApiProperty({ description: 'User data' })
-  data: AuthenticatedUserDto;
-
-  @ApiPropertyOptional({ description: 'Error message if validation failed' })
-  error?: string;
-
-  @ApiPropertyOptional({ description: 'Validation response' })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ValidationResponse)
-  validation?: ValidationResponse;
-}
-
-/**
- * DTO for refresh token response
- */
-export class RefreshTokenResponseDto extends AuthResponse<AuthenticatedUserDto> {
-  @ApiProperty({ description: 'Success status' })
-  success: boolean;
-
-  @ApiProperty({ description: 'New JWT access token' })
-  data: AuthenticatedUserDto;
-
-  @ApiPropertyOptional({ description: 'Error message if refresh failed' })
-  error?: string;
-
-  @ApiPropertyOptional({ description: 'Validation response' })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ValidationResponse)
-  validation?: ValidationResponse;
-}
-
-/**
- * DTO for session data
- */
-export class SessionDto {
-  @ApiProperty({ description: 'Session ID' })
-  @IsUUID()
-  id: string;
-
-  @ApiProperty({ description: 'User ID' })
-  @IsUUID()
-  userId: string;
-
-  @ApiProperty({ description: 'Username' })
-  @IsString()
-  @IsNotEmpty()
-  username: string;
-
-  @ApiProperty({ description: 'User role', enum: UserRole })
-  @IsEnum(UserRole)
-  role: UserRole;
-
-  @ApiProperty({ description: 'Account status' })
-  @IsBoolean()
-  is_active: boolean;
-
-  @ApiProperty({ description: 'Refresh token' })
-  @IsString()
-  refreshToken: string;
-
-  @ApiProperty({ description: 'Session creation date' })
-  @IsDate()
-  @Type(() => Date)
-  createdAt: Date;
-
-  @ApiProperty({ description: 'Session last activity date' })
-  @IsDate()
-  @Type(() => Date)
-  lastActivity: Date;
-
-  @ApiPropertyOptional({ description: 'Session expiration date' })
-  @IsOptional()
-  @IsDate()
-  @Type(() => Date)
-  expiresAt?: Date;
-
-  @ApiPropertyOptional({ description: 'Device information' })
-  @IsOptional()
-  @IsObject()
-  device?: {
-    id: string;
-    type: string;
-    name: string;
-    platform: string;
-    browser: string;
-  };
-
-  @ApiPropertyOptional({ description: 'Session metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: AuthMetadata;
-}
-
-/**
- * DTO for token payload
+ * Base token payload DTO
  */
 export class TokenPayloadDto {
   @ApiProperty({ description: 'Token ID' })
   @IsUUID()
-  id: string;
+  id = '';
 
   @ApiProperty({ description: 'User ID' })
   @IsUUID()
-  userId: string;
+  userId = '';
 
   @ApiProperty({ description: 'Username' })
   @IsString()
   @IsNotEmpty()
-  username: string;
+  username = '';
 
   @ApiProperty({ description: 'User role', enum: UserRole })
   @IsEnum(UserRole)
-  role: UserRole;
+  role = UserRole.USER;
 
   @ApiProperty({ description: 'Account status' })
   @IsBoolean()
-  is_active: boolean;
-
-  @ApiProperty({ description: 'Token type', enum: ['access', 'refresh'] })
-  @IsEnum(['access', 'refresh'])
-  type: 'access' | 'refresh';
-
-  @ApiPropertyOptional({ description: 'Token metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: AuthMetadata;
+  is_active = false;
 }
 
 /**
  * DTO for access token payload
  */
 export class AccessTokenPayloadDto extends TokenPayloadDto {
-  @ApiProperty({ description: 'Token type', enum: ['access'] })
-  @IsEnum(['access'])
-  type: 'access';
+  @ApiProperty({ description: 'Token type', enum: ['access'] as const })
+  @IsEnum(['access'] as const)
+  type = 'access' as const;
 
   @ApiPropertyOptional({ description: 'Access token permissions' })
   @IsOptional()
@@ -396,14 +290,145 @@ export class AccessTokenPayloadDto extends TokenPayloadDto {
  * DTO for refresh token payload
  */
 export class RefreshTokenPayloadDto extends TokenPayloadDto {
-  @ApiProperty({ description: 'Token type', enum: ['refresh'] })
-  @IsEnum(['refresh'])
-  type: 'refresh';
+  @ApiProperty({ description: 'Token type', enum: ['refresh'] as const })
+  @IsEnum(['refresh'] as const)
+  type = 'refresh' as const;
 
   @ApiPropertyOptional({ description: 'Original access token ID' })
   @IsOptional()
   @IsUUID()
   accessTokenId?: string;
+}
+
+/**
+ * Access token DTO
+ */
+export class AccessTokenDto extends AccessTokenPayloadDto {}
+
+/**
+ * Refresh token DTO
+ */
+export class RefreshTokenDto extends RefreshTokenPayloadDto {}
+
+/**
+ * DTO for token validation response
+ */
+export class ValidateResponseDto extends ValidationResponse<AuthenticatedUserDto> {
+  @ApiPropertyOptional({ description: 'Error message if validation failed' })
+  error?: string;
+}
+
+/**
+ * DTO for refresh token response
+ */
+export class RefreshTokenResponseDto extends AuthResponse<AuthenticatedUserDto> {
+  @ApiPropertyOptional({ description: 'Error message if refresh failed' })
+  error?: string;
+
+  toValidationResponse(): ValidationResponse<AuthenticatedUserDto> {
+    const response = new ValidationResponse<AuthenticatedUserDto>();
+    response.success = this.success;
+    response.data = this.data;
+    response.error = this.error;
+    response.valid = this.success;
+    return response;
+  }
+}
+
+/**
+ * Device information interface
+ */
+export interface DeviceInfo {
+  id: string;
+  type: string;
+  name: string;
+  platform: string;
+  browser: string;
+}
+
+/**
+ * DTO for session data
+ */
+export class SessionDto {
+  @ApiProperty({ description: 'Session ID' })
+  @IsUUID()
+  id = '';
+
+  @ApiProperty({ description: 'User ID' })
+  @IsUUID()
+  userId = '';
+
+  @ApiProperty({ description: 'Username' })
+  @IsString()
+  @IsNotEmpty()
+  username = '';
+
+  @ApiProperty({ description: 'User role', enum: UserRole })
+  @IsEnum(UserRole)
+  role = UserRole.USER;
+
+  @ApiProperty({ description: 'Account status' })
+  @IsBoolean()
+  is_active = false;
+
+  @ApiProperty({ description: 'Refresh token' })
+  @IsString()
+  refreshToken = '';
+
+  @ApiProperty({ description: 'Session creation date' })
+  @IsDate()
+  @Type(() => Date)
+  createdAt = new Date();
+
+  @ApiProperty({ description: 'Session last activity date' })
+  @IsDate()
+  @Type(() => Date)
+  lastActivity = new Date();
+
+  @ApiPropertyOptional({ description: 'Session expiration date' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  expiresAt?: Date;
+
+  @ApiPropertyOptional({ description: 'Device information' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DeviceInfo)
+  device?: DeviceInfo;
+
+  @ApiPropertyOptional({ description: 'Session metadata' })
+  @IsOptional()
+  @IsObject()
+  metadata?: AuthMetadata;
+}
+
+/**
+ * Base token type
+ */
+export abstract class BaseTokenDto {
+  @ApiProperty({ description: 'Token ID' })
+  @IsUUID()
+  id = '';
+
+  @ApiProperty({ description: 'User ID' })
+  @IsUUID()
+  userId = '';
+
+  @ApiProperty({ description: 'Username' })
+  @IsString()
+  @IsNotEmpty()
+  username = '';
+
+  @ApiProperty({ description: 'User role', enum: UserRole })
+  @IsEnum(UserRole)
+  role = UserRole.USER;
+
+  @ApiProperty({ description: 'Account status' })
+  @IsBoolean()
+  is_active = false;
+
+  abstract type: 'access' | 'refresh';
 }
 
 /**
@@ -444,18 +469,15 @@ export class UpdateUserDto {
  * DTO for update user response
  */
 export class UpdateUserResponseDto extends AuthResponse<UserDto> {
-  @ApiProperty({ description: 'Success status' })
-  success: boolean;
-
-  @ApiProperty({ description: 'Updated user data' })
-  data: UserDto;
-
   @ApiPropertyOptional({ description: 'Error message if update failed' })
   error?: string;
 
-  @ApiPropertyOptional({ description: 'Validation response' })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ValidationResponse)
-  validation?: ValidationResponse;
+  toValidationResponse(): ValidationResponse<UserDto> {
+    const response = new ValidationResponse<UserDto>();
+    response.success = this.success;
+    response.data = this.data;
+    response.error = this.error;
+    response.valid = this.success;
+    return response;
+  }
 }

@@ -1,7 +1,7 @@
 import type { Request as BaseRequest, Response as BaseResponse, NextFunction as BaseNextFunction } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
-import type { TokenPayload } from './auth';
+import type { AccessTokenPayloadDto, RefreshTokenPayloadDto } from './auth';
 
 // Base API response type
 export interface ApiResponse<T = unknown> {
@@ -25,7 +25,7 @@ export interface AuthenticatedRequest<
   ReqBody = RequestBody,
   ReqQuery = RequestQuery,
 > extends BaseRequest<P, ResBody, ReqBody, ReqQuery> {
-  user?: TokenPayload;
+  user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
   requestId?: string;
   files?: import('express-fileupload').FileArray | null;
 }
@@ -104,7 +104,7 @@ export function createAuthHandler<P, ResBody extends ApiResponse, ReqBody, ReqQu
 declare module 'express' {
   interface Request {
     requestId?: string;
-    user?: TokenPayload;
+    user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
     files?: import('express-fileupload').FileArray | null;
   }
 }
@@ -112,7 +112,7 @@ declare module 'express' {
 declare module 'express-serve-static-core' {
   interface Request {
     requestId?: string;
-    user?: TokenPayload;
+    user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
     files?: import('express-fileupload').FileArray | null;
   }
 }

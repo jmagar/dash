@@ -3,22 +3,19 @@ import { promisify } from 'util';
 import ms from 'ms';
 import config from '../config';
 import { logger } from './logger';
-import type { TokenPayload as AuthTokenPayload } from '../../types/auth';
+import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
 
-export type TokenPayload = AuthTokenPayload & {
-  iat?: number;
-  exp?: number;
-};
+export type TokenPayload = AccessTokenPayloadDto | RefreshTokenPayloadDto;
 
 const signAsync = promisify<Record<string, unknown>, string, jwt.SignOptions, string>(jwt.sign);
 const verifyAsync = promisify<string, string, jwt.VerifyOptions, object>(jwt.verify);
 
 export async function generateToken(
-  payload: Omit<TokenPayload, 'iat' | 'exp'>,
+  payload: Omit<AccessTokenPayloadDto, 'iat' | 'exp'>,
   options?: { expiresIn: string }
 ): Promise<string> {
   try {
-    const expiresIn = options?.expiresIn || (payload.type === 'access' ? config.jwt.expiry : config.jwt.refreshExpiry);
+    const expiresIn = options?.expiresIn || config.jwt.expiry;
     return await signAsync(payload as Record<string, unknown>, config.jwt.secret, {
       expiresIn,
     });
@@ -32,7 +29,7 @@ export async function generateToken(
 }
 
 export async function generateRefreshToken(
-  payload: Omit<TokenPayload, 'iat' | 'exp' | 'type'>,
+  payload: Omit<RefreshTokenPayloadDto, 'iat' | 'exp'>,
 ): Promise<string> {
   return generateToken(
     { ...payload, type: 'refresh' }

@@ -1,0 +1,169 @@
+{
+  "timestamp": "2024-11-28T19:36:07.6350412-05:00",
+  "files": [
+    {
+      "security": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.6707140-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.6812066-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "issues": [],
+          "statistics": {
+            "total": 0,
+            "bySeverity": {
+              "critical": 0,
+              "low": 0,
+              "medium": 0,
+              "high": 0
+            }
+          },
+          "status": {
+            "errors": [
+              "Method invocation failed because [System.Management.Automation.WildcardPattern] does not contain a method named 'ToRegex'."
+            ],
+            "success": false
+          },
+          "score": 0
+        }
+      ],
+      "patterns": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.6468893-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.6601871-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "patterns": {
+            "matched": [],
+            "suggested": [],
+            "statistics": {
+              "byType": {},
+              "total": 0
+            }
+          },
+          "status": {
+            "errors": [
+              "The property 'patterns' cannot be found on this object. Verify that the property exists."
+            ],
+            "success": false
+          }
+        }
+      ],
+      "performance": [
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.6933021-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "status": {
+            "errors": [
+              "A parameter cannot be found that matches parameter name 'Append'."
+            ],
+            "success": false
+          },
+          "metadata": {
+            "timestamp": "2024-11-28T19:36:07.7053085-05:00",
+            "level": "FATAL",
+            "source": "Logging.ps1"
+          }
+        },
+        {
+          "hotspots": [],
+          "metrics": {
+            "complexity": 0.0,
+            "functions": 0,
+            "lines": 2
+          },
+          "recommendations": [],
+          "status": {
+            "errors": [],
+            "success": true
+          },
+          "score": 100
+        }
+      ],
+      "language": "powershell",
+      "path": "C:\\Users\\jmaga\\AppData\\Local\\Temp\\c5ac6895-32c7-4c38-bad2-d2ce39356e58\\TestData\\empty_test.ps1",
+      "timestamp": "2024-11-28T19:36:07.7138937-05:00"
+    }
+  ],
+  "summary": {
+    "averageScore": 0,
+    "performance": {
+      "averageComplexity": 0,
+      "hotspots": []
+    },
+    "totalFiles": 1,
+    "processedFiles": 1,
+    "patterns": {
+      "byType": {
+        "metadata": 2,
+        "patterns": 1,
+        "status": 3
+      },
+      "total": 6
+    },
+    "totalScore": 0,
+    "security": {
+      "score": 100,
+      "issues": []
+    },
+    "refactoring": {
+      "priorities": [],
+      "suggestions": []
+    }
+  }
+}

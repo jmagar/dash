@@ -1,42 +1,30 @@
+import { 
+  UserRole, 
+  AuthenticatedUserDto, 
+  LoginDto, 
+  RefreshTokenRequestDto, 
+  ValidateResponseDto, 
+  RefreshTokenResponseDto,
+  TokenPayloadDto,
+  AccessTokenPayloadDto,
+  RefreshTokenPayloadDto
+} from '../server/routes/auth/dto/auth.dto';
+
 export interface User {
   id: string;
   username: string;
   email: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   is_active: boolean;
   password_hash?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Base token payload contains common fields
-export interface TokenPayload {
-  id: string;
-  userId: string;
-  username: string;
-  role: 'admin' | 'user';
-  is_active: boolean;
-  type: 'access' | 'refresh';
-}
-
-// Access token payload
-export interface AccessTokenPayload extends TokenPayload {
-  type: 'access';
-}
-
-// Refresh token payload
-export interface RefreshTokenPayload extends TokenPayload {
-  type: 'refresh';
-}
-
-// Full user data with tokens for client-side use
-export interface AuthenticatedUser extends User {
-  token: string;
-  refreshToken: string;
-}
+export { TokenPayloadDto, AccessTokenPayloadDto, RefreshTokenPayloadDto };
 
 export interface AuthContextType {
-  user: AuthenticatedUser | null;
+  user: AuthenticatedUserDto | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -44,51 +32,25 @@ export interface AuthContextType {
   error: string | null;
 }
 
-export interface LoginRequest {
-  username: string;
-  password: string;
-}
+export type LoginRequest = LoginDto;
+export type RefreshTokenRequest = RefreshTokenRequestDto;
+export type ValidateResponse = ValidateResponseDto;
+export type RefreshTokenResponse = RefreshTokenResponseDto;
 
-export interface LoginResponse {
-  success: boolean;
-  token: string;
-  refreshToken: string;
-  user: AuthenticatedUser;
-  error?: string;
-}
-
-export interface LogoutResponse {
-  success: boolean;
-  error?: string;
-}
-
-export interface ValidateResponse {
-  success: boolean;
-  valid: boolean;
-  user: AuthenticatedUser;
-  error?: string;
-}
-
-export interface RegisterRequest {
+export type RegisterRequest = {
   username: string;
   email: string;
   password: string;
   confirmPassword: string;
 }
 
-export interface RegisterResponse {
+export type RegisterResponse = {
   success: boolean;
-  user: AuthenticatedUser;
+  user: AuthenticatedUserDto;
   error?: string;
 }
 
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-export interface RefreshTokenResponse {
+export type LogoutResponse = {
   success: boolean;
-  token: string;
-  refreshToken: string;
   error?: string;
 }
