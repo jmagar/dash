@@ -114,3 +114,15 @@ export interface TransferProgressEvent {
   speed: number;
   remaining: number;
 }
+
+export interface FileSystemStats {
+  size: number;
+  mtime: number;  // Unix timestamp in seconds
+  mode: number;   // Unix file mode (permissions)
+  modTime: number; // Unix timestamp in milliseconds
+  owner: string;  // Owner username/ID
+  group: string;  // Group name/ID
+  isDirectory: boolean;
+  isFile: boolean;
+  permissions: string; // String representation of permissions (e.g. '644')
+}

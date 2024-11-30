@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -12,11 +12,12 @@ import {
   Select,
   Typography,
   Box,
+  SelectChangeEvent,
 } from '@mui/material';
-import { compressionApi } from '../api/compression';
-import { useSnackbar } from '../hooks/useSnackbar';
-import { useLoadingOverlay } from '../hooks/useLoadingOverlay';
-import { logger } from '../utils/logger';
+import { useCompression } from '../hooks/useCompression';
+import { frontendLogger } from '../utils/frontendLogger';
+import type { NotificationSeverity } from '../store/types';
+import type { CompressionFormatValue, CompressionFormat } from '../../types/api/compression';
 
 interface CompressionDialogProps {
   open: boolean;
@@ -27,12 +28,12 @@ interface CompressionDialogProps {
   currentPath: string;
 }
 
-const compressionFormats = [
-  { value: 'zip', label: 'ZIP' },
-  { value: 'tar', label: 'TAR' },
-  { value: 'gz', label: 'GZIP' },
-  { value: 'bz2', label: 'BZIP2' },
-];
+const compressionFormats: readonly CompressionFormat[] = [
+  { value: 'zip', label: 'ZIP', mimeType: 'application/zip' },
+  { value: 'tar', label: 'TAR', mimeType: 'application/x-tar' },
+  { value: 'gz', label: 'GZIP', mimeType: 'application/gzip' },
+  { value: 'bz2', label: 'BZIP2', mimeType: 'application/x-bzip2' },
+] as const;
 
 export const CompressionDialog: React.FC<CompressionDialogProps> = ({
   open,
@@ -43,14 +44,38 @@ export const CompressionDialog: React.FC<CompressionDialogProps> = ({
   currentPath,
 }) => {
   const [targetPath, setTargetPath] = useState('');
-  const [format, setFormat] = useState('zip');
-  const { showSnackbar } = useSnackbar();
-  const { showLoading, hideLoading } = useLoadingOverlay();
+  const [format, setFormat] = useState<CompressionFormatValue>('zip');
+  const { compressFiles, extractFiles } = useCompression();
 
-  const handleSubmit = async () => {
+  const handleFormatChange = useCallback((event: SelectChangeEvent<CompressionFormatValue>) => {
+    setFormat(event.target.value as CompressionFormatValue);
+  }, []);
+
+  const handleTargetPathChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setTargetPath(event.target.value);
+  }, []);
+
+  const getFormatFromFileName = useCallback((fileName: string): CompressionFormatValue | undefined => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    return compressionFormats.find(f => f.value === extension)?.value;
+  }, []);
+
+  const validateTargetPath = useCallback((path: string): boolean => {
+    if (!path.trim()) return false;
+    if (mode === 'compress') {
+      const format = getFormatFromFileName(path);
+      return format !== undefined || !path.includes('.');
+    }
+    return true;
+  }, [mode, getFormatFromFileName]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!targetPath.trim()) {
+      return;
+    }
+
     try {
-      showLoading();
-      logger.info('Starting compression operation', {
+      frontendLogger.info('Starting compression operation', {
         mode,
         hostId,
         selectedPaths,
@@ -62,34 +87,38 @@ export const CompressionDialog: React.FC<CompressionDialogProps> = ({
         const finalTargetPath = targetPath.endsWith(`.${format}`)
           ? targetPath
           : `${targetPath}.${format}`;
-        await compressionApi.compressFiles(hostId, selectedPaths, finalTargetPath);
-        logger.info('Files compressed successfully', {
-          targetPath: finalTargetPath,
-          count: selectedPaths.length,
-        });
-        showSnackbar('Files compressed successfully', 'success');
+
+        await compressFiles(hostId, selectedPaths, finalTargetPath);
+        onClose();
       } else {
-        await compressionApi.extractFiles(hostId, selectedPaths[0], targetPath);
-        logger.info('Files extracted successfully', {
-          sourcePath: selectedPaths[0],
-          targetPath,
-        });
-        showSnackbar('Files extracted successfully', 'success');
+        if (selectedPaths.length !== 1) {
+          throw new Error('Can only extract one file at a time');
+        }
+
+        await extractFiles(hostId, selectedPaths[0], targetPath);
+        onClose();
       }
-      onClose();
     } catch (error) {
-      logger.error('Compression operation failed:', {
+      frontendLogger.error('Compression operation failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         mode,
         hostId,
         selectedPaths,
         targetPath,
       });
-      showSnackbar('Failed to process files', 'error');
-    } finally {
-      hideLoading();
     }
-  };
+  }, [
+    targetPath,
+    format,
+    mode,
+    hostId,
+    selectedPaths,
+    compressFiles,
+    extractFiles,
+    onClose,
+  ]);
+
+  const isPathValid = validateTargetPath(targetPath);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -108,11 +137,12 @@ export const CompressionDialog: React.FC<CompressionDialogProps> = ({
 
         {mode === 'compress' && (
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Format</InputLabel>
+            <InputLabel id="compression-format-label">Format</InputLabel>
             <Select
+              labelId="compression-format-label"
               value={format}
               label="Format"
-              onChange={(e) => setFormat(e.target.value)}
+              onChange={handleFormatChange}
             >
               {compressionFormats.map((fmt) => (
                 <MenuItem key={fmt.value} value={fmt.value}>
@@ -127,19 +157,20 @@ export const CompressionDialog: React.FC<CompressionDialogProps> = ({
           fullWidth
           label="Target Path"
           value={targetPath}
-          onChange={(e) => setTargetPath(e.target.value)}
+          onChange={handleTargetPathChange}
           margin="normal"
           helperText={`Specify the ${
             mode === 'compress' ? 'archive' : 'destination'
           } path`}
+          error={!isPathValid}
         />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           variant="contained"
-          disabled={!targetPath}
+          disabled={!isPathValid}
         >
           {mode === 'compress' ? 'Compress' : 'Extract'}
         </Button>

@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 
 interface ApiError {
   status?: number;

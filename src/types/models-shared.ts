@@ -49,7 +49,7 @@ export interface CreateHostRequest {
   environment?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
-  os_type: 'windows' | 'linux';
+  os_type: 'windows' | 'linux' | 'darwin';
 }
 
 export type UpdateHostRequest = Partial<CreateHostRequest>
@@ -65,12 +65,12 @@ export interface Host {
   passphrase?: string;
   environment?: string;
   tags?: string[];
-  status: 'online' | 'offline' | 'error';
+  status: 'online' | 'offline' | 'error' | 'installing';
   lastSeen?: Date;
   agentStatus?: 'installed' | 'error' | null;
   agentVersion?: string;
   metadata?: Record<string, unknown>;
-  os_type: 'windows' | 'linux';
+  os_type: 'windows' | 'linux' | 'darwin';
   createdAt: Date;
   updatedAt: Date;
 }

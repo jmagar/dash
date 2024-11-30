@@ -34,7 +34,7 @@ import {
   Memory,
   CloudUpload,
 } from '@mui/icons-material';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 import { Host } from '../../types/models-shared';
 import { getHostStatus, connectHost, disconnectHost } from '../api/hosts.client';
 import { useHost } from '../hooks/useHost';

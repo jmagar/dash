@@ -8,7 +8,8 @@ import {
   ICacheService, 
   AgentInfo, 
   agentInfoSchema,
-  AgentServiceMetrics 
+  AgentServiceMetrics,
+  AgentOperationResult
 } from './agent.types';
 import { AgentStatus } from '../../../types/agent-config';
 import type { AgentCommandResult } from '../../../types/socket-events';
@@ -26,6 +27,16 @@ export class AgentService extends BaseService {
   private readonly agents: Map<string, AgentState> = new Map();
   protected readonly cache?: ICacheService;
   private readonly prisma: PrismaClient;
+  private readonly metrics: AgentServiceMetrics = {
+    totalAgents: 0,
+    activeAgents: 0,
+    disconnectedAgents: 0,
+    erroredAgents: 0,
+    averageResponseTime: 0,
+    totalCommandsExecuted: 0,
+    failedCommands: 0,
+    averageHeartbeatLatency: 0
+  };
 
   constructor() {
     super({
@@ -52,14 +63,14 @@ export class AgentService extends BaseService {
     // Start periodic cleanup of stale agents
     setInterval(() => {
       void this.cleanup();
-    }, 60000);
+    }, STALE_THRESHOLD);
   }
 
-  async getAgent(agentId: string): Promise<AgentInfo | null> {
+  async getAgent(agentId: string): Promise<AgentOperationResult<AgentInfo>> {
     try {
       const cachedAgent = await this.cache?.get<AgentInfo>(`agent:${agentId}`);
       if (cachedAgent) {
-        return cachedAgent;
+        return { success: true, data: cachedAgent };
       }
 
       const agent = await this.prisma.agent.findUnique({
@@ -67,32 +78,51 @@ export class AgentService extends BaseService {
       });
 
       if (!agent) {
-        return null;
+        return { 
+          success: false, 
+          error: { 
+            message: 'Agent not found',
+            code: 'AGENT_NOT_FOUND'
+          }
+        };
       }
 
       const agentInfo: AgentInfo = {
         id: agent.id,
-        name: agent.name,
-        version: agent.version,
-        status: agent.status as AgentStatus,
-        lastSeen: agent.lastSeen,
-        metadata: agent.metadata as Record<string, unknown>,
+        hostname: agent.hostname,
+        ipAddress: agent.ipAddress,
+        osType: agent.osType as 'linux' | 'windows' | 'darwin',
+        osVersion: agent.osVersion,
+        agentVersion: agent.agentVersion,
+        labels: agent.labels as Record<string, string>,
+        capabilities: agent.capabilities as string[]
       };
 
+      const validationResult = validateAgentInfo(agentInfo);
+      if (!validationResult.success) {
+        return validationResult;
+      }
+
       await this.cache?.set(`agent:${agentId}`, agentInfo, AGENT_CACHE_TTL);
-      return agentInfo;
+      return { success: true, data: agentInfo };
     } catch (error) {
       this.logger.error('Failed to get agent', { error, agentId });
-      throw new ApiError('Failed to get agent', error);
+      return {
+        success: false,
+        error: {
+          message: 'Failed to get agent',
+          code: 'INTERNAL_ERROR'
+        }
+      };
     }
   }
 
   async getAgentStatus(agentId: string): Promise<AgentStatus> {
     const agent = await this.getAgent(agentId);
-    if (!agent) {
+    if (!agent.success) {
       throw new ApiError('Agent not found', { agentId });
     }
-    return agent.status;
+    return agent.data.status;
   }
 
   async getAgentConnection(agentId: string): Promise<WebSocket | null> {
@@ -125,7 +155,7 @@ export class AgentService extends BaseService {
   async updateAgentMetrics(agentId: string, metrics: AgentMetrics): Promise<void> {
     try {
       const agent = await this.getAgent(agentId);
-      if (!agent) {
+      if (!agent.success) {
         throw new ApiError('Agent not found', { agentId });
       }
 
@@ -147,25 +177,28 @@ export class AgentService extends BaseService {
   private async handleAgentRegistration(socket: WebSocket, info: AgentInfo): Promise<void> {
     try {
       const existingAgent = await this.getAgent(info.id);
-      if (existingAgent) {
+      if (existingAgent.success) {
         await this.prisma.agent.update({
           where: { id: info.id },
           data: {
             status: AgentStatus.CONNECTED,
             lastSeen: new Date(),
-            version: info.version,
-            metadata: info.metadata as any,
+            version: info.agentVersion,
+            metadata: info.labels as any,
           },
         });
       } else {
         await this.prisma.agent.create({
           data: {
             id: info.id,
-            name: info.name,
-            version: info.version,
+            hostname: info.hostname,
+            ipAddress: info.ipAddress,
+            osType: info.osType,
+            osVersion: info.osVersion,
+            agentVersion: info.agentVersion,
             status: AgentStatus.CONNECTED,
             lastSeen: new Date(),
-            metadata: info.metadata as any,
+            metadata: info.labels as any,
           },
         });
       }

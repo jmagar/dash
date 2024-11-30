@@ -1,6 +1,6 @@
 import type { NotificationType, Notification, DesktopNotification, NotificationPreferences } from './notifications';
 import type { Host } from './models-shared';
-import type { ProcessInfo , SystemMetrics } from './metrics';
+import type { ProcessInfo, SystemMetrics } from './metrics';
 import type { DockerStats, DockerContainer, DockerComposeConfig } from './docker';
 
 export interface LogEntry {
@@ -56,6 +56,15 @@ export interface HeartbeatInfo {
   timestamp: Date;
   status: 'healthy' | 'unhealthy';
   error?: string;
+}
+
+// Socket Data interface
+export interface SocketData {
+  agentId?: string;
+  userId?: string;
+  hostId?: string;
+  sessionId?: string;
+  authenticated?: boolean;
 }
 
 // Socket Event Names

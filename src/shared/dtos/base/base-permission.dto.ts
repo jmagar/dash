@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { PermissionType, ResourceType } from '../enums';
 
 export enum PermissionType {
   READ = 'READ',
@@ -52,6 +51,21 @@ export class BasePermissionDto {
   metadata?: Record<string, any> = {};
 
   constructor(partial?: Partial<BasePermissionDto>) {
-    Object.assign(this, partial);
+    // Set default values
+    this.type = PermissionType.READ;
+    this.resourceType = ResourceType.ANY;
+    this.resourceId = '*';
+    this.grantedAt = new Date();
+    this.metadata = {};
+
+    // Override with provided values
+    if (partial) {
+      Object.assign(this, {
+        ...partial,
+        grantedAt: partial.grantedAt ? new Date(partial.grantedAt) : this.grantedAt,
+        expiresAt: partial.expiresAt ? new Date(partial.expiresAt) : undefined,
+        metadata: partial.metadata || this.metadata
+      });
+    }
   }
 }

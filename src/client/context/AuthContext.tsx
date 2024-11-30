@@ -9,7 +9,7 @@ export interface User {
   isAdmin?: boolean;
 }
 
-interface AuthState {
+export interface AuthState {
   user: User | null;
   token: string | null;
   loading: boolean;
@@ -24,7 +24,7 @@ type AuthAction =
   | { type: 'CLEAR_ERROR' }
   | { type: 'CLEAR_AUTH' };
 
-interface AuthContextType {
+export interface AuthContextType {
   state: AuthState;
   dispatch: React.Dispatch<AuthAction>;
 }
@@ -36,7 +36,10 @@ const initialState: AuthState = {
   error: null,
 };
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType>({
+  state: initialState,
+  dispatch: () => null,
+});
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
@@ -79,7 +82,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   return (

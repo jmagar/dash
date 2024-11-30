@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, CircularProgress } from '@mui/material';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 import type { FileInfo } from '../../types/files';
 
 interface MediaPreviewProps {

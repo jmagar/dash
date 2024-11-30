@@ -8,7 +8,7 @@ import type { AgentState } from '../agent/agent.types';
  */
 export enum HostState {
   UNINITIALIZED = 'offline',    // Initial state, no agent
-  INSTALLING = 'offline',       // Agent being installed
+  INSTALLING = 'installing',    // Agent being installed
   ACTIVE = 'online',           // Agent running and connected
   UNREACHABLE = 'offline',     // Can't connect via SSH or agent
   MAINTENANCE = 'offline',      // Under maintenance
@@ -158,6 +158,8 @@ export function mapStateToStatus(state: HostState): BaseHost['status'] {
       return 'online';
     case HostState.ERROR:
       return 'error';
+    case HostState.INSTALLING:
+      return 'installing';
     default:
       return 'offline';
   }
@@ -172,6 +174,8 @@ export function mapStatusToState(status: BaseHost['status']): HostState {
       return HostState.ACTIVE;
     case 'error':
       return HostState.ERROR;
+    case 'installing':
+      return HostState.INSTALLING;
     default:
       return HostState.UNREACHABLE;
   }

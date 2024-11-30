@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import { Socket, io } from 'socket.io-client';
 import { config } from '../config';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 import { createApiError } from '../../types/error';
 import type { ApiResponse } from '../../types/express';
 

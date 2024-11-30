@@ -1,4 +1,4 @@
-import type { Logger, LogLevel, LogMetadata } from '@/types/logging';
+import type { Logger, LogLevel, LogMetadata } from '../../types/logging';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -21,10 +21,25 @@ export class FrontendLogger implements Logger {
     return LOG_LEVELS[level] >= LOG_LEVELS[this.level];
   }
 
-  private formatMessage(level: LogLevel, message: string, meta?: LogMetadata): string {
+  private formatMessage(level: LogLevel, message: string, data?: unknown): string {
     const timestamp = new Date().toISOString();
+    const meta = this.convertToMeta(data);
     const formattedMeta = meta ? this.formatMeta(meta) : '';
     return `${timestamp} ${this.prefix} [${level.toUpperCase()}] ${message}${formattedMeta}`;
+  }
+
+  private convertToMeta(data?: unknown): LogMetadata | undefined {
+    if (data === undefined || data === null) {
+      return undefined;
+    }
+
+    // If it's already a LogMetadata object, use it directly
+    if (typeof data === 'object' && !Array.isArray(data) && data !== null) {
+      return data as LogMetadata;
+    }
+
+    // Otherwise wrap it in a data field
+    return { data };
   }
 
   private formatMeta(meta: LogMetadata): string {
@@ -47,37 +62,41 @@ export class FrontendLogger implements Logger {
     return ` ${formattedMeta}`;
   }
 
-  debug(message: string, meta?: LogMetadata): void {
+  debug(message: string, data?: unknown): void {
     if (this.shouldLog('debug')) {
-      console.debug(this.formatMessage('debug', message, meta));
+      console.debug(this.formatMessage('debug', message, data));
     }
   }
 
-  info(message: string, meta?: LogMetadata): void {
+  info(message: string, data?: unknown): void {
     if (this.shouldLog('info')) {
-      console.info(this.formatMessage('info', message, meta));
+      console.info(this.formatMessage('info', message, data));
     }
   }
 
-  warn(message: string, meta?: LogMetadata): void {
+  warn(message: string, data?: unknown): void {
     if (this.shouldLog('warn')) {
-      console.warn(this.formatMessage('warn', message, meta));
+      console.warn(this.formatMessage('warn', message, data));
     }
   }
 
-  error(message: string, meta?: LogMetadata): void {
+  error(message: string, data?: unknown): void {
     if (this.shouldLog('error')) {
-      console.error(this.formatMessage('error', message, meta));
+      console.error(this.formatMessage('error', message, data));
     }
   }
 
-  critical(message: string, meta?: LogMetadata): void {
+  critical(message: string, data?: unknown): void {
     if (this.shouldLog('critical')) {
-      console.error(this.formatMessage('critical', message, meta));
+      console.error(this.formatMessage('critical', message, data));
     }
   }
 }
 
-export const logger = new FrontendLogger(
+// Create and export the default logger instance
+export const frontendLogger = new FrontendLogger(
   (process.env.REACT_APP_LOG_LEVEL as LogLevel) || 'info'
 );
+
+// Also export the instance as 'logger' for backward compatibility
+export const logger = frontendLogger;

@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext, User } from '../context/AuthContext';
+import { AuthContext, User, AuthContextType } from '../context/AuthContext';
 import { logger } from '../utils/frontendLogger';
 
 interface LoginResponse {
@@ -37,7 +37,7 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 
-  const { state, dispatch } = context;
+  const { state, dispatch } = context as AuthContextType;
 
   const isAdmin = state.user?.role === 'admin';
 

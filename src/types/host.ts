@@ -9,7 +9,7 @@ export interface Host {
   passphrase?: string;
   environment?: string;
   tags?: string[];
-  status: 'online' | 'offline' | 'error';
+  status: 'online' | 'offline' | 'error' | 'installing';
   lastSeen?: Date;
   agentStatus?: 'installed' | 'error' | null;
   agentVersion?: string;

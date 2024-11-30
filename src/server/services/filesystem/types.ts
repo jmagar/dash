@@ -1,59 +1,77 @@
-import { FileItem } from '../../../types/models-shared';
+import { FileItem } from '../../../types/filesystem';
 
-export type FileSystemType = 'sftp' | 'smb' | 'rclone' | 'webdav';
+export { FileItem };
+
+export type FileSystemType = 'sftp' | 'smb' | 'webdav' | 'rclone';
+
+export interface SftpConfig {
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+}
+
+export interface SmbConfig {
+  host: string;
+  share: string;
+  username: string;
+  password: string;
+  domain?: string;
+}
+
+export interface WebdavConfig {
+  url: string;
+  username: string;
+  password: string;
+}
+
+export interface RcloneConfig {
+  remote: string;
+  configPath: string;
+}
+
+export interface FilesystemLocation {
+  id: string;
+  type: FileSystemType;
+  credentials: FileSystemCredentials;
+  path?: string;
+}
 
 export interface FileSystemCredentials {
-  type: FileSystemType;
-  // Common credentials
   host?: string;
   port?: number;
   username?: string;
   password?: string;
-  
-  // SFTP specific
   privateKey?: string;
-  
-  // SMB specific
-  domain?: string;
+  url?: string;
   share?: string;
-  
-  // WebDAV specific
-  baseUrl?: string;
-  digest?: boolean;
-  
-  // Rclone specific
-  rcloneConfig?: string;
-  remoteName?: string;
+  domain?: string;
+  remote?: string;
+  configPath?: string;
 }
 
 export interface FileSystemStats {
   size: number;
-  mtime: number;
-  mode: number;
-  modTime: number;
-  owner: string;
-  group: string;
   isDirectory: boolean;
   isFile: boolean;
-  permissions?: string;
+  isSymbolicLink: boolean;
+  mtime?: Date;
+  atime?: Date;
+  ctime?: Date;
+  birthtime?: Date;
 }
 
 export interface FileSystemProvider {
-  readonly type: FileSystemType;
-  
-  connect(credentials: FileSystemCredentials): Promise<void>;
+  connect(): Promise<void>;
   disconnect(): Promise<void>;
-  
-  // Core file operations
-  listFiles(path: string): Promise<FileItem[]>;
-  readFile(path: string): Promise<Buffer>;
-  writeFile(path: string, content: Buffer): Promise<void>;
-  delete(path: string): Promise<void>;
-  rename(oldPath: string, newPath: string): Promise<void>;
-  mkdir(path: string): Promise<void>;
+  list(path: string): Promise<string[]>;
   stat(path: string): Promise<FileSystemStats>;
-  
-  // Optional capabilities - providers can implement these if supported
-  exists?(path: string): Promise<boolean>;
-  test?(): Promise<boolean>; // Test connection/credentials
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string): Promise<void>;
+  rmdir(path: string): Promise<void>;
+  unlink(path: string): Promise<void>;
+  readFile(path: string): Promise<Buffer>;
+  writeFile(path: string, data: Buffer): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
 }

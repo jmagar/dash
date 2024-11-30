@@ -28,22 +28,10 @@ import {
   Help as HelpIcon,
   Check as CheckIcon,
 } from '@mui/icons-material';
-import { api } from '../api/api';
-import { logger } from '../utils/logger';
+import { api } from '../api/api.client';
+import { frontendLogger } from '../utils/frontendLogger';
+import type { ApiResponse } from '../../types/api/common';
 import type { Host } from '../../types/models-shared';
-
-interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-  message?: string;
-}
-
-interface ApiErrorResponse {
-  success: false;
-  message: string;
-}
-
-type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 interface SetupForm {
   friendlyName: string;
@@ -65,13 +53,34 @@ interface SetupStep {
   help: string;
 }
 
+interface AgentConfig {
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
+  useSyslog: boolean;
+  metrics: {
+    collectionInterval: number;
+    retentionPeriod: number;
+    includeIO: boolean;
+    includeNetwork: boolean;
+    includeExtended: boolean;
+  };
+}
+
+interface TestConnectionResponse {
+  success: boolean;
+  message?: string;
+}
+
+interface CreateHostResponse {
+  host: Host;
+}
+
 const initialForm: SetupForm = {
   friendlyName: '',
   hostname: '',
   port: 22,
 };
 
-const steps: SetupStep[] = [
+const steps: readonly SetupStep[] = [
   {
     label: 'Connection Details',
     description: 'Enter host connection details',
@@ -90,7 +99,7 @@ const steps: SetupStep[] = [
     icon: <CloudUploadIcon />,
     help: 'The agent will be installed on the remote host to enable monitoring and management capabilities.',
   },
-];
+] as const;
 
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
@@ -118,8 +127,9 @@ export function SetupWizard(): JSX.Element {
   }, []);
 
   const handleChange = useCallback((field: keyof SetupForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value.trim();
     if (field === 'port') {
-      const portValue = parseInt(event.target.value, 10);
+      const portValue = parseInt(value, 10);
       if (isNaN(portValue) || portValue < 1 || portValue > 65535) {
         setError('Port must be a number between 1 and 65535');
         return;
@@ -127,7 +137,7 @@ export function SetupWizard(): JSX.Element {
       setError(null);
       setForm(prev => ({ ...prev, [field]: portValue }));
     } else {
-      setForm(prev => ({ ...prev, [field]: event.target.value.trim() }));
+      setForm(prev => ({ ...prev, [field]: value }));
     }
   }, []);
 
@@ -136,42 +146,30 @@ export function SetupWizard(): JSX.Element {
     setSuccess(null);
     setTesting(true);
     setActiveStep(1);
-    updateStatus('Testing agent connection...', 25);
+    updateStatus('Testing connection...', 25);
 
     try {
-      if (!form.hostname.trim()) {
-        throw new Error('Hostname is required');
-      }
-
-      if (!form.port || form.port < 1 || form.port > 65535) {
-        throw new Error('Invalid port number');
-      }
-
-      const response = await api.post<ApiResponse<{ message: string }>>('/api/hosts/test', {
-        hostname: form.hostname.trim(),
-        port: form.port,
+      const response = await api.post<ApiResponse<TestConnectionResponse>>('/api/hosts/test', {
+        data: form,
       });
 
       if (response.data.success) {
-        setSuccess('Agent connection test successful!');
         setTestPassed(true);
-        updateStatus('Connection test successful', 50);
-        setActiveStep(2);
+        updateStatus('Connection test passed', 50);
       } else {
-        setError(response.data.message || 'Connection test failed');
         setTestPassed(false);
-        updateStatus('Connection test failed', 25, response.data.message);
+        updateStatus('Connection test failed', 25, response.data.error);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      logger.error('Connection test failed:', err);
-      setError('Connection test failed: ' + message);
+      const message = err instanceof Error ? err.message : 'Unknown error occurred';
+      frontendLogger.error('Connection test failed:', { error: message });
+      setError(`Connection test failed: ${message}`);
       setTestPassed(false);
       updateStatus('Connection test failed', 25, message);
     } finally {
       setTesting(false);
     }
-  }, [form.hostname, form.port, updateStatus]);
+  }, [form, updateStatus]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -188,32 +186,32 @@ export function SetupWizard(): JSX.Element {
     setError(null);
     setInstalling(true);
     setActiveStep(3);
-    updateStatus('Creating host record...', 60);
+    updateStatus('Creating host...', 50);
 
     try {
-      const createResponse = await api.post<ApiResponse<Host>>('/api/hosts', {
-        ...form,
-        friendlyName: form.friendlyName.trim(),
-        hostname: form.hostname.trim(),
+      const createResponse = await api.post<ApiResponse<CreateHostResponse>>('/api/hosts', {
+        data: form,
       });
 
       if (createResponse.data.success) {
-        const host = createResponse.data.data;
+        const host = createResponse.data.data.host;
         updateStatus('Installing agent...', 75);
+
+        const config: AgentConfig = {
+          logLevel: 'info',
+          useSyslog: true,
+          metrics: {
+            collectionInterval: 5000,
+            retentionPeriod: 168,
+            includeIO: true,
+            includeNetwork: true,
+            includeExtended: true,
+          },
+        };
 
         const installResponse = await api.post<ApiResponse<void>>(`/api/hosts/${host.id}/install`, {
           type: 'docker',
-          config: {
-            logLevel: 'info',
-            useSyslog: true,
-            metrics: {
-              collectionInterval: 5000,
-              retentionPeriod: 168,
-              includeIO: true,
-              includeNetwork: true,
-              includeExtended: true,
-            },
-          },
+          config,
         });
 
         if (installResponse.data.success) {
@@ -224,15 +222,15 @@ export function SetupWizard(): JSX.Element {
             navigate(`/hosts/${host.id}`);
           }, 2000);
         } else {
-          throw new Error(installResponse.data.message || 'Failed to install agent');
+          throw new Error(installResponse.data.error || 'Failed to install agent');
         }
       } else {
-        throw new Error(createResponse.data.message || 'Failed to create host');
+        throw new Error(createResponse.data.error || 'Failed to create host');
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      logger.error('Installation failed:', err);
-      setError('Installation failed: ' + message);
+      const message = err instanceof Error ? err.message : 'Unknown error occurred';
+      frontendLogger.error('Installation failed:', { error: message });
+      setError(`Installation failed: ${message}`);
       updateStatus('Installation failed', status.progress, message);
     } finally {
       setInstalling(false);
@@ -243,15 +241,15 @@ export function SetupWizard(): JSX.Element {
     setShowHelp(prev => prev === null ? activeStep : null);
   }, [activeStep]);
 
-  const renderStepIcon = (index: number): React.ReactElement => {
+  const renderStepIcon = useCallback((index: number): React.ReactElement => {
     if (index < activeStep) {
       return <CheckIcon color="success" />;
     }
     if (index === activeStep) {
       return steps[index].icon as React.ReactElement;
     }
-    return <Box sx={{ opacity: 0.5 }}>{steps[index].icon}</Box> as React.ReactElement;
-  };
+    return <Box sx={{ opacity: 0.5 }}>{steps[index].icon}</Box>;
+  }, [activeStep]);
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>

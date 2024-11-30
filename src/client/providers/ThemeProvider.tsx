@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import { preferencesClient } from '../api/preferences.client';
 import { useAuth } from '../hooks/useAuth';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 import { CssBaseline } from '@mui/material';
 
 export type ThemeMode = 'light' | 'dark' | 'system';

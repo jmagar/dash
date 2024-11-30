@@ -10,11 +10,12 @@ import type {
   AgentMetrics,
   AgentCommandResult,
   LogFilter,
-  LogEntry
+  LogEntry,
+  SocketData
 } from '../../types/socket-events';
 
 interface ConnectedAgent {
-  socket: Socket<ClientToServerEvents, ServerToClientEvents>;
+  socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
   info: AgentInfo;
   lastSeen: Date;
   metrics?: AgentMetrics;
@@ -22,16 +23,16 @@ interface ConnectedAgent {
 
 class AgentService extends EventEmitter {
   private agents: Map<string, ConnectedAgent> = new Map();
-  private namespace: Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents>;
+  private namespace: Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
-  constructor(io: SocketServer) {
+  constructor(io: SocketServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>) {
     super();
     this.namespace = io.of('/agent');
     this.setupSocketServer();
   }
 
   private setupSocketServer(): void {
-    this.namespace.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
+    this.namespace.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>) => {
       logger.debug('Agent attempting to connect');
 
       // Handle registration
@@ -57,7 +58,7 @@ class AgentService extends EventEmitter {
   }
 
   private handleRegistration(
-    socket: Socket<ClientToServerEvents, ServerToClientEvents>,
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     info: AgentInfo
   ): void {
     const { id } = info;
@@ -98,7 +99,7 @@ class AgentService extends EventEmitter {
   }
 
   private setupAgentHandlers(
-    socket: Socket<ClientToServerEvents, ServerToClientEvents>,
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     agentId: string
   ): void {
     // Handle metrics updates
@@ -295,7 +296,7 @@ class AgentService extends EventEmitter {
 
 let agentServiceInstance: AgentService | null = null;
 
-export function initializeAgentService(io: SocketServer): AgentService {
+export function initializeAgentService(io: SocketServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>): AgentService {
   if (!agentServiceInstance) {
     agentServiceInstance = new AgentService(io);
   }

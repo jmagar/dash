@@ -1,5 +1,5 @@
 import { Server as SocketServer, Socket, Namespace } from 'socket.io';
-import { WebSocket, Server as WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { z } from 'zod';
 import { BaseService } from './base.service';
@@ -40,6 +40,46 @@ const MessageType = z.enum([
   'error'
 ]);
 
+// Add specific payload schemas for each message type
+const RegisterPayload = z.object({
+  id: z.string(),
+  hostname: z.string(),
+  platform: z.string(),
+  version: z.string(),
+  arch: z.string(),
+  status: z.nativeEnum(AgentStatus),
+  lastSeen: z.string().datetime(),
+}).strict();
+
+const HeartbeatPayload = z.object({
+  cpu: z.object({
+    usage: z.number(),
+    cores: z.number(),
+  }),
+  memory: z.object({
+    total: z.number(),
+    used: z.number(),
+    free: z.number(),
+  }),
+  storage: z.object({
+    total: z.number(),
+    used: z.number(),
+    free: z.number(),
+  }),
+  network: z.object({
+    bytesIn: z.number(),
+    bytesOut: z.number(),
+  }),
+  timestamp: z.string().datetime(),
+}).strict();
+
+const CommandResponsePayload = z.object({
+  id: z.string(),
+  exitCode: z.number(),
+  stdout: z.string(),
+  stderr: z.string(),
+}).strict();
+
 const Message = z.object({
   type: MessageType,
   id: z.string(),
@@ -49,11 +89,11 @@ const Message = z.object({
 
 export class UnifiedAgentService extends BaseService {
   private agents: Map<string, AgentState> = new Map();
-  private wsServer: WebSocketServer;
+  private wsServer: WebSocket.Server;
   private browserNamespace: Namespace<ClientToServerEvents, ServerToClientEvents, InterServerEvents>;
 
   constructor(
-    wsServer: WebSocketServer,
+    wsServer: WebSocket.Server,
     io: SocketServer
   ) {
     super();
@@ -76,26 +116,47 @@ export class UnifiedAgentService extends BaseService {
         logger.warn('Agent WebSocket connection timed out during registration');
       }, 5000);
 
-      ws.on('message', async (data: WebSocket.Data) => {
+      ws.on('message', (data: WebSocket.Data) => {
         try {
           const message = Message.parse(JSON.parse(data.toString()));
           
           switch (message.type) {
-            case 'register':
+            case 'register': {
               clearTimeout(timeout);
-              await this.handleAgentRegistration(ws, message.payload as AgentInfo, 'ws');
+              const registerPayload = RegisterPayload.parse(message.payload);
+              void this.handleAgentRegistration(ws, registerPayload, 'ws');
               break;
-            case 'heartbeat':
-              await this.handleAgentHeartbeat(message.payload as AgentMetrics);
+            }
+            case 'heartbeat': {
+              const heartbeatPayload = HeartbeatPayload.parse(message.payload);
+              void this.handleAgentHeartbeat(heartbeatPayload);
               break;
-            case 'command_response':
-              this.handleCommandResponse(message.payload as AgentCommandResult);
+            }
+            case 'command_response': {
+              const commandPayload = CommandResponsePayload.parse(message.payload);
+              this.handleCommandResponse(commandPayload);
               break;
+            }
+            default:
+              this.handleError(new Error(`Unsupported message type: ${message.type}`), {
+                context: { operation: 'handleWebSocketMessage' }
+              });
           }
         } catch (error) {
-          logger.error('Error handling WebSocket message', {
-            error: error instanceof Error ? error.message : String(error),
+          this.handleError(error, {
+            message: 'Error handling WebSocket message',
+            context: { operation: 'handleWebSocketMessage' }
           });
+          
+          // Send error back to agent
+          ws.send(JSON.stringify({
+            type: 'error',
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            payload: {
+              message: error instanceof Error ? error.message : 'Invalid message format'
+            }
+          }));
         }
       });
 
@@ -280,7 +341,7 @@ export class UnifiedAgentService extends BaseService {
 // Singleton instance
 let unifiedAgentServiceInstance: UnifiedAgentService | null = null;
 
-export function initializeAgentService(wsServer: WebSocketServer, io: SocketServer): UnifiedAgentService {
+export function initializeAgentService(wsServer: WebSocket.Server, io: SocketServer): UnifiedAgentService {
   if (!unifiedAgentServiceInstance) {
     unifiedAgentServiceInstance = new UnifiedAgentService(wsServer, io);
   }

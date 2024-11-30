@@ -1,30 +1,46 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, CircularProgress, Typography, Box } from '@mui/material';
-import { Computer as ComputerIcon } from '@mui/icons-material';
-import { FolderOpen } from '@mui/icons-material';
-import { useHost } from '../hooks/useHost';
-import { FileListItem } from './FileListItem';
-import { FileGridItem } from './FileGridItem';
-import { HostSelector } from './HostSelector';
-import { FileBreadcrumbs } from './FileBreadcrumbs';
-import { FileToolbar } from './FileToolbar';
-import { FileContextMenu } from './FileContextMenu';
-import { FilePreviewModal } from './FilePreviewModal';
-import { NewFolderDialog, RenameDialog, DeleteDialog } from './FileOperationDialogs';
-import { CompressionDialog } from './CompressionDialog';
-import { BulkOperationProgress } from './BulkOperationProgress';
+import {
+  Box,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+  TextField,
+  CircularProgress,
+  LinearProgress,
+  Alert,
+} from '@mui/material';
+import {
+  CreateNewFolder as CreateNewFolderIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  FileCopy as FileCopyIcon,
+  ContentCut as ContentCutIcon,
+  ContentPaste as ContentPasteIcon,
+  Refresh as RefreshIcon,
+  ViewList as ViewListIcon,
+  ViewModule as ViewModuleIcon,
+  Sort as SortIcon,
+  Compress as CompressIcon,
+} from '@mui/icons-material';
 import { fileOperations } from '../api/files.client';
-import { useFileClipboard } from '../hooks/useFileClipboard';
-import { useDirectoryCache } from '../hooks/useDirectoryCache';
-import type { Host } from '../../types/models-shared';
-import { VirtualizedList } from './VirtualizedList';
-import { useLoadingState } from '../hooks/useLoadingState';
-import { LoadingIndicator } from './LoadingIndicator';
-import { useLogger } from '../hooks/useLogger';
+import { useHost } from '../hooks/useHost';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { useNotification } from '../hooks/useNotification';
-import type { LogMetadata } from '../../types/logger';
+import { useFileClipboard } from '../hooks/useFileClipboard';
+import { useDirectoryCache } from '../hooks/useDirectoryCache';
+import { useLoadingState } from '../hooks/useLoadingState';
+import { frontendLogger } from '../utils/frontendLogger';
+import type { FileInfo } from '../../types/files';
+import type { LogMetadata } from '../../types/logging';
 
 interface FileInfo {
   name: string;
@@ -64,9 +80,8 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   const [compressionDialogOpen, setCompressionDialogOpen] = useState(false);
   const [compressionMode, setCompressionMode] = useState<'compress' | 'extract'>('compress');
   const [operations, setOperations] = useState<Array<{ id: string; message: string; progress: number; completed?: boolean }>>([]);
-  
+
   const { host } = useHost({ hostId });
-  const logger = useLogger();
   const handleError = useErrorHandler();
   const { showNotification } = useNotification();
   const {
@@ -120,7 +135,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
     setError(null);
 
     try {
-      logger.info('Loading files', {
+      frontendLogger.info('Loading files', {
         hostId,
         path,
         component: 'FileExplorer'
@@ -129,7 +144,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       // Check cache first
       const cachedFiles = getCachedFiles(hostId, path);
       if (cachedFiles) {
-        logger.debug('Using cached files', {
+        frontendLogger.debug('Using cached files', {
           hostId,
           path,
           fileCount: cachedFiles.length,
@@ -141,7 +156,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       }
 
       const response = await fileOperations.listFiles(hostId, path);
-      logger.info('Files loaded successfully', {
+      frontendLogger.info('Files loaded successfully', {
         hostId,
         path,
         fileCount: response.files.length,
@@ -165,12 +180,12 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       setLoading(false);
       finishLoading(loadingId);
     }
-  }, [hostId, path, getCachedFiles, cacheFiles, logger, handleError, showNotification, startLoading, finishLoading]);
+  }, [hostId, path, getCachedFiles, cacheFiles, showNotification, startLoading, finishLoading]);
 
   const handleFileOperation = useCallback(async (operation: () => Promise<void>, operationName: string) => {
     const loadingId = startLoading(`${operationName}...`);
     try {
-      logger.info(`Starting file operation: ${operationName}`, {
+      frontendLogger.info(`Starting file operation: ${operationName}`, {
         hostId,
         path,
         component: 'FileExplorer'
@@ -180,7 +195,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       invalidateCache(hostId, path);
       await loadFiles();
       
-      logger.info(`File operation completed: ${operationName}`, {
+      frontendLogger.info(`File operation completed: ${operationName}`, {
         hostId,
         path,
         component: 'FileExplorer'
@@ -200,12 +215,12 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
     } finally {
       finishLoading(loadingId);
     }
-  }, [hostId, path, invalidateCache, loadFiles, logger, handleError, showNotification, startLoading, finishLoading]);
+  }, [hostId, path, invalidateCache, loadFiles, showNotification, startLoading, finishLoading]);
 
   const handleCreateFolder = useCallback((name: string) => {
     return handleFileOperation(
       async () => {
-        logger.info('Creating new folder', {
+        frontendLogger.info('Creating new folder', {
           hostId,
           path,
           folderName: name,
@@ -215,12 +230,12 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       },
       'Create folder'
     );
-  }, [handleFileOperation, hostId, path, logger]);
+  }, [handleFileOperation, hostId, path]);
 
   const handleDelete = useCallback((files: string[]) => {
     return handleFileOperation(
       async () => {
-        logger.info('Deleting files', {
+        frontendLogger.info('Deleting files', {
           hostId,
           path,
           files,
@@ -230,12 +245,12 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       },
       'Delete files'
     );
-  }, [handleFileOperation, hostId, logger]);
+  }, [handleFileOperation, hostId]);
 
   const handleRename = useCallback((oldPath: string, newName: string) => {
     return handleFileOperation(
       async () => {
-        logger.info('Renaming file', {
+        frontendLogger.info('Renaming file', {
           hostId,
           oldPath,
           newName,
@@ -245,14 +260,14 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
       },
       'Rename file'
     );
-  }, [handleFileOperation, hostId, logger]);
+  }, [handleFileOperation, hostId]);
 
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
 
   const handleHostSelect = (host: Host) => {
-    logger.info('Host selected', {
+    frontendLogger.info('Host selected', {
       hostId: host.id,
       component: 'FileExplorer'
     });
@@ -260,7 +275,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   };
 
   const handleFileClick = (file: FileInfo) => {
-    logger.debug('File clicked', {
+    frontendLogger.debug('File clicked', {
       hostId,
       path: file.path,
       isDirectory: file.isDirectory,
@@ -275,7 +290,7 @@ export function FileExplorer({ hostId }: FileExplorerProps) {
   };
 
   const handleRefresh = () => {
-    logger.info('Refreshing files', {
+    frontendLogger.info('Refreshing files', {
       hostId,
       path,
       component: 'FileExplorer'

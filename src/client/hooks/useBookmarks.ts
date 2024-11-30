@@ -7,7 +7,40 @@ import {
   deleteBookmark,
   updateLastAccessed,
 } from '../api/bookmarks.client';
-import { logger } from '../utils/logger';
+import { frontendLogger } from '../utils/frontendLogger';
+
+interface BookmarkContext {
+  path: string;
+  hostId: string;
+  notes: string | null;
+}
+
+interface ChatContextResponse {
+  success: boolean;
+  error?: string;
+}
+
+async function updateChatContext(bookmarks: BookmarkContext[]): Promise<void> {
+  try {
+    const response = await fetch('/api/chat/context/bookmarks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bookmarks }),
+    });
+    
+    const data = await response.json() as ChatContextResponse;
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to update chat context');
+    }
+  } catch (error) {
+    frontendLogger.error('Failed to update chat context:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // Don't throw error for context updates
+  }
+}
 
 export function useBookmarks() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -21,7 +54,7 @@ export function useBookmarks() {
         const data = await listBookmarks();
         setBookmarks(data);
       } catch (error) {
-        logger.error('Failed to load bookmarks:', {
+        frontendLogger.error('Failed to load bookmarks:', {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
         setError(error instanceof Error ? error : new Error('Failed to load bookmarks'));
@@ -39,7 +72,7 @@ export function useBookmarks() {
     name: string,
     isDirectory: boolean,
     notes?: string
-  ) => {
+  ): Promise<Bookmark> => {
     try {
       const bookmark = await createBookmark({
         hostId,
@@ -51,23 +84,16 @@ export function useBookmarks() {
       setBookmarks(prev => [...prev, bookmark]);
 
       // Update chatbot context
-      void fetch('/api/chat/context/bookmarks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookmarks: [...bookmarks, bookmark].map(b => ({
-            path: b.path,
-            hostId: b.hostId,
-            notes: b.notes,
-          })),
-        }),
-      });
+      const contextBookmarks = [...bookmarks, bookmark].map(b => ({
+        path: b.path,
+        hostId: b.hostId,
+        notes: b.notes,
+      }));
+      void updateChatContext(contextBookmarks);
 
       return bookmark;
     } catch (error) {
-      logger.error('Failed to add bookmark:', {
+      frontendLogger.error('Failed to add bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
         path,
@@ -76,29 +102,22 @@ export function useBookmarks() {
     }
   }, [bookmarks]);
 
-  const removeBookmark = useCallback(async (hostId: string, path: string) => {
+  const removeBookmark = useCallback(async (hostId: string, path: string): Promise<void> => {
     try {
       await deleteBookmark(hostId, path);
       setBookmarks(prev => prev.filter(b => !(b.hostId === hostId && b.path === path)));
 
       // Update chatbot context
-      void fetch('/api/chat/context/bookmarks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookmarks: bookmarks
-            .filter(b => !(b.hostId === hostId && b.path === path))
-            .map(b => ({
-              path: b.path,
-              hostId: b.hostId,
-              notes: b.notes,
-            })),
-        }),
-      });
+      const contextBookmarks = bookmarks
+        .filter(b => !(b.hostId === hostId && b.path === path))
+        .map(b => ({
+          path: b.path,
+          hostId: b.hostId,
+          notes: b.notes,
+        }));
+      void updateChatContext(contextBookmarks);
     } catch (error) {
-      logger.error('Failed to remove bookmark:', {
+      frontendLogger.error('Failed to remove bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
         path,
@@ -111,7 +130,7 @@ export function useBookmarks() {
     hostId: string,
     path: string,
     notes: string
-  ) => {
+  ): Promise<void> => {
     try {
       const updatedBookmark = await updateBookmark(hostId, path, { notes });
       setBookmarks(prev =>
@@ -121,21 +140,14 @@ export function useBookmarks() {
       );
 
       // Update chatbot context
-      void fetch('/api/chat/context/bookmarks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookmarks: bookmarks.map(b => ({
-            path: b.path,
-            hostId: b.hostId,
-            notes: b.hostId === hostId && b.path === path ? notes : b.notes,
-          })),
-        }),
-      });
+      const contextBookmarks = bookmarks.map(b => ({
+        path: b.path,
+        hostId: b.hostId,
+        notes: b.hostId === hostId && b.path === path ? notes : b.notes,
+      }));
+      void updateChatContext(contextBookmarks);
     } catch (error) {
-      logger.error('Failed to update bookmark notes:', {
+      frontendLogger.error('Failed to update bookmark notes:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
         path,
@@ -144,7 +156,7 @@ export function useBookmarks() {
     }
   }, [bookmarks]);
 
-  const updateLastAccessedTime = useCallback(async (hostId: string, path: string) => {
+  const updateLastAccessedTime = useCallback(async (hostId: string, path: string): Promise<void> => {
     try {
       await updateLastAccessed(hostId, path);
       const now = new Date();
@@ -156,7 +168,7 @@ export function useBookmarks() {
         )
       );
     } catch (error) {
-      logger.error('Failed to update bookmark last accessed:', {
+      frontendLogger.error('Failed to update bookmark last accessed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
         path,
@@ -165,11 +177,11 @@ export function useBookmarks() {
     }
   }, []);
 
-  const isBookmarked = useCallback((hostId: string, path: string) => {
+  const isBookmarked = useCallback((hostId: string, path: string): boolean => {
     return bookmarks.some(b => b.hostId === hostId && b.path === path);
   }, [bookmarks]);
 
-  const getBookmark = useCallback((hostId: string, path: string) => {
+  const getBookmark = useCallback((hostId: string, path: string): Bookmark | undefined => {
     return bookmarks.find(b => b.hostId === hostId && b.path === path);
   }, [bookmarks]);
 

@@ -16,6 +16,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   BugReport as BugReportIcon,
 } from '@mui/icons-material';
+import { logger } from '../utils/frontendLogger';
 
 interface Props {
   children: React.ReactNode;

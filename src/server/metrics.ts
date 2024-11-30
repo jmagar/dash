@@ -33,6 +33,17 @@ type HostMetricLabels = {
   metric_type: string;
 };
 
+type OperationLabels = {
+  operation: string;
+  success: string;
+  service: string;
+};
+
+type ServiceMetricLabels = {
+  service: string;
+  metric_type: string;
+};
+
 // Create metrics with proper typing
 const httpRequestDuration = new Histogram({
   name: 'http_request_duration_seconds',
@@ -53,6 +64,28 @@ const hostMetrics = new Gauge({
   name: 'host_metrics',
   help: 'Host system metrics',
   labelNames: ['host_id', 'metric_type'],
+  registers: [register],
+});
+
+const operationDuration = new Histogram({
+  name: 'operation_duration_seconds',
+  help: 'Duration of service operations in seconds',
+  labelNames: ['operation', 'success', 'service'],
+  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10],
+  registers: [register],
+});
+
+const operationCounter = new Counter({
+  name: 'operation_total',
+  help: 'Total number of service operations',
+  labelNames: ['operation', 'success', 'service'],
+  registers: [register],
+});
+
+const serviceMetrics = new Gauge({
+  name: 'service_metrics',
+  help: 'Service-level metrics',
+  labelNames: ['service', 'metric_type'],
   registers: [register],
 });
 
@@ -133,8 +166,31 @@ function handleSocketDisconnect(hostId: string): void {
 export const metrics = {
   httpRequestDuration,
   apiErrors,
-  hostMetrics,
-  register,
+  operationDuration,
+  operationCounter,
+  serviceMetrics,
+
+  // Operation metrics
+  histogram(name: string, value: number, labels: Record<string, string | number>): void {
+    operationDuration.observe(value / 1000, labels); // Convert ms to seconds
+  },
+
+  increment(name: string, value: number, labels: Record<string, string | number>): void {
+    operationCounter.inc(labels, value);
+  },
+
+  gauge(name: string, value: number, labels: Record<string, string | number> = {}): void {
+    serviceMetrics.set({ ...labels, metric_type: name }, value);
+  },
+
+  // HTTP metrics
+  observeHttpDuration(method: string, route: string, statusCode: string, duration: number): void {
+    httpRequestDuration.observe({ method, route, status_code: statusCode }, duration);
+  },
+
+  incrementApiError(method: string, route: string, errorType: string): void {
+    apiErrors.inc({ method, route, error_type: errorType });
+  }
 };
 
 // Helper functions
@@ -142,12 +198,4 @@ export function recordHostMetric(hostId: string, metricType: string, value: numb
   hostMetrics.set({ host_id: hostId, metric_type: metricType }, value);
 }
 
-export function incrementApiError(method: string, route: string, errorType: string): void {
-  apiErrors.inc({ method, route, error_type: errorType });
-}
-
-export function observeRequestDuration(method: string, route: string, statusCode: string, duration: number): void {
-  httpRequestDuration.observe({ method, route, status_code: statusCode }, duration);
-}
-
-export type { MetricLabels, ErrorLabels, HostMetricLabels };
+export type { MetricLabels, ErrorLabels, HostMetricLabels, OperationLabels, ServiceMetricLabels };

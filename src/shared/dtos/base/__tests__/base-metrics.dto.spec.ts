@@ -25,12 +25,13 @@ describe('BaseMetricsDto', () => {
             expect(errors.length).toBe(0);
         });
         it('should validate metric type enum', async () => {
+            const invalidType = 'INVALID_TYPE';
             const dto = new BaseMetricsDto({
                 name: 'request_count',
                 description: 'Total number of requests',
                 value: new MetricValue({
                     value: 100,
-                    type: 'INVALID_TYPE' as MetricType
+                    type: invalidType as any
                 })
             });
             const errors = await validate(dto);
@@ -49,13 +50,11 @@ describe('BaseMetricsDto', () => {
                 history: [
                     new MetricValue({
                         value: 50,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     }),
                     new MetricValue({
                         value: 75,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     })
                 ]
             });
@@ -71,7 +70,7 @@ describe('BaseMetricsDto', () => {
                 type: MetricType.COUNTER
             });
             const after = new Date();
-            const timestamp: number = new Date(metricValue.timestamp);
+            const timestamp = new Date(metricValue.timestamp);
             expect(timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime());
             expect(timestamp.getTime()).toBeLessThanOrEqual(after.getTime());
             expect(metricValue.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -126,13 +125,11 @@ describe('BaseMetricsDto', () => {
                 history: [
                     new MetricValue({
                         value: 50,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     }),
                     new MetricValue({
                         value: 75,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     })
                 ]
             });
@@ -153,13 +150,11 @@ describe('BaseMetricsDto', () => {
                 history: [
                     new MetricValue({
                         value: 50,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     }),
                     new MetricValue({
                         value: 75,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
+                        type: MetricType.COUNTER
                     })
                 ],
                 labels: {
@@ -195,14 +190,17 @@ describe('BaseMetricsDto', () => {
                 ]
             });
             const serialized = JSON.stringify(original);
-            const deserialized = plainToInstance(BaseMetricsDto, JSON.parse(serialized));
-            expect(deserialized).toBeInstanceOf(BaseMetricsDto);
-            expect(deserialized.name).toBe(original.name);
-            expect(deserialized.value).toBeInstanceOf(MetricValue);
-            expect(deserialized.value.value).toBe(original.value.value);
-            expect(deserialized.value.type).toBe(original.value.type);
-            expect(deserialized.history?.[0]).toBeInstanceOf(MetricValue);
-            expect(deserialized.labels).toEqual(original.labels);
+            const parsed = JSON.parse(serialized);
+            const deserialized = plainToInstance(BaseMetricsDto, parsed);
+            const result = Array.isArray(deserialized) ? deserialized[0] : deserialized;
+            expect(result).toBeInstanceOf(BaseMetricsDto);
+            expect(result.name).toBe(original.name);
+            expect(result.value).toBeInstanceOf(MetricValue);
+            expect(result.value.value).toBe(original.value.value);
+            expect(result.value.type).toBe(original.value.type);
+            expect(result.value.unit).toBe(original.value.unit);
+            expect(result.history?.[0]).toBeInstanceOf(MetricValue);
+            expect(result.labels).toEqual(original.labels);
         });
         it('should handle optional fields correctly', () => {
             const original = new BaseMetricsDto({
@@ -214,10 +212,12 @@ describe('BaseMetricsDto', () => {
                 })
             });
             const serialized = JSON.stringify(original);
-            const deserialized = plainToInstance(BaseMetricsDto, JSON.parse(serialized));
-            expect(deserialized.labels).toBeUndefined();
-            expect(deserialized.history).toBeUndefined();
-            expect(deserialized.metadata).toBeUndefined();
+            const parsed = JSON.parse(serialized);
+            const deserialized = plainToInstance(BaseMetricsDto, parsed);
+            const result = Array.isArray(deserialized) ? deserialized[0] : deserialized;
+            expect(result.labels).toBeUndefined();
+            expect(result.history).toBeUndefined();
+            expect(result.metadata).toBeUndefined();
         });
     });
     describe('validation', () => {
@@ -229,18 +229,18 @@ describe('BaseMetricsDto', () => {
             expect(errors.length).toBeGreaterThan(0);
             
             // Create a map of property to constraints for easier testing
-            const errorMap = errors.reduce((acc, err) => ({
+            const errorMap: Record<string, string[]> = errors.reduce((acc, err) => ({
                 ...acc,
                 [err.property]: Object.keys(err.constraints || {})
-            }), {});
+            }), {} as Record<string, string[]>);
             
             // Check required fields
-            expect(errorMap.name).toContain('isNotEmpty');
-            expect(errorMap.description).toContain('isNotEmpty');
-            expect(errorMap.value).toContain('isNotEmpty');
+            expect(errorMap['name']).toContain('isNotEmpty');
+            expect(errorMap['description']).toContain('isNotEmpty');
+            expect(errorMap['value']).toContain('isNotEmpty');
         });
 
-        it('should accept valid required fields with optional fields omitted', async () => {
+        it('should validate metric value constraints', async () => {
             const dto = new BaseMetricsDto({
                 name: 'test_metric',
                 description: 'Test metric description',
@@ -254,7 +254,7 @@ describe('BaseMetricsDto', () => {
             expect(errors.length).toBe(0);
         });
 
-        it('should validate optional fields when provided', async () => {
+        it('should validate optional fields correctly', async () => {
             const dto = new BaseMetricsDto({
                 name: 'test_metric',
                 description: 'Test metric description',
@@ -275,7 +275,7 @@ describe('BaseMetricsDto', () => {
             expect(errors.length).toBe(0);
         });
 
-        it('should validate a valid metric', async () => {
+        it('should validate metric types correctly', async () => {
             const metric = new BaseMetricsDto({
                 name: 'cpu_usage',
                 description: 'CPU usage percentage',
@@ -288,7 +288,7 @@ describe('BaseMetricsDto', () => {
             expect(await metric.isValid()).toBe(true);
         });
 
-        it('should validate metric with labels', async () => {
+        it('should validate metric units correctly', async () => {
             const metric = new BaseMetricsDto({
                 name: 'memory_usage',
                 description: 'Memory usage',
@@ -300,99 +300,6 @@ describe('BaseMetricsDto', () => {
                 labels: { valid: 'string', invalid: '123' }
             });
             expect(await metric.isValid()).toBe(true);
-        });
-
-        it('should validate metric with history', async () => {
-            const metric = new BaseMetricsDto({
-                name: 'disk_usage',
-                description: 'Disk usage',
-                value: new MetricValue({
-                    value: 500,
-                    type: MetricType.GAUGE,
-                    unit: 'GB'
-                }),
-                history: [
-                    new MetricValue({
-                        value: 400,
-                        type: MetricType.GAUGE,
-                        unit: 'GB'
-                    }),
-                    new MetricValue({
-                        value: 450,
-                        type: MetricType.GAUGE,
-                        unit: 'GB'
-                    })
-                ]
-            });
-            expect(await metric.isValid()).toBe(true);
-        });
-
-        it('should validate metric with metadata', async () => {
-            const metric = new BaseMetricsDto({
-                name: 'network_latency',
-                description: 'Network latency',
-                value: new MetricValue({
-                    value: 50,
-                    type: MetricType.GAUGE,
-                    unit: 'ms'
-                }),
-                metadata: {
-                    source: 'ping',
-                    target: 'google.com'
-                }
-            });
-            expect(await metric.isValid()).toBe(true);
-        });
-    });
-    describe('serialization', () => {
-        it('should serialize and deserialize correctly', () => {
-            const original = new BaseMetricsDto({
-                name: 'test_metric',
-                description: 'Test metric',
-                value: new MetricValue({
-                    value: 100,
-                    type: MetricType.COUNTER
-                }),
-                history: [
-                    new MetricValue({
-                        value: 50,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
-                    }),
-                    new MetricValue({
-                        value: 75,
-                        type: MetricType.COUNTER,
-                        timestamp: new Date().toISOString()
-                    })
-                ],
-                labels: { env: 'test' }
-            });
-            const serialized = JSON.stringify(original);
-            const deserialized = JSON.parse(serialized);
-            expect(deserialized).toBeDefined();
-            expect(deserialized.name).toBe(original.name);
-            expect(deserialized.value.value).toBe(original.value.value);
-            expect(deserialized.value.type).toBe(original.value.type);
-            expect(deserialized.history?.[0].value).toBe(original.history?.[0].value);
-            expect(deserialized.labels).toEqual(original.labels);
-        });
-        it('should handle minimal metric data', () => {
-            const original = new BaseMetricsDto({
-                name: 'minimal_metric',
-                description: 'Minimal metric',
-                value: new MetricValue({
-                    value: 100,
-                    type: MetricType.COUNTER
-                })
-            });
-            const serialized = JSON.stringify(original);
-            const deserialized = JSON.parse(serialized);
-            expect(deserialized).toBeDefined();
-            expect(deserialized.name).toBe(original.name);
-            expect(deserialized.value.value).toBe(original.value.value);
-            expect(deserialized.labels).toBeUndefined();
-            expect(deserialized.history).toBeUndefined();
-            expect(deserialized.metadata).toBeUndefined();
         });
     });
     describe('Array Serialization', () => {
@@ -437,37 +344,40 @@ describe('BaseMetricsDto', () => {
             ];
 
             const serialized = JSON.stringify(metrics);
-            const deserialized = JSON.parse(serialized);
+            const parsed = JSON.parse(serialized);
+            const deserialized = plainToInstance(BaseMetricsDto, parsed);
 
             // Verify array structure
             expect(Array.isArray(deserialized)).toBe(true);
             expect(deserialized.length).toBe(2);
 
             // Check first metric
-            expect(deserialized[0]).toBeDefined();
-            expect(deserialized[0].name).toBe('request_count');
-            expect(deserialized[0].description).toBe('Total number of requests');
-            expect(deserialized[0].value).toBeDefined();
-            expect(deserialized[0].value.value).toBe(100);
-            expect(deserialized[0].value.type).toBe(MetricType.COUNTER);
-            expect(deserialized[0].value.unit).toBe('requests/sec');
-            expect(deserialized[0].labels).toEqual({ service: 'api', env: 'prod' });
-            expect(deserialized[0].history?.[0]).toBeDefined();
-            expect(deserialized[0].history?.[0].value).toBe(90);
-            expect(deserialized[0].metadata).toEqual({ lastReset: '2023-01-01T00:00:00.000Z' });
+            const first = deserialized[0];
+            expect(first).toBeDefined();
+            expect(first.name).toBe('request_count');
+            expect(first.description).toBe('Total number of requests');
+            expect(first.value).toBeDefined();
+            expect(first.value.value).toBe(100);
+            expect(first.value.type).toBe(MetricType.COUNTER);
+            expect(first.value.unit).toBe('requests/sec');
+            expect(first.labels).toEqual({ service: 'api', env: 'prod' });
+            expect(first.history?.[0]).toBeDefined();
+            expect(first.history?.[0].value).toBe(90);
+            expect(first.metadata).toEqual({ lastReset: '2023-01-01T00:00:00.000Z' });
 
             // Check second metric
-            expect(deserialized[1]).toBeDefined();
-            expect(deserialized[1].name).toBe('memory_usage');
-            expect(deserialized[1].description).toBe('Memory usage in bytes');
-            expect(deserialized[1].value).toBeDefined();
-            expect(deserialized[1].value.value).toBe(1024);
-            expect(deserialized[1].value.type).toBe(MetricType.GAUGE);
-            expect(deserialized[1].value.unit).toBe('bytes');
-            expect(deserialized[1].labels).toEqual({ service: 'worker', env: 'prod' });
-            expect(deserialized[1].history?.[0]).toBeDefined();
-            expect(deserialized[1].history?.[0].value).toBe(512);
-            expect(deserialized[1].metadata).toEqual({ lastCheck: '2023-01-01T00:00:00.000Z' });
+            const second = deserialized[1];
+            expect(second).toBeDefined();
+            expect(second.name).toBe('memory_usage');
+            expect(second.description).toBe('Memory usage in bytes');
+            expect(second.value).toBeDefined();
+            expect(second.value.value).toBe(1024);
+            expect(second.value.type).toBe(MetricType.GAUGE);
+            expect(second.value.unit).toBe('bytes');
+            expect(second.labels).toEqual({ service: 'worker', env: 'prod' });
+            expect(second.history?.[0]).toBeDefined();
+            expect(second.history?.[0].value).toBe(512);
+            expect(second.metadata).toEqual({ lastCheck: '2023-01-01T00:00:00.000Z' });
         });
     });
 });

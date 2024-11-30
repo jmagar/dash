@@ -1,86 +1,113 @@
-import { Client as SSHClient, SFTPWrapper } from 'ssh2';
-import { FileSystemProvider, FileSystemCredentials, FileSystemStats, FileSystemType } from './types';
+import { Client, SFTPWrapper } from 'ssh2';
+import type { ClientConfig, SFTPStats } from 'ssh2';
+import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
+import logger from '../../../logger';
+
+interface SFTPFileEntry {
+  filename: string;
+  longname: string;
+  attrs: SFTPStats;
+}
 
 export class SFTPProvider implements FileSystemProvider {
   readonly type: FileSystemType = 'sftp';
-  private client: SSHClient | null = null;
+  private client: Client | null = null;
   private sftp: SFTPWrapper | null = null;
 
   async connect(credentials: FileSystemCredentials): Promise<void> {
-    if (credentials.type !== 'sftp') {
-      throw new Error('Invalid credentials type for SFTP provider');
+    if (!credentials.host || !credentials.username) {
+      throw new Error('Missing required SFTP credentials: host and username are required');
     }
 
-    return new Promise((resolve, reject) => {
-      this.client = new SSHClient();
+    try {
+      this.client = new Client();
 
-      this.client.on('ready', () => {
-        this.client!.sftp((err, sftp) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          this.sftp = sftp;
-          resolve();
+      await new Promise<void>((resolve, reject) => {
+        if (!this.client) {
+          reject(new Error('SFTP client not initialized'));
+          return;
+        }
+
+        const config: ClientConfig = {
+          host: credentials.host,
+          port: credentials.port ? Number(credentials.port) : 22,
+          username: credentials.username,
+          password: credentials.password,
+          privateKey: credentials.privateKey ? Buffer.from(credentials.privateKey) : undefined
+        };
+
+        this.client.on('ready', () => {
+          this.client!.sftp((err, sftp) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            this.sftp = sftp;
+            resolve();
+          });
         });
+
+        this.client.on('error', (err) => {
+          reject(err);
+        });
+
+        this.client.connect(config);
       });
-
-      this.client.on('error', (err) => {
-        reject(err);
-      });
-
-      const connectConfig: any = {
-        host: credentials.host,
-        port: credentials.port || 22,
-        username: credentials.username,
-      };
-
-      if (credentials.privateKey) {
-        connectConfig.privateKey = credentials.privateKey;
-      } else if (credentials.password) {
-        connectConfig.password = credentials.password;
-      }
-
-      this.client.connect(connectConfig);
-    });
+    } catch (error) {
+      logger.error('Failed to connect to SFTP server', { error });
+      await this.disconnect();
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
-    if (this.sftp) {
-      this.sftp.end();
-      this.sftp = null;
-    }
-    if (this.client) {
-      this.client.end();
-      this.client = null;
+    try {
+      if (this.client) {
+        await new Promise<void>((resolve) => {
+          this.client?.once('close', () => resolve());
+          this.client?.end();
+        });
+        this.client = null;
+        this.sftp = null;
+      }
+    } catch (error) {
+      logger.error('Error disconnecting from SFTP server', { error });
+      throw error;
     }
   }
 
   private ensureConnected(): void {
     if (!this.sftp) {
-      throw new Error('SFTP connection not established');
+      throw new Error('Not connected to SFTP server');
     }
   }
 
   async listFiles(path: string): Promise<FileItem[]> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.readdir(path, (err, list) => {
+    
+    return new Promise<FileItem[]>((resolve, reject) => {
+      this.sftp.readdir(path, (err: Error | null, list: SFTPFileEntry[]) => {
         if (err) {
           reject(err);
           return;
         }
 
-        const items: FileItem[] = list.map((item) => ({
-          name: item.filename,
-          path: `${path}/${item.filename}`.replace(/\/+/g, '/'),
-          isDirectory: item.attrs.isDirectory(),
-          size: item.attrs.size,
-          modifiedTime: new Date(item.attrs.mtime * 1000).toISOString(),
-          permissions: (item.attrs.mode & 0o777).toString(8),
-        }));
-
+        const items = list.map((entry: SFTPFileEntry): FileItem => {
+          const isDirectory = (entry.attrs.mode & 0o40000) === 0o40000;
+          return {
+            name: entry.filename,
+            path: `${path}/${entry.filename}`,
+            type: isDirectory ? 'directory' : 'file',
+            size: entry.attrs.size,
+            modifiedTime: new Date(entry.attrs.mtime * 1000),
+            metadata: {
+              mode: entry.attrs.mode,
+              uid: entry.attrs.uid,
+              gid: entry.attrs.gid
+            }
+          };
+        });
         resolve(items);
       });
     });
@@ -88,8 +115,9 @@ export class SFTPProvider implements FileSystemProvider {
 
   async readFile(path: string): Promise<Buffer> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.readFile(path, (err, data) => {
+    
+    return new Promise<Buffer>((resolve, reject) => {
+      this.sftp.readFile(path, (err: Error | null, data: Buffer) => {
         if (err) {
           reject(err);
           return;
@@ -101,8 +129,9 @@ export class SFTPProvider implements FileSystemProvider {
 
   async writeFile(path: string, content: Buffer): Promise<void> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.writeFile(path, content, (err) => {
+    
+    return new Promise<void>((resolve, reject) => {
+      this.sftp.writeFile(path, content, (err: Error | null) => {
         if (err) {
           reject(err);
           return;
@@ -114,11 +143,9 @@ export class SFTPProvider implements FileSystemProvider {
 
   async delete(path: string): Promise<void> {
     this.ensureConnected();
-    const stats = await this.stat(path);
-
-    return new Promise((resolve, reject) => {
-      const operation = stats.isDirectory ? 'rmdir' : 'unlink';
-      this.sftp![operation](path, (err) => {
+    
+    return new Promise<void>((resolve, reject) => {
+      this.sftp.unlink(path, (err: Error | null) => {
         if (err) {
           reject(err);
           return;
@@ -130,8 +157,9 @@ export class SFTPProvider implements FileSystemProvider {
 
   async rename(oldPath: string, newPath: string): Promise<void> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.rename(oldPath, newPath, (err) => {
+    
+    return new Promise<void>((resolve, reject) => {
+      this.sftp.rename(oldPath, newPath, (err: Error | null) => {
         if (err) {
           reject(err);
           return;
@@ -143,8 +171,9 @@ export class SFTPProvider implements FileSystemProvider {
 
   async mkdir(path: string): Promise<void> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.mkdir(path, (err) => {
+    
+    return new Promise<void>((resolve, reject) => {
+      this.sftp.mkdir(path, (err: Error | null) => {
         if (err) {
           reject(err);
           return;
@@ -156,21 +185,58 @@ export class SFTPProvider implements FileSystemProvider {
 
   async stat(path: string): Promise<FileSystemStats> {
     this.ensureConnected();
-    return new Promise((resolve, reject) => {
-      this.sftp!.stat(path, (err, stats) => {
+
+    return new Promise<FileSystemStats>((resolve, reject) => {
+      this.sftp.stat(path, (err: Error | null, stats: SFTPStats) => {
         if (err) {
           reject(err);
           return;
         }
+
+        const isDirectory = (stats.mode & 0o40000) === 0o40000;
+        const isFile = (stats.mode & 0o100000) === 0o100000;
+
         resolve({
           size: stats.size,
           mtime: stats.mtime,
-          isDirectory: stats.isDirectory(),
-          isFile: stats.isFile(),
-          permissions: (stats.mode & 0o777).toString(8),
+          mode: stats.mode,
+          modTime: stats.mtime * 1000,
+          owner: stats.uid.toString(),
+          group: stats.gid.toString(),
+          isDirectory,
+          isFile,
+          permissions: (stats.mode & 0o777).toString(8)
         });
       });
     });
+  }
+
+  async rmdir(path: string): Promise<void> {
+    this.ensureConnected();
+    
+    return new Promise<void>((resolve, reject) => {
+      this.sftp.rmdir(path, (err: Error | null) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async unlink(path: string): Promise<void> {
+    return this.delete(path);
+  }
+
+  async copyFile(sourcePath: string, targetPath: string): Promise<void> {
+    const content = await this.readFile(sourcePath);
+    await this.writeFile(targetPath, content);
+  }
+
+  async moveFile(sourcePath: string, targetPath: string): Promise<void> {
+    await this.copyFile(sourcePath, targetPath);
+    await this.delete(sourcePath);
   }
 
   async exists(path: string): Promise<boolean> {
@@ -184,7 +250,7 @@ export class SFTPProvider implements FileSystemProvider {
 
   async test(): Promise<boolean> {
     try {
-      await this.listFiles('/');
+      await this.stat('/');
       return true;
     } catch {
       return false;

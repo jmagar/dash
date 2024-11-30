@@ -2,11 +2,12 @@ import { EventEmitter } from 'events';
 import { Client as SSHClient } from 'ssh2';
 import { logger } from '../utils/logger';
 import { metrics, recordHostMetric } from '../metrics';
+import type { OperationLabels, ServiceMetricLabels } from '../metrics';
 import cache from '../cache';
 import { errorAggregator } from './errorAggregator';
 import { ServiceOperationExecutor } from './operation';
 import { db } from '../db';
-import { getDockerService } from './docker.service';
+import { DockerService } from './docker.service';
 import { SyslogService } from './logging/syslog.service';
 import { sshService } from './ssh.service';
 import type { Pool, QueryResult } from 'pg';
@@ -18,130 +19,146 @@ import { CommandResult } from '../../types/models-shared';
 import { ApiError } from '../../types/error';
 import { ContextProvider } from './context.provider';
 import type { ChatbotContext } from '../../types/chatbot';
-import { performance } from 'perf_hooks';
+import type { Schema } from '../../types/validation';
 import { z } from 'zod';
 
-// Service context interface
 export interface ServiceContext {
   user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
   requestId?: string;
   traceId?: string;
   spanId?: string;
   metadata?: Record<string, unknown>;
+  chatbot?: ChatbotContext;
 }
 
-// Service configuration interface
+export type ValidationSchema<T> = z.ZodType<T>;
+
+export interface ValidationOptions {
+  schema?: ValidationSchema<unknown>;
+  strict?: boolean;
+  partial?: boolean;
+}
+
 export interface ServiceConfig {
   retryOptions?: RetryOptions;
   sshOptions?: SSHOptions;
   cacheOptions?: CacheOptions;
   metricsEnabled?: boolean;
   loggingEnabled?: boolean;
-  validation?: {
-    schema?: z.ZodType<any>;
-    strict?: boolean;
-  };
+  validation?: ValidationOptions;
 }
 
-interface RetryOptions {
+export interface RetryOptions {
   maxAttempts: number;
   initialDelay: number;
   maxDelay: number;
   factor: number;
   timeout?: number;
+  retryableErrors?: Array<string | RegExp>;
 }
 
-interface SSHOptions {
+export interface SSHOptions {
   timeout?: number;
   keepaliveInterval?: number;
   readyTimeout?: number;
 }
 
-interface CacheOptions {
+export interface CacheOptions {
   ttl?: number;
   prefix?: string;
 }
 
-const defaultRetryOptions: RetryOptions = {
+export interface ServiceMetrics {
+  operationCount: number;
+  errorCount: number;
+  lastError?: ServiceError;
+  uptime: number;
+}
+
+export interface ServiceError extends Error {
+  code?: string;
+  timestamp?: string;
+  details?: Record<string, unknown>;
+  retryable?: boolean;
+  attempt?: number;
+}
+
+const defaultRetryOptions: Required<RetryOptions> = {
   maxAttempts: 3,
   initialDelay: 1000,
   maxDelay: 10000,
   factor: 2,
+  timeout: 30000
 };
 
-const defaultSSHOptions: SSHOptions = {
+const defaultSSHOptions: Required<SSHOptions> = {
   timeout: 10000,
   keepaliveInterval: 10000,
-  readyTimeout: 20000,
+  readyTimeout: 20000
 };
 
-const defaultCacheOptions: CacheOptions = {
-  ttl: 3600,
-  prefix: 'service:',
+const defaultCacheOptions: Required<CacheOptions> = {
+  ttl: 300,
+  prefix: 'service:'
 };
 
-// Operation result interface with type safety and metrics
+export interface ServiceOperationExecutor<T, TInput = void> {
+  (input: TInput, context?: ChatbotContext): Promise<T>;
+  schema?: ValidationSchema<TInput>;
+}
+
+export interface ServiceOptions<TInput = void> {
+  cache?: {
+    ttl?: number;
+    prefix?: string;
+  };
+  retry?: {
+    maxAttempts?: number;
+    initialDelay?: number;
+    maxDelay?: number;
+  };
+  metrics?: MetricsOptions;
+  context?: ChatbotContext;
+  validation?: ValidationOptions;
+  input?: TInput;
+}
+
 export interface OperationMetrics {
   duration: number;
   timestamp: string;
   success: boolean;
   operation: string;
   tags?: Record<string, string | number>;
+  error?: ServiceError;
 }
 
 export interface OperationResult<T> {
   data: T;
   metrics: OperationMetrics;
-  error?: Error & { timestamp?: string };
+  error?: ServiceError;
 }
 
-export interface ServiceResult<T> {
-  success: boolean;
-  data?: T;
-  error?: Error;
-  metrics?: OperationMetrics;
+export interface MetricsOptions {
+  enabled?: boolean;
+  tags?: Record<string, string | number>;
+  operation?: string;
+  customMetrics?: Record<string, number>;
 }
 
-// Enhanced service options with proper type definitions
-export interface ServiceOptions {
-  cache?: {
-    ttl?: number;
-    prefix?: string;
-    bypass?: boolean;
-  };
-  retry?: {
-    maxAttempts?: number;
-    initialDelay?: number;
-    maxDelay?: number;
-    factor?: number;
-    timeout?: number;
-  };
-  metrics?: {
-    tags?: Record<string, string | number>;
-    enabled?: boolean;
-  };
-  validation?: {
-    schema?: z.ZodType<any>;
-    strict?: boolean;
-  };
-}
-
-export abstract class BaseService extends EventEmitter {
+export class BaseService extends EventEmitter {
   protected readonly logger = logger;
   protected readonly metrics = metrics;
   protected readonly cache: ICacheService = cache;
   protected readonly db = db;
-  protected readonly dockerService = getDockerService();
+  protected readonly dockerService = new DockerService();
   protected readonly syslogService = new SyslogService();
   protected readonly sshService = sshService;
   protected readonly contextProvider: ContextProvider = ContextProvider.getInstance();
-  
   protected context?: ServiceContext;
-  protected config: ServiceConfig;
-
+  protected config: Required<ServiceConfig>;
   private operationCount = 0;
   private errorCount = 0;
-  private lastError?: Error & { timestamp?: string };
+  private lastError?: ServiceError;
   private startTime: number = Date.now();
 
   constructor(config: ServiceConfig = {}) {
@@ -152,377 +169,328 @@ export abstract class BaseService extends EventEmitter {
       cacheOptions: { ...defaultCacheOptions, ...config.cacheOptions },
       metricsEnabled: config.metricsEnabled ?? true,
       loggingEnabled: config.loggingEnabled ?? true,
-      validation: config.validation,
+      validation: config.validation ?? { strict: false }
     };
   }
 
-  /**
-   * Set request context and update chatbot context
-   */
-  protected setContext(context: ServiceContext): void {
+  setContext(context: ServiceContext): void {
     this.context = context;
-    this.contextProvider.setContext(context);
-    this.logger.withContext({
-      requestId: context.requestId,
-      traceId: context.traceId,
-      userId: context.user?.id,
-    });
+    this.contextProvider.updateContext(context);
   }
 
-  /**
-   * Get current chatbot context
-   */
-  protected async getChatbotContext(): Promise<ChatbotContext> {
-    return this.contextProvider.getCurrentContext();
+  async getChatbotContext(): Promise<ChatbotContext> {
+    return this.contextProvider.getContext();
   }
 
-  /**
-   * Update chatbot context with query and result
-   */
-  protected updateChatbotContext(query: string, result: unknown): void {
-    this.contextProvider.updateLastQuery(query, result);
+  async updateChatbotContext(query: string, result: unknown): Promise<void> {
+    await this.contextProvider.updateContext({ query, result });
   }
 
-  /**
-   * Cleanup resources before service shutdown
-   */
   async cleanup(): Promise<void> {
-    try {
-      await Promise.all([
-        this.cache.clear(),
-        this.syslogService.cleanup(),
-        this.dockerService.cleanup(),
-      ]);
-      
-      // Close all SSH connections
-      this.sshService.disconnectAll();
-    } catch (error) {
-      this.handleError(error, { operation: 'service_cleanup' });
-    }
+    await Promise.all([
+      this.cache?.clear?.(),
+      this.dockerService?.cleanup?.(),
+      this.syslogService?.cleanup?.()
+    ]);
   }
 
-  /**
-   * Enhanced operation execution with metrics, validation, and error handling
-   */
-  protected async executeOperation<T>(
-    operation: ServiceOperationExecutor<T>,
-    options: ServiceOptions = {}
+  protected async executeOperation<T, TInput = void>(
+    executor: ServiceOperationExecutor<T, TInput>,
+    options: ServiceOptions<TInput> = {}
   ): Promise<OperationResult<T>> {
-    const operationId = ++this.operationCount;
-    const startTime = performance.now();
+    const startTime = process.hrtime.bigint();
+    const operationName = options.metrics?.operation || executor.name || 'unknown';
+    this.operationCount++;
 
     try {
-      // Validate input if schema is provided
-      if (options.validation?.schema) {
-        const parseResult = options.validation.schema.safeParse(operation.input);
-        if (!parseResult.success) {
-          throw new ApiError('ValidationError', parseResult.error.message);
-        }
-      }
+      const input = await this.validateInput(
+        options.input as TInput,
+        executor.schema,
+        options.validation
+      );
 
-      // Execute operation with retry logic if configured
-      const data = await this.withRetry(
-        async () => operation.execute(),
+      const result = await this.withRetry(
+        async () => {
+          if (options.cache) {
+            return this.withCache(
+              () => executor(input, options.context),
+              options.cache.ttl || 3600,
+              options.cache.prefix
+            );
+          }
+          return executor(input, options.context);
+        },
         options.retry
       );
 
-      const duration = performance.now() - startTime;
-      const result: OperationResult<T> = {
-        data,
-        metrics: {
-          duration,
-          timestamp: new Date().toISOString(),
-          success: true,
-          operation: operation.name || `anonymous_${operationId}`,
-          tags: options.metrics?.tags,
-        },
+      const duration = Number(process.hrtime.bigint() - startTime) / 1e6;
+      const metrics: OperationMetrics = {
+        duration,
+        timestamp: new Date().toISOString(),
+        success: true,
+        operation: operationName,
+        tags: options.metrics?.tags
       };
 
-      this.emit('operation:success', result);
-      return result;
-    } catch (error) {
-      this.errorCount++;
-      this.lastError = error instanceof Error ? error : new Error(String(error));
-      this.lastError.timestamp = new Date().toISOString();
-
-      const result: OperationResult<T> = {
-        data: null as T,
-        metrics: {
-          duration: performance.now() - startTime,
-          timestamp: new Date().toISOString(),
-          success: false,
-          operation: operation.name || `anonymous_${operationId}`,
-          tags: options.metrics?.tags,
-        },
-        error: this.lastError,
-      };
-
-      this.emit('operation:error', { error: this.lastError, result });
-      throw this.lastError;
-    }
-  }
-
-  /**
-   * Execute an operation with proper context, logging, metrics, and error handling
-   */
-  protected async executeOperationLegacy<T>(
-    operation: () => Promise<T>,
-    options: ServiceOptions = {}
-  ): Promise<ServiceResult<T>> {
-    const executor = new ServiceOperationExecutor(operation, options);
-    executor.on('success', event => this.emit('success', event));
-    executor.on('error', event => this.emit('error', event));
-    return executor.execute();
-  }
-
-  /**
-   * Execute an operation with an SSH connection
-   */
-  protected async withSSH<T>(
-    host: Host,
-    operation: (client: SSHClient) => Promise<T>
-  ): Promise<T> {
-    try {
-      const client = await this.sshService.executeCommand(host.hostname, '');
-      const result = await operation(client as unknown as SSHClient);
-      return result;
-    } catch (error) {
-      this.handleError(error, { 
-        operation: 'ssh_operation',
-        host: host.hostname,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Execute SSH command
-   */
-  protected async executeSSHCommand(host: Host, command: string): Promise<CommandResult> {
-    return this.sshService.executeCommand(host.hostname, command);
-  }
-
-  /**
-   * Cache data with consistent error handling and type safety
-   */
-  protected async withCache<T>(
-    key: string,
-    operation: () => Promise<T>,
-    options: ServiceOptions['cache'] = {}
-  ): Promise<T> {
-    const { ttl = this.config.cacheOptions?.ttl, bypass = false } = options;
-    
-    if (bypass) {
-      return operation();
-    }
-
-    try {
-      const cachedResult = await this.cache.get<T>(key);
-      if (cachedResult !== null) {
-        return cachedResult;
+      if (this.config.metricsEnabled && options.metrics?.enabled !== false) {
+        this.recordOperationMetrics(operationName, duration, true, options.metrics);
       }
-    } catch (error) {
-      this.logger.warn('Cache retrieval failed', { error, key });
-    }
 
-    const result = await operation();
-    
-    try {
-      await this.cache.set(key, result, ttl);
-    } catch (error) {
-      this.logger.warn('Cache storage failed', { error, key });
-    }
+      return { data: result, metrics };
 
-    return result;
+    } catch (error) {
+      const duration = Number(process.hrtime.bigint() - startTime) / 1e6;
+      this.errorCount++;
+      
+      const serviceError = this.normalizeError(error);
+      serviceError.timestamp = new Date().toISOString();
+      this.lastError = serviceError;
+
+      const metrics: OperationMetrics = {
+        duration,
+        timestamp: new Date().toISOString(),
+        success: false,
+        operation: operationName,
+        tags: options.metrics?.tags,
+        error: serviceError
+      };
+
+      if (this.config.metricsEnabled && options.metrics?.enabled !== false) {
+        this.recordOperationMetrics(operationName, duration, false, options.metrics);
+      }
+
+      throw serviceError;
+    }
   }
 
-  /**
-   * Retry operation with exponential backoff
-   */
+  private async validateInput<T>(
+    input: T | undefined,
+    schema?: ValidationSchema<T>,
+    options?: ValidationOptions
+  ): Promise<T> {
+    if (!schema) {
+      if (options?.strict) {
+        throw new Error('No validation schema provided for strict operation');
+      }
+      return input as T;
+    }
+
+    try {
+      const validationSchema = options?.partial
+        ? schema.partial()
+        : schema;
+
+      return await validationSchema.parseAsync(input);
+    } catch (error) {
+      const validationError = new Error('Validation failed');
+      (validationError as ServiceError).code = 'VALIDATION_ERROR';
+      (validationError as ServiceError).details = error instanceof Error ? { message: error.message } : error;
+      throw validationError;
+    }
+  }
+
+  private normalizeError(error: unknown): ServiceError {
+    if (error instanceof Error) {
+      return {
+        ...error,
+        code: (error as ServiceError).code,
+        details: (error as ServiceError).details,
+        timestamp: (error as ServiceError).timestamp,
+        retryable: (error as ServiceError).retryable,
+        attempt: (error as ServiceError).attempt
+      };
+    }
+
+    const serviceError = new Error(String(error));
+    (serviceError as ServiceError).code = 'UNKNOWN_ERROR';
+    (serviceError as ServiceError).details = { originalError: error };
+    return serviceError as ServiceError;
+  }
+
+  protected async withCache<T>(
+    executor: ServiceOperationExecutor<T>,
+    ttlSeconds: number,
+    prefix = ''
+  ): Promise<T> {
+    if (!this.cache) {
+      return executor();
+    }
+
+    const cacheKey = `${prefix}${this.getCacheKey(executor)}`;
+  
+    try {
+      const cachedValue = await this.cache.get<T>(cacheKey);
+      if (cachedValue !== null) {
+        return cachedValue;
+      }
+
+      const result = await executor();
+      await this.cache.set(cacheKey, result, ttlSeconds);
+      return result;
+    } catch (error) {
+      const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
+      serviceError.code = 'CACHE_ERROR';
+      throw serviceError;
+    }
+  }
+
+  private getCacheKey(executor: ServiceOperationExecutor<unknown>): string {
+    return `${executor.name || executor.toString()}_${JSON.stringify(this.context || {})}`;
+  }
+
   protected async withRetry<T>(
-    operation: () => Promise<T>,
+    executor: () => Promise<T>,
     options?: ServiceOptions['retry']
   ): Promise<T> {
-    const retryConfig = {
-      ...this.config.retryOptions,
-      ...options,
+    const retryOpts = {
+      maxAttempts: options?.maxAttempts || this.config.retryOptions.maxAttempts,
+      initialDelay: options?.initialDelay || this.config.retryOptions.initialDelay,
+      maxDelay: options?.maxDelay || this.config.retryOptions.maxDelay,
+      factor: this.config.retryOptions.factor,
+      timeout: this.config.retryOptions.timeout,
+      retryableErrors: this.config.retryOptions.retryableErrors
     };
 
-    let lastError: Error | undefined;
-    let attempt = 0;
-    let delay = retryConfig.initialDelay;
+    let attempt = 1;
+    let delay = retryOpts.initialDelay;
 
-    while (attempt < retryConfig.maxAttempts) {
+    while (attempt <= retryOpts.maxAttempts) {
       try {
-        return await operation();
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        attempt++;
+        const timeoutPromise = retryOpts.timeout
+          ? new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Operation timed out')), retryOpts.timeout)
+            )
+          : null;
 
-        if (attempt === retryConfig.maxAttempts) {
-          break;
+        const executorPromise = executor();
+        const result = await (timeoutPromise
+          ? Promise.race([executorPromise, timeoutPromise])
+          : executorPromise);
+
+        return result;
+      } catch (error) {
+        const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
+        serviceError.attempt = attempt;
+        
+        const isRetryable = this.isRetryableError(serviceError, retryOpts.retryableErrors);
+        serviceError.retryable = isRetryable;
+
+        if (!isRetryable || attempt === retryOpts.maxAttempts) {
+          throw serviceError;
         }
 
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay = Math.min(delay * retryConfig.factor, retryConfig.maxDelay);
+        this.logger.warn(`Operation failed (attempt ${attempt}/${retryOpts.maxAttempts})`, {
+          error: serviceError.message,
+          code: serviceError.code,
+          attempt,
+          nextDelay: delay
+        });
+
+        await this.delay(delay);
+        delay = Math.min(delay * retryOpts.factor, retryOpts.maxDelay);
+        attempt++;
       }
     }
 
-    throw lastError || new Error('Operation failed after max retry attempts');
+    throw new Error('Max retry attempts reached');
   }
 
-  /**
-   * Get service health metrics
-   */
-  protected getHealthMetrics(): Record<string, unknown> {
-    return {
-      uptime: Date.now() - this.startTime,
-      operationCount: this.operationCount,
-      errorCount: this.errorCount,
-      errorRate: this.operationCount ? (this.errorCount / this.operationCount) : 0,
-      lastError: this.lastError ? {
-        message: this.lastError.message,
-        timestamp: this.lastError.timestamp,
-      } : null,
-    };
-  }
-
-  /**
-   * Execute a database transaction
-   */
-  protected async withTransaction<T>(
-    operation: (client: Pool) => Promise<T>
-  ): Promise<T> {
-    try {
-      const result = await operation(this.db as unknown as Pool);
-      return result;
-    } catch (error) {
-      this.handleError(error, { operation: 'database_transaction' });
-      throw error;
+  private isRetryableError(error: ServiceError, retryableErrors?: Array<string | RegExp>): boolean {
+    if (!retryableErrors?.length) {
+      return true; // Default to retrying all errors if no patterns specified
     }
+
+    return retryableErrors.some(pattern => {
+      if (pattern instanceof RegExp) {
+        return pattern.test(error.message) || (error.code && pattern.test(error.code));
+      }
+      return error.code === pattern;
+    });
   }
 
-  /**
-   * Execute a database query
-   */
-  protected async query<T = unknown>(
-    text: string,
-    params?: unknown[]
-  ): Promise<QueryResult<T>> {
-    return this.db.query<T>(text, params);
-  }
-
-  /**
-   * Docker operations
-   */
-  protected async withDocker<T>(operation: (docker: any) => Promise<T>): Promise<T> {
-    try {
-      return await operation(this.dockerService);
-    } catch (error) {
-      this.handleError(error, { operation: 'docker_operation' });
-      throw error;
-    }
-  }
-
-  /**
-   * Syslog operations
-   */
-  protected async withSyslog<T>(operation: (syslog: SyslogService) => Promise<T>): Promise<T> {
-    try {
-      return await operation(this.syslogService);
-    } catch (error) {
-      this.handleError(error, { operation: 'syslog_operation' });
-      throw error;
-    }
-  }
-
-  /**
-   * Handle and log errors consistently
-   */
   protected handleError(error: unknown, context: Record<string, unknown> = {}): never {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
+    
     const metadata: LogMetadata = {
       ...context,
-      error: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined,
+      error: serviceError.message,
+      code: serviceError.code,
+      details: serviceError.details,
+      stack: serviceError.stack,
+      attempt: serviceError.attempt,
+      retryable: serviceError.retryable
     };
 
     this.logger.error('Operation failed', metadata);
-    errorAggregator.trackError(
-      error instanceof Error ? error : new Error(errorMessage),
-      metadata
-    );
+    errorAggregator.trackError(serviceError, metadata);
 
-    throw error;
-  }
-
-  /**
-   * Record metrics with consistent error handling
-   */
-  protected recordMetric(
-    metricType: string,
-    value: number
-  ): void {
-    try {
-      if (this.context?.metadata?.hostId) {
-        recordHostMetric(this.context.metadata.hostId as string, metricType, value);
-      }
-    } catch (error) {
-      this.logger.error('Failed to record metric', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        metricType,
-        value,
-      });
-    }
-  }
-
-  /**
-   * Authentication helper methods
-   */
-  protected async withAuth<T>(operation: (user: import('../routes/auth/dto/auth.dto').AccessTokenPayloadDto | import('../routes/auth/dto/auth.dto').RefreshTokenPayloadDto) => Promise<T>): Promise<T> {
-    const user = this.getCurrentUser();
-    if (!user) {
-      throw new ApiError('Unauthorized', undefined, 401);
-    }
-    return operation(user);
-  }
-
-  protected getCurrentUser(): import('../routes/auth/dto/auth.dto').AccessTokenPayloadDto | import('../routes/auth/dto/auth.dto').RefreshTokenPayloadDto | undefined {
-    return this.context?.user;
-  }
-
-  protected checkRole(requiredRole: string): void {
-    const user = this.getCurrentUser();
-    if (!user || user.role !== requiredRole) {
-      throw new ApiError('Insufficient permissions', undefined, 403);
-    }
-  }
-
-  protected checkOwnership(resourceUserId: string): void {
-    const user = this.getCurrentUser();
-    if (!user || user.id !== resourceUserId) {
-      throw new ApiError('Access denied', undefined, 403);
-    }
-  }
-
-  protected clearContext(): void {
-    this.context = undefined;
-    this.contextProvider.clearContext();
+    throw serviceError;
   }
 
   protected getMetrics(): ServiceMetrics {
-    return {
+    const uptime = Date.now() - this.startTime;
+  
+    const baseMetrics = {
       operationCount: this.operationCount,
       errorCount: this.errorCount,
       lastError: this.lastError,
-      uptime: Date.now() - this.startTime,
+      uptime
+    };
+
+    if (this.config.metricsEnabled) {
+      metrics.gauge('service_uptime', uptime);
+      metrics.gauge('service_operation_count', this.operationCount);
+      metrics.gauge('service_error_count', this.errorCount);
+    }
+
+    return baseMetrics;
+  }
+
+  protected getHealthMetrics(): Record<string, unknown> {
+    const metrics = this.getMetrics();
+    return {
+      ...metrics,
+      healthy: this.errorCount === 0 || (Date.now() - (this.lastError?.timestamp ? new Date(this.lastError.timestamp).getTime() : 0)) > 300000, // 5 minutes
+      status: this.errorCount === 0 ? 'healthy' : 'degraded'
     };
   }
-}
 
-interface ServiceMetrics {
-  operationCount: number;
-  errorCount: number;
-  lastError?: Error & { timestamp?: string };
-  uptime: number;
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private recordOperationMetrics(
+    operation: string,
+    duration: number,
+    success: boolean,
+    options?: MetricsOptions
+  ): void {
+    const labels: OperationLabels = {
+      operation,
+      success: String(success),
+      service: this.constructor.name
+    };
+
+    // Record operation duration
+    metrics.histogram('operation_duration', duration, labels);
+
+    // Record operation result
+    metrics.increment('operation_total', 1, labels);
+
+    // Record custom metrics if provided
+    if (options?.customMetrics) {
+      Object.entries(options.customMetrics).forEach(([metric, value]) => {
+        const metricLabels: ServiceMetricLabels = {
+          service: this.constructor.name,
+          metric_type: metric
+        };
+        metrics.gauge(metric, value, metricLabels);
+      });
+    }
+
+    // Record service metrics
+    const serviceLabels = { service: this.constructor.name };
+    metrics.gauge('operation_count', this.operationCount, serviceLabels);
+    metrics.gauge('error_count', this.errorCount, serviceLabels);
+  }
 }

@@ -1,8 +1,8 @@
 import { DockerService } from '../../../src/server/services/docker.service';
 import { getAgentService } from '../../../src/server/services/agent.service';
-import { DockerError, DockerContainerCreateOptions } from '../../../src/server/services/docker.types';
+import { DockerContainerCreateOptions } from '../../../src/server/services/docker.types';
+import { ApiError } from '../../../src/types/error';
 
-// Mock the agent service
 jest.mock('../../../src/server/services/agent.service');
 
 describe('DockerService', () => {
@@ -10,19 +10,15 @@ describe('DockerService', () => {
   let mockAgentService: jest.Mocked<ReturnType<typeof getAgentService>>;
 
   beforeEach(() => {
-    // Clear all mocks before each test
-    jest.clearAllMocks();
-
-    // Create a new instance of DockerService
-    dockerService = new DockerService();
-
-    // Create mock agent service
     mockAgentService = {
       executeCommand: jest.fn(),
     } as any;
-
-    // Mock getAgentService to return our mock
     (getAgentService as jest.Mock).mockReturnValue(mockAgentService);
+    dockerService = new DockerService();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('getMetrics', () => {
@@ -39,7 +35,6 @@ describe('DockerService', () => {
     };
 
     it('should return Docker metrics successfully', async () => {
-      // Mock the agent service response
       mockAgentService.executeCommand.mockResolvedValue({
         stdout: JSON.stringify(mockDockerInfo),
         stderr: '',
@@ -69,7 +64,7 @@ describe('DockerService', () => {
       const errorMessage = 'Failed to get Docker info';
       mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-      await expect(dockerService.getMetrics(mockHostId)).rejects.toThrow(DockerError);
+      await expect(dockerService.getMetrics(mockHostId)).rejects.toThrow(ApiError);
     });
   });
 
@@ -122,7 +117,7 @@ describe('DockerService', () => {
       const errorMessage = 'Failed to list containers';
       mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-      await expect(dockerService.listContainers(mockHostId)).rejects.toThrow(DockerError);
+      await expect(dockerService.listContainers(mockHostId)).rejects.toThrow(ApiError);
     });
   });
 
@@ -176,7 +171,7 @@ describe('DockerService', () => {
       const errorMessage = 'Failed to create container';
       mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-      await expect(dockerService.createContainer(mockHostId, mockCreateOptions)).rejects.toThrow(DockerError);
+      await expect(dockerService.createContainer(mockHostId, mockCreateOptions)).rejects.toThrow(ApiError);
     });
   });
 
@@ -205,7 +200,7 @@ describe('DockerService', () => {
         const errorMessage = 'Failed to start container';
         mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-        await expect(dockerService.startContainer(mockHostId, mockContainerId)).rejects.toThrow(DockerError);
+        await expect(dockerService.startContainer(mockHostId, mockContainerId)).rejects.toThrow(ApiError);
       });
     });
 
@@ -230,7 +225,7 @@ describe('DockerService', () => {
         const errorMessage = 'Failed to stop container';
         mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-        await expect(dockerService.stopContainer(mockHostId, mockContainerId)).rejects.toThrow(DockerError);
+        await expect(dockerService.stopContainer(mockHostId, mockContainerId)).rejects.toThrow(ApiError);
       });
     });
 
@@ -271,7 +266,7 @@ describe('DockerService', () => {
         const errorMessage = 'Failed to remove container';
         mockAgentService.executeCommand.mockRejectedValue(new Error(errorMessage));
 
-        await expect(dockerService.removeContainer(mockHostId, mockContainerId)).rejects.toThrow(DockerError);
+        await expect(dockerService.removeContainer(mockHostId, mockContainerId)).rejects.toThrow(ApiError);
       });
     });
   });

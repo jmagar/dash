@@ -4,8 +4,8 @@ export interface DockerServiceMetrics {
   containersPaused: number;
   containersStopped: number;
   images: number;
-  memoryLimit: number;
-  cpuTotal: number;
+  memoryTotal: number;
+  cpuCount: number;
   version: string;
 }
 
@@ -23,16 +23,6 @@ export interface DockerContainerMetrics {
     Type: string;
   }>;
   networks: string[];
-  mounts: Array<{
-    Type: string;
-    Name?: string;
-    Source: string;
-    Destination: string;
-    Driver?: string;
-    Mode: string;
-    RW: boolean;
-  }>;
-  labels: Record<string, string>;
 }
 
 export interface DockerVolumeMetrics {
@@ -97,19 +87,27 @@ export interface DockerConfig {
 }
 
 export interface DockerContainerCreateOptions {
-  Image: string;
-  Cmd?: string[];
-  Env?: string[];
-  ExposedPorts?: Record<string, {}>;
-  HostConfig?: {
-    Binds?: string[];
-    PortBindings?: Record<string, Array<{ HostPort: string }>>;
-    RestartPolicy?: {
-      Name: string;
-      MaximumRetryCount?: number;
-    };
-    NetworkMode?: string;
-  };
-  Labels?: Record<string, string>;
   name?: string;
+  image: string;
+  command?: readonly string[];
+  ports?: Readonly<Record<string, string>>;
+  env?: Readonly<Record<string, string>>;
+}
+
+export interface DockerInfo {
+  Containers: number;
+  ContainersRunning: number;
+  ContainersPaused: number;
+  ContainersStopped: number;
+  Images: number;
+  MemTotal: number;
+  NCPU: number;
+  ServerVersion: string;
+}
+
+export interface DockerCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  data?: Record<string, unknown>;
 }

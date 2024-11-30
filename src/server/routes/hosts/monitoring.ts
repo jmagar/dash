@@ -187,21 +187,21 @@ export class HostMonitor {
     });
   }
 
-  private async updateHostStatus(host: Host, status: 'running' | 'error'): Promise<void> {
+  private async updateHostStatus(host: Host, status: 'running' | 'error' | 'installing'): Promise<void> {
     try {
       // Update host data in cache
       const hostData = await cache.getHost(host.id);
       if (hostData) {
         const updatedHost = {
           ...JSON.parse(hostData),
-          status,
+          status: status === 'running' ? 'online' : status,
           lastSeen: new Date().toISOString(),
         };
         await cache.setHost(host.id, JSON.stringify(updatedHost));
       }
 
       // Record metric
-      recordHostMetric(host.id, 'status', status === 'running' ? 1 : 0);
+      recordHostMetric(host.id, 'status', status === 'running' ? 1 : status === 'installing' ? 0.5 : 0);
 
       logger.info(`Updated host status: ${status}`, {
         hostId: host.id,

@@ -1,70 +1,39 @@
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: 'admin' | 'user';
-  is_active: boolean;
-  password_hash?: string;
-  createdAt: Date;
-  updatedAt: Date;
+export interface BaseTokenPayloadDto {
+    userId: string;
+    username: string;
+    role: string;
+    is_active: boolean;
+    permissions: string[];
 }
 
-export interface AuthenticatedUser extends User {
-  token: string;
-  refreshToken: string;
-  expiresAt: string;
+export interface AccessTokenPayloadDto extends BaseTokenPayloadDto {
+    type: 'access';
 }
 
-export interface AccessTokenPayloadDto| RefreshTokenPayloadDto {
-  id: string;
-  userId: string;
-  username: string;
-  role: 'admin' | 'user';
-  is_active: boolean;
-  type?: 'access' | 'refresh';
-  iat?: number;
-  exp?: number;
+export interface RefreshTokenPayloadDto extends BaseTokenPayloadDto {
+    type: 'refresh';
+    tokenId: string;
 }
 
-export interface LoginRequest {
-  username: string;
-  password: string;
+export type TokenPayloadDto = AccessTokenPayloadDto | RefreshTokenPayloadDto;
+
+// Re-export as TokenPayload for backward compatibility
+export type TokenPayload = TokenPayloadDto;
+
+export type TokenType = 'access' | 'refresh';
+
+export interface TokenMetadata {
+    type: TokenType;
+    expiresIn: number;
+    issuer: string;
+    audience: string;
 }
 
-export interface LoginResponse {
-  success: boolean;
-  error?: string;
-  user: AuthenticatedUser | null;
-}
-
-export interface ValidateResponse {
-  success: boolean;
-  error?: string;
-  user: AuthenticatedUser | null;
-  valid: boolean;
-}
-
-export interface LogoutResponse {
-  success: boolean;
-  error?: string;
-}
-
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-export interface RefreshTokenResponse {
-  success: boolean;
-  error?: string;
-  token: string;
-  refreshToken: string;
-}
-
-export interface SessionData {
-  userId: string;
-  username: string;
-  role: 'admin' | 'user';
-  is_active: boolean;
-  refreshToken: string;
-  expiresAt: string;
+export interface TokenPair {
+    accessToken: string;
+    refreshToken: string;
+    metadata: {
+        access: TokenMetadata;
+        refresh: TokenMetadata;
+    };
 }

@@ -1,34 +1,32 @@
 import SMB2 from '@marsaud/smb2';
-import { FileSystemProvider, FileSystemCredentials, FileSystemStats, FileSystemType } from './types';
+import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
+import logger from '../../../logger';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 export class SMBProvider implements FileSystemProvider {
-  readonly type: FileSystemType = 'smb';
+  readonly type = 'smb' as FileSystemType;
   private client: SMB2 | null = null;
-  private basePath: string = '';
 
   async connect(credentials: FileSystemCredentials): Promise<void> {
-    if (credentials.type !== 'smb') {
-      throw new Error('Invalid credentials type for SMB provider');
-    }
-
-    if (!credentials.host || !credentials.username || !credentials.share) {
+    if (!credentials.host || !credentials.username) {
       throw new Error('Missing required SMB credentials');
     }
 
-    this.client = new SMB2({
-      share: `\\\\${credentials.host}\\${credentials.share}`,
-      domain: credentials.domain || '',
-      username: credentials.username,
-      password: credentials.password || '',
-      port: credentials.port || 445,
-      autoCloseTimeout: 0, // Don't auto close
-    });
-
-    // Test connection by trying to read the root directory
     try {
+      this.client = new SMB2({
+        share: `\\\\${credentials.host}\\${credentials.share || ''}`,
+        domain: credentials.domain || '',
+        username: credentials.username,
+        password: credentials.password,
+      });
+
+      // Test connection
       await this.client.readdir('/');
     } catch (error) {
+      logger.error('SMB connection error:', error);
       this.client = null;
       throw error;
     }
@@ -36,82 +34,157 @@ export class SMBProvider implements FileSystemProvider {
 
   async disconnect(): Promise<void> {
     if (this.client) {
-      await this.client.close();
+      await this.client.disconnect();
       this.client = null;
     }
   }
 
-  private ensureConnected(): void {
-    if (!this.client) {
-      throw new Error('SMB connection not established');
-    }
-  }
-
   async listFiles(path: string): Promise<FileItem[]> {
-    if (!this.client) {
-      throw new Error('SMB client not connected');
-    }
+    if (!this.client) throw new Error('Not connected');
 
-    const files = await this.client.readdir(path);
-    return Promise.all(files.map(async file => {
-      const fullPath = path ? `${path}/${file}` : file;
-      const stats = await this.client!.stat(fullPath);
-      return {
-        name: file,
-        path: fullPath,
-        type: stats.isDirectory() ? 'directory' : 'file',
-        size: stats.size,
-        modifiedTime: stats.mtime,
-        permissions: '644' // SMB doesn't provide Unix permissions
-      };
-    }));
+    try {
+      const files = await this.client.readdir(path);
+      const fileStats = await Promise.all(
+        files.map(async (name) => {
+          const filePath = `${path}/${name}`.replace(/\/+/g, '/');
+          const stats = await this.client!.stat(filePath);
+          return {
+            name,
+            path: filePath,
+            size: stats.size,
+            modifiedTime: new Date(stats.mtime),
+            isDirectory: stats.isDirectory(),
+            type: stats.isDirectory() ? 'directory' : 'file',
+            metadata: {
+              mode: stats.mode,
+              uid: stats.uid,
+              gid: stats.gid
+            }
+          };
+        })
+      );
+      return fileStats;
+    } catch (error) {
+      logger.error('SMB list files error:', error);
+      throw error;
+    }
   }
 
   async readFile(path: string): Promise<Buffer> {
-    this.ensureConnected();
-    return this.client!.readFile(this.normalizePath(path));
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      const tempPath = join(tmpdir(), Math.random().toString(36).substring(7));
+      await this.client.readFile(path, { encoding: null });
+      const content = await fs.readFile(tempPath);
+      await fs.unlink(tempPath);
+      return content;
+    } catch (error) {
+      logger.error('SMB read file error:', error);
+      throw error;
+    }
   }
 
   async writeFile(path: string, content: Buffer): Promise<void> {
-    this.ensureConnected();
-    await this.client!.writeFile(this.normalizePath(path), content);
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      const tempPath = join(tmpdir(), Math.random().toString(36).substring(7));
+      await fs.writeFile(tempPath, content);
+      await this.client.writeFile(path, tempPath);
+      await fs.unlink(tempPath);
+    } catch (error) {
+      logger.error('SMB write file error:', error);
+      throw error;
+    }
   }
 
   async delete(path: string): Promise<void> {
-    this.ensureConnected();
-    const stats = await this.stat(path);
-    const normalizedPath = this.normalizePath(path);
+    if (!this.client) throw new Error('Not connected');
 
-    if (stats.isDirectory) {
-      await this.client!.rmdir(normalizedPath, { recursive: true });
-    } else {
-      await this.client!.unlink(normalizedPath);
+    try {
+      await this.client.unlink(path);
+    } catch (error) {
+      logger.error('SMB delete error:', error);
+      throw error;
     }
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
-    this.ensureConnected();
-    await this.client!.rename(
-      this.normalizePath(oldPath),
-      this.normalizePath(newPath)
-    );
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      await this.client.rename(oldPath, newPath);
+    } catch (error) {
+      logger.error('SMB rename error:', error);
+      throw error;
+    }
   }
 
   async mkdir(path: string): Promise<void> {
-    this.ensureConnected();
-    await this.client!.mkdir(this.normalizePath(path));
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      await this.client.mkdir(path);
+    } catch (error) {
+      logger.error('SMB mkdir error:', error);
+      throw error;
+    }
   }
 
   async stat(path: string): Promise<FileSystemStats> {
-    this.ensureConnected();
-    const stats = await this.client!.stat(this.normalizePath(path));
-    return {
-      size: stats.size,
-      mtime: stats.mtime.getTime() / 1000,
-      isDirectory: stats.isDirectory(),
-      isFile: stats.isFile(),
-      permissions: (stats.mode & 0o777).toString(8),
-    };
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      const stat = await this.client.stat(path);
+      const modTime = new Date(stat.lastModified).getTime();
+
+      return {
+        size: stat.size,
+        mtime: Math.floor(modTime / 1000),
+        mode: 0o644, // SMB doesn't provide Unix permissions
+        modTime: modTime,
+        owner: '', // SMB doesn't provide ownership info in a Unix-compatible way
+        group: '', // SMB doesn't provide group info in a Unix-compatible way
+        isDirectory: stat.isDirectory(),
+        isFile: !stat.isDirectory(),
+        permissions: '644' // Default permissions since SMB doesn't provide Unix-style permissions
+      };
+    } catch (error) {
+      logger.error('SMB stat error:', error);
+      throw error;
+    }
+  }
+
+  async copyFile(sourcePath: string, targetPath: string): Promise<void> {
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      const content = await this.readFile(sourcePath);
+      await this.writeFile(targetPath, content);
+    } catch (error) {
+      logger.error('SMB copy file error:', error);
+      throw error;
+    }
+  }
+
+  async moveFile(sourcePath: string, targetPath: string): Promise<void> {
+    await this.rename(sourcePath, targetPath);
+  }
+
+  async rmdir(path: string): Promise<void> {
+    if (!this.client) throw new Error('Not connected');
+
+    try {
+      await this.client.rmdir(path);
+    } catch (error) {
+      logger.error('SMB rmdir error:', error);
+      throw error;
+    }
+  }
+
+  async unlink(path: string): Promise<void> {
+    return this.delete(path);
   }
 
   async exists(path: string): Promise<boolean> {
@@ -125,15 +198,10 @@ export class SMBProvider implements FileSystemProvider {
 
   async test(): Promise<boolean> {
     try {
-      await this.listFiles('/');
+      await this.stat('/');
       return true;
     } catch {
       return false;
     }
-  }
-
-  private normalizePath(path: string): string {
-    // Convert Unix-style paths to Windows-style for SMB
-    return path.replace(/\//g, '\\');
   }
 }

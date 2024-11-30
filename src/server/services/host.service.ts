@@ -13,8 +13,8 @@ class HostService {
         hostname: `host-${hostId}`,
         port: 22,
         username: 'admin',
-        status: 'online',
-        agentStatus: 'installed',
+        status: 'installing', // Can be: 'online' | 'offline' | 'error' | 'installing'
+        agentStatus: 'installed', // Can be: 'installed' | 'error' | null
         agentVersion: '1.0.0',
         environment: 'production',
         tags: ['production'],

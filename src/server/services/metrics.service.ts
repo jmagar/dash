@@ -119,11 +119,42 @@ class MetricsService extends EventEmitter {
         ]
       );
 
+      await this.handleHostStatus(hostId, metrics);
+
       this.emit('metrics', { hostId, metrics });
     } catch (error) {
       logger.error('Failed to store metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
+      });
+    }
+  }
+
+  private async handleHostStatus(hostId: string, metrics: SystemMetrics): Promise<void> {
+    try {
+      const host = await db.query('SELECT status FROM hosts WHERE id = $1', [hostId]);
+      if (!host.rows[0]) return;
+
+      const currentStatus = host.rows[0].status;
+      let newStatus = currentStatus;
+
+      // Don't update status if host is in installing state
+      if (currentStatus !== 'installing') {
+        if (metrics.cpu.total > 95 || metrics.memory.usage > 95) {
+          newStatus = 'error';
+        } else {
+          newStatus = 'online';
+        }
+
+        if (currentStatus !== newStatus) {
+          await db.query('UPDATE hosts SET status = $1 WHERE id = $2', [newStatus, hostId]);
+          this.emit('hostStatusChanged', { hostId, oldStatus: currentStatus, newStatus });
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to handle host status:', {
+        hostId,
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }

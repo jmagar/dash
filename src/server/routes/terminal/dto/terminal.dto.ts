@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, ApiResponse, ApiExample } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
     IsString,
@@ -10,32 +10,57 @@ import {
     Min,
     Max,
     IsInt,
-    IsDateString,
     IsEnum,
     IsBoolean,
     Matches,
     MaxLength
 } from 'class-validator';
-import { Command, CommandRequest, CommandResult } from '../../../../types/api-shared';
-import { TerminalSize, TerminalOptions } from '../../../../types/terminal';
+import type { TerminalSize, TerminalOptions } from '../../../../types/terminal';
 import { BaseResponseDto, PaginatedResponseDto } from './base.dto';
-import { ConnectionStatus, CommandStatus, TerminalEventType, TerminalEventPayload } from './enums';
+import { ConnectionStatus, CommandStatus, TerminalEventType, type TerminalEventPayload } from './enums';
 
 const ID_PATTERN = /^[a-zA-Z0-9-]+$/;
 const MAX_ID_LENGTH = 36;
+
+// Command-related interfaces
+export interface Command {
+    command: string;
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+}
+
+export interface CommandRequest extends Command {
+    workingDirectory?: string;
+    environment?: Record<string, string>;
+    timeout?: number;
+    shell?: boolean;
+    sudo?: boolean;
+}
+
+export interface CommandResult {
+    stdout?: string;
+    stderr?: string;
+    exitCode: number;
+    error?: string;
+    duration: number;
+    status: CommandStatus;
+    startedAt?: Date;
+    completedAt?: Date;
+}
 
 export class TerminalSizeDto implements TerminalSize {
     @ApiProperty({ description: 'Number of columns in the terminal', minimum: 1, example: 80 })
     @IsInt()
     @Min(1)
     @Max(500)
-    cols: number;
+    cols!: number;
 
     @ApiProperty({ description: 'Number of rows in the terminal', minimum: 1, example: 24 })
     @IsInt()
     @Min(1)
     @Max(500)
-    rows: number;
+    rows!: number;
 }
 
 export class TerminalOptionsDto implements Partial<TerminalOptions> {
@@ -43,13 +68,13 @@ export class TerminalOptionsDto implements Partial<TerminalOptions> {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Session ID for the terminal', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    sessionId: string;
+    sessionId!: string;
 
     @ApiPropertyOptional({ description: 'Command to execute', example: 'ls -la' })
     @IsOptional()
@@ -78,7 +103,7 @@ export class TerminalOptionsDto implements Partial<TerminalOptions> {
     @ApiProperty({ description: 'Terminal size configuration' })
     @ValidateNested()
     @Type(() => TerminalSizeDto)
-    size: TerminalSizeDto;
+    size!: TerminalSizeDto;
 
     @ApiPropertyOptional({ description: 'Additional metadata' })
     @IsOptional()
@@ -90,7 +115,7 @@ export class ExecuteCommandDto implements CommandRequest {
     @ApiProperty({ description: 'Command to execute', example: 'ls -la' })
     @IsString()
     @MaxLength(1000)
-    command: string;
+    command!: string;
 
     @ApiPropertyOptional({ description: 'Working directory for command execution', example: '/home/user' })
     @IsOptional()
@@ -134,7 +159,7 @@ export class CommandResultDto implements CommandResult {
 
     @ApiProperty({ description: 'Command exit code', example: 0 })
     @IsNumber()
-    exitCode: number;
+    exitCode!: number;
 
     @ApiPropertyOptional({ description: 'Error message if command failed' })
     @IsOptional()
@@ -143,20 +168,20 @@ export class CommandResultDto implements CommandResult {
 
     @ApiProperty({ description: 'Command execution duration in milliseconds', example: 100 })
     @IsNumber()
-    duration: number;
+    duration!: number;
 
     @ApiProperty({ description: 'Command execution status', enum: CommandStatus })
     @IsEnum(CommandStatus)
-    status: CommandStatus;
+    status!: CommandStatus;
 
     @ApiPropertyOptional({ description: 'Command start timestamp' })
     @IsOptional()
-    @IsDateString()
+    @Type(() => Date)
     startedAt?: Date;
 
     @ApiPropertyOptional({ description: 'Command completion timestamp' })
     @IsOptional()
-    @IsDateString()
+    @Type(() => Date)
     completedAt?: Date;
 }
 
@@ -165,7 +190,7 @@ export class CreateTerminalSessionDto {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiPropertyOptional({ description: 'Initial command to execute', example: 'bash' })
     @IsOptional()
@@ -187,7 +212,7 @@ export class CreateTerminalSessionDto {
     @ApiProperty({ description: 'Terminal size configuration' })
     @ValidateNested()
     @Type(() => TerminalSizeDto)
-    size: TerminalSizeDto;
+    size!: TerminalSizeDto;
 
     @ApiPropertyOptional({ description: 'Additional metadata' })
     @IsOptional()
@@ -195,7 +220,7 @@ export class CreateTerminalSessionDto {
     metadata?: Record<string, unknown>;
 }
 
-export class TerminalSessionResponseDto extends BaseResponseDto<{
+export interface TerminalSessionData {
     id: string;
     hostId: string;
     pid: number;
@@ -203,46 +228,48 @@ export class TerminalSessionResponseDto extends BaseResponseDto<{
     status: ConnectionStatus;
     createdAt: Date;
     updatedAt: Date;
-}> {
+}
+
+export class TerminalSessionResponseDto extends BaseResponseDto<TerminalSessionData> {
     @ApiProperty({ description: 'Session ID', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    id: string;
+    id!: string;
 
     @ApiProperty({ description: 'Host ID', example: 'host-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Process ID', example: 1234 })
     @IsNumber()
-    pid: number;
+    pid!: number;
 
     @ApiProperty({ description: 'Terminal title', example: 'bash' })
     @IsString()
-    title: string;
+    title!: string;
 
     @ApiProperty({ description: 'Session status', enum: ConnectionStatus })
     @IsEnum(ConnectionStatus)
-    status: ConnectionStatus;
+    status!: ConnectionStatus;
 
     @ApiProperty({ description: 'Session creation timestamp' })
-    @IsDateString()
-    createdAt: Date;
+    @Type(() => Date)
+    createdAt!: Date;
 
     @ApiProperty({ description: 'Session last update timestamp' })
-    @IsDateString()
-    updatedAt: Date;
+    @Type(() => Date)
+    updatedAt!: Date;
 }
 
 export class TerminalSessionListResponseDto extends PaginatedResponseDto<TerminalSessionResponseDto> {
-    @ApiProperty({ description: 'List of terminal sessions', type: [TerminalSessionResponseDto] })
+    @ApiProperty({ description: 'List of terminal sessions', type: () => [TerminalSessionResponseDto] })
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => TerminalSessionResponseDto)
-    data: TerminalSessionResponseDto[];
+    data!: TerminalSessionResponseDto[];
 }
 
 export class TerminalDataDto {
@@ -250,17 +277,17 @@ export class TerminalDataDto {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Session ID', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    sessionId: string;
+    sessionId!: string;
 
     @ApiProperty({ description: 'Terminal data content' })
     @IsString()
-    data: string;
+    data!: string;
 }
 
 export class TerminalExitDto {
@@ -268,17 +295,17 @@ export class TerminalExitDto {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Session ID', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    sessionId: string;
+    sessionId!: string;
 
     @ApiProperty({ description: 'Exit code', example: 0 })
     @IsNumber()
-    code: number;
+    code!: number;
 }
 
 export class TerminalResizeDto extends TerminalSizeDto {
@@ -286,35 +313,74 @@ export class TerminalResizeDto extends TerminalSizeDto {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Session ID', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    sessionId: string;
+    sessionId!: string;
+}
+
+// DTOs for each type of terminal event payload
+export class TerminalDataEventPayload {
+    @ApiProperty({ description: 'Terminal data content' })
+    @IsString()
+    data!: string;
+}
+
+export class TerminalResizeEventPayload {
+    @ApiProperty({ description: 'Number of columns' })
+    @IsNumber()
+    cols!: number;
+
+    @ApiProperty({ description: 'Number of rows' })
+    @IsNumber()
+    rows!: number;
+}
+
+export class TerminalExitEventPayload {
+    @ApiProperty({ description: 'Exit code' })
+    @IsNumber()
+    code!: number;
+}
+
+export class TerminalErrorEventPayload {
+    @ApiProperty({ description: 'Error message' })
+    @IsString()
+    message!: string;
 }
 
 export class TerminalSocketEventDto {
     @ApiProperty({ description: 'Event type', enum: TerminalEventType })
     @IsEnum(TerminalEventType)
-    event: TerminalEventType;
+    event!: TerminalEventType;
 
     @ApiProperty({ description: 'Event payload' })
-    @IsObject()
     @ValidateNested()
-    payload: TerminalEventPayload;
+    @Type(() => Object, {
+        discriminator: {
+            property: 'event',
+            subTypes: [
+                { value: TerminalDataEventPayload, name: TerminalEventType.Data },
+                { value: TerminalResizeEventPayload, name: TerminalEventType.Resize },
+                { value: TerminalExitEventPayload, name: TerminalEventType.Exit },
+                { value: TerminalErrorEventPayload, name: TerminalEventType.Error }
+            ]
+        }
+    })
+    payload!: TerminalEventPayload;
 }
 
 export class TerminalSocketErrorDto {
     @ApiProperty({ description: 'Error code', example: 'CONN_ERROR' })
     @IsString()
     @MaxLength(50)
-    code: string;
+    code!: string;
 
     @ApiProperty({ description: 'Error message' })
     @IsString()
-    message: string;
+    message!: string;
 
     @ApiPropertyOptional({ description: 'Additional error details' })
     @IsOptional()
@@ -325,11 +391,11 @@ export class TerminalSocketErrorDto {
 export class TerminalStateDto {
     @ApiProperty({ description: 'Connection status', enum: ConnectionStatus })
     @IsEnum(ConnectionStatus)
-    status: ConnectionStatus;
+    status!: ConnectionStatus;
 
     @ApiProperty({ description: 'Loading state' })
     @IsBoolean()
-    loading: boolean;
+    loading!: boolean;
 
     @ApiPropertyOptional({ description: 'Error message if status is error' })
     @IsOptional()
@@ -347,17 +413,17 @@ export class TerminalConnectionDto {
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    hostId: string;
+    hostId!: string;
 
     @ApiProperty({ description: 'Session ID', example: 'session-123' })
     @IsString()
     @Matches(ID_PATTERN)
     @MaxLength(MAX_ID_LENGTH)
-    sessionId: string;
+    sessionId!: string;
 
     @ApiProperty({ description: 'Connection status', enum: ConnectionStatus })
     @IsEnum(ConnectionStatus)
-    status: ConnectionStatus;
+    status!: ConnectionStatus;
 
     @ApiPropertyOptional({ description: 'Error message if status is error' })
     @IsOptional()

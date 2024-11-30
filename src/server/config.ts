@@ -1,142 +1,193 @@
-import dotenv from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import type { Config } from '../types/config';
 import { logger } from './utils/logger';
 
-dotenv.config();
+dotenvConfig();
 
-// Helper function to parse boolean env vars
+// Type-safe environment variables
+type RequiredEnvVars = typeof requiredEnvVars[number];
+type OptionalEnvVars = 
+  | 'NODE_ENV' | 'HOST' | 'PORT' | 'BASE_URL' | 'CORS_ORIGIN'
+  | 'MAX_REQUEST_SIZE' | 'CORS_ALLOWED_HEADERS' | 'CORS_EXPOSED_HEADERS'
+  | 'CORS_MAX_AGE' | 'RATE_LIMIT_WINDOW' | 'RATE_LIMIT_MAX'
+  | 'REFRESH_SECRET' | 'TOKEN_EXPIRATION' | 'REFRESH_EXPIRATION'
+  | 'TOKEN_REFRESH_INTERVAL' | 'SESSION_MAX_AGE' | 'MAX_FILE_SIZE'
+  | 'REDIS_HOST' | 'REDIS_PORT' | 'REDIS_PASSWORD' | 'REDIS_DB'
+  | 'LOG_LEVEL' | 'LOG_FORMAT' | 'LOG_DIR' | 'LOG_MAX_FILES' | 'LOG_MAX_SIZE'
+  | 'MONITORING_ENABLED' | 'MONITORING_INTERVAL' | 'METRICS_PATH'
+  | 'PROCESS_MONITOR_INTERVAL' | 'PROCESS_MAX_MONITORED_HOSTS'
+  | 'PROCESS_INCLUDE_CHILDREN' | 'PROCESS_EXCLUDE_SYSTEM'
+  | 'PROCESS_SORT_BY' | 'PROCESS_SORT_ORDER' | 'PROCESS_MAX_PROCESSES'
+  | 'BINARIES_PATH'
+  | 'POSTGRES_HOST' | 'POSTGRES_PORT' | 'POSTGRES_DB' | 'POSTGRES_USER'
+  | 'JWT_EXPIRY' | 'JWT_REFRESH_EXPIRY'
+  | 'OPENAI_API_KEY' | 'OPENAI_MODEL' | 'OPENAI_ORG'
+  | 'OPENAI_MAX_TOKENS' | 'OPENAI_TEMPERATURE'
+  | 'OPENROUTER_API_KEY' | 'OPENROUTER_MODEL' | 'OPENROUTER_BASE_URL'
+  | 'OPENROUTER_MAX_TOKENS' | 'OPENROUTER_TEMPERATURE'
+  | 'GOTIFY_URL' | 'GOTIFY_TOKEN';
+
+type EnvVars = RequiredEnvVars | OptionalEnvVars;
+
+// Type-safe environment getter
+function getEnvVar<T extends EnvVars>(key: T, defaultValue?: string): string {
+  const value = process.env[key];
+  if (value === undefined && defaultValue === undefined) {
+    logger.error(`Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+  return value ?? defaultValue!;
+}
+
+// Helper function to parse boolean env vars with type safety
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) return defaultValue;
   return value.toLowerCase() === 'true';
 }
 
-// Helper function to parse number with validation
-function parseNumber(value: string | undefined, defaultValue: number, min?: number, max?: number): number {
+// Helper function to parse number with validation and type safety
+function parseNumber(
+  value: string | undefined, 
+  defaultValue: number, 
+  min?: number, 
+  max?: number
+): number {
   if (value === undefined) return defaultValue;
   const parsed = parseInt(value, 10);
-  if (isNaN(parsed)) return defaultValue;
-  if (min !== undefined && parsed < min) return min;
-  if (max !== undefined && parsed > max) return max;
+  if (isNaN(parsed)) {
+    logger.warn(`Invalid number format for value: ${value}, using default: ${defaultValue}`);
+    return defaultValue;
+  }
+  if (min !== undefined && parsed < min) {
+    logger.warn(`Value ${parsed} is below minimum ${min}, using minimum value`);
+    return min;
+  }
+  if (max !== undefined && parsed > max) {
+    logger.warn(`Value ${parsed} is above maximum ${max}, using maximum value`);
+    return max;
+  }
   return parsed;
 }
 
-// Environment validation
+// Environment validation with type safety
 const requiredEnvVars = [
   'JWT_SECRET',
   'POSTGRES_PASSWORD'
 ] as const;
 
 for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    logger.error(`Missing required environment variable: ${envVar}`);
-    process.exit(1);
-  }
+  getEnvVar(envVar);
 }
 
 const config: Config = {
   server: {
-    env: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
-    host: process.env.HOST || 'localhost',
-    port: parseNumber(process.env.PORT, 4000, 1, 65535), // Default to 4000 to match client
-    baseUrl: process.env.BASE_URL || 'http://localhost:4000', // Match port 4000
-    maxRequestSize: parseNumber(process.env.MAX_REQUEST_SIZE, 104857600, 1024, 100 * 1024 * 1024), // 100MB - matches client maxUploadSize
+    env: getEnvVar('NODE_ENV', 'development') as Config['server']['env'],
+    host: getEnvVar('HOST', 'localhost'),
+    port: parseNumber(getEnvVar('PORT', '4000'), 4000, 1, 65535),
+    baseUrl: getEnvVar('BASE_URL', 'http://localhost:4000'),
+    maxRequestSize: parseNumber(
+      getEnvVar('MAX_REQUEST_SIZE', '104857600'),
+      104857600,
+      1024,
+      100 * 1024 * 1024
+    ),
     cors: {
-      origin: process.env.CORS_ORIGIN || '*', // Allow all origins in dev
+      origin: getEnvVar('CORS_ORIGIN', '*'),
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: process.env.CORS_ALLOWED_HEADERS || 'Content-Type,Authorization,X-Requested-With',
-      exposedHeaders: process.env.CORS_EXPOSED_HEADERS || '',
+      allowedHeaders: getEnvVar('CORS_ALLOWED_HEADERS', 'Content-Type,Authorization,X-Requested-With'),
+      exposedHeaders: getEnvVar('CORS_EXPOSED_HEADERS', ''),
       credentials: true,
-      maxAge: parseNumber(process.env.CORS_MAX_AGE, 86400, 0, 86400),
+      maxAge: parseNumber(getEnvVar('CORS_MAX_AGE', '86400'), 86400, 0, 86400),
     },
     rateLimit: {
-      windowMs: parseNumber(process.env.RATE_LIMIT_WINDOW, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000),
-      max: parseNumber(process.env.RATE_LIMIT_MAX, 100, 1, 1000),
+      windowMs: parseNumber(getEnvVar('RATE_LIMIT_WINDOW', '15 * 60 * 1000'), 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000),
+      max: parseNumber(getEnvVar('RATE_LIMIT_MAX', '100'), 100, 1, 1000),
     },
     security: {
-      jwtSecret: process.env.JWT_SECRET!,
-      refreshSecret: process.env.REFRESH_SECRET || process.env.JWT_SECRET!,
-      tokenExpiration: process.env.TOKEN_EXPIRATION || '1h',
-      refreshExpiration: process.env.REFRESH_EXPIRATION || '7d',
-      tokenRefreshInterval: parseNumber(process.env.TOKEN_REFRESH_INTERVAL, 300000, 60000, 3600000), // 5 minutes, matches client
-      sessionMaxAge: parseNumber(process.env.SESSION_MAX_AGE, 3600000, 60000, 24 * 60 * 60 * 1000),
-      maxFileSize: parseNumber(process.env.MAX_FILE_SIZE, 52428800, 1024, 500 * 1024 * 1024), // 50MB - matches client maxFileSize
+      jwtSecret: getEnvVar('JWT_SECRET'),
+      refreshSecret: getEnvVar('REFRESH_SECRET', getEnvVar('JWT_SECRET')),
+      tokenExpiration: getEnvVar('TOKEN_EXPIRATION', '1h'),
+      refreshExpiration: getEnvVar('REFRESH_EXPIRATION', '7d'),
+      tokenRefreshInterval: parseNumber(getEnvVar('TOKEN_REFRESH_INTERVAL', '300000'), 300000, 60000, 3600000),
+      sessionMaxAge: parseNumber(getEnvVar('SESSION_MAX_AGE', '3600000'), 3600000, 60000, 24 * 60 * 60 * 1000),
+      maxFileSize: parseNumber(getEnvVar('MAX_FILE_SIZE', '52428800'), 52428800, 1024, 500 * 1024 * 1024),
     },
     redis: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseNumber(process.env.REDIS_PORT, 6379, 1, 65535),
-      password: process.env.REDIS_PASSWORD,
-      db: parseNumber(process.env.REDIS_DB, 0, 0, 15),
+      host: getEnvVar('REDIS_HOST', 'localhost'),
+      port: parseNumber(getEnvVar('REDIS_PORT', '6379'), 6379, 1, 65535),
+      password: getEnvVar('REDIS_PASSWORD'),
+      db: parseNumber(getEnvVar('REDIS_DB', '0'), 0, 0, 15),
     },
     logging: {
-      level: (process.env.LOG_LEVEL || 'info') as 'error' | 'warn' | 'info' | 'debug' | 'trace',
-      format: process.env.LOG_FORMAT || 'json',
-      dir: process.env.LOG_DIR || 'logs',
-      maxFiles: parseNumber(process.env.LOG_MAX_FILES, 5, 1, 100),
-      maxSize: process.env.LOG_MAX_SIZE || '10m',
+      level: (getEnvVar('LOG_LEVEL', 'info')) as 'error' | 'warn' | 'info' | 'debug' | 'trace',
+      format: getEnvVar('LOG_FORMAT', 'json'),
+      dir: getEnvVar('LOG_DIR', 'logs'),
+      maxFiles: parseNumber(getEnvVar('LOG_MAX_FILES', '5'), 5, 1, 100),
+      maxSize: getEnvVar('LOG_MAX_SIZE', '10m'),
     },
     monitoring: {
-      enabled: parseBoolean(process.env.MONITORING_ENABLED, false),
-      interval: parseNumber(process.env.MONITORING_INTERVAL, 5000, 1000, 60000),
-      metricsPath: process.env.METRICS_PATH || '/metrics',
+      enabled: parseBoolean(getEnvVar('MONITORING_ENABLED', 'false'), false),
+      interval: parseNumber(getEnvVar('MONITORING_INTERVAL', '5000'), 5000, 1000, 60000),
+      metricsPath: getEnvVar('METRICS_PATH', '/metrics'),
     },
     process: {
-      monitorInterval: parseNumber(process.env.PROCESS_MONITOR_INTERVAL, 5000, 1000, 60000),
-      maxMonitoredHosts: parseNumber(process.env.PROCESS_MAX_MONITORED_HOSTS, 100, 1, 1000),
-      includeChildren: parseBoolean(process.env.PROCESS_INCLUDE_CHILDREN, true),
-      excludeSystemProcesses: parseBoolean(process.env.PROCESS_EXCLUDE_SYSTEM, false),
-      sortBy: (process.env.PROCESS_SORT_BY || 'cpu') as 'cpu' | 'memory' | 'pid' | 'name',
-      sortOrder: (process.env.PROCESS_SORT_ORDER || 'desc') as 'asc' | 'desc',
-      maxProcesses: parseNumber(process.env.PROCESS_MAX_PROCESSES, 100, 1, 1000),
+      monitorInterval: parseNumber(getEnvVar('PROCESS_MONITOR_INTERVAL', '5000'), 5000, 1000, 60000),
+      maxMonitoredHosts: parseNumber(getEnvVar('PROCESS_MAX_MONITORED_HOSTS', '100'), 100, 1, 1000),
+      includeChildren: parseBoolean(getEnvVar('PROCESS_INCLUDE_CHILDREN', 'true'), true),
+      excludeSystemProcesses: parseBoolean(getEnvVar('PROCESS_EXCLUDE_SYSTEM', 'false'), false),
+      sortBy: (getEnvVar('PROCESS_SORT_BY', 'cpu')) as 'cpu' | 'memory' | 'pid' | 'name',
+      sortOrder: (getEnvVar('PROCESS_SORT_ORDER', 'desc')) as 'asc' | 'desc',
+      maxProcesses: parseNumber(getEnvVar('PROCESS_MAX_PROCESSES', '100'), 100, 1, 1000),
     },
   },
   logging: {
-    level: process.env.LOG_LEVEL || 'info',
-    format: process.env.LOG_FORMAT || 'json',
-    dir: process.env.LOG_DIR || 'logs',
-    maxFiles: parseNumber(process.env.LOG_MAX_FILES, 5, 1, 100),
-    maxSize: process.env.LOG_MAX_SIZE || '10m',
+    level: getEnvVar('LOG_LEVEL', 'info'),
+    format: getEnvVar('LOG_FORMAT', 'json'),
+    dir: getEnvVar('LOG_DIR', 'logs'),
+    maxFiles: parseNumber(getEnvVar('LOG_MAX_FILES', '5'), 5, 1, 100),
+    maxSize: getEnvVar('LOG_MAX_SIZE', '10m'),
   },
   redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseNumber(process.env.REDIS_PORT, 6379, 1, 65535),
-    password: process.env.REDIS_PASSWORD,
-    db: parseNumber(process.env.REDIS_DB, 0, 0, 15),
+    host: getEnvVar('REDIS_HOST', 'localhost'),
+    port: parseNumber(getEnvVar('REDIS_PORT', '6379'), 6379, 1, 65535),
+    password: getEnvVar('REDIS_PASSWORD'),
+    db: parseNumber(getEnvVar('REDIS_DB', '0'), 0, 0, 15),
   },
   paths: {
-    binaries: process.env.BINARIES_PATH || './binaries',
+    binaries: getEnvVar('BINARIES_PATH', './binaries'),
   },
   process: {
-    env: process.env.NODE_ENV || 'development',
+    env: getEnvVar('NODE_ENV', 'development'),
   },
   db: {
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseNumber(process.env.POSTGRES_PORT, 5432, 1, 65535),
-    name: process.env.POSTGRES_DB || 'shh',
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD!,
+    host: getEnvVar('POSTGRES_HOST', 'localhost'),
+    port: parseNumber(getEnvVar('POSTGRES_PORT', '5432'), 5432, 1, 65535),
+    name: getEnvVar('POSTGRES_DB', 'shh'),
+    user: getEnvVar('POSTGRES_USER', 'postgres'),
+    password: getEnvVar('POSTGRES_PASSWORD'),
   },
   jwt: {
-    secret: process.env.JWT_SECRET!,
-    expiry: process.env.JWT_EXPIRY || '1h',
-    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+    secret: getEnvVar('JWT_SECRET'),
+    expiry: getEnvVar('JWT_EXPIRY', '1h'),
+    refreshExpiry: getEnvVar('JWT_REFRESH_EXPIRY', '7d'),
   },
   openai: {
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || 'gpt-4',
-    org: process.env.OPENAI_ORG,
-    maxTokens: parseNumber(process.env.OPENAI_MAX_TOKENS, 2000, 1, 32000),
-    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+    apiKey: getEnvVar('OPENAI_API_KEY'),
+    model: getEnvVar('OPENAI_MODEL', 'gpt-4'),
+    org: getEnvVar('OPENAI_ORG'),
+    maxTokens: parseNumber(getEnvVar('OPENAI_MAX_TOKENS', '2000'), 2000, 1, 32000),
+    temperature: parseFloat(getEnvVar('OPENAI_TEMPERATURE', '0.7')),
   },
   openrouter: {
-    apiKey: process.env.OPENROUTER_API_KEY,
-    model: process.env.OPENROUTER_MODEL || 'anthropic/claude-2',
-    baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1/chat/completions',
-    maxTokens: parseNumber(process.env.OPENROUTER_MAX_TOKENS, 2000, 1, 32000),
-    temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
+    apiKey: getEnvVar('OPENROUTER_API_KEY'),
+    model: getEnvVar('OPENROUTER_MODEL', 'anthropic/claude-2'),
+    baseUrl: getEnvVar('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1/chat/completions'),
+    maxTokens: parseNumber(getEnvVar('OPENROUTER_MAX_TOKENS', '2000'), 2000, 1, 32000),
+    temperature: parseFloat(getEnvVar('OPENROUTER_TEMPERATURE', '0.7')),
   },
   gotify: {
-    url: process.env.GOTIFY_URL,
-    token: process.env.GOTIFY_TOKEN,
+    url: getEnvVar('GOTIFY_URL'),
+    token: getEnvVar('GOTIFY_TOKEN'),
   },
 };
 

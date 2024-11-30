@@ -5,7 +5,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { FileInfo } from './FileExplorer';
 import { BookmarkDialog } from './BookmarkDialog';
 import { useBookmarks } from '../hooks/useBookmarks';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/frontendLogger';
 
 interface BookmarkButtonProps {
   file: FileInfo;

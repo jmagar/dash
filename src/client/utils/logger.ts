@@ -1,3 +1,11 @@
+/**
+ * @deprecated Use frontendLogger.ts instead. This logger will be removed in a future version.
+ * Import from '../utils/frontendLogger' instead of '../utils/logger'.
+ */
+
+import { logger as frontendLogger } from './frontendLogger';
+import type { LogMetadata } from '../../types/logger';
+
 interface LoggerOptions {
   level: 'debug' | 'info' | 'warn' | 'error';
   prefix?: string;
@@ -8,37 +16,33 @@ class Logger {
   private prefix: string;
 
   constructor(options: LoggerOptions) {
+    console.warn('Logger from logger.ts is deprecated. Please use frontendLogger.ts instead.');
     this.level = options.level;
     this.prefix = options.prefix || '';
   }
 
   private formatMessage(level: string, message: string, data?: unknown): string {
-    const timestamp = new Date().toISOString();
-    const prefix = this.prefix ? `[${this.prefix}] ` : '';
-    const dataString = data ? ` ${JSON.stringify(data)}` : '';
-    return `${timestamp} ${prefix}${level.toUpperCase()}: ${message}${dataString}`;
+    const meta: LogMetadata = {
+      ...(typeof data === 'object' ? data as object : { data }),
+      prefix: this.prefix
+    };
+    return message;
   }
 
   debug(message: string, data?: unknown): void {
-    if (this.level === 'debug') {
-      console.debug(this.formatMessage('debug', message, data));
-    }
+    frontendLogger.debug(this.formatMessage('debug', message, data), data as LogMetadata);
   }
 
   info(message: string, data?: unknown): void {
-    if (this.level === 'debug' || this.level === 'info') {
-      console.info(this.formatMessage('info', message, data));
-    }
+    frontendLogger.info(this.formatMessage('info', message, data), data as LogMetadata);
   }
 
   warn(message: string, data?: unknown): void {
-    if (this.level !== 'error') {
-      console.warn(this.formatMessage('warn', message, data));
-    }
+    frontendLogger.warn(this.formatMessage('warn', message, data), data as LogMetadata);
   }
 
   error(message: string, data?: unknown): void {
-    console.error(this.formatMessage('error', message, data));
+    frontendLogger.error(this.formatMessage('error', message, data), data as LogMetadata);
   }
 }
 

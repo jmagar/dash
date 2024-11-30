@@ -1,234 +1,167 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
-import { Socket, io } from 'socket.io-client';
-import type { SystemMetrics } from '../../types/metrics';
-import type { Notification, DesktopNotification } from '../../types/notifications';
-import type { ProcessInfo } from '../../types/process';
-import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../../types/socket-events';
-import { useAuth } from './useAuth';
-import { logger } from '../utils/frontendLogger';
-import { socket as appSocket } from '../socket';
+import socketIO from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Socket error types
-type ErrorType = 'ConnectionError' | 'AuthError' | 'UnknownError';
-
-interface BaseSocketError {
-  message: string;
-  description?: string;
-  code?: string;
-}
-
-interface ConnectionError extends BaseSocketError {
-  type: 'ConnectionError';
-}
-
-interface AuthError extends BaseSocketError {
-  type: 'AuthError';
-}
-
-interface UnknownError extends BaseSocketError {
-  type: 'UnknownError';
-}
-
-type SocketError = ConnectionError | AuthError | UnknownError;
-type SocketErrorType = SocketError | Error;
-
-// Connection states
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-// Type guard for SocketError
-function isSocketError(error: SocketErrorType): error is SocketError {
-  return (error as SocketError).type !== undefined;
+interface BaseEvent<T = unknown> {
+  type: string;
+  payload: T;
 }
 
-// Error factory
-function createSocketError(error: Error): SocketError {
-  return {
-    type: 'UnknownError',
-    message: error.message,
-    description: error.stack,
-  };
-}
-
-type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents, InterServerEvents, SocketData>;
-
-interface UseSocketOptions {
-  hostId?: string;
-  autoReconnect?: boolean;
-  maxReconnectAttempts?: number;
-  reconnectInterval?: number;
-  onAuthenticated?: () => void;
-}
-
-const DEFAULT_OPTIONS: Required<UseSocketOptions> = {
-  hostId: '',
-  autoReconnect: true,
-  maxReconnectAttempts: 5,
-  reconnectInterval: 5000,
-  onAuthenticated: () => {},
-};
-
-interface UseSocketReturn {
-  socket: TypedSocket | null;
-  appSocket: TypedSocket;
-  connectionState: ConnectionState;
-  error: SocketErrorType | null;
-  reconnect: () => void;
+interface ServerToClientEvents {
+  connect: () => void;
   disconnect: () => void;
-  emit: <T extends keyof ClientToServerEvents>(
+  error: (error: Error) => void;
+  message: (event: BaseEvent<string>) => void;
+  notification: (event: BaseEvent<unknown>) => void;
+}
+
+interface ClientToServerEvents {
+  message: (event: BaseEvent<string>) => void;
+  notification: (event: BaseEvent<unknown>) => void;
+}
+
+interface SocketMethods {
+  connected: boolean;
+  on<E extends keyof ServerToClientEvents>(event: E, listener: ServerToClientEvents[E]): InstanceType<typeof Socket>;
+  off<E extends keyof ServerToClientEvents>(event: E, listener: ServerToClientEvents[E]): InstanceType<typeof Socket>;
+  emit<E extends keyof ClientToServerEvents>(event: E, ...args: Parameters<ClientToServerEvents[E]>): boolean;
+  connect(): InstanceType<typeof Socket>;
+  disconnect(): InstanceType<typeof Socket>;
+}
+
+type SocketInstance = ReturnType<typeof socketIO> & SocketMethods;
+
+interface SocketHookReturn {
+  readonly socket: SocketInstance | null;
+  readonly connectionState: ConnectionState;
+  readonly connect: () => void;
+  readonly disconnect: () => void;
+  readonly emit: <T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
   ) => void;
-  on: <T extends keyof ServerToClientEvents>(
+  readonly on: <T extends keyof ServerToClientEvents>(
     event: T,
-    handler: ServerToClientEvents[T]
+    callback: ServerToClientEvents[T]
   ) => () => void;
 }
 
-export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
-  const { token } = useAuth();
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  const { hostId, autoReconnect, maxReconnectAttempts, reconnectInterval, onAuthenticated } = opts;
+function isConnected(socket: SocketInstance | null): socket is SocketInstance {
+  return socket !== null && socket.connected;
+}
 
+export function useSocket(url: string): SocketHookReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [error, setError] = useState<SocketErrorType | null>(null);
-  const socketRef = useRef<TypedSocket | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const socketRef = useRef<SocketInstance | null>(null);
 
-  const handleConnect = useCallback(() => {
-    setConnectionState('connected');
-    setError(null);
-    onAuthenticated();
-  }, [onAuthenticated]);
-
-  const handleDisconnect = useCallback((reason: string) => {
-    setConnectionState('disconnected');
-    if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
-      reconnectAttemptsRef.current += 1;
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (socketRef.current) {
-          socketRef.current.connect();
-        }
-      }, reconnectInterval);
+  const connect = useCallback((): void => {
+    if (isConnected(socketRef.current)) {
+      console.warn('Socket already connected');
+      return;
     }
-  }, [autoReconnect, maxReconnectAttempts, reconnectInterval]);
 
-  const handleError = useCallback((err: Error) => {
-    setConnectionState('error');
-    setError(isSocketError(err) ? err : createSocketError(err));
-  }, []);
-
-  const createSocket = useCallback(() => {
     try {
-      const socket: TypedSocket = io({
-        auth: { token },
-        query: { hostId },
-        transports: ['websocket'],
-        reconnection: false,
-      });
+      const socket = socketIO(url, {
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      }) as SocketInstance;
+
+      const handleConnect = () => {
+        setConnectionState('connected');
+      };
+
+      const handleDisconnect = () => {
+        setConnectionState('disconnected');
+      };
+
+      const handleError = (error: Error) => {
+        console.error('Socket error:', error);
+        setConnectionState('error');
+      };
 
       socket.on('connect', handleConnect);
       socket.on('disconnect', handleDisconnect);
-      socket.on('connect_error', handleError);
       socket.on('error', handleError);
 
       socketRef.current = socket;
-      return socket;
-    } catch (error) {
-      logger.error('Failed to create socket:', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId
-      });
-      return null;
-    }
-  }, [hostId, token, handleConnect, handleDisconnect, handleError]);
+      socket.connect();
+      setConnectionState('connecting');
 
-  const disconnect = useCallback(() => {
+    } catch (error) {
+      console.error('Socket connection error:', error instanceof Error ? error.message : String(error));
+      setConnectionState('error');
+    }
+  }, [url]);
+
+  const disconnect = useCallback((): void => {
+    const socket = socketRef.current;
+    if (!socket) {
+      console.warn('No socket connection to disconnect');
+      return;
+    }
+
     try {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      socket.disconnect();
+      socketRef.current = null;
       setConnectionState('disconnected');
     } catch (error) {
-      logger.error('Failed to disconnect:', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId
-      });
+      console.error('Socket disconnect error:', error instanceof Error ? error.message : String(error));
+      setConnectionState('error');
     }
   }, []);
 
   const emit = useCallback(<T extends keyof ClientToServerEvents>(
     event: T,
     ...args: Parameters<ClientToServerEvents[T]>
-  ) => {
-    if (!socketRef.current?.connected) {
-      logger.warn('Socket not connected, cannot emit event:', { event });
+  ): void => {
+    const socket = socketRef.current;
+    if (!isConnected(socket)) {
+      console.warn('Cannot emit: socket not connected');
       return;
     }
+
     try {
-      (socketRef.current as TypedSocket).emit(event, ...args);
+      socket.emit(event, ...args);
     } catch (error) {
-      logger.error('Failed to emit event:', {
-        error: error instanceof Error ? error.message : String(error),
-        event,
-        args
-      });
+      console.error(`Socket emit error for event ${String(event)}:`, error instanceof Error ? error.message : String(error));
     }
   }, []);
 
   const on = useCallback(<T extends keyof ServerToClientEvents>(
     event: T,
-    handler: ServerToClientEvents[T]
-  ) => {
-    if (!socketRef.current) return () => undefined;
-
-    try {
-      (socketRef.current as TypedSocket).on(event, handler);
-      return () => {
-        if (socketRef.current) {
-          (socketRef.current as TypedSocket).off(event, handler);
-        }
-      };
-    } catch (error) {
-      logger.error('Failed to register event handler:', {
-        error: error instanceof Error ? error.message : String(error),
-        event
-      });
+    callback: ServerToClientEvents[T]
+  ): (() => void) => {
+    const socket = socketRef.current;
+    if (!socket) {
+      console.warn('Cannot add listener: socket not initialized');
       return () => undefined;
     }
+
+    socket.on(event, callback);
+    return () => {
+      if (socket) {
+        socket.off(event, callback);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    socketRef.current = createSocket();
-
+    connect();
     return () => {
-      disconnect();
-    };
-  }, [createSocket, disconnect]);
-
-  const reconnect = useCallback(() => {
-    try {
-      if (socketRef.current) {
-        socketRef.current.connect();
+      const socket = socketRef.current;
+      if (isConnected(socket)) {
+        disconnect();
       }
-    } catch (error) {
-      logger.error('Failed to reconnect:', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId
-      });
-    }
-  }, []);
+    };
+  }, [connect, disconnect, url]);
 
   return {
     socket: socketRef.current,
-    appSocket,
     connectionState,
-    error,
-    reconnect,
+    connect,
     disconnect,
     emit,
     on,

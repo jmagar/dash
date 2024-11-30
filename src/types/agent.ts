@@ -1,9 +1,11 @@
 import type { Host } from './models-shared';
 
 export interface ExtendedHost extends Host {
-  os_type: 'windows' | 'linux';
+  os_type: 'windows' | 'linux' | 'darwin';
   labels?: Record<string, string>;
   agent_installed?: boolean;
+  environment?: string;
+  tags?: string[];
 }
 
 export interface AgentConfig {
