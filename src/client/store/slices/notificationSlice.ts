@@ -1,14 +1,18 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { Notification } from '@/types/notifications';
-import type { RootState } from '@/client/store/storeTypes';
-import { logger } from '@/client/utils/frontendLogger';
-
-interface NotificationState {
-  notifications: Notification[];
-  unreadCount: number;
-  loading: boolean;
-  error: string | null;
-}
+import { logger } from '../../utils/logger';
+import type { RootState } from '../store';
+import type {
+  NotificationState,
+  ShowNotificationPayload,
+  HideNotificationPayload,
+  UpdateNotificationPayload,
+  MarkAsReadPayload,
+  BatchMarkAsReadPayload,
+  ClearNotificationsPayload,
+  NotificationFilter
+} from '../types';
+import { NotificationEntity } from '../../../types/notifications';
+import { notificationsApi } from '../../api/notifications';
 
 const initialState: NotificationState = {
   notifications: [],
@@ -18,15 +22,72 @@ const initialState: NotificationState = {
 };
 
 export const fetchNotifications = createAsyncThunk<
-  Notification[],
-  void,
+  NotificationEntity[],
+  NotificationFilter,
   { state: RootState }
->('notifications/fetchNotifications', async () => {
+>('notifications/fetchNotifications', async (filter) => {
   try {
-    // TODO: Implement API call
-    return [];
+    const response = await notificationsApi.getNotifications(filter);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to fetch notifications');
+    }
+    return response.data || [];
   } catch (error) {
     logger.error('Failed to fetch notifications:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+});
+
+export const markAsRead = createAsyncThunk<
+  void,
+  MarkAsReadPayload,
+  { state: RootState }
+>('notifications/markAsRead', async ({ id }) => {
+  try {
+    const response = await notificationsApi.markAsRead(id);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to mark notification as read');
+    }
+  } catch (error) {
+    logger.error('Failed to mark notification as read:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+});
+
+export const markAllAsRead = createAsyncThunk<
+  void,
+  BatchMarkAsReadPayload,
+  { state: RootState }
+>('notifications/markAllAsRead', async ({ ids }) => {
+  try {
+    const response = await notificationsApi.markAllAsRead(ids);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to mark all notifications as read');
+    }
+  } catch (error) {
+    logger.error('Failed to mark all notifications as read:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+});
+
+export const clearNotifications = createAsyncThunk<
+  void,
+  ClearNotificationsPayload,
+  { state: RootState }
+>('notifications/clearNotifications', async ({ userId }) => {
+  try {
+    const response = await notificationsApi.clearNotifications(userId);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to clear notifications');
+    }
+  } catch (error) {
+    logger.error('Failed to clear notifications:', {
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
@@ -37,20 +98,21 @@ const notificationSlice = createSlice({
   name: 'notifications',
   initialState,
   reducers: {
-    addNotification: (state, action: PayloadAction<Notification>) => {
+    addNotification: (state, action: PayloadAction<NotificationEntity>) => {
       state.notifications.unshift(action.payload);
       if (!action.payload.read) {
         state.unreadCount += 1;
       }
     },
-    updateNotification: (state, action: PayloadAction<Notification>) => {
-      const index = state.notifications.findIndex(n => n.id === action.payload.id);
+    updateNotification: (state, action: PayloadAction<UpdateNotificationPayload>) => {
+      const { id, updates } = action.payload;
+      const index = state.notifications.findIndex(n => n.id === id);
       if (index !== -1) {
         const oldNotification = state.notifications[index];
-        if (!oldNotification.read && action.payload.read) {
+        if (!oldNotification.read && updates.read) {
           state.unreadCount = Math.max(0, state.unreadCount - 1);
         }
-        state.notifications[index] = action.payload;
+        state.notifications[index] = { ...oldNotification, ...updates };
       }
     },
     removeNotification: (state, action: PayloadAction<string>) => {
@@ -60,13 +122,7 @@ const notificationSlice = createSlice({
       }
       state.notifications = state.notifications.filter(n => n.id !== action.payload);
     },
-    markAllAsRead: (state) => {
-      state.notifications.forEach(notification => {
-        notification.read = true;
-      });
-      state.unreadCount = 0;
-    },
-    clearNotifications: (state) => {
+    clearAllNotifications: (state) => {
       state.notifications = [];
       state.unreadCount = 0;
     },
@@ -85,6 +141,28 @@ const notificationSlice = createSlice({
       .addCase(fetchNotifications.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message ?? 'Failed to fetch notifications';
+      })
+      .addCase(markAsRead.fulfilled, (state, action) => {
+        const notification = state.notifications.find(n => n.id === action.meta.arg.id);
+        if (notification && !notification.read) {
+          notification.read = true;
+          notification.readAt = new Date();
+          state.unreadCount = Math.max(0, state.unreadCount - 1);
+        }
+      })
+      .addCase(markAllAsRead.fulfilled, (state, action) => {
+        const ids = action.meta.arg.ids;
+        state.notifications.forEach(notification => {
+          if (ids.includes(notification.id) && !notification.read) {
+            notification.read = true;
+            notification.readAt = new Date();
+          }
+        });
+        state.unreadCount = state.notifications.filter(n => !n.read).length;
+      })
+      .addCase(clearNotifications.fulfilled, (state) => {
+        state.notifications = [];
+        state.unreadCount = 0;
       });
   },
 });
@@ -93,14 +171,13 @@ export const {
   addNotification,
   updateNotification,
   removeNotification,
-  markAllAsRead,
-  clearNotifications,
+  clearAllNotifications,
 } = notificationSlice.actions;
 
-export default notificationSlice.reducer;
-
 // Selectors
-export const selectAllNotifications = (state: RootState) => state.notification.notifications;
+export const selectNotifications = (state: RootState) => state.notification.notifications;
 export const selectUnreadCount = (state: RootState) => state.notification.unreadCount;
 export const selectIsLoading = (state: RootState) => state.notification.loading;
 export const selectError = (state: RootState) => state.notification.error;
+
+export default notificationSlice.reducer;

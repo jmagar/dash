@@ -21,14 +21,13 @@ import {
     StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import type { Response } from 'express-serve-static-core';
+import type { Response, ParamsDictionary } from 'express-serve-static-core';
 import { createReadStream } from 'fs';
 import { join } from 'path';
 import { Archiver, create } from 'archiver';
-import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
+import { rateLimit, MemoryStore, Options as RateLimitOptions } from 'express-rate-limit';
 import { lookup } from 'mime-types';
 import { Readable } from 'stream';
-import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 
 import type { 
@@ -75,6 +74,20 @@ class TypedRateLimiter implements CanActivate {
             legacyHeaders: false,
             message: 'Too many requests, please try again later.',
             statusCode: 429,
+            skip: () => false,
+            requestPropertyName: 'rateLimit',
+            skipFailedRequests: false,
+            skipSuccessfulRequests: false,
+            keyGenerator: (req) => req.ip || req.socket.remoteAddress || 'unknown',
+            handler: (req, res) => {
+                res.status(429).json({
+                    message: 'Too many requests, please try again later.',
+                });
+            },
+            limit: max,
+            requestWasSuccessful: (_req, res) => res.statusCode < 400,
+            store: new MemoryStore(),
+            validate: true,  // Enable validation of options
         };
         this.middleware = rateLimit(options) as RateLimitMiddleware;
     }

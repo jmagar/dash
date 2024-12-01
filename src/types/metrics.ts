@@ -1,124 +1,120 @@
-export interface SystemMetrics {
+import { BaseEntity } from './base';
+import { ServiceStatus } from './status';
+import { ServiceEvent } from './events';
+
+export interface MetricsEntity extends BaseEntity {
+  hostId: string;
   timestamp: Date;
-  cpu: {
-    usage: number;
-    user: number;
-    system: number;
-    idle: number;
-    iowait: number;
-    steal: number;
-    cores: number;
-    threads: number;
-    total: number;
-  };
-  memory: {
-    total: number;
-    used: number;
-    free: number;
-    shared: number;
-    buffers: number;
-    cached: number;
-    available: number;
-    swap_total: number;
-    swap_used: number;
-    swap_free: number;
-    usage: number;
-  };
-  storage: {
-    total: number;
-    used: number;
-    free: number;
-    usage: number;
-    read_bytes: number;
-    write_bytes: number;
-    read_count: number;
-    write_count: number;
-    health: string;
-    ioStats: {
-      readBytes: number;
-      writeBytes: number;
-      readCount: number;
-      writeCount: number;
-      readTime: number;
-      writeTime: number;
-      ioTime: number;
-    };
-  };
-  network: {
-    bytesRecv: number;
-    bytesSent: number;
-    packetsRecv: number;
-    packetsSent: number;
-    errorsIn: number;
-    errorsOut: number;
-    dropsIn: number;
-    dropsOut: number;
-    tx_bytes: number;
-    rx_bytes: number;
-    tx_packets: number;
-    rx_packets: number;
-    rx_errors: number;
-    tx_errors: number;
-    rx_dropped: number;
-    tx_dropped: number;
-    tcp_conns: number;
-    udp_conns: number;
-    listen_ports: number;
-    average_speed: number;
-    total_speed: number;
-    health: number;
-    interfaces: {
-      name: string;
-      bytesRecv: number;
-      bytesSent: number;
-      packetsRecv: number;
-      packetsSent: number;
-      errorsIn: number;
-      errorsOut: number;
-      dropsIn: number;
-      dropsOut: number;
-    }[];
-  };
+  system: SystemMetrics;
+  processes: ProcessMetrics[];
+  status: ServiceStatus;
+}
+
+export interface SystemMetrics extends BaseEntity {
+  cpu: CpuMetrics;
+  memory: MemoryMetrics;
+  storage: StorageMetrics;
+  network: NetworkMetrics;
   uptime: number;
   loadAverage: [number, number, number];
-  history?: SystemMetrics[];
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-export interface ProcessInfo {
-  pid: number;
-  ppid: number;
-  name: string;
-  command: string;
-  args: string[];
-  status: string;
-  user: string;
-  username: string;
-  cpu: number;
-  cpuUsage: number;
-  memory: number;
-  memoryUsage: number;
-  memoryRss: number;
-  memoryVms: number;
+export interface CpuMetrics extends BaseEntity {
+  usage: number;
+  user: number;
+  system: number;
+  idle: number;
+  iowait: number;
+  steal: number;
+  cores: number;
   threads: number;
-  fds: number;
-  startTime: Date;
-  children?: ProcessInfo[];
-  ioStats?: {
-    readCount: number;
-    writeCount: number;
-    readBytes: number;
-    writeBytes: number;
-    ioTime: number;
-  };
-  createdAt: Date;
-  updatedAt: Date;
+  total: number;
 }
 
-export interface ProcessMetrics {
-  id: string;
-  hostId: string;
+export interface MemoryMetrics extends BaseEntity {
+  total: number;
+  used: number;
+  free: number;
+  shared: number;
+  buffers: number;
+  cached: number;
+  available: number;
+  swap_total: number;
+  swap_used: number;
+  swap_free: number;
+  usage: number;
+}
+
+export interface StorageDevice extends BaseEntity {
+  name: string;
+  mountpoint: string;
+  fstype: string;
+  total: number;
+  used: number;
+  free: number;
+  usage: number;
+  health: number;
+}
+
+export interface StorageMetrics extends BaseEntity {
+  total: number;
+  used: number;
+  free: number;
+  usage: number;
+  devices: StorageDevice[];
+  io_stats: StorageIoStats;
+  health: number;
+}
+
+export interface StorageIoStats extends BaseEntity {
+  readBytes: number;
+  writeBytes: number;
+  readCount: number;
+  writeCount: number;
+  readTime: number;
+  writeTime: number;
+  ioTime: number;
+}
+
+export interface NetworkMetrics extends BaseEntity {
+  bytesRecv: number;
+  bytesSent: number;
+  packetsRecv: number;
+  packetsSent: number;
+  errorsIn: number;
+  errorsOut: number;
+  dropsIn: number;
+  dropsOut: number;
+  tx_bytes: number;
+  rx_bytes: number;
+  tx_packets: number;
+  rx_packets: number;
+  rx_errors: number;
+  tx_errors: number;
+  rx_dropped: number;
+  tx_dropped: number;
+  tcp_conns: number;
+  udp_conns: number;
+  listen_ports: number;
+  average_speed: number;
+  total_speed: number;
+  health: number;
+  interfaces: NetworkInterface[];
+}
+
+export interface NetworkInterface extends BaseEntity {
+  name: string;
+  bytesRecv: number;
+  bytesSent: number;
+  packetsRecv: number;
+  packetsSent: number;
+  errorsIn: number;
+  errorsOut: number;
+  dropsIn: number;
+  dropsOut: number;
+}
+
+export interface ProcessMetrics extends BaseEntity {
   pid: number;
   cpu: number;
   cpuUsage: number;
@@ -133,8 +129,6 @@ export interface ProcessMetrics {
   threads: number;
   fds: number;
   timestamp: Date;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface MetricsFilter {
@@ -142,20 +136,26 @@ export interface MetricsFilter {
   endTime?: Date;
   interval?: string;
   metrics?: string[];
+  status?: ServiceStatus[];
 }
 
-// Metric types
-export type MetricType = 'gauge' | 'counter' | 'histogram' | 'summary';
+export enum MetricType {
+  COUNTER = 'counter',
+  GAUGE = 'gauge',
+  HISTOGRAM = 'histogram',
+  SUMMARY = 'summary'
+}
+
 export type MetricValue = number | string | boolean;
 
-export interface BaseMetric<T extends MetricValue = number> {
+export interface BaseMetric<T = MetricValue> extends BaseEntity {
   value: T;
   timestamp: Date;
   type: MetricType;
   labels?: Record<string, string>;
 }
 
-export interface MetricOptions {
+export interface MetricOptions extends BaseEntity {
   name: string;
   description?: string;
   type: MetricType;
@@ -164,8 +164,7 @@ export interface MetricOptions {
   critical?: boolean;
 }
 
-// Metric definitions
-export interface MetricDefinition {
+export interface MetricDefinition extends BaseEntity {
   name: string;
   help: string;
   type: MetricType;
@@ -184,58 +183,63 @@ export interface MetricsConfig {
   };
 }
 
-// Type guards
-export function isMetricType(type: string | undefined): type is MetricType {
-  return typeof type === 'string' && ['gauge', 'counter', 'histogram', 'summary'].includes(type);
-}
-
-export function isMetricValue(value: unknown): value is MetricValue {
-  return typeof value === 'number' ||
-         typeof value === 'string' ||
-         typeof value === 'boolean';
-}
-
-export function isBaseMetric(metric: unknown): metric is BaseMetric {
-  if (!metric || typeof metric !== 'object') return false;
-  const m = metric as Partial<BaseMetric>;
-  
-  return isMetricValue(m.value) &&
-         m.timestamp instanceof Date &&
-         (typeof m.type === 'string' && isMetricType(m.type)) &&
-         (m.labels === undefined ||
-          (typeof m.labels === 'object' &&
-           m.labels !== null &&
-           Object.values(m.labels).every(v => typeof v === 'string')));
-}
-
-// Default configurations
 export const DEFAULT_METRICS_CONFIG: MetricsConfig = {
   enabled: true,
   interval: 60000, // 1 minute
-  retention: 86400000, // 24 hours
+  retention: 604800000, // 7 days
   thresholds: {
-    cpu: 80,      // 80% CPU usage
-    memory: 85,   // 85% memory usage
-    disk: 90,     // 90% disk usage
-    latency: 1000 // 1 second latency
+    cpu: 80,
+    memory: 80,
+    disk: 80,
+    latency: 1000
   }
-} as const;
+};
 
-// Metric event types
-export interface MetricEvent {
-  type: 'threshold_exceeded' | 'value_change' | 'status_change';
-  timestamp: Date;
-  metric: string;
-  previous?: MetricValue;
-  current: MetricValue;
-  details?: Record<string, unknown>;
+export interface MetricEvent extends ServiceEvent {
+  type: 'metric:threshold' | 'metric:change' | 'metric:status';
+  payload: {
+    metric: string;
+    previous?: MetricValue;
+    current: MetricValue;
+    threshold?: number;
+    status?: ServiceStatus;
+  };
 }
 
-// Metric notification types
-export interface MetricNotification {
-  level: 'info' | 'warning' | 'error' | 'critical';
-  message: string;
-  timestamp: Date;
-  metric: string;
-  metadata?: Record<string, unknown>;
+// Type guards
+export function isMetricType(type: string | undefined): type is MetricType {
+  return type !== undefined && Object.values(MetricType).includes(type as MetricType);
+}
+
+export function isMetricValue(value: unknown): value is MetricValue {
+  return typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean';
+}
+
+export function isBaseMetric<T = MetricValue>(metric: unknown): metric is BaseMetric<T> {
+  return metric !== null &&
+    typeof metric === 'object' &&
+    'id' in metric &&
+    'value' in metric &&
+    'timestamp' in metric &&
+    'type' in metric;
+}
+
+export function isMetricsEntity(obj: unknown): obj is MetricsEntity {
+  return obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    'hostId' in obj &&
+    'system' in obj &&
+    'processes' in obj &&
+    'status' in obj;
+}
+
+export function isSystemMetrics(obj: unknown): obj is SystemMetrics {
+  return obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    'cpu' in obj &&
+    'memory' in obj &&
+    'storage' in obj &&
+    'network' in obj;
 }

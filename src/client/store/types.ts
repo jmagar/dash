@@ -2,7 +2,7 @@
  * Common type definitions for Redux store
  */
 
-export type NotificationSeverity = 'success' | 'error' | 'warning' | 'info';
+import { NotificationType, NotificationEntity, ServiceStatus } from '../../types/notifications';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -14,16 +14,11 @@ export interface UIState {
 }
 
 // Notification State
-export interface Notification {
-  id: string;
-  message: string;
-  severity: NotificationSeverity;
-  timestamp: string;
-  autoHideDuration?: number;
-}
-
 export interface NotificationState {
-  notifications: Notification[];
+  notifications: NotificationEntity[];
+  unreadCount: number;
+  loading: boolean;
+  error: string | null;
 }
 
 // Root State
@@ -33,18 +28,40 @@ export interface RootState {
 }
 
 // Action Types
-export interface BaseAction<T = unknown> {
+export interface BaseAction<T = any> {
   type: string;
   payload?: T;
 }
 
+// Action Payloads
 export interface ShowNotificationPayload {
   message: string;
-  severity: NotificationSeverity;
+  type: NotificationType;
+  title: string;
+  metadata?: Record<string, unknown>;
+  link?: string;
+  status?: ServiceStatus;
 }
 
 export interface HideNotificationPayload {
   id: string;
+}
+
+export interface UpdateNotificationPayload {
+  id: string;
+  updates: Partial<NotificationEntity>;
+}
+
+export interface MarkAsReadPayload {
+  id: string;
+}
+
+export interface BatchMarkAsReadPayload {
+  ids: string[];
+}
+
+export interface ClearNotificationsPayload {
+  userId: string;
 }
 
 export interface SetThemePayload {

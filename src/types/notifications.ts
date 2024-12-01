@@ -1,9 +1,66 @@
-import type { Alert } from './metrics-alerts';
+import { BaseEntity } from './base';
+import { ServiceEvent } from './events';
+import { Alert } from './metrics-alerts';
+import { Result } from './common';
+import { ServiceStatus } from './status';
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'alert';
+export enum NotificationType {
+  Alert = 'alert',
+  Info = 'info',
+  Success = 'success',
+  Warning = 'warning',
+  Error = 'error'
+}
 
-export interface Notification {
-  id: string;
+export enum NotificationChannel {
+  Web = 'web',
+  Gotify = 'gotify',
+  Desktop = 'desktop'
+}
+
+export interface WebChannelConfig {
+  desktop: boolean;
+  sound: boolean;
+  timeout?: number;
+}
+
+export interface GotifyChannelConfig {
+  priority?: number;
+  serverUrl?: string;
+}
+
+export interface DesktopChannelConfig {
+  sound: boolean;
+  position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  duration?: number;
+}
+
+export interface ChannelConfig {
+  web: WebChannelConfig;
+  gotify: GotifyChannelConfig;
+  desktop: DesktopChannelConfig;
+}
+
+export interface ChannelPreferences {
+  enabled: boolean;
+  types: NotificationType[];
+  config?: Partial<ChannelConfig>;
+}
+
+export interface QuietHours {
+  enabled: boolean;
+  start?: string; // HH:mm format
+  end?: string; // HH:mm format
+  days?: number[]; // 0-6, where 0 is Sunday
+}
+
+export interface GlobalConfig {
+  batchNotifications?: boolean;
+  batchInterval?: number; // milliseconds
+  quietHours?: QuietHours;
+}
+
+export interface NotificationEntity extends BaseEntity {
   userId: string;
   type: NotificationType;
   title: string;
@@ -14,35 +71,57 @@ export interface Notification {
   read: boolean;
   readAt?: Date;
   timestamp: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  status: ServiceStatus;
 }
 
-// Database representation of a notification
-export interface DBNotification {
-  id: string;
-  user_id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-  alert?: Record<string, unknown>;
-  link?: string;
-  read: boolean;
-  read_at?: Date;
-  created_at: Date;
+export interface NotificationEvent extends ServiceEvent {
+  type: 'notification:created' | 'notification:updated' | 'notification:deleted';
+  payload: {
+    notification: NotificationEntity;
+    channel?: NotificationChannel;
+  };
 }
 
-// Gotify notification event
-export interface NotificationGotifyEvent {
-  title: string;
-  message: string;
-  priority: number;
-  link?: string;
+export interface NotificationPreferences {
+  id?: string;
+  userId: string;
+  channels: Record<NotificationChannel, ChannelPreferences>;
+  muted: boolean;
+  mutedUntil?: Date;
+  alertTypes: Record<NotificationType, boolean>;
+  globalConfig?: GlobalConfig;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-export interface DesktopNotification {
-  id: string;
+export interface NotificationFilter {
+  type?: NotificationType[];
+  read?: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+  status?: ServiceStatus[];
+  limit?: number;
+  offset?: number;
+}
+
+export interface NotificationStats {
+  total: number;
+  unread: number;
+  byType: Record<NotificationType, number>;
+  byChannel: Record<NotificationChannel, number>;
+  byStatus: Record<ServiceStatus, number>;
+}
+
+export interface NotificationDelivery extends BaseEntity {
+  notificationId: string;
+  channel: NotificationChannel;
+  status: ServiceStatus;
+  error?: string;
+  timestamp: Date;
+}
+
+export interface DesktopNotificationOptions extends BaseEntity {
   type: NotificationType;
   title: string;
   message: string;
@@ -52,74 +131,61 @@ export interface DesktopNotification {
   timestamp: Date;
 }
 
-export interface NotificationPreferences {
-  userId: string;
-  web: NotificationType[];
-  gotify: NotificationType[];
-  desktop: NotificationType[];
-  muted: boolean;
-  mutedUntil?: Date;
-  alertTypes: {
-    alert: boolean;
-    info: boolean;
-    success: boolean;
-    warning: boolean;
-    error: boolean;
-  };
-  webEnabled: boolean;
-  gotifyEnabled: boolean;
-  desktopEnabled: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface NotificationEvent {
-  id: string;
-  type: NotificationType;
+export interface GotifyNotificationOptions {
   title: string;
   message: string;
-  metadata?: Record<string, unknown>;
-  timestamp: Date;
+  priority?: number;
+  extras?: Record<string, unknown>;
 }
 
-export interface NotificationChannel {
-  id: string;
-  name: string;
-  type: 'web' | 'gotify' | 'desktop';
-  enabled: boolean;
-  config?: Record<string, unknown>;
+export interface NotificationOptions {
+  title: string;
+  message: string;
+  type: NotificationType;
+  data?: unknown;
+  batch?: boolean;
+  batchKey?: string;
+  batchInterval?: number;
 }
 
-export interface NotificationFilter {
-  type?: NotificationType[];
-  read?: boolean;
-  startDate?: Date;
-  endDate?: Date;
-  search?: string;
-  limit?: number;
-  offset?: number;
-  userId?: string;
-}
-
-export interface NotificationStats {
-  total: number;
-  unread: number;
-  byType: Record<NotificationType, number>;
-}
-
-export interface NotificationCount {
-  total: number;
-  unread: number;
-  byType: Record<NotificationType, number>;
-}
-
-export interface NotificationPreferencesResponse {
-  success: boolean;
-  error?: string;
+export interface NotificationPreferencesResponse extends Result<NotificationPreferences> {
   data?: NotificationPreferences;
 }
 
-// For backward compatibility
-export type NotificationPreferencesV1 = NotificationPreferences;
-export type NotificationPreferencesV2 = NotificationPreferences;
-export type NotificationPreferencesConverter = (prefs: NotificationPreferencesV1) => NotificationPreferencesV2;
+// Type guards
+export function isNotificationType(type: unknown): type is NotificationType {
+  return typeof type === 'string' && Object.values(NotificationType).includes(type as NotificationType);
+}
+
+export function isNotificationChannel(channel: unknown): channel is NotificationChannel {
+  return typeof channel === 'string' && Object.values(NotificationChannel).includes(channel as NotificationChannel);
+}
+
+export function isNotificationEntity(obj: unknown): obj is NotificationEntity {
+  return obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    'userId' in obj &&
+    'type' in obj &&
+    'title' in obj &&
+    'message' in obj &&
+    'status' in obj;
+}
+
+export function isNotificationDelivery(obj: unknown): obj is NotificationDelivery {
+  return obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    'notificationId' in obj &&
+    'channel' in obj &&
+    'status' in obj;
+}
+
+export function isNotificationPreferences(obj: unknown): obj is NotificationPreferences {
+  return obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    'userId' in obj &&
+    'channels' in obj &&
+    'alertTypes' in obj;
+}
