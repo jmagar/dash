@@ -5,7 +5,8 @@
     "declaration": true,
     "tsBuildInfoFile": "./tsconfig.root.tsbuildinfo",
     "baseUrl": ".",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
     "paths": {
       "@/*": ["src/*"],
       "@server/*": ["src/server/*"],
