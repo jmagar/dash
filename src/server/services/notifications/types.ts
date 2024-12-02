@@ -1,7 +1,7 @@
 import type { NotificationEntity, NotificationType, NotificationPreferences } from '../../../types/notifications';
 
 export interface BatchQueue {
-  notifications: NotificationEntity[];
+  notifications: Partial<NotificationEntity>[];
   timer: NodeJS.Timeout | null;
   lastProcessed: Date;
 }

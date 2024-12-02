@@ -12,7 +12,7 @@ import type {
   AlertCategory,
   DEFAULT_ALERT_RULES,
 } from '../../types/metrics-alerts';
-import type { SystemMetrics, ProcessMetrics } from '../../types/process-metrics';
+import type { SystemMetrics, ProcessMetrics } from '../../types/metrics.types';
 
 class AlertsService extends EventEmitter {
   private readonly CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours

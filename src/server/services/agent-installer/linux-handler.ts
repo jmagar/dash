@@ -1,7 +1,7 @@
 import path from 'path';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
-import type { ExtendedHost, InstallOptions } from '../../../types/agent';
+import type { ExtendedHost, InstallOptions } from '../../../types/agent-config';
 import { ApiError } from '../../../types/error';
 import { unixInstallScript } from './install-scripts';
 import { IAgentHandler } from './types';

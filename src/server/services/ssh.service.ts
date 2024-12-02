@@ -155,13 +155,13 @@ export class SSHService extends EventEmitter {
   public async transferFile(hostname: string, localPath: string, remotePath: string): Promise<void> {
     const host = await this.getHost(hostname);
     if (!host) {
-      throw new Error(`Host ${hostname} not found`);
+      throw new ApiError(`Host ${hostname} not found`, 404);
     }
 
     const client = await this.getConnection(host);
 
     return new Promise((resolve, reject) => {
-      client.sftp((err: Error | undefined, sftp) => {
+      client.sftp((err: Error | null, sftp) => {
         if (err) {
           const metadata: LogMetadata = {
             error: err.message,
@@ -170,11 +170,16 @@ export class SSHService extends EventEmitter {
             remotePath
           };
           logger.error('Failed to create SFTP session', metadata);
-          reject(err);
+          reject(new ApiError(`Failed to create SFTP session: ${err.message}`, 500));
           return;
         }
 
-        const handleError = (err: Error | undefined | null) => {
+        if (!sftp) {
+          reject(new ApiError('SFTP session is undefined', 500));
+          return;
+        }
+
+        sftp.fastPut(localPath, remotePath, (err: Error | null) => {
           if (err) {
             const metadata: LogMetadata = {
               error: err.message,
@@ -183,19 +188,37 @@ export class SSHService extends EventEmitter {
               remotePath
             };
             logger.error('Failed to transfer file', metadata);
-            reject(err);
-            return true;
+            reject(new ApiError(`Failed to transfer file: ${err.message}`, 500));
+            return;
           }
-          return false;
-        };
-
-        sftp.fastPut(localPath, remotePath, {}, (err) => {
-          if (!handleError(err)) {
-            resolve();
-          }
+          resolve();
         });
       });
     });
+  }
+
+  public async withSSH<T>(
+    hostname: string, 
+    callback: (client: Client) => Promise<T>
+  ): Promise<T> {
+    const host = await this.getHost(hostname);
+    if (!host) {
+      throw new ApiError(`Host ${hostname} not found`, 404);
+    }
+
+    const client = await this.getConnection(host);
+    try {
+      return await callback(client);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        hostname: host.hostname
+      };
+      logger.error('SSH operation failed', metadata);
+      throw new ApiError(`SSH operation failed: ${error instanceof Error ? error.message : String(error)}`, 500);
+    } finally {
+      // Don't disconnect - connection is managed by connection pool
+    }
   }
 
   public disconnect(hostId: string): void {

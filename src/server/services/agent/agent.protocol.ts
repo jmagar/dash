@@ -2,7 +2,8 @@ import { WebSocket } from 'ws';
 import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { logger } from '../../utils/logger';
-import type { AgentInfo, AgentMetrics, AgentCommandResult } from '../../../types/socket-events';
+import type { AgentInfo } from '../../../types/agent-config';
+import type { AgentMetrics, AgentCommandResult } from '../../../types/agent-metrics';
 import type { AgentState } from './agent.types';
 
 // Reuse existing message schemas

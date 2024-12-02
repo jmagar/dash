@@ -72,13 +72,17 @@ export interface NotificationEntity extends BaseEntity {
   readAt?: Date;
   timestamp: Date;
   status: ServiceStatus;
+  channel: NotificationChannel;
 }
 
 export interface NotificationEvent extends ServiceEvent {
-  type: 'notification:created' | 'notification:updated' | 'notification:deleted';
+  type: 'notification:created' | 'notification:updated' | 'notification:deleted' | 'notification:bulk_updated';
   payload: {
-    notification: NotificationEntity;
+    notification?: NotificationEntity;
+    notifications?: NotificationEntity[];
     channel?: NotificationChannel;
+    changes?: Record<string, unknown>;
+    action?: string;
   };
 }
 
@@ -169,7 +173,8 @@ export function isNotificationEntity(obj: unknown): obj is NotificationEntity {
     'type' in obj &&
     'title' in obj &&
     'message' in obj &&
-    'status' in obj;
+    'status' in obj &&
+    'channel' in obj;
 }
 
 export function isNotificationDelivery(obj: unknown): obj is NotificationDelivery {

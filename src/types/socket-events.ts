@@ -1,7 +1,7 @@
-import type { NotificationType, Notification, DesktopNotification, NotificationPreferences } from './notifications';
+import type { NotificationType, Notification, DesktopNotification, NotificationPreferences } from './notification.types';
 import type { Host } from './models-shared';
-import type { ProcessInfo, SystemMetrics } from './metrics';
-import type { DockerStats, DockerContainer, DockerComposeConfig } from './docker';
+import type { ProcessInfo, SystemMetrics } from './metrics.types';
+import type { DockerStats, DockerContainer, DockerComposeConfig } from './docker.types';
 
 export interface LogEntry {
   id: string;

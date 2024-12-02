@@ -11,7 +11,10 @@ export enum ServiceStatus {
   STARTING = 'starting',    // Service is initializing
   STOPPING = 'stopping',    // Service is shutting down
   DEGRADED = 'degraded',    // Service is running with reduced functionality
-  ERROR = 'error'          // Service has encountered an error
+  ERROR = 'error',         // Service has encountered an error
+  SENT = 'sent',           // Notification has been sent successfully
+  PENDING = 'pending',     // Notification is queued for delivery
+  FAILED = 'failed'        // Notification delivery failed
 }
 
 /**

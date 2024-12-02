@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import { getAgentService } from './agent.service';
 import { sshService } from './ssh.service';
 import { db } from '../db';
-import type { Host } from '../../types/host';
+import type { Host } from '../../types/host-config';
 import type { Command, CommandResult } from '../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../types/socket-events';
 

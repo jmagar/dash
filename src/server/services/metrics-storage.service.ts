@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { logger } from '../utils/logger';
-import type { SystemMetrics } from '../../types/metrics';
+import type { SystemMetrics } from '../../types/metrics.types';
 import type { DBMetric } from '../../types/db-models';
 import type { Host } from '../../types/models-shared';
 

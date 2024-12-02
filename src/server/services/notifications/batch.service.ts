@@ -1,19 +1,23 @@
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
-import { NotificationEntity, NotificationType, NotificationEvent, ServiceStatus } from '../../../types/notifications';
+import { NotificationEntity, NotificationType, NotificationEvent, NotificationChannel } from '../../../types/notifications';
+import { ServiceStatus } from '../../../types/status';
 import { BatchQueue } from './types';
-import { io } from '../../server';
+import { io } from '../../socket';
+import { NotificationDBService } from './db.service';
 
 export class NotificationBatchService extends EventEmitter {
   private batchQueues: Map<string, BatchQueue> = new Map();
+  private dbService: NotificationDBService;
 
   constructor() {
     super();
+    this.dbService = new NotificationDBService();
     this.processBatchQueues = this.processBatchQueues.bind(this);
     setInterval(this.processBatchQueues, 60000); // Check batch queues every minute
   }
 
-  public addToBatchQueue(userId: string, notification: NotificationEntity): void {
+  public addToBatchQueue(userId: string, notification: Partial<NotificationEntity>): void {
     let queue = this.batchQueues.get(userId);
     if (!queue) {
       queue = {
@@ -27,60 +31,91 @@ export class NotificationBatchService extends EventEmitter {
   }
 
   private async processBatchQueues(): Promise<void> {
-    for (const [userId, queue] of this.batchQueues) {
+    // Convert Map entries to array for ES5 compatibility
+    const entries = Array.from(this.batchQueues.entries());
+    for (const [userId, queue] of entries) {
       if (!queue.timer && queue.notifications.length > 0) {
         const timeSinceLastProcess = Date.now() - queue.lastProcessed.getTime();
         if (timeSinceLastProcess >= 300000) { // 5 minutes default
-          await this.processBatchQueue(userId);
+          await this.processBatchQueue(userId, queue);
         }
       }
     }
   }
 
-  private async processBatchQueue(userId: string): Promise<void> {
-    const queue = this.batchQueues.get(userId);
-    if (!queue) return;
-
+  private async processBatchQueue(userId: string, queue: BatchQueue): Promise<void> {
     try {
+      if (!queue.notifications.length) {
+        return;
+      }
+
       const notifications = queue.notifications;
       queue.notifications = [];
       queue.lastProcessed = new Date();
 
-      // Group notifications by type
-      const groupedNotifications = notifications.reduce((acc, notification) => {
-        const { type } = notification;
-        if (!acc[type]) acc[type] = [];
-        acc[type].push(notification);
-        return acc;
-      }, {} as Record<NotificationType, NotificationEntity[]>);
+      const validNotifications: NotificationEntity[] = [];
+      const failedNotifications: Partial<NotificationEntity>[] = [];
 
-      // Send batched notifications by type
-      for (const [type, typeNotifications] of Object.entries(groupedNotifications)) {
-        const event: NotificationEvent = {
-          type: 'notification:created',
-          payload: {
-            notification: {
-              id: `batch-${Date.now()}`,
+      for (const notification of notifications) {
+        try {
+          const entity = await this.dbService.create(notification as NotificationEntity);
+          if (!this.isValidNotification(entity)) {
+            logger.error('Invalid notification data returned from database', {
               userId,
-              type: type as NotificationType,
-              title: `${typeNotifications.length} New Notifications`,
-              message: typeNotifications.map(n => n.message).join('\n'),
-              read: false,
-              timestamp: new Date(),
-              status: ServiceStatus.Success
-            }
+              notification
+            });
+            failedNotifications.push(notification);
+            continue;
           }
+          validNotifications.push(entity);
+        } catch (error) {
+          logger.error('Failed to create batched notification', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            userId,
+            notification
+          });
+          failedNotifications.push(notification);
+        }
+      }
+
+      if (validNotifications.length > 0) {
+        const event: NotificationEvent = {
+          type: 'notification:bulk_updated',
+          payload: { 
+            notifications: validNotifications,
+            changes: { batched: true }
+          },
+          id: `event-${Date.now()}`,
+          timestamp: new Date(),
+          serviceName: 'notifications'
         };
 
-        this.emit('notification:event', event);
-        io.to(userId).emit('notification:event', event);
+        io.to(`user:${userId}`).emit('notification', event);
+      }
+
+      if (failedNotifications.length > 0) {
+        logger.warn('Some notifications failed to batch', {
+          userId,
+          failedCount: failedNotifications.length,
+          successCount: validNotifications.length
+        });
       }
     } catch (error) {
       logger.error('Failed to process batch queue', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        userId,
+        userId
       });
     }
+  }
+
+  private isValidNotification(notification: any): notification is NotificationEntity {
+    return notification 
+      && typeof notification === 'object'
+      && typeof notification.id === 'string'
+      && typeof notification.userId === 'string'
+      && typeof notification.type === 'string'
+      && typeof notification.timestamp === 'object'
+      && notification.timestamp instanceof Date;
   }
 }
 

@@ -1,13 +1,42 @@
-import { BaseService } from './base.service';
+import { BaseService, type ServiceMetrics } from './base.service';
 import { getAgentService } from './agent.service';
-import type {
-  DockerServiceMetrics,
-  DockerContainerMetrics,
-  DockerContainerCreateOptions,
-  DockerInfo,
-  DockerCommandResult
-} from './docker.types';
-import { ApiError } from '../../types/api-error';
+import { ApiError } from '../../types/error';
+
+interface DockerMetrics {
+  containers: number;
+  containersRunning: number;
+  containersPaused: number;
+  containersStopped: number;
+  images: number;
+  memTotal: number;
+  numCPU: number;
+  serverVersion: string;
+}
+
+interface DockerContainerMetrics {
+  id: string;
+  name: string;
+  image: string;
+  ports: Array<{
+    hostPort: number;
+    containerPort: number;
+    protocol: string;
+  }>;
+  env: Array<{
+    key: string;
+    value: string;
+  }>;
+  command: string[];
+  status: string;
+  created: string;
+  state: string;
+}
+
+interface DockerCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
 
 export class DockerService extends BaseService {
   constructor() {
@@ -20,125 +49,119 @@ export class DockerService extends BaseService {
     });
   }
 
-  async getInfo(hostId: string): Promise<DockerInfo> {
+  override getMetrics(): ServiceMetrics {
+    const baseMetrics = super.getMetrics();
+    return {
+      ...baseMetrics,
+      operationCount: baseMetrics.operationCount,
+      errorCount: baseMetrics.errorCount,
+      uptime: baseMetrics.uptime
+    };
+  }
+
+  async getDockerMetrics(hostId: string): Promise<DockerMetrics> {
     try {
-      const result = await this.executeCommand(hostId, 'docker info --format "{{json .}}"');
-      if (!result.stdout) {
+      const info = await this.executeCommand(hostId, 'docker info --format "{{json .}}"');
+      if (!info.stdout) {
         throw new ApiError('Empty docker info result', 500);
       }
-      const info = this.parseJsonSafe<DockerInfo>(result.stdout);
-      if (!this.isDockerInfo(info)) {
-        throw new ApiError('Invalid docker info format', 500);
+      
+      let infoJson: Record<string, unknown>;
+      try {
+        infoJson = JSON.parse(info.stdout) as Record<string, unknown>;
+      } catch (error) {
+        this.handleError(new ApiError('Failed to parse Docker info JSON', error instanceof Error ? error : new Error(String(error)), 500));
       }
-      return info;
-    } catch (error) {
-      throw this.handleError(error, { operation: 'docker_info', hostId });
-    }
-  }
 
-  async getDockerMetrics(hostId: string): Promise<DockerServiceMetrics> {
-    try {
-      const info = await this.getInfo(hostId);
       return {
-        containers: info.Containers,
-        containersRunning: info.ContainersRunning,
-        containersPaused: info.ContainersPaused,
-        containersStopped: info.ContainersStopped,
-        images: info.Images,
-        memoryTotal: info.MemTotal,
-        cpuCount: info.NCPU,
-        version: info.ServerVersion
+        containers: Number(infoJson.Containers) || 0,
+        containersRunning: Number(infoJson.ContainersRunning) || 0,
+        containersPaused: Number(infoJson.ContainersPaused) || 0,
+        containersStopped: Number(infoJson.ContainersStopped) || 0,
+        images: Number(infoJson.Images) || 0,
+        memTotal: Number(infoJson.MemTotal) || 0,
+        numCPU: Number(infoJson.NumCPU) || 0, // Docker API field for CPU count
+        serverVersion: String(infoJson.ServerVersion) || ''
       };
     } catch (error) {
-      throw this.handleError(error, { operation: 'getDockerMetrics', hostId });
+      this.handleError(new ApiError('Failed to get Docker metrics', error instanceof Error ? error : new Error(String(error)), 500));
     }
   }
 
-  async listContainers(hostId: string, all = false): Promise<DockerContainerMetrics[]> {
+  async getContainers(hostId: string): Promise<DockerContainerMetrics[]> {
     try {
-      const result = await this.executeCommand(hostId, `docker ps ${all ? '-a' : ''} --format "{{json .}}"`);
-      const containers = result.stdout
+      const psResult = await this.executeCommand(hostId, 'docker ps -a --format "{{json .}}"');
+      if (!psResult.stdout) {
+        return [];
+      }
+
+      return psResult.stdout
         .split('\n')
         .filter(line => line.trim())
         .map(line => {
-          const container = this.parseJsonSafe<unknown>(line);
-          if (!this.isDockerContainer(container)) {
-            throw new ApiError('Invalid container format', 500);
+          try {
+            const container = JSON.parse(line.trim()) as Record<string, unknown>;
+            return {
+              id: String(container.ID || ''),
+              name: String(container.Names || ''),
+              image: this.parseImageName(String(container.Image || '')),
+              ports: this.parsePorts(String(container.Ports || '')),
+              env: this.parseEnv(String(container.Env || '')),
+              command: this.parseCommand(container.Command),
+              status: String(container.Status || ''),
+              created: String(container.Created || ''),
+              state: String(container.State || '')
+            };
+          } catch (error) {
+            this.logger.error('Failed to parse container data', { 
+              error: error instanceof Error ? error : new Error(String(error)),
+              line 
+            });
+            return null;
           }
-          return this.mapToContainerMetrics(container);
-        });
-
-      return containers;
+        })
+        .filter((container): container is DockerContainerMetrics => container !== null);
     } catch (error) {
-      throw this.handleError(error, { operation: 'listContainers', hostId, all });
+      this.handleError(new ApiError('Failed to get Docker containers', error instanceof Error ? error : new Error(String(error)), 500));
     }
   }
 
-  async createContainer(hostId: string, options: DockerContainerCreateOptions): Promise<{ id: string }> {
-    try {
-      const args: string[] = ['create'];
-
-      if (options.name) {
-        args.push('--name', options.name);
-      }
-
-      if (options.ports) {
-        Object.entries(options.ports).forEach(([host, container]) => {
-          args.push('-p', `${host}:${container}`);
-        });
-      }
-
-      if (options.env) {
-        Object.entries(options.env).forEach(([key, value]) => {
-          args.push('-e', `${key}=${value}`);
-        });
-      }
-
-      args.push(options.image);
-
-      if (options.command) {
-        args.push(...Array.from(options.command));
-      }
-
-      const result = await this.executeDockerCommand(hostId, args);
-      const containerId = result.stdout.trim();
-      if (!containerId) {
-        throw new ApiError('Empty container ID returned', 500);
-      }
-
-      return { id: containerId };
-    } catch (error) {
-      throw this.handleError(error, { operation: 'createContainer', hostId, options });
-    }
+  private parseImageName(image: string): string {
+    return image.split(':')[0];
   }
 
-  async startContainer(hostId: string, id: string): Promise<void> {
-    try {
-      await this.executeCommand(hostId, `docker start ${id}`);
-    } catch (error) {
-      this.handleError(error, { operation: 'startContainer', hostId, containerId: id });
-    }
+  private parsePorts(portsStr: string): Array<{ hostPort: number; containerPort: number; protocol: string }> {
+    if (!portsStr) return [];
+    
+    return portsStr.split(', ').map(portMapping => {
+      const [hostPart, containerPart] = portMapping.split('->');
+      const [, hostPort] = (hostPart || '').split(':');
+      const [containerPort, protocol] = (containerPart || '').split('/');
+      
+      return {
+        hostPort: parseInt(hostPort || '0', 10),
+        containerPort: parseInt(containerPort || '0', 10),
+        protocol: protocol || 'tcp'
+      };
+    });
   }
 
-  async stopContainer(hostId: string, id: string): Promise<void> {
-    try {
-      await this.executeCommand(hostId, `docker stop ${id}`);
-    } catch (error) {
-      this.handleError(error, { operation: 'stopContainer', hostId, containerId: id });
-    }
+  private parseEnv(envStr: string): Array<{ key: string; value: string }> {
+    if (!envStr) return [];
+    return envStr.split(',').map(env => {
+      const [key = '', value = ''] = env.split('=');
+      return { key, value };
+    });
   }
 
-  async removeContainer(hostId: string, id: string, force = false): Promise<void> {
-    try {
-      const args = ['rm'];
-      if (force) {
-        args.push('-f');
-      }
-      args.push(id);
-      await getAgentService().executeCommand(hostId, 'docker', args);
-    } catch (error) {
-      this.handleError(error, { operation: 'removeContainer', hostId, containerId: id, force });
+  private parseCommand(command: unknown): string[] {
+    if (Array.isArray(command)) {
+      return command.map(String);
     }
+    if (typeof command === 'string') {
+      return command.split(' ');
+    }
+    return [];
   }
 
   private async executeCommand(hostId: string, command: string): Promise<DockerCommandResult> {
@@ -152,142 +175,14 @@ export class DockerService extends BaseService {
     return result;
   }
 
-  private async executeDockerCommand(hostId: string, args: string[]): Promise<DockerCommandResult> {
-    const agentService = getAgentService();
-    const result = await agentService.executeCommand(hostId, 'docker', args);
-    
-    if (!this.isCommandResult(result)) {
-      throw new ApiError('Invalid command result', 500);
-    }
-    
-    return result;
-  }
-
-  private isDockerInfo(value: unknown): value is DockerInfo {
-    return value !== null && typeof value === 'object' &&
-      'Containers' in value && typeof value.Containers === 'number' &&
-      'ContainersRunning' in value && typeof value.ContainersRunning === 'number' &&
-      'ContainersPaused' in value && typeof value.ContainersPaused === 'number' &&
-      'ContainersStopped' in value && typeof value.ContainersStopped === 'number' &&
-      'Images' in value && typeof value.Images === 'number' &&
-      'MemTotal' in value && typeof value.MemTotal === 'number' &&
-      'NCPU' in value && typeof value.NCPU === 'number' &&
-      'ServerVersion' in value && typeof value.ServerVersion === 'string';
-  }
-
   private isCommandResult(value: unknown): value is DockerCommandResult {
-    return value !== null && typeof value === 'object' &&
-      'stdout' in value && typeof value.stdout === 'string' &&
-      'stderr' in value && typeof value.stderr === 'string' &&
-      'exitCode' in value && typeof value.exitCode === 'number';
-  }
-
-  private isDockerContainer(value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === 'object' &&
-      'ID' in value && typeof value.ID === 'string' &&
-      'Names' in value && typeof value.Names === 'string' &&
-      'Image' in value && typeof value.Image === 'string' &&
-      'Status' in value && typeof value.Status === 'string' &&
-      'State' in value && typeof value.State === 'string' &&
-      'Created' in value && typeof value.Created === 'number';
-  }
-
-  private mapToContainerMetrics(container: Record<string, unknown>): DockerContainerMetrics {
-    return {
-      id: container.ID as string,
-      name: container.Names as string,
-      image: container.Image as string,
-      status: container.Status as string,
-      state: container.State as string,
-      created: container.Created as number,
-      ports: this.parsePortsString(String(container.Ports || '')),
-      networks: this.parseNetworksString(String(container.Networks || ''))
-    };
-  }
-
-  private parseJsonSafe<T>(str: string): unknown {
-    try {
-      return JSON.parse(str);
-    } catch {
-      throw new ApiError('Invalid JSON format', 500);
-    }
-  }
-
-  private parsePortsString(portsStr: string): DockerContainerMetrics['ports'] {
-    if (!portsStr) {
-      return [];
-    }
-    
-    interface DockerPort {
-      IP?: string;
-      PrivatePort: number;
-      PublicPort?: number;
-      Type: string;
-    }
-    
-    try {
-      const parsed: unknown = JSON.parse(portsStr);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-      
-      return parsed.filter((item): item is DockerPort => {
-        if (!item || typeof item !== 'object') {
-          return false;
-        }
-        
-        const port = item as Record<string, unknown>;
-        
-        if ('IP' in port && typeof port.IP !== 'string') {
-          return false;
-        }
-        
-        if (!('PrivatePort' in port) || typeof port.PrivatePort !== 'number') {
-          return false;
-        }
-        
-        if ('PublicPort' in port && typeof port.PublicPort !== 'number') {
-          return false;
-        }
-        
-        if (!('Type' in port) || typeof port.Type !== 'string') {
-          return false;
-        }
-        
-        return true;
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  private parseNetworksString(networksStr: string): string[] {
-    if (!networksStr) {
-      return [];
-    }
-    return networksStr.split(',').map(n => n.trim()).filter(Boolean);
-  }
-
-  private parsePorts(portsString: string): Array<{
-    IP?: string;
-    PrivatePort: number;
-    PublicPort?: number;
-    Type: string;
-  }> {
-    if (!portsString) return [];
-    
-    // Parse the ports string format: "0.0.0.0:8080->80/tcp"
-    return portsString.split(', ').map(portMapping => {
-      const [hostPart, containerPart] = portMapping.split('->');
-      const [hostIp, hostPort] = (hostPart || '').split(':');
-      const [containerPort, type] = (containerPart || '').split('/');
-
-      return {
-        IP: hostIp || undefined,
-        PrivatePort: parseInt(containerPort, 10) || 0,
-        PublicPort: hostPort ? parseInt(hostPort, 10) : undefined,
-        Type: type || 'tcp'
-      };
-    });
+    return value !== null && 
+           typeof value === 'object' &&
+           'stdout' in value &&
+           typeof value.stdout === 'string' &&
+           'stderr' in value &&
+           typeof value.stderr === 'string' &&
+           'exitCode' in value &&
+           typeof value.exitCode === 'number';
   }
 }

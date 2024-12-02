@@ -53,7 +53,10 @@ export class ValidationResponse<T> extends BaseResponse<T> {
 /**
  * Auth response type
  */
-export class AuthResponse<T> extends BaseResponse<T> {}
+export class AuthResponse<T> extends BaseResponse<T> {
+  @ApiProperty({ description: 'Authentication status' })
+  authenticated = false;
+}
 
 /**
  * DTO for user registration
@@ -275,9 +278,9 @@ export class TokenPayloadDto {
  * DTO for access token payload
  */
 export class AccessTokenPayloadDto extends TokenPayloadDto {
-  @ApiProperty({ description: 'Token type', enum: ['access'] as const })
-  @IsEnum(['access'] as const)
-  type = 'access' as const;
+  @ApiProperty({ description: 'Token type' })
+  @IsEnum(['access'])
+  type = 'access';
 
   @ApiPropertyOptional({ description: 'Access token permissions' })
   @IsOptional()
@@ -290,9 +293,9 @@ export class AccessTokenPayloadDto extends TokenPayloadDto {
  * DTO for refresh token payload
  */
 export class RefreshTokenPayloadDto extends TokenPayloadDto {
-  @ApiProperty({ description: 'Token type', enum: ['refresh'] as const })
-  @IsEnum(['refresh'] as const)
-  type = 'refresh' as const;
+  @ApiProperty({ description: 'Token type' })
+  @IsEnum(['refresh'])
+  type = 'refresh';
 
   @ApiPropertyOptional({ description: 'Original access token ID' })
   @IsOptional()
@@ -301,14 +304,48 @@ export class RefreshTokenPayloadDto extends TokenPayloadDto {
 }
 
 /**
+ * Base token type
+ */
+export abstract class BaseTokenDto {
+  @ApiProperty({ description: 'Token ID' })
+  @IsUUID()
+  id = '';
+
+  @ApiProperty({ description: 'User ID' })
+  @IsUUID()
+  userId = '';
+
+  @ApiProperty({ description: 'Username' })
+  @IsString()
+  @IsNotEmpty()
+  username = '';
+
+  @ApiProperty({ description: 'User role', enum: UserRole })
+  @IsEnum(UserRole)
+  role = UserRole.USER;
+
+  @ApiProperty({ description: 'Account status' })
+  @IsBoolean()
+  is_active = false;
+
+  abstract type: 'access' | 'refresh';
+}
+
+/**
  * Access token DTO
  */
-export class AccessTokenDto extends AccessTokenPayloadDto {}
+export class AccessTokenDto extends BaseTokenDto {
+  @ApiProperty({ description: 'Token type' })
+  type = 'access' as const;
+}
 
 /**
  * Refresh token DTO
  */
-export class RefreshTokenDto extends RefreshTokenPayloadDto {}
+export class RefreshTokenDto extends BaseTokenDto {
+  @ApiProperty({ description: 'Token type' })
+  type = 'refresh' as const;
+}
 
 /**
  * DTO for token validation response
@@ -336,14 +373,33 @@ export class RefreshTokenResponseDto extends AuthResponse<AuthenticatedUserDto> 
 }
 
 /**
- * Device information interface
+ * Device information DTO
  */
-export interface DeviceInfo {
-  id: string;
-  type: string;
-  name: string;
-  platform: string;
-  browser: string;
+export class DeviceInfo {
+  @ApiProperty({ description: 'Device ID' })
+  @IsString()
+  @IsNotEmpty()
+  id = '';
+
+  @ApiProperty({ description: 'Device type' })
+  @IsString()
+  @IsNotEmpty()
+  type = '';
+
+  @ApiProperty({ description: 'Device name' })
+  @IsString()
+  @IsNotEmpty()
+  name = '';
+
+  @ApiProperty({ description: 'Device platform' })
+  @IsString()
+  @IsNotEmpty()
+  platform = '';
+
+  @ApiProperty({ description: 'Browser information' })
+  @IsString()
+  @IsNotEmpty()
+  browser = '';
 }
 
 /**
@@ -401,34 +457,6 @@ export class SessionDto {
   @IsOptional()
   @IsObject()
   metadata?: AuthMetadata;
-}
-
-/**
- * Base token type
- */
-export abstract class BaseTokenDto {
-  @ApiProperty({ description: 'Token ID' })
-  @IsUUID()
-  id = '';
-
-  @ApiProperty({ description: 'User ID' })
-  @IsUUID()
-  userId = '';
-
-  @ApiProperty({ description: 'Username' })
-  @IsString()
-  @IsNotEmpty()
-  username = '';
-
-  @ApiProperty({ description: 'User role', enum: UserRole })
-  @IsEnum(UserRole)
-  role = UserRole.USER;
-
-  @ApiProperty({ description: 'Account status' })
-  @IsBoolean()
-  is_active = false;
-
-  abstract type: 'access' | 'refresh';
 }
 
 /**
