@@ -1,171 +1,200 @@
-import type { NotificationType, Notification, DesktopNotification, NotificationPreferences } from './notification.types';
-import type { Host } from './models-shared';
-import type { ProcessInfo, SystemMetrics } from './metrics.types';
-import type { DockerStats, DockerContainer, DockerComposeConfig } from './docker.types';
+import { z } from 'zod';
+import type { 
+  NotificationType, 
+  Notification, 
+  DesktopNotification, 
+  NotificationPreferences 
+} from './notification.types';
+import type { 
+  Host 
+} from './models-shared';
+import type { 
+  ProcessInfo, 
+  SystemMetrics, 
+  ProcessMetrics 
+} from './metrics.types';
+import type { 
+  DockerStats, 
+  DockerContainer, 
+  DockerComposeConfig 
+} from './docker.types';
+import type {
+  HostId,
+  SessionId,
+  ProcessId,
+  BaseEventPayload,
+  BaseErrorPayload,
+  BaseSuccessPayload,
+  HostEventPayload,
+  ProcessEventPayload,
+  TerminalEventPayload
+} from './socket.io';
 
-export interface LogEntry {
-  id: string;
-  timestamp: Date;
-  level: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-}
+// Log entry schema with strict validation
+export const logEntrySchema = z.object({
+  id: z.string().uuid(),
+  timestamp: z.date(),
+  level: z.enum(['debug', 'info', 'warn', 'error']),
+  message: z.string(),
+  metadata: z.record(z.unknown()).optional()
+}).strict().readonly();
 
-export interface LogFilter {
-  level?: string;
-  search?: string;
-  startTime?: Date;
-  endTime?: Date;
-}
+export type LogEntry = z.infer<typeof logEntrySchema>;
 
-export interface NotificationPreferencesResponse {
-  success: boolean;
-  error?: string;
-  data?: {
-    preferences?: NotificationPreferences;
-  };
-}
+// Log filter schema with strict validation
+export const logFilterSchema = z.object({
+  level: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+  search: z.string().min(1).optional(),
+  startTime: z.date().optional(),
+  endTime: z.date().optional()
+}).strict().readonly();
 
-// Agent-related types
-export interface AgentInfo {
-  id: string;
-  version: string;
-  hostname: string;
-  platform: string;
-  arch: string;
-  status: 'connected' | 'disconnected' | 'error';
-  lastSeen: Date;
-  error?: string;
-}
+export type LogFilter = z.infer<typeof logFilterSchema>;
 
-export interface AgentMetrics {
-  cpu: SystemMetrics['cpu'];
-  memory: SystemMetrics['memory'];
-  storage: SystemMetrics['storage'];
-  network: SystemMetrics['network'];
-  timestamp: Date;
-}
+// Response schemas with strict validation
+export const notificationPreferencesResponseSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+  data: z.object({
+    preferences: z.custom<NotificationPreferences>().optional()
+  }).optional()
+}).strict().readonly();
 
-export interface AgentCommandResult {
-  success: boolean;
-  output?: string;
-  error?: string;
-}
+export type NotificationPreferencesResponse = z.infer<typeof notificationPreferencesResponseSchema>;
 
-export interface HeartbeatInfo {
-  timestamp: Date;
-  status: 'healthy' | 'unhealthy';
-  error?: string;
-}
+// Agent info schema with strict validation
+export const agentInfoSchema = z.object({
+  id: z.string().uuid(),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  hostname: z.string().min(1),
+  platform: z.string().min(1),
+  arch: z.string().min(1),
+  status: z.enum(['connected', 'disconnected', 'error']),
+  lastSeen: z.date(),
+  error: z.string().optional()
+}).strict().readonly();
 
-// Socket Data interface
-export interface SocketData {
-  agentId?: string;
-  userId?: string;
-  hostId?: string;
-  sessionId?: string;
-  authenticated?: boolean;
-}
+export type AgentInfo = z.infer<typeof agentInfoSchema>;
 
-// Socket Event Names
-export type SocketEventName = keyof ClientToServerEvents | keyof ServerToClientEvents;
+// Agent metrics schema with strict validation
+export const agentMetricsSchema = z.object({
+  cpu: z.custom<SystemMetrics['cpu']>(),
+  memory: z.custom<SystemMetrics['memory']>(),
+  storage: z.custom<SystemMetrics['storage']>(),
+  network: z.custom<SystemMetrics['network']>(),
+  timestamp: z.date()
+}).strict().readonly();
 
-// Client to Server Events
+export type AgentMetrics = z.infer<typeof agentMetricsSchema>;
+
+// Agent command result schema with strict validation
+export const agentCommandResultSchema = z.object({
+  success: z.boolean(),
+  output: z.string().optional(),
+  error: z.string().optional()
+}).strict().readonly();
+
+export type AgentCommandResult = z.infer<typeof agentCommandResultSchema>;
+
+// Heartbeat info schema with strict validation
+export const heartbeatInfoSchema = z.object({
+  timestamp: z.date(),
+  status: z.enum(['healthy', 'unhealthy']),
+  error: z.string().optional()
+}).strict().readonly();
+
+export type HeartbeatInfo = z.infer<typeof heartbeatInfoSchema>;
+
+// Socket data schema with strict validation
+export const socketDataSchema = z.object({
+  agentId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  hostId: z.string().uuid().optional(),
+  sessionId: z.string().uuid().optional(),
+  authenticated: z.boolean().optional()
+}).strict().readonly();
+
+export type SocketData = z.infer<typeof socketDataSchema>;
+
+// Client to server events with strict typing
 export interface ClientToServerEvents {
   // Host Events
-  'host:connect': (data: { hostId: string }, callback: (response: { error?: string }) => void) => void;
-  'host:disconnect': (data: { hostId: string }, callback: (response: { error?: string }) => void) => void;
+  'host:connect': (payload: Readonly<{
+    hostId: HostId;
+  }> & BaseEventPayload, callback: (response: BaseSuccessPayload | BaseErrorPayload) => void) => void;
+  'host:disconnect': (payload: Readonly<{
+    hostId: HostId;
+  }> & BaseEventPayload, callback: (response: BaseSuccessPayload | BaseErrorPayload) => void) => void;
 
   // Process Events
-  'process:monitor': (data: { hostId: string }) => void;
-  'process:unmonitor': (data: { hostId: string }) => void;
-  'process:kill': (data: { hostId: string; pid: number; signal?: string }) => void;
+  'process:monitor': (payload: HostEventPayload) => void;
+  'process:unmonitor': (payload: HostEventPayload) => void;
+  'process:kill': (payload: Readonly<{
+    hostId: HostId;
+    pid: ProcessId;
+    signal?: NodeJS.Signals;
+  }> & BaseEventPayload) => void;
 
   // Terminal Events
-  'terminal:join': (data: { hostId: string; sessionId: string }) => void;
-  'terminal:leave': (data: { hostId: string; sessionId: string }) => void;
-  'terminal:data': (data: { hostId: string; sessionId: string; data: string }) => void;
-  'terminal:resize': (data: { hostId: string; sessionId: string; cols: number; rows: number }) => void;
-
-  // Docker Events
-  'docker:subscribe': (data: { hostId: string }) => void;
-  'docker:unsubscribe': (data: { hostId: string }) => void;
-
-  // Command Events
-  'command:execute': (data: {
-    hostId: string;
-    command: string;
-    args?: string[];
-    options?: {
-      timeout?: number;
-      cwd?: string;
-      env?: Record<string, string>;
-    };
-  }) => void;
-
-  // Log Events
-  'logs:subscribe': (data: { hostIds: string[]; filter?: LogFilter }) => void;
-  'logs:unsubscribe': (data: { hostIds: string[] }) => void;
-  'logs:filter': (data: { filter: LogFilter }) => void;
-  'logs:stream': (data: { logs: LogEntry[] }) => void;
-
-  // Agent Events
-  'agent:connected': (data: { info: AgentInfo }) => void;
-  'agent:metrics': (data: { metrics: AgentMetrics }) => void;
-  'agent:heartbeat': (data: { timestamp: Date; load: number[] }) => void;
-  'agent:command': (data: { command: string; args?: string[] }) => void;
-
-  // Ping/Pong
-  'ping': () => void;
-  'pong': () => void;
+  'terminal:join': (payload: TerminalEventPayload) => void;
+  'terminal:leave': (payload: TerminalEventPayload) => void;
+  'terminal:data': (payload: Readonly<{
+    hostId: HostId;
+    sessionId: SessionId;
+    data: string;
+  }> & BaseEventPayload) => void;
+  'terminal:resize': (payload: Readonly<{
+    hostId: HostId;
+    sessionId: SessionId;
+    cols: number;
+    rows: number;
+  }> & BaseEventPayload) => void;
 }
 
-// Server to Client Events
+// Server to client events with strict typing
 export interface ServerToClientEvents {
   // Host Events
-  'host:updated': (host: Host) => void;
+  'host:updated': (payload: Readonly<Host> & BaseEventPayload) => void;
 
   // Process Events
-  'process:list': (data: { hostId: string; processes: ProcessInfo[] }) => void;
-  'process:update': (data: { hostId: string; process: ProcessInfo }) => void;
-  'process:error': (data: { hostId: string; error: string }) => void;
-  'process:started': (data: { hostId: string; process: ProcessInfo }) => void;
-  'process:ended': (data: { hostId: string; process: ProcessInfo }) => void;
-  'process:changed': (data: { hostId: string; process: ProcessInfo; oldStatus: string }) => void;
-  'process:metrics': (data: { hostId: string; processes: ProcessInfo[] }) => void;
+  'process:list': (payload: Readonly<{
+    hostId: HostId;
+    processes: readonly ProcessInfo[];
+  }> & BaseEventPayload) => void;
+  'process:update': (payload: Readonly<{
+    hostId: HostId;
+    process: ProcessInfo;
+  }> & BaseEventPayload) => void;
+  'process:error': (payload: ProcessEventPayload & BaseErrorPayload) => void;
+  'process:started': (payload: Readonly<{
+    hostId: HostId;
+    process: ProcessInfo;
+  }> & BaseEventPayload) => void;
+  'process:ended': (payload: Readonly<{
+    hostId: HostId;
+    process: ProcessInfo;
+  }> & BaseEventPayload) => void;
+  'process:changed': (payload: Readonly<{
+    hostId: HostId;
+    process: ProcessInfo;
+    oldStatus: string;
+  }> & BaseEventPayload) => void;
+  'process:metrics': (payload: Readonly<{
+    hostId: HostId;
+    processes: readonly ProcessInfo[];
+  }> & BaseEventPayload) => void;
 
   // Terminal Events
-  'terminal:data': (data: { hostId: string; sessionId: string; data: string }) => void;
-  'terminal:exit': (data: { hostId: string; sessionId: string; code: number }) => void;
-
-  // Metrics Events
-  'metrics:update': (data: { hostId: string; metrics: SystemMetrics }) => void;
-  'metrics:error': (data: { hostId: string; error: string }) => void;
-
-  // Docker Events
-  'docker:stats': (data: { hostId: string; stats: DockerStats }) => void;
-  'docker:containers': (data: { hostId: string; containers: DockerContainer[] }) => void;
-  'docker:error': (data: { hostId: string; error: string }) => void;
-
-  // Log Events
-  'logs:new': (log: LogEntry) => void;
-  'logs:error': (data: { error: string }) => void;
-  'logs:stream': (data: { logs: LogEntry[] }) => void;
-
-  // Notification Events
-  'notification:created': (notification: Notification) => void;
-  'notification:updated': (notification: Notification) => void;
-  'notification:deleted': (notificationId: string) => void;
-  'notification:desktop': (notification: DesktopNotification) => void;
-
-  // Agent Events
-  'agent:connected': (data: { hostId: string; info: AgentInfo }) => void;
-  'agent:disconnected': (data: { hostId: string; reason?: string }) => void;
-  'agent:error': (data: { hostId: string; error: string }) => void;
-  'agent:metrics': (data: { hostId: string; metrics: AgentMetrics }) => void;
-  'agent:heartbeat': (data: { hostId: string; info: HeartbeatInfo }) => void;
-  'agent:update': (data: { hostId: string; info: AgentInfo }) => void;
-  'agent:command': (data: { command: string; args?: string[] }) => void;
+  'terminal:data': (payload: Readonly<{
+    hostId: HostId;
+    sessionId: SessionId;
+    data: string;
+  }> & BaseEventPayload) => void;
+  'terminal:exit': (payload: Readonly<{
+    hostId: HostId;
+    sessionId: SessionId;
+    code: number;
+  }> & BaseEventPayload) => void;
 
   // System Events
   'error': (error: Error | string) => void;
@@ -175,7 +204,26 @@ export interface ServerToClientEvents {
   'pong': () => void;
 }
 
+// Inter-server events with strict typing
 export interface InterServerEvents {
   ping: () => void;
   pong: () => void;
 }
+
+// Helper types for event handling
+export type EventName = keyof ClientToServerEvents | keyof ServerToClientEvents;
+export type EventCallback<T extends EventName> = T extends keyof ServerToClientEvents 
+  ? ServerToClientEvents[T] 
+  : T extends keyof ClientToServerEvents 
+    ? ClientToServerEvents[T] 
+    : never;
+
+// Event category type helpers
+export type HostEvents = Extract<EventName, `host:${string}`>;
+export type ProcessEvents = Extract<EventName, `process:${string}`>;
+export type TerminalEvents = Extract<EventName, `terminal:${string}`>;
+export type MetricsEvents = Extract<EventName, `metrics:${string}`>;
+export type DockerEvents = Extract<EventName, `docker:${string}`>;
+export type LogEvents = Extract<EventName, `logs:${string}`>;
+export type NotificationEvents = Extract<EventName, `notification:${string}`>;
+export type SystemEvents = 'error' | 'connect_error' | 'disconnect' | 'ping' | 'pong';

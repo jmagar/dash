@@ -2,7 +2,7 @@ import { Client, SFTPWrapper } from 'ssh2';
 import type { ClientConfig, SFTPStats } from 'ssh2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
-import logger from '../../../logger';
+import { logger } from '../../utils/logger';
 
 interface SFTPFileEntry {
   filename: string;

@@ -1,57 +1,23 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "module": "esnext",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "useDefineForClassFields": false,
-    "downlevelIteration": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "crypto": ["node_modules/crypto-browserify"],
-      "stream": ["node_modules/stream-browserify"],
-      "path": ["node_modules/path-browserify"],
-      "os": ["node_modules/os-browserify/browser"],
-      "http": ["node_modules/stream-http"],
-      "https": ["node_modules/https-browserify"],
-      "buffer": ["node_modules/buffer"]
-    },
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
-    "types": [
-      "node",
-      "jest",
-      "express",
-      "react",
-      "react-dom",
-      "socket.io",
-      "socket.io-client"
-    ],
-    "skipDefaultLibCheck": true,
-    "ignoreDeprecations": "5.0"
+    "composite": true,
+    "incremental": true
   },
+  "references": [
+    { "path": "./tsconfig.server.json" },
+    { "path": "./tsconfig.client.json" }
+  ],
+  "files": [],
   "include": [
-    "src"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
-    "build",
-    "dist"
+    "dist",
+    "scripts"
   ]
 }

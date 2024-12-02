@@ -1,22 +1,22 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
 
-@Entity('share_access_logs')
+@Entity()
 export class ShareAccessLog {
     @PrimaryGeneratedColumn('uuid')
-    id: string;
+    id!: string;
 
     @Column()
     @Index()
-    shareId: string;
+    shareId!: string;
 
     @Column({ type: 'timestamp' })
-    timestamp: Date;
+    timestamp!: Date;
 
     @Column()
-    ipAddress: string;
+    ipAddress!: string;
 
     @Column()
-    userAgent: string;
+    userAgent!: string;
 
     @Column({ nullable: true })
     status?: string;
@@ -25,5 +25,5 @@ export class ShareAccessLog {
     error?: string;
 
     @CreateDateColumn()
-    createdAt: Date;
+    createdAt!: Date;
 }

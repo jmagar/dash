@@ -19,11 +19,17 @@ export enum SortOrder {
     DESC = 'desc',
 }
 
+export enum ShareStatus {
+    ACTIVE = 'active',
+    EXPIRED = 'expired',
+    REVOKED = 'revoked',
+}
+
 export class ShareSecurityDto {
     @ApiPropertyOptional()
     @IsBoolean()
     @IsOptional()
-    csrfProtection?: boolean;
+    csrfProtection?: boolean = false;
 
     @ApiPropertyOptional()
     @IsString()
@@ -36,6 +42,19 @@ export class ShareSecurityDto {
     expiresIn?: number;
 }
 
+export interface ShareAccessLogEntryDto {
+    timestamp: Date;
+    ipAddress: string;
+    userAgent: string;
+    status: string;
+    error?: string;
+    headers?: Record<string, string>;
+    rateLimit?: {
+        remaining: number;
+        reset: Date;
+    };
+}
+
 export class CreateShareRequestDto {
     @ApiProperty()
     @IsString()
@@ -44,7 +63,7 @@ export class CreateShareRequestDto {
     @ApiPropertyOptional()
     @IsBoolean()
     @IsOptional()
-    allowZipDownload?: boolean;
+    allowZipDownload?: boolean = false;
 
     @ApiPropertyOptional()
     @Type(() => ShareSecurityDto)
@@ -70,10 +89,22 @@ export class ShareInfoDto {
     @IsString()
     path!: string;
 
+    @ApiProperty({ enum: ShareAccessType })
+    @IsEnum(ShareAccessType)
+    accessType!: ShareAccessType;
+
+    @ApiProperty({ enum: ShareStatus })
+    @IsEnum(ShareStatus)
+    status!: ShareStatus;
+
+    @ApiProperty()
+    @IsString()
+    url!: string;
+
     @ApiPropertyOptional()
     @IsBoolean()
     @IsOptional()
-    allowZipDownload?: boolean;
+    allowZipDownload?: boolean = false;
 
     @ApiPropertyOptional()
     @Type(() => ShareSecurityDto)
@@ -105,7 +136,17 @@ export class ShareInfoDto {
     @ApiPropertyOptional()
     @IsDateString()
     @IsOptional()
-    lastAccessed?: Date;
+    lastAccessedAt?: Date;
+
+    @ApiPropertyOptional()
+    @IsBoolean()
+    @IsOptional()
+    hasPassword?: boolean = false;
+
+    @ApiPropertyOptional()
+    @IsObject()
+    @IsOptional()
+    metadata?: Record<string, unknown>;
 }
 
 export class ShareAccessRequestDto {
@@ -127,7 +168,7 @@ export class ModifyShareRequestDto {
     @ApiPropertyOptional()
     @IsBoolean()
     @IsOptional()
-    allowZipDownload?: boolean;
+    allowZipDownload?: boolean = false;
 
     @ApiPropertyOptional()
     @Type(() => ShareSecurityDto)
@@ -155,7 +196,7 @@ export class ListSharesRequestDto {
     @ApiPropertyOptional()
     @IsBoolean()
     @IsOptional()
-    includeExpired?: boolean;
+    includeExpired?: boolean = false;
 
     @ApiPropertyOptional()
     @IsNumber()

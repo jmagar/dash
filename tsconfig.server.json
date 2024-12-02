@@ -1,38 +1,36 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "target": "es2020",
-    "lib": ["es2020"],
+    "module": "commonjs",
     "outDir": "dist",
-    "rootDir": "src",
     "noEmit": false,
-    "jsx": "react",
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "sourceMap": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "types": [
+      "node",
+      "jest",
+      "express"
+    ],
+    "paths": {
+      "@/*": ["src/*"],
+      "@server/*": ["src/server/*"],
+      "@shared/*": ["src/shared/*"]
+    }
   },
   "include": [
-    "src/server/**/*",
-    "src/types/**/*",
-    "src/utils/**/*",
-    "src/shared/**/*"
+    "src/server/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/types/**/*.ts",
+    "src/types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
-    "build",
     "dist",
-    "scripts",
     "src/client",
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.spec.ts"
   ]
 }

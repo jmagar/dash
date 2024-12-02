@@ -3,6 +3,25 @@ import type { ProcessInfo } from '../../types/metrics';
 import { logger } from '../utils/logger';
 
 class HostService {
+  private initialized = false;
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      logger.info('Initializing host service...');
+      // Add initialization logic here
+      this.initialized = true;
+      logger.info('Host service initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize host service:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
   async getHost(hostId: string): Promise<Host | null> {
     try {
       // This would typically query your database

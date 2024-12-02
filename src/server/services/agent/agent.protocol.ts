@@ -1,132 +1,138 @@
 import { WebSocket } from 'ws';
 import { Socket } from 'socket.io';
-import { z } from 'zod';
 import { logger } from '../../utils/logger';
-import type { AgentInfo } from '../../../types/agent-config';
-import type { AgentMetrics, AgentCommandResult } from '../../../types/agent-metrics';
-import type { AgentState } from './agent.types';
-
-// Reuse existing message schemas
-export const MessageType = z.enum([
-  'ping', 'pong', 'handshake', 'register',
-  'command', 'command_response', 'heartbeat',
-  'disconnect', 'error'
-]);
-
-export const Message = z.object({
-  type: MessageType,
-  id: z.string(),
-  timestamp: z.string().datetime(),
-  payload: z.record(z.any()).optional(),
-});
-
-type MessageData = z.infer<typeof Message>;
+import type { AgentCommandResult, AgentInfo, AgentMetrics } from './agent.types';
+import { MessageData } from './types/message.types';
+import { MessageParser } from './utils/message.parser';
+import { MessageHandler } from './services/message.handler';
 
 export class ProtocolHandler {
+  private readonly messageHandler: MessageHandler;
+
   constructor(
-    private readonly onRegister: (connection: WebSocket | Socket, info: AgentInfo, type: 'ws' | 'socketio') => Promise<void>,
+    private readonly onRegister: (info: AgentInfo) => Promise<void>,
     private readonly onHeartbeat: (metrics: AgentMetrics) => Promise<void>,
     private readonly onDisconnect: (connection: WebSocket | Socket) => void,
     private readonly onCommandResponse: (result: AgentCommandResult) => void
-  ) {}
-
-  // Reuse existing WebSocket handler code
-  handleWebSocket(ws: WebSocket): void {
-    logger.debug('Agent attempting to connect via WebSocket');
-
-    const timeout = setTimeout(() => {
-      ws.terminate();
-      logger.warn('Agent WebSocket connection timed out during registration');
-    }, 5000);
-
-    ws.on('message', (data: Buffer) => {
-      void this.handleWebSocketMessage(ws, data, timeout);
-    });
-
-    ws.on('close', () => {
-      clearTimeout(timeout);
-      this.onDisconnect(ws);
-    });
+  ) {
+    this.messageHandler = new MessageHandler(
+      onRegister,
+      onHeartbeat,
+      onDisconnect,
+      onCommandResponse
+    );
   }
 
-  private async handleWebSocketMessage(ws: WebSocket, data: Buffer, timeout: NodeJS.Timeout): Promise<void> {
+  async handleWebSocketMessage(ws: WebSocket, data: WebSocket.RawData): Promise<void> {
     try {
-      const parsed = JSON.parse(data.toString()) as MessageData;
-      const message = Message.parse(parsed);
-      
-      switch (message.type) {
-        case 'register':
-          clearTimeout(timeout);
-          await this.onRegister(ws, message.payload as AgentInfo, 'ws');
-          break;
-        case 'heartbeat':
-          await this.onHeartbeat(message.payload as AgentMetrics);
-          break;
-        case 'command_response':
-          this.onCommandResponse(message.payload as AgentCommandResult);
-          break;
-      }
+      const message = MessageParser.parse(data);
+      if (!message) return;
+
+      await this.messageHandler.handleMessage(message, ws);
     } catch (error) {
-      logger.error('Error handling WebSocket message', {
+      logger.error('Error handling WebSocket message:', {
         error: error instanceof Error ? error.message : String(error),
+        data: data.toString()
       });
     }
   }
 
-  // Reuse existing Socket.IO handler code
-  handleSocketIO(socket: Socket): void {
-    logger.debug('Browser client connected via Socket.IO');
+  async handleSocketIOMessage(socket: Socket, message: MessageData): Promise<void> {
+    try {
+      await this.messageHandler.handleMessage(message, socket);
+    } catch (error) {
+      logger.error('Error handling Socket.IO message:', {
+        error: error instanceof Error ? error.message : String(error),
+        socketId: socket.id
+      });
+    }
+  }
 
-    socket.on('agent:connected', (data: { info: AgentInfo }) => {
-      void this.onRegister(socket, data.info, 'socketio');
+  handleWebSocketConnection(ws: WebSocket): void {
+    ws.on('message', (data: WebSocket.RawData) => {
+      void this.handleWebSocketMessage(ws, data);
     });
 
-    socket.on('agent:metrics', (metrics: AgentMetrics) => {
-      void this.onHeartbeat(metrics);
+    ws.on('error', (error: Error) => {
+      logger.error('WebSocket error:', { error: error.message });
+      this.onDisconnect(ws);
     });
 
-    socket.on('disconnect', () => {
-      this.onDisconnect(socket);
+    ws.on('close', (code: number, reason: Buffer) => {
+      logger.debug('WebSocket closed:', { 
+        code, 
+        reason: reason.toString('utf8') 
+      });
+      this.onDisconnect(ws);
     });
   }
 
-  // Send command to agent regardless of protocol
-  async sendCommand(agent: AgentState, command: string): Promise<void> {
-    const message = {
-      type: 'command' as const,
-      id: Math.random().toString(36).substring(7),
+  handleSocketIOConnection(socket: Socket): void {
+    logger.debug('Browser client connected via Socket.IO');
+
+    socket.on('agent:register', (data: { info: AgentInfo }) => {
+      void this.handleSocketIOMessage(socket, {
+        type: 'register',
+        id: socket.id,
+        timestamp: new Date().toISOString(),
+        payload: data
+      });
+    });
+
+    socket.on('agent:heartbeat', (metrics: AgentMetrics) => {
+      void this.handleSocketIOMessage(socket, {
+        type: 'heartbeat',
+        id: socket.id,
+        timestamp: new Date().toISOString(),
+        payload: { metrics }
+      });
+    });
+
+    socket.on('agent:command_response', (result: AgentCommandResult) => {
+      void this.handleSocketIOMessage(socket, {
+        type: 'command_response',
+        id: socket.id,
+        timestamp: new Date().toISOString(),
+        payload: { result }
+      });
+    });
+
+    socket.on('disconnect', (reason: string) => {
+      logger.debug('Socket.IO client disconnected:', { reason });
+      this.onDisconnect(socket);
+    });
+
+    socket.on('error', (error: Error) => {
+      logger.error('Socket.IO error:', { error: error.message });
+      void this.handleSocketIOMessage(socket, {
+        type: 'error',
+        id: socket.id,
+        timestamp: new Date().toISOString(),
+        payload: { error: error.message }
+      });
+    });
+  }
+
+  public async sendCommand(agentId: string, command: string): Promise<void> {
+    const message: MessageData = {
+      type: 'command',
+      id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      payload: { command }
+      payload: {
+        command,
+        agentId
+      }
     };
 
-    return new Promise<void>((resolve, reject) => {
-      try {
-        if (agent.connectionType === 'ws') {
-          const ws = agent.connection as WebSocket;
-          if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify(message), (error) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve();
-              }
-            });
-          } else {
-            reject(new Error('WebSocket connection is not open'));
-          }
-        } else {
-          const socket = agent.connection as Socket;
-          if (socket.connected) {
-            socket.emit('agent:command', { command }, () => {
-              resolve();
-            });
-          } else {
-            reject(new Error('Socket.IO connection is not open'));
-          }
-        }
-      } catch (error) {
-        reject(error);
-      }
-    });
+    try {
+      await this.messageHandler.handleMessage(message, null as unknown as WebSocket | Socket);
+    } catch (error) {
+      logger.error('Failed to send command:', {
+        error: error instanceof Error ? error.message : String(error),
+        agentId,
+        command
+      });
+      throw error;
+    }
   }
 }

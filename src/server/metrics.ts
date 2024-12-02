@@ -167,27 +167,28 @@ export const metrics = {
   httpRequestDuration,
   apiErrors,
   operationDuration,
-  operationCounter,
+  hostMetrics,
   serviceMetrics,
-
-  // Operation metrics
+  initialize(): void {
+    logger.info('Initializing metrics collection...');
+    collectDefaultMetrics({ register });
+  },
+  cleanup(): void {
+    logger.info('Cleaning up metrics...');
+    register.clear();
+  },
   histogram(name: string, value: number, labels: Record<string, string | number>): void {
     operationDuration.observe(value / 1000, labels); // Convert ms to seconds
   },
-
   increment(name: string, value: number, labels: Record<string, string | number>): void {
     operationCounter.inc(labels, value);
   },
-
   gauge(name: string, value: number, labels: Record<string, string | number> = {}): void {
     serviceMetrics.set({ ...labels, metric_type: name }, value);
   },
-
-  // HTTP metrics
   observeHttpDuration(method: string, route: string, statusCode: string, duration: number): void {
     httpRequestDuration.observe({ method, route, status_code: statusCode }, duration);
   },
-
   incrementApiError(method: string, route: string, errorType: string): void {
     apiErrors.inc({ method, route, error_type: errorType });
   }

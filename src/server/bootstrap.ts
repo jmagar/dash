@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import type { Server } from 'http';
 import { cacheService } from './cache/CacheService';
 import { db } from './db';

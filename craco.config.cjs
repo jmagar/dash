@@ -1,6 +1,8 @@
 const webpack = require('webpack');
 const path = require('path');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
+const { pathsToModuleNameMapper } = require('ts-jest');
+const { compilerOptions } = require('./config/paths.json');
 
 module.exports = {
   style: {
@@ -10,13 +12,15 @@ module.exports = {
   },
   webpack: {
     alias: {
-      '@': path.resolve(__dirname, 'src/'),
+      ...pathsToModuleNameMapper(compilerOptions.paths, { prefix: '<rootDir>/' }),
       'path': require.resolve('path-browserify'),
       'os': require.resolve('os-browserify/browser'),
     },
     configure: (webpackConfig) => {
       // Add TypeScript paths support
-      webpackConfig.resolve.plugins = webpackConfig.resolve.plugins || [];
+      if (!webpackConfig.resolve.plugins) {
+        webpackConfig.resolve.plugins = [];
+      }
       webpackConfig.resolve.plugins.push(
         new TsconfigPathsPlugin({
           configFile: path.resolve(__dirname, './tsconfig.json'),
@@ -70,9 +74,8 @@ module.exports = {
   },
   jest: {
     configure: {
-      moduleNameMapper: {
-        '^@/(.*)$': '<rootDir>/src/$1',
-      },
-    },
-  },
+      preset: 'ts-jest',
+      moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths, { prefix: '<rootDir>/' })
+    }
+  }
 };

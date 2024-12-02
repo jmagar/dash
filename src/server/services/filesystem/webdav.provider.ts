@@ -1,7 +1,7 @@
 import { createClient, WebDAVClient, FileStat } from 'webdav';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
-import logger from '../../../logger';
+import { logger } from '../../utils/logger';
 
 export class WebDAVProvider implements FileSystemProvider {
   readonly type = 'webdav' as FileSystemType;

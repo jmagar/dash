@@ -1,111 +1,107 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
-import { Request } from 'express';
-import { normalize, resolve } from 'path';
-import { Cache } from 'cache-manager';
-import sanitize from 'sanitize-filename';
+import type { Cache } from 'cache-manager';
+import { Request as ExpressRequest } from 'express';
+import sanitizeFilename from 'sanitize-filename';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
+import { normalize, resolve } from 'path';
+import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 
-import {
+import { FileShare } from '../entities/file-share.entity';
+import { ShareAccessLog } from '../entities/share-access-log.entity';
+import { 
+    ShareInfoDto, 
+    ShareAccessLogEntryDto, 
+    ShareStatus, 
+    ShareAccessType,
     CreateShareRequestDto,
-    ShareInfoDto,
-    ShareAccessRequestDto,
     ModifyShareRequestDto,
     RevokeShareRequestDto,
     ListSharesRequestDto,
     ListSharesResponseDto,
-    ShareStatus,
-    ShareAccessType,
-    ShareAccessLogEntryDto
+    ShareSecurityDto
 } from '../dto/sharing.dto';
-import { FileShare } from '../entities/file-share.entity';
-import { ShareAccessLog } from '../entities/share-access-log.entity';
-import { FilesystemService } from './filesystem.service';
-import { logger } from '../../../utils/logger';
-import { errorAggregator } from '../../../services/errorAggregator';
 
-const CACHE_TTL = 5 * 60; // 5 minutes
-const SHARE_INFO_PREFIX = 'share_info:';
-const SHARE_LIST_PREFIX = 'share_list:';
+const SHARE_INFO_PREFIX = 'share:';
+const CSRF_TOKEN_PREFIX = 'csrf:';
+const CACHE_TTL = 3600; // 1 hour
+const SALT_ROUNDS = 10;
+
+interface ShareSecurity {
+    rateLimit?: {
+        maxRequests: number;
+        windowMinutes: number;
+    };
+    ipAllowlist?: string[];
+    ipDenylist?: string[];
+    referrerAllowlist?: string[];
+    referrerDenylist?: string[];
+    csrfProtection?: boolean;
+}
+
+type TypedRequest = ExpressRequest & {
+    headers: {
+        'x-csrf-token'?: string;
+        referer?: string;
+    };
+    ip: string;
+};
+
+function isShareSecurity(obj: unknown): obj is ShareSecurity {
+    if (!obj || typeof obj !== 'object') return false;
+    const security = obj as ShareSecurity;
+    
+    if (security.rateLimit) {
+        if (typeof security.rateLimit.maxRequests !== 'number' || 
+            typeof security.rateLimit.windowMinutes !== 'number') {
+            return false;
+        }
+    }
+    
+    if (security.ipAllowlist && !Array.isArray(security.ipAllowlist)) return false;
+    if (security.ipDenylist && !Array.isArray(security.ipDenylist)) return false;
+    if (security.referrerAllowlist && !Array.isArray(security.referrerAllowlist)) return false;
+    if (security.referrerDenylist && !Array.isArray(security.referrerDenylist)) return false;
+    if (security.csrfProtection && typeof security.csrfProtection !== 'boolean') return false;
+    
+    return true;
+}
 
 @Injectable()
 export class SharingService {
-    private readonly rateLimiters: Map<string, RateLimiterMemory> = new Map();
+    private readonly rateLimiters: Map<string, RateLimiterMemory>;
+    private readonly cache: Cache;
 
     constructor(
         @InjectRepository(FileShare)
-        private shareRepository: Repository<FileShare>,
+        private readonly shareRepository: Repository<FileShare>,
         @InjectRepository(ShareAccessLog)
-        private accessLogRepository: Repository<ShareAccessLog>,
-        private filesystemService: FilesystemService,
-        private configService: ConfigService,
-        private cacheManager: Cache
-    ) {}
-
-    private async getCachedShareInfo(shareId: string): Promise<ShareInfoDto | null> {
-        return this.cacheManager.get<ShareInfoDto>(`${SHARE_INFO_PREFIX}${shareId}`);
-    }
-
-    private async setCachedShareInfo(shareId: string, info: ShareInfoDto): Promise<void> {
-        await this.cacheManager.set(`${SHARE_INFO_PREFIX}${shareId}`, info, CACHE_TTL);
-    }
-
-    private async invalidateShareCache(shareId: string): Promise<void> {
-        await this.cacheManager.del(`${SHARE_INFO_PREFIX}${shareId}`);
+        private readonly accessLogRepository: Repository<ShareAccessLog>,
+        @Inject('CACHE_MANAGER')
+        private readonly cacheManager: Cache,
+        private readonly configService: ConfigService
+    ) {
+        this.rateLimiters = new Map<string, RateLimiterMemory>();
+        this.cache = this.cacheManager;
     }
 
     private async validateSecurity(
         share: FileShare,
-        req: Request
+        req: TypedRequest
     ): Promise<{ isValid: boolean; error?: string }> {
-        if (!share.security) {
+        const security = share.security;
+        if (!security || !isShareSecurity(security)) {
             return { isValid: true };
         }
 
-        // Check IP allowlist
-        if (share.security.allowedIps?.length > 0) {
-            const clientIp = req.ip;
-            if (!share.security.allowedIps.includes(clientIp)) {
-                return {
-                    isValid: false,
-                    error: 'IP address not allowed'
-                };
-            }
-        }
-
-        // Check referrer allowlist
-        if (share.security.allowedReferrers?.length > 0) {
-            const referrer = req.get('referer');
-            if (!referrer || !share.security.allowedReferrers.some(allowed => referrer.startsWith(allowed))) {
-                return {
-                    isValid: false,
-                    error: 'Invalid referrer'
-                };
-            }
-        }
-
-        // Check CSRF token if enabled
-        if (share.security.csrfProtection) {
-            const csrfToken = req.get('x-csrf-token');
-            const storedToken = await this.getCachedCsrfToken(share.id);
-            
-            if (!csrfToken || !storedToken || csrfToken !== storedToken) {
-                return {
-                    isValid: false,
-                    error: 'Invalid CSRF token'
-                };
-            }
-        }
-
-        // Check rate limit
-        if (share.security.rateLimit) {
+        // Rate limit check
+        if (security.rateLimit) {
             try {
-                const rateLimiter = this.getRateLimiter(share);
-                await rateLimiter.consume(req.ip);
+                const limiter = this.getRateLimiter(share);
+                await limiter.consume(req.ip);
             } catch (error) {
                 return {
                     isValid: false,
@@ -114,383 +110,281 @@ export class SharingService {
             }
         }
 
+        // IP allowlist check
+        if (security.ipAllowlist?.length) {
+            if (!security.ipAllowlist.includes(req.ip)) {
+                return {
+                    isValid: false,
+                    error: 'IP address not allowed'
+                };
+            }
+        }
+
+        // IP denylist check
+        if (security.ipDenylist?.length) {
+            if (security.ipDenylist.includes(req.ip)) {
+                return {
+                    isValid: false,
+                    error: 'IP address blocked'
+                };
+            }
+        }
+
+        // Referrer check
+        if (security.referrerAllowlist?.length) {
+            const referrer = req.headers.referer;
+            if (!referrer || !security.referrerAllowlist.some(r => referrer.startsWith(r))) {
+                return {
+                    isValid: false,
+                    error: 'Invalid referrer'
+                };
+            }
+        }
+
+        // CSRF protection
+        if (security.csrfProtection) {
+            const token = await this.getCachedCsrfToken(share.id);
+            const providedToken = req.headers['x-csrf-token'];
+
+            if (!token || !providedToken || token !== providedToken) {
+                return {
+                    isValid: false,
+                    error: 'Invalid CSRF token'
+                };
+            }
+        }
+
         return { isValid: true };
     }
 
     private getRateLimiter(share: FileShare): RateLimiterMemory {
-        if (!this.rateLimiters.has(share.id)) {
-            const config = share.security?.rateLimit;
-            this.rateLimiters.set(
-                share.id,
-                new RateLimiterMemory({
-                    points: config?.maxRequests || 60,
-                    duration: (config?.windowMinutes || 1) * 60
-                })
-            );
+        const security = share.security;
+        if (!security || !isShareSecurity(security) || !security.rateLimit) {
+            throw new Error('Rate limit configuration not found');
         }
-        return this.rateLimiters.get(share.id)!;
+
+        const { maxRequests, windowMinutes } = security.rateLimit;
+        const key = `rate-limiter:${share.id}`;
+        let limiter = this.rateLimiters.get(key);
+
+        if (!limiter) {
+            limiter = new RateLimiterMemory({
+                points: maxRequests,
+                duration: windowMinutes * 60,
+                keyPrefix: key
+            });
+            this.rateLimiters.set(key, limiter);
+        }
+
+        return limiter;
+    }
+
+    private async getCachedShareInfo(shareId: string): Promise<ShareInfoDto | null> {
+        const key = `${SHARE_INFO_PREFIX}${shareId}`;
+        try {
+            return await this.cache.get<ShareInfoDto>(key) ?? null;
+        } catch (error) {
+            console.error('Cache get error:', error instanceof Error ? error.message : 'Unknown error');
+            return null;
+        }
+    }
+
+    private async setCachedShareInfo(shareId: string, info: ShareInfoDto): Promise<void> {
+        const key = `${SHARE_INFO_PREFIX}${shareId}`;
+        try {
+            await this.cache.set(key, info, CACHE_TTL);
+        } catch (error) {
+            console.error('Cache set error:', error instanceof Error ? error.message : 'Unknown error');
+        }
     }
 
     private async getCachedCsrfToken(shareId: string): Promise<string | null> {
-        return this.cacheManager.get<string>(`${SHARE_INFO_PREFIX}${shareId}:csrf`);
+        const key = `${CSRF_TOKEN_PREFIX}${shareId}`;
+        try {
+            return await this.cache.get<string>(key) ?? null;
+        } catch (error) {
+            console.error('Cache get error:', error instanceof Error ? error.message : 'Unknown error');
+            return null;
+        }
     }
 
     private async setCachedCsrfToken(shareId: string, token: string): Promise<void> {
-        await this.cacheManager.set(
-            `${SHARE_INFO_PREFIX}${shareId}:csrf`,
-            token,
-            CACHE_TTL
-        );
-    }
-
-    private generateCsrfToken(): string {
-        return crypto.randomBytes(32).toString('hex');
-    }
-
-    async createShare(dto: CreateShareRequestDto, req: Request): Promise<ShareInfoDto> {
+        const key = `${CSRF_TOKEN_PREFIX}${shareId}`;
         try {
-            // Sanitize and validate path
-            const sanitizedPath = this.sanitizePath(dto.path);
-            if (!await this.filesystemService.exists(sanitizedPath)) {
-                throw new NotFoundException(`File not found: ${dto.path}`);
+            await this.cache.set(key, token, CACHE_TTL);
+        } catch (error) {
+            console.error('Cache set error:', error instanceof Error ? error.message : 'Unknown error');
+        }
+    }
+
+    private async invalidateShareCache(shareId: string): Promise<void> {
+        const key = `${SHARE_INFO_PREFIX}${shareId}`;
+        try {
+            await this.cache.del(key);
+        } catch (error) {
+            console.error('Cache delete error:', error instanceof Error ? error.message : 'Unknown error');
+        }
+    }
+
+    async createShare(req: CreateShareRequestDto): Promise<ShareInfoDto> {
+        const share = new FileShare();
+        share.path = sanitizeFilename(req.path);
+        share.accessType = req.accessType;
+        share.allowZipDownload = req.allowZipDownload ?? false;
+        share.metadata = req.metadata;
+
+        if (req.security) {
+            const security: ShareSecurity = {
+                csrfProtection: req.security.csrfProtection ?? false
+            };
+
+            if (req.security.password) {
+                share.passwordHash = await this.hashPassword(req.security.password);
             }
 
-            const share = this.shareRepository.create({
-                id: this.generateShareId(),
-                path: sanitizedPath,
-                accessType: dto.accessType,
-                status: ShareStatus.ACTIVE,
-                expiresAt: dto.expiresAt,
-                maxAccesses: dto.maxAccesses,
-                allowZipDownload: dto.allowZipDownload,
-                metadata: dto.metadata,
-                passwordHash: dto.password ? await this.hashPassword(dto.password) : null,
-                security: dto.security
-            });
-
-            // Generate CSRF token if protection is enabled
-            if (dto.security?.csrfProtection) {
-                const csrfToken = this.generateCsrfToken();
-                await this.setCachedCsrfToken(share.id, csrfToken);
-                share.csrfToken = csrfToken;
+            if (req.security.expiresIn) {
+                const expiresAt = new Date();
+                expiresAt.setMinutes(expiresAt.getMinutes() + req.security.expiresIn);
+                share.expiresAt = expiresAt;
             }
 
+            if (security.csrfProtection) {
+                share.csrfToken = randomBytes(32).toString('hex');
+                await this.setCachedCsrfToken(share.id, share.csrfToken);
+            }
+
+            share.security = security;
+        }
+
+        try {
             const savedShare = await this.shareRepository.save(share);
-            const shareInfo = this.mapShareToDto(savedShare);
-            await this.setCachedShareInfo(share.id, shareInfo);
-
-            logger.info('Share created:', {
-                shareId: share.id,
-                path: sanitizedPath,
-                accessType: dto.accessType,
-            });
-
+            const shareInfo = this.toShareInfoDto(savedShare);
+            await this.setCachedShareInfo(savedShare.id, shareInfo);
             return shareInfo;
         } catch (error) {
-            errorAggregator.trackError(error);
-            throw error;
+            throw this.handleError(error as Error);
         }
     }
 
-    async verifyShareAccess(shareId: string, req: Request, password?: string): Promise<void> {
+    async modifyShare(req: ModifyShareRequestDto): Promise<ShareInfoDto> {
+        const share = await this.shareRepository.findOne({ where: { id: req.shareId } });
+        if (!share) {
+            throw new NotFoundException('Share not found');
+        }
+
+        share.allowZipDownload = req.allowZipDownload ?? share.allowZipDownload;
+        share.metadata = req.metadata ?? share.metadata;
+
+        if (req.security) {
+            const existingSecurity = share.security && isShareSecurity(share.security) ? share.security : {};
+            const security: ShareSecurity = {
+                ...existingSecurity,
+                csrfProtection: req.security.csrfProtection ?? false
+            };
+
+            if (req.security.password) {
+                share.passwordHash = await this.hashPassword(req.security.password);
+            }
+
+            if (req.security.expiresIn) {
+                const expiresAt = new Date();
+                expiresAt.setMinutes(expiresAt.getMinutes() + req.security.expiresIn);
+                share.expiresAt = expiresAt;
+            }
+
+            if (security.csrfProtection && !share.csrfToken) {
+                share.csrfToken = randomBytes(32).toString('hex');
+                await this.setCachedCsrfToken(share.id, share.csrfToken);
+            }
+
+            share.security = security;
+        }
+
         try {
-            // Check cache first
-            const cachedShare = await this.getCachedShareInfo(shareId);
-            const share = cachedShare || await this.shareRepository.findOne({ 
-                where: { id: shareId }
-            });
-            
-            if (!share) {
-                throw new NotFoundException('Share not found');
-            }
-
-            if (share.status !== ShareStatus.ACTIVE) {
-                throw new UnauthorizedException('Share is not active');
-            }
-
-            if (share.expiresAt && share.expiresAt < new Date()) {
-                share.status = ShareStatus.EXPIRED;
-                await Promise.all([
-                    this.shareRepository.save(share),
-                    this.invalidateShareCache(shareId)
-                ]);
-                throw new UnauthorizedException('Share has expired');
-            }
-
-            if (share.maxAccesses && share.accessCount >= share.maxAccesses) {
-                throw new UnauthorizedException('Maximum access count reached');
-            }
-
-            if (share.passwordHash) {
-                if (!password) {
-                    throw new UnauthorizedException('Password required');
-                }
-                if (!await this.verifyPassword(password, share.passwordHash)) {
-                    // Log failed password attempts
-                    logger.warn('Failed share password attempt:', {
-                        shareId,
-                        ip: req.ip,
-                        userAgent: req.headers['user-agent'],
-                    });
-                    throw new UnauthorizedException('Invalid password');
-                }
-            }
-
-            // Validate security settings
-            const securityValidation = await this.validateSecurity(share, req);
-            if (!securityValidation.isValid) {
-                throw new UnauthorizedException(securityValidation.error);
-            }
-
-            const log = this.accessLogRepository.create({
-                shareId,
-                timestamp: new Date(),
-                ipAddress: req.ip,
-                userAgent: req.headers['user-agent'] || 'Unknown',
-                status: 'success'
-            });
-
-            await Promise.all([
-                this.accessLogRepository.save(log),
-                this.shareRepository.update(shareId, {
-                    accessCount: () => '"accessCount" + 1',
-                    lastAccessedAt: new Date()
-                })
-            ]);
-
-            // Update cache with new access count
-            if (cachedShare) {
-                cachedShare.accessCount = (cachedShare.accessCount || 0) + 1;
-                cachedShare.lastAccessedAt = new Date();
-                await this.setCachedShareInfo(shareId, cachedShare);
-            }
-
-            logger.info('Share accessed:', {
-                shareId,
-                ip: req.ip,
-                userAgent: req.headers['user-agent'],
-            });
+            const savedShare = await this.shareRepository.save(share);
+            const shareInfo = this.toShareInfoDto(savedShare);
+            await this.setCachedShareInfo(savedShare.id, shareInfo);
+            return shareInfo;
         } catch (error) {
-            // Log access failure
-            const log = this.accessLogRepository.create({
-                shareId,
-                timestamp: new Date(),
-                ipAddress: req.ip,
-                userAgent: req.headers['user-agent'] || 'Unknown',
-                status: 'failure',
-                errorMessage: error.message
-            });
-            await this.accessLogRepository.save(log);
-
-            errorAggregator.trackError(error);
-            throw error;
+            throw this.handleError(error as Error);
         }
     }
 
-    private sanitizePath(path: string): string {
-        // Normalize path and prevent directory traversal
-        const normalizedPath = normalize(path).replace(/^(\.\.[\/\\])+/, '');
-        const parts = normalizedPath.split(/[\/\\]/);
-        const sanitizedParts = parts.map(part => sanitize(part));
-        return resolve(sanitizedParts.join('/'));
+    async listShares(req: ListSharesRequestDto): Promise<ListSharesResponseDto> {
+        const where: FindOptionsWhere<FileShare> = {};
+
+        if (req.path) {
+            where.path = req.path;
+        }
+
+        if (!req.includeExpired) {
+            where.status = ShareStatus.ACTIVE;
+        }
+
+        try {
+            const [shares, total] = await this.shareRepository.findAndCount({
+                where,
+                skip: req.offset,
+                take: req.limit,
+                order: {
+                    [req.sortBy ?? 'createdAt']: req.sortOrder ?? 'DESC'
+                }
+            });
+
+            const items = await Promise.all(shares.map(share => this.toShareInfoDto(share)));
+
+            return {
+                items,
+                total,
+                offset: req.offset ?? 0,
+                limit: req.limit ?? 20
+            };
+        } catch (error) {
+            throw this.handleError(error as Error);
+        }
     }
 
-    private generateShareId(): string {
-        return crypto.randomBytes(16).toString('hex');
+    private handleError(error: Error): Error {
+        console.error('Operation failed:', error);
+        
+        if (error instanceof NotFoundException || 
+            error instanceof BadRequestException || 
+            error instanceof UnauthorizedException) {
+            return error;
+        }
+        
+        return new Error('Internal server error');
     }
 
-    private async hashPassword(password: string): Promise<string> {
-        return bcrypt.hash(password, 12); // Increased from 10 to 12 rounds
-    }
+    private toShareInfoDto(share: FileShare): ShareInfoDto {
+        const baseUrl = this.configService.get<string>('BASE_URL', '');
+        const shareUrl = baseUrl ? `${baseUrl}/share/${share.id}` : `/share/${share.id}`;
 
-    private async verifyPassword(password: string, hash: string): Promise<boolean> {
-        return bcrypt.compare(password, hash);
-    }
-
-    private generateShareUrl(shareId: string): string {
-        const baseUrl = this.configService.get<string>('APP_URL', 'http://localhost:3000');
-        return `${baseUrl}/share/${shareId}`;
-    }
-
-    private mapShareToDto(share: FileShare): ShareInfoDto {
-        return {
+        const shareInfo: ShareInfoDto = {
             id: share.id,
-            url: this.generateShareUrl(share.id),
             path: share.path,
             accessType: share.accessType,
             status: share.status,
+            url: shareUrl,
+            allowZipDownload: share.allowZipDownload ?? false,
+            security: {
+                csrfProtection: (share.security && isShareSecurity(share.security)) ? 
+                    share.security.csrfProtection ?? false : false
+            },
+            csrfToken: share.csrfToken,
             createdAt: share.createdAt,
             expiresAt: share.expiresAt,
+            createdBy: 'system', // TODO: Add user context
+            accessCount: share.accessCount ?? 0,
             lastAccessedAt: share.lastAccessedAt,
-            accessCount: share.accessCount,
-            maxAccesses: share.maxAccesses,
-            allowZipDownload: share.allowZipDownload,
-            hasPassword: !!share.passwordHash,
-            metadata: share.metadata,
-            security: share.security
+            hasPassword: Boolean(share.passwordHash),
+            metadata: share.metadata ?? {}
         };
+
+        return shareInfo;
     }
 
-    async getShareInfo(shareId: string): Promise<ShareInfoDto> {
-        try {
-            // Check cache first
-            const cachedShare = await this.getCachedShareInfo(shareId);
-            if (cachedShare) {
-                return cachedShare;
-            }
-
-            const share = await this.shareRepository.findOne({ 
-                where: { id: shareId }
-            });
-
-            if (!share) {
-                throw new NotFoundException(`Share not found: ${shareId}`);
-            }
-
-            const shareInfo = this.mapShareToDto(share);
-            await this.setCachedShareInfo(shareId, shareInfo);
-            
-            return shareInfo;
-        } catch (error) {
-            errorAggregator.trackError(error);
-            throw error;
-        }
-    }
-
-    async modifyShare(dto: ModifyShareRequestDto): Promise<ShareInfoDto> {
-        try {
-            const share = await this.shareRepository.findOne({ 
-                where: { id: dto.shareId }
-            });
-
-            if (!share) {
-                throw new NotFoundException(`Share not found: ${dto.shareId}`);
-            }
-
-            Object.assign(share, {
-                ...(dto.accessType && { accessType: dto.accessType }),
-                ...(dto.expiresAt && { expiresAt: dto.expiresAt }),
-                ...(dto.maxAccesses && { maxAccesses: dto.maxAccesses }),
-                ...(dto.allowZipDownload !== undefined && { allowZipDownload: dto.allowZipDownload }),
-                ...(dto.metadata && { metadata: { ...share.metadata, ...dto.metadata } }),
-                ...(dto.password && { passwordHash: await this.hashPassword(dto.password) }),
-                ...(dto.security && { security: dto.security })
-            });
-
-            // Update CSRF token if protection is enabled/disabled
-            if (dto.security?.csrfProtection) {
-                const csrfToken = this.generateCsrfToken();
-                await this.setCachedCsrfToken(share.id, csrfToken);
-                share.csrfToken = csrfToken;
-            } else {
-                await this.cacheManager.del(`${SHARE_INFO_PREFIX}${share.id}:csrf`);
-                share.csrfToken = null;
-            }
-
-            // Reset rate limiter if configuration changed
-            if (dto.security?.rateLimit) {
-                this.rateLimiters.delete(share.id);
-            }
-
-            const savedShare = await this.shareRepository.save(share);
-            const shareInfo = this.mapShareToDto(savedShare);
-            await this.setCachedShareInfo(share.id, shareInfo);
-
-            logger.info('Share modified:', {
-                shareId: share.id,
-                accessType: share.accessType,
-                expiresAt: share.expiresAt,
-                maxAccesses: share.maxAccesses,
-                allowZipDownload: share.allowZipDownload,
-                metadata: share.metadata
-            });
-
-            return shareInfo;
-        } catch (error) {
-            errorAggregator.trackError(error);
-            throw error;
-        }
-    }
-
-    async revokeShare(dto: RevokeShareRequestDto): Promise<void> {
-        try {
-            const result = await this.shareRepository.update(
-                { id: dto.shareId, status: ShareStatus.ACTIVE },
-                {
-                    status: ShareStatus.REVOKED,
-                    metadata: () => `jsonb_set(metadata, '{revocation}', '${JSON.stringify({
-                        reason: dto.reason,
-                        timestamp: new Date()
-                    })}')`
-                }
-            );
-
-            if (result.affected === 0) {
-                throw new NotFoundException(`Share not found or already revoked: ${dto.shareId}`);
-            }
-
-            await this.invalidateShareCache(dto.shareId);
-
-            logger.info('Share revoked:', {
-                shareId: dto.shareId,
-                reason: dto.reason
-            });
-        } catch (error) {
-            errorAggregator.trackError(error);
-            throw error;
-        }
-    }
-
-    async listShares(dto: ListSharesRequestDto): Promise<ListSharesResponseDto> {
-        try {
-            const queryBuilder = this.shareRepository.createQueryBuilder('share');
-
-            if (dto.path) {
-                queryBuilder.andWhere('share.path = :path', { path: dto.path });
-            }
-
-            if (dto.status) {
-                queryBuilder.andWhere('share.status = :status', { status: dto.status });
-            }
-
-            if (dto.accessType) {
-                queryBuilder.andWhere('share.accessType = :accessType', { accessType: dto.accessType });
-            }
-
-            if (!dto.includeExpired) {
-                queryBuilder.andWhere('(share.expiresAt IS NULL OR share.expiresAt > :now)', { now: new Date() });
-            }
-
-            const [shares, total] = await queryBuilder
-                .orderBy('share.createdAt', 'DESC')
-                .getManyAndCount();
-
-            let accessLogs: ShareAccessLogEntryDto[] = [];
-            if (dto.includeAccessLogs && shares.length > 0) {
-                accessLogs = await this.accessLogRepository.find({
-                    where: { shareId: { $in: shares.map(s => s.id) } },
-                    order: { timestamp: 'DESC' }
-                });
-            }
-
-            const cachedShares = await Promise.all(shares.map(share => this.getCachedShareInfo(share.id)));
-            const shareInfos = shares.map((share, index) => this.mapShareToDto(share));
-
-            await Promise.all(cachedShares.map((cachedShare, index) => {
-                if (!cachedShare) {
-                    return this.setCachedShareInfo(shares[index].id, shareInfos[index]);
-                }
-                return Promise.resolve();
-            }));
-
-            return {
-                shares: shareInfos,
-                total,
-                accessLogs
-            };
-        } catch (error) {
-            errorAggregator.trackError(error);
-            throw error;
-        }
+    private async hashPassword(password: string): Promise<string> {
+        return bcrypt.hash(password, SALT_ROUNDS);
     }
 }

@@ -1,0 +1,54 @@
+{
+  "extends": "./config/paths.json",
+  "compilerOptions": {
+    /* Performance Optimizations */
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "incremental": true,
+    "skipLibCheck": true,
+    "importsNotUsedAsValues": "remove",
+    
+    /* Language and Environment */
+    "target": "ES2021",
+    "module": "esnext",
+    "lib": ["ES2021"],
+    
+    /* Type Checking */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnreachableCode": false,
+    
+    /* Module Resolution */
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    
+    /* Advanced */
+    "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "skipDefaultLibCheck": true,
+    
+    /* Type Definitions */
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
+  },
+  "watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriority"
+  },
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,71 +1,73 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { ShareAccessType, ShareStatus } from '../dto/sharing.dto';
 
-@Entity('file_shares')
+@Entity('file_share')
 export class FileShare {
     @PrimaryGeneratedColumn('uuid')
-    id: string;
+    id!: string;
 
     @Column()
-    path: string;
+    path!: string;
 
     @Column({
         type: 'enum',
         enum: ShareAccessType,
-        default: ShareAccessType.READ
+        default: ShareAccessType.PUBLIC
     })
-    accessType: ShareAccessType;
+    accessType!: ShareAccessType;
 
     @Column({
         type: 'enum',
         enum: ShareStatus,
         default: ShareStatus.ACTIVE
     })
-    status: ShareStatus;
+    status!: ShareStatus;
 
     @CreateDateColumn()
-    createdAt: Date;
+    createdAt!: Date;
 
     @Column({ nullable: true })
-    expiresAt: Date | null;
+    expiresAt?: Date;
 
     @Column({ default: 0 })
-    accessCount: number;
+    accessCount!: number;
 
     @Column({ nullable: true })
-    maxAccesses: number | null;
+    maxAccesses?: number;
 
     @Column({ nullable: true })
-    passwordHash: string | null;
+    passwordHash?: string;
 
     @Column({ default: false })
-    allowZipDownload: boolean;
+    allowZipDownload!: boolean;
 
     @Column({ type: 'jsonb', nullable: true })
-    metadata: Record<string, unknown> | null;
+    metadata?: Record<string, unknown>;
 
     @Column({ type: 'jsonb', nullable: true })
-    security: {
+    security?: {
         rateLimit?: {
             maxRequests: number;
             windowMinutes: number;
         };
-        allowedIps?: string[];
-        allowedReferrers?: string[];
+        ipAllowlist?: string[];
+        ipDenylist?: string[];
+        referrerAllowlist?: string[];
+        referrerDenylist?: string[];
         csrfProtection?: boolean;
-    } | null;
+    };
 
     @Column({ nullable: true })
-    csrfToken: string | null;
+    csrfToken?: string;
 
     @UpdateDateColumn()
-    updatedAt: Date;
+    updatedAt!: Date;
 
     @Column({ nullable: true, type: 'timestamp' })
-    lastAccessedAt: Date | null;
+    lastAccessedAt?: Date;
 
     @Column({ type: 'jsonb', nullable: true })
-    accessLog: {
+    accessLog?: {
         timestamp: Date;
         ipAddress: string;
         userAgent: string;
@@ -76,5 +78,5 @@ export class FileShare {
             remaining: number;
             reset: Date;
         };
-    }[] | null;
+    }[];
 }

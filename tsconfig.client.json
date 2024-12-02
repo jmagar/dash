@@ -1,37 +1,38 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "esnext",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
+    "lib": ["dom", "dom.iterable", "ES2021"],
     "jsx": "react-jsx",
-    "baseUrl": ".",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "noEmit": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "types": [
+      "node",
+      "jest",
+      "react",
+      "react-dom"
+    ],
     "paths": {
-      "*": ["node_modules/*"],
-      "src/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@client/*": ["src/client/*"],
+      "@shared/*": ["src/shared/*"]
     }
   },
   "include": [
-    "src/client/**/*",
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/shared/**/*.ts",
     "src/types/**/*.ts",
-    "src/types/**/*.d.ts"
+    "src/types/**/*.d.ts",
+    "src/**/*.stories.tsx"
   ],
   "exclude": [
     "node_modules",
-    "build",
     "dist",
-    "scripts",
-    "test",
-    "src/server/**/*"
+    "src/server",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

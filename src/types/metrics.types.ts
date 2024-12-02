@@ -130,6 +130,18 @@ export interface ProcessMetrics {
   updatedAt: Date;
 }
 
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+  command: string;
+  status: string;
+  user: string;
+  cpu: number;
+  memory: number;
+  threads: number;
+  fds: number;
+}
+
 export interface NetworkInterface {
   name: string;
   mac: string;
