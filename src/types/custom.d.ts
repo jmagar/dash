@@ -53,3 +53,26 @@ declare module '@copilotkit/shared' {
     error?: string;
   }
 }
+
+declare module 'ioredis' {
+  class Redis {
+    constructor(options?: RedisOptions);
+    connect(): Promise<void>;
+    disconnect(): void;
+    quit(): Promise<'OK'>;
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string, mode?: string, duration?: number): Promise<'OK' | null>;
+    del(...keys: string[]): Promise<number>;
+  }
+  
+  interface RedisOptions {
+    host?: string;
+    port?: number;
+    password?: string;
+    db?: number;
+    maxRetriesPerRequest?: number;
+    retryStrategy?: (times: number) => number | null;
+  }
+
+  export = Redis;
+}

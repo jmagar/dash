@@ -5,7 +5,10 @@
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "node",
-    "noEmit": true,
+    "composite": true,
+    "declaration": true,
+    "tsBuildInfoFile": "./tsconfig.client.tsbuildinfo",
+    "outDir": "dist/client",
     "isolatedModules": true,
     "allowJs": true,
     "types": [

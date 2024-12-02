@@ -29,8 +29,11 @@
     /* Module Resolution */
     "moduleResolution": "node",
     "resolveJsonModule": true,
+    "allowJs": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "typeRoots": ["./node_modules/@types"],
+    "types": ["node"],
     
     /* Advanced */
     "forceConsistentCasingInFileNames": true,
@@ -39,11 +42,6 @@
     "useDefineForClassFields": false,
     "skipDefaultLibCheck": true,
     
-    /* Type Definitions */
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ]
   },
   "watchOptions": {
     "watchFile": "useFsEvents",

@@ -6,7 +6,7 @@ import {
   ProcessStatus,
   StatusValidationResult,
   StatusValidator 
-} from '../types/status';
+} from '../../types/status';
 
 /**
  * Validates if a status is a valid ServiceStatus
@@ -102,7 +102,7 @@ export const createTransitionMap = <T extends Status>(transitions: Array<[T, T]>
     allowed.add(to);
     map.set(from, allowed);
   });
-
+  
   return map;
 };
 

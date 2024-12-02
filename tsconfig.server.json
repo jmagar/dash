@@ -2,35 +2,29 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "commonjs",
-    "outDir": "dist",
-    "noEmit": false,
+    "outDir": "dist/server",
+    "rootDir": "src",
+    "composite": true,
+    "tsBuildInfoFile": "./tsconfig.server.tsbuildinfo",
     "sourceMap": true,
     "declaration": true,
-    "removeComments": true,
     "emitDecoratorMetadata": true,
     "strictPropertyInitialization": false,
     "types": [
       "node",
       "jest",
       "express"
-    ],
-    "paths": {
-      "@/*": ["src/*"],
-      "@server/*": ["src/server/*"],
-      "@shared/*": ["src/shared/*"]
-    }
+    ]
   },
   "include": [
-    "src/server/**/*.ts",
-    "src/shared/**/*.ts",
-    "src/types/**/*.ts",
-    "src/types/**/*.d.ts"
+    "src/server/**/*",
+    "src/server/utils/**/*",
+    "src/types/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/client",
-    "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "**/*.test.ts"
   ]
 }
