@@ -1,10 +1,11 @@
-import { SFTPWrapper, Client as SSHClient } from 'ssh2';
+﻿import { SFTPWrapper, Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import { Host } from '../../../types/host.types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import type { LogMetadata } from '../../../types/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 interface SSHClientWithSFTP extends SSHClient {
   sftp(callback: (err: Error | null, sftp: SFTPWrapper) => void): void;
@@ -47,7 +48,7 @@ export class SFTPService extends BaseService {
             host: this.host,
             operation: 'SFTP initialization'
           };
-          logger.error('Failed to initialize SFTP client', metadata);
+          loggerLoggingManager.getInstance().();
           reject(new ApiError('Failed to initialize SFTP client', { cause: err }));
           return;
         }
@@ -68,7 +69,7 @@ export class SFTPService extends BaseService {
               host: this.host,
               operation: 'SFTP operation'
             };
-            logger.error('SFTP operation failed', metadata);
+            loggerLoggingManager.getInstance().();
             reject(new ApiError('SFTP operation failed', { cause: err }));
           })
           .finally(() => {
@@ -86,7 +87,7 @@ export class SFTPService extends BaseService {
               } else {
                 error = new Error('Unknown error during SSH client cleanup');
               }
-              logger.warn('Failed to close SSH client', { error });
+              loggerLoggingManager.getInstance().();
             }
           });
       });
@@ -159,7 +160,7 @@ export class SFTPService extends BaseService {
               host: this.host,
               operation: 'SFTP stat'
             };
-            logger.error('Failed to get file stats', metadata);
+            loggerLoggingManager.getInstance().();
             reject(new ApiError('Failed to get file stats', { cause: err }));
             return;
           }
@@ -176,7 +177,7 @@ export class SFTPService extends BaseService {
                 host: this.host,
                 operation: isDir ? 'SFTP rmdir' : 'SFTP unlink'
               };
-              logger.error('Failed to delete file', metadata);
+              loggerLoggingManager.getInstance().();
               reject(new ApiError('Failed to delete file', { cause: err }));
               return;
             }
@@ -197,7 +198,7 @@ export class SFTPService extends BaseService {
               host: this.host,
               operation: 'SFTP rename'
             };
-            logger.error('Failed to rename file', metadata);
+            loggerLoggingManager.getInstance().();
             reject(new ApiError('Failed to rename file', { cause: err }));
             return;
           }
@@ -217,7 +218,7 @@ export class SFTPService extends BaseService {
               host: this.host,
               operation: 'SFTP mkdir'
             };
-            logger.error('Failed to create directory', metadata);
+            loggerLoggingManager.getInstance().();
             reject(new ApiError('Failed to create directory', { cause: err }));
             return;
           }
@@ -242,3 +243,4 @@ export class SFTPService extends BaseService {
     });
   }
 }
+

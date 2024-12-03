@@ -1,5 +1,7 @@
-import Redis from 'ioredis';
-import { logger } from '../utils/logger';
+﻿import Redis from 'ioredis';
+import { LoggingManager } from '../utils/logging/LoggingManager';
+import { RedisError, RedisErrorCode } from '../../types/redis';
+import { getErrorMessage, wrapError } from './utils/error';
 
 export interface RedisMetrics {
   connectedClients: number;
@@ -49,7 +51,7 @@ export class RedisMetricsCollector {
 
   private async collectMetrics(): Promise<void> {
     try {
-      const info = await this.redis.info();
+      const info = await this.redisLoggingManager.getInstance().();
       const parsedInfo = this.parseRedisInfo(info);
 
       this._metrics = {
@@ -59,9 +61,12 @@ export class RedisMetricsCollector {
         lastUpdate: new Date(),
       };
     } catch (error) {
-      logger.error('Failed to collect Redis metrics:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      const redisError = wrapError(error, 'Failed to collect Redis metrics', {
+        service: this.constructor.name,
+        operation: 'collectMetrics',
+        interval: this.intervalMs,
       });
+      LoggingManager.getInstance().error('Failed to collect Redis metrics:', { error: redisError.toJSON() });
     }
   }
 
@@ -70,26 +75,37 @@ export class RedisMetricsCollector {
       const keys = await this.redis.dbsize();
       return Number(keys);
     } catch (error) {
-      logger.error('Failed to get total keys:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      const redisError = wrapError(error, 'Failed to get total keys', {
+        service: this.constructor.name,
+        operation: 'getTotalKeys',
       });
+      LoggingManager.getInstance().error('Failed to get total keys:', { error: redisError.toJSON() });
       return 0;
     }
   }
 
   private parseRedisInfo(info: string): Record<string, string> {
-    const result: Record<string, string> = {};
-    const lines = info.split('\n');
+    try {
+      const result: Record<string, string> = {};
+      const lines = info.split('\n');
 
-    for (const line of lines) {
-      if (line && !line.startsWith('#')) {
-        const [key, value] = line.split(':');
-        if (key && value) {
-          result[key.trim()] = value.trim();
+      for (const line of lines) {
+        if (line && !line.startsWith('#')) {
+          const [key, value] = line.split(':');
+          if (key && value) {
+            result[key.trim()] = value.trim();
+          }
         }
       }
-    }
 
-    return result;
+      return result;
+    } catch (error) {
+      throw wrapError(error, 'Failed to parse Redis INFO command output', {
+        service: this.constructor.name,
+        operation: 'parseRedisInfo',
+      });
+    }
   }
 }
+
+

@@ -1,9 +1,9 @@
 import OpenAI from 'openai';
 import config from '../config';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 if (!config.openai.apiKey) {
-  logger.error('OpenAI API key is not configured');
+  LoggingManager.getInstance().error('OpenAI API key is not configured');
   throw new Error('OpenAI API key is required');
 }
 
@@ -21,7 +21,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     return response.data[0].embedding;
   } catch (error) {
-    logger.error('Failed to generate embedding:', {
+    LoggingManager.getInstance().error('Failed to generate embedding:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw error;
@@ -45,9 +45,10 @@ export async function generateCompletion(prompt: string): Promise<string> {
 
     return response;
   } catch (error) {
-    logger.error('Failed to generate completion:', {
+    LoggingManager.getInstance().error('Failed to generate completion:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw error;
   }
 }
+

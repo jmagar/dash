@@ -1,10 +1,11 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
 import cache from '../../cache';
 import { Container, Stack } from '../../types/models-shared';
 import { DockerParams, CacheContainersDto, CacheStacksDto } from './dto/docker.dto';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 function validateContainers(containers: unknown): containers is Container[] {
   return Array.isArray(containers) && containers.every(container =>
@@ -29,7 +30,7 @@ export const getContainers = async (
   const { hostId } = req.params;
   const logMeta = { userId: req.user!.id, hostId };
 
-  logger.info('Getting Docker containers', logMeta);
+  loggerLoggingManager.getInstance().();
 
   const containers = await cache.get(`docker:containers:${hostId}`);
   if (!containers) {
@@ -50,7 +51,7 @@ export const getStacks = async (
   const { hostId } = req.params;
   const logMeta = { userId: req.user!.id, hostId };
 
-  logger.info('Getting Docker stacks', logMeta);
+  loggerLoggingManager.getInstance().();
 
   const stacks = await cache.get(`docker:stacks:${hostId}`);
   if (!stacks) {
@@ -72,7 +73,7 @@ export const cacheContainers = async (
   const { containers } = req.body;
   const logMeta = { userId: req.user!.id, hostId };
 
-  logger.info('Caching Docker containers', logMeta);
+  loggerLoggingManager.getInstance().();
 
   if (!validateContainers(containers)) {
     throw new ApiError(400, 'Invalid container data');
@@ -90,7 +91,7 @@ export const cacheStacks = async (
   const { stacks } = req.body;
   const logMeta = { userId: req.user!.id, hostId };
 
-  logger.info('Caching Docker stacks', logMeta);
+  loggerLoggingManager.getInstance().();
 
   if (!validateStacks(stacks)) {
     throw new ApiError(400, 'Invalid stack data');
@@ -99,3 +100,4 @@ export const cacheStacks = async (
   await cache.set(`docker:stacks:${hostId}`, stacks);
   res.json(new ApiResponse(undefined));
 };
+

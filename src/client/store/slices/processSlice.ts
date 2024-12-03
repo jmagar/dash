@@ -1,7 +1,8 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+﻿import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import type { ProcessInfo, ProcessStats } from '@/types/process';
 import type { RootState } from '@/client/store/storeTypes';
 import { logger } from '@/client/utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface ProcessState {
   processes: ProcessInfo[];
@@ -28,8 +29,7 @@ export const fetchProcesses = createAsyncThunk<
     // TODO: Implement API call
     return [];
   } catch (error) {
-    logger.error('Failed to fetch processes:', {
-      error: error instanceof Error ? error.message : String(error),
+    loggerLoggingManager.getInstance().(),
     });
     throw error;
   }
@@ -98,3 +98,4 @@ export const selectSelectedProcess = (state: RootState) => {
 };
 export const selectIsLoading = (state: RootState) => state.process.loading;
 export const selectError = (state: RootState) => state.process.error;
+

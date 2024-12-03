@@ -1,4 +1,5 @@
-import type { Logger, LogLevel, LogMetadata } from '../../types/logging';
+﻿import type { Logger, LogLevel, LogMetadata } from '../../types/logging';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -64,31 +65,31 @@ export class FrontendLogger implements Logger {
 
   debug(message: string, data?: unknown): void {
     if (this.shouldLog('debug')) {
-      console.debug(this.formatMessage('debug', message, data));
+      consoleLoggingManager.getInstance().());
     }
   }
 
   info(message: string, data?: unknown): void {
     if (this.shouldLog('info')) {
-      console.info(this.formatMessage('info', message, data));
+      consoleLoggingManager.getInstance().());
     }
   }
 
   warn(message: string, data?: unknown): void {
     if (this.shouldLog('warn')) {
-      console.warn(this.formatMessage('warn', message, data));
+      consoleLoggingManager.getInstance().());
     }
   }
 
   error(message: string, data?: unknown): void {
     if (this.shouldLog('error')) {
-      console.error(this.formatMessage('error', message, data));
+      consoleLoggingManager.getInstance().());
     }
   }
 
   critical(message: string, data?: unknown): void {
     if (this.shouldLog('critical')) {
-      console.error(this.formatMessage('critical', message, data));
+      consoleLoggingManager.getInstance().());
     }
   }
 }
@@ -99,4 +100,5 @@ export const frontendLogger = new FrontendLogger(
 );
 
 // Also export the instance as 'logger' for backward compatibility
-export const logger = frontendLogger;
+export 
+

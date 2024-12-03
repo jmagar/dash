@@ -1,6 +1,7 @@
-import { RawData } from 'ws';
+﻿import { RawData } from 'ws';
 import { logger } from '../../../utils/logger';
 import { Message, MessageData } from '../types/message.types';
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
 
 export class MessageParser {
   static parse(data: RawData): MessageData | null {
@@ -23,8 +24,7 @@ export class MessageParser {
           throw new Error('Unsupported message data type');
         }
       } catch (error) {
-        logger.error('Failed to convert message data:', {
-          error: error instanceof Error ? error.message : String(error),
+        loggerLoggingManager.getInstance().(),
           dataType: typeof data
         });
         return null;
@@ -35,8 +35,7 @@ export class MessageParser {
       try {
         parsed = JSON.parse(rawMessage);
       } catch (error) {
-        logger.error('Failed to parse JSON:', {
-          error: error instanceof Error ? error.message : String(error),
+        loggerLoggingManager.getInstance().(),
           rawMessage
         });
         return null;
@@ -50,11 +49,7 @@ export class MessageParser {
           message: issue.message,
           code: issue.code
         }));
-        logger.warn('Invalid message format:', { 
-          errors, 
-          data: rawMessage,
-          parsed
-        });
+        loggerLoggingManager.getInstance().();
         return null;
       }
 
@@ -85,8 +80,7 @@ export class MessageParser {
             break;
         }
       } catch (error) {
-        logger.error('Message validation failed:', {
-          error: error instanceof Error ? error.message : String(error),
+        loggerLoggingManager.getInstance().(),
           messageType: message.type,
           messageId: message.id
         });
@@ -95,8 +89,7 @@ export class MessageParser {
 
       return message;
     } catch (error) {
-      logger.error('Unexpected error parsing message:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         dataType: typeof data,
         isBuffer: Buffer.isBuffer(data),
         isArrayBuffer: data instanceof ArrayBuffer,
@@ -117,3 +110,4 @@ export class MessageParser {
     return message.type === expectedType;
   }
 }
+

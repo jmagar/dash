@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { BaseService, ServiceConfig } from './base.service';
 import { ServiceStatus } from '../types/status';
 import { HealthMonitorService } from './health-monitor';
 import { EventEmitter } from 'events';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 interface ServiceRegistryEvents {
   'service:registered': (name: string) => void;
@@ -260,7 +261,7 @@ export class ServiceRegistry extends BaseService {
         await startService(name);
       } catch (error) {
         // Log error but continue with other services
-        console.error(`Failed to start service ${name}:`, error);
+        consoleLoggingManager.getInstance().();
       }
     }
   }
@@ -285,7 +286,7 @@ export class ServiceRegistry extends BaseService {
         await this.stopService(name);
         stopped.add(name);
       } catch (error) {
-        console.error(`Failed to stop service ${name}:`, error);
+        consoleLoggingManager.getInstance().();
         throw error;
       }
     };
@@ -296,7 +297,7 @@ export class ServiceRegistry extends BaseService {
         await stopService(name);
       } catch (error) {
         // Log error but continue with other services
-        console.error(`Failed to stop service ${name}:`, error);
+        consoleLoggingManager.getInstance().();
       }
     }
   }
@@ -363,3 +364,4 @@ export class ServiceRegistry extends BaseService {
     this.registryEmitter.removeAllListeners();
   }
 }
+

@@ -1,6 +1,6 @@
 import type { Host } from '../../types/models-shared';
 import type { ProcessInfo } from '../../types/metrics';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 class HostService {
   private initialized = false;
@@ -9,12 +9,12 @@ class HostService {
     if (this.initialized) return;
     
     try {
-      logger.info('Initializing host service...');
+      LoggingManager.getInstance().info('Initializing host service...');
       // Add initialization logic here
       this.initialized = true;
-      logger.info('Host service initialized successfully');
+      LoggingManager.getInstance().info('Host service initialized successfully');
     } catch (error) {
-      logger.error('Failed to initialize host service:', {
+      LoggingManager.getInstance().error('Failed to initialize host service:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
@@ -44,7 +44,7 @@ class HostService {
       };
       return mockHost;
     } catch (error) {
-      logger.error('Failed to get host:', {
+      LoggingManager.getInstance().error('Failed to get host:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId
       });
@@ -88,7 +88,7 @@ class HostService {
         }
       ];
     } catch (error) {
-      logger.error('Failed to list processes:', {
+      LoggingManager.getInstance().error('Failed to list processes:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id
       });
@@ -98,3 +98,4 @@ class HostService {
 }
 
 export const hostService = new HostService();
+

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+﻿import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface QueryState<T> {
   data: T | null;
@@ -76,9 +77,7 @@ export function useQuery<T>(
         onSuccess?.(data);
       }
     } catch (error) {
-      logger.error('Query error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
 
       if (mountedRef.current) {
         const errorObj = error instanceof Error ? error : new Error('Unknown error');
@@ -111,3 +110,4 @@ export function useQuery<T>(
     refetch: fetchData,
   };
 }
+

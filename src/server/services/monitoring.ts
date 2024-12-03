@@ -1,6 +1,6 @@
 import os from 'os';
 import { SystemMetrics, ProcessMetrics, ServiceStatus, HealthCheckResponse } from '../types/middleware';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 class MonitoringService {
   private static instance: MonitoringService;
@@ -34,25 +34,25 @@ class MonitoringService {
     // Perform initial health check
     this.performHealthCheck()
       .then(health => this.handleHealthCheck(health))
-      .catch(error => logger.error('Initial health check failed:', error));
+      .catch(error => LoggingManager.getInstance().error('Initial health check failed:', error));
 
     this.checkInterval = setInterval(() => {
       this.performHealthCheck()
         .then(health => this.handleHealthCheck(health))
         .catch(error => {
-          logger.error('Health check failed:', error);
+          LoggingManager.getInstance().error('Health check failed:', error);
           this.updateAllServicesUnhealthy('Health check failed');
         });
     }, this.CHECK_INTERVAL_MS);
 
-    logger.info('Health monitoring started');
+    LoggingManager.getInstance().info('Health monitoring started');
   }
 
   public stopMonitoring(): void {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
-      logger.info('Health monitoring stopped');
+      LoggingManager.getInstance().info('Health monitoring stopped');
     }
   }
 
@@ -80,7 +80,7 @@ class MonitoringService {
     }
 
     if (health.status !== 'healthy') {
-      logger.warn('System health degraded:', health);
+      LoggingManager.getInstance().warn('System health degraded:', health);
     }
 
     // Check for critical thresholds
@@ -92,7 +92,7 @@ class MonitoringService {
 
     // Check CPU usage
     if (system.cpu.usage > 90) {
-      logger.error('Critical CPU usage detected:', {
+      LoggingManager.getInstance().error('Critical CPU usage detected:', {
         usage: system.cpu.usage,
         threshold: 90
       });
@@ -100,7 +100,7 @@ class MonitoringService {
 
     // Check memory usage
     if (system.memory.usagePercent > 90) {
-      logger.error('Critical memory usage detected:', {
+      LoggingManager.getInstance().error('Critical memory usage detected:', {
         usage: system.memory.usagePercent,
         free: system.memory.free,
         threshold: 90
@@ -113,7 +113,7 @@ class MonitoringService {
     const heapUsage = (heapUsed / heapTotal) * 100;
 
     if (heapUsage > 85) {
-      logger.error('Critical heap usage detected:', {
+      LoggingManager.getInstance().error('Critical heap usage detected:', {
         usage: heapUsage,
         used: heapUsed,
         total: heapTotal,
@@ -128,7 +128,7 @@ class MonitoringService {
     );
 
     if (consecutiveUnhealthy) {
-      logger.error('System consistently unhealthy:', {
+      LoggingManager.getInstance().error('System consistently unhealthy:', {
         lastChecks: recentChecks.map(check => ({
           timestamp: check.timestamp,
           status: check.metrics.status
@@ -162,7 +162,7 @@ class MonitoringService {
         disk
       };
     } catch (error) {
-      logger.error('Failed to get system metrics:', error);
+      LoggingManager.getInstance().error('Failed to get system metrics:', error);
       throw error;
     }
   }
@@ -189,7 +189,7 @@ class MonitoringService {
 
   public async registerService(name: string): Promise<void> {
     if (this.serviceStatuses.has(name)) {
-      logger.warn(`Service ${name} already registered`);
+      LoggingManager.getInstance().warn(`Service ${name} already registered`);
       return;
     }
 
@@ -199,14 +199,14 @@ class MonitoringService {
       lastCheck: new Date(),
     });
 
-    logger.info(`Service ${name} registered for monitoring`);
+    LoggingManager.getInstance().info(`Service ${name} registered for monitoring`);
   }
 
   public async updateServiceStatus(name: string, status: ServiceStatus): Promise<void> {
     const currentStatus = this.serviceStatuses.get(name);
     
     if (!currentStatus) {
-      logger.warn(`Attempting to update unknown service: ${name}`);
+      LoggingManager.getInstance().warn(`Attempting to update unknown service: ${name}`);
       await this.registerService(name);
     }
 
@@ -218,7 +218,7 @@ class MonitoringService {
     this.serviceStatuses.set(name, newStatus);
 
     if (newStatus.status !== 'healthy') {
-      logger.warn(`Service ${name} status changed to ${newStatus.status}:`, {
+      LoggingManager.getInstance().warn(`Service ${name} status changed to ${newStatus.status}:`, {
         error: newStatus.error,
         latency: newStatus.latency
       });
@@ -260,7 +260,7 @@ class MonitoringService {
         services
       };
     } catch (error) {
-      logger.error('Health check failed:', error);
+      LoggingManager.getInstance().error('Health check failed:', error);
       throw error;
     }
   }
@@ -279,3 +279,4 @@ class MonitoringService {
 }
 
 export const monitoringService = MonitoringService.getInstance();
+

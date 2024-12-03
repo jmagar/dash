@@ -1,9 +1,10 @@
-import { readdir, readFile } from 'fs/promises';
+﻿import { readdir, readFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import dotenv from 'dotenv';
 import { Pool, PoolClient } from 'pg';
+import { LoggingManager } from '../../../../../../src/server/utils/logging/LoggingManager';
 
 // Resolve __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -72,7 +73,7 @@ async function runMigrations(): Promise<void> {
 
     console.log('All migrations completed successfully');
   } catch (error) {
-    console.error('Migration failed:', error);
+    consoleLoggingManager.getInstance().();
     process.exit(1);
   } finally {
     if (client) {
@@ -84,6 +85,7 @@ async function runMigrations(): Promise<void> {
 
 // Run migrations
 runMigrations().catch(error => {
-  console.error('Unhandled migration error:', error);
+  consoleLoggingManager.getInstance().();
   process.exit(1);
 });
+

@@ -1,7 +1,8 @@
-import socketIO from 'socket.io-client';
+﻿import socketIO from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '../types/socket-events';
 import { config } from './config';
 import { logger } from './utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../src/server/utils/logging/LoggingManager';
 
 // Socket configuration
 const socketConfig = {
@@ -38,21 +39,21 @@ function setupBasicEvents(): void {
   // Connection events
   socketInstance.on('connect', () => {
     const socketId = socketInstance.id;
-    logger.info('Socket connected:', { id: socketId });
+    loggerLoggingManager.getInstance().();
   });
 
   // Disconnection events
   socketInstance.on('disconnect', () => {
-    logger.info('Socket disconnected');
+    loggerLoggingManager.getInstance().();
   });
 
   // Error events
   socketInstance.on('connect_error', () => {
-    logger.error('Socket connection error');
+    loggerLoggingManager.getInstance().();
   });
 
   socketInstance.on('error', () => {
-    logger.error('Socket error');
+    loggerLoggingManager.getInstance().();
   });
 }
 
@@ -60,19 +61,19 @@ function setupBasicEvents(): void {
 function setupReconnectionEvents(): void {
   // Reconnection events using socket events
   socketInstance.on('reconnect', () => {
-    logger.info('Socket reconnected');
+    loggerLoggingManager.getInstance().();
   });
 
   socketInstance.on('reconnect_attempt', () => {
-    logger.info('Socket reconnection attempt');
+    loggerLoggingManager.getInstance().();
   });
 
   socketInstance.on('reconnect_error', () => {
-    logger.error('Socket reconnection error');
+    loggerLoggingManager.getInstance().();
   });
 
   socketInstance.on('reconnect_failed', () => {
-    logger.error('Socket reconnection failed');
+    loggerLoggingManager.getInstance().();
   });
 }
 
@@ -120,3 +121,4 @@ export {
   on,
   off
 };
+

@@ -1,634 +1,300 @@
-import Redis from 'ioredis';
-
-import { validateConfig } from './config';
-import { RedisError, RedisErrorCode, REDIS_ERROR_MESSAGES } from './errors';
-import { RedisMetricsCollector, type RedisMetrics } from './metrics';
-import type { ICacheService } from './types';
-import type { User } from '../../types/auth';
-import type { CacheCommand } from '../../types/cache';
 import type { LogMetadata } from '../../types/logger';
+import type { RedisConfig } from '../../types/redis';
+import { CommandCacheService } from './CommandCacheService';
+import { ContextCacheService } from './ContextCacheService';
+import { DockerCacheService } from './DockerCacheService';
+import { HostCacheService } from './HostCacheService';
+import { SessionCacheService } from './SessionCacheService';
+import { SystemCacheService } from './SystemCacheService';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import type { Container, Stack } from '../../types/models-shared';
-import { logger } from '../utils/logger';
+import type { SessionData } from '../../types/session';
+import type { 
+  FileSystemState,
+  ProcessState,
+  NetworkState,
+  UserState,
+  AppState,
+  SystemState
+} from '../../types/system';
+import { getErrorMessage, maskSensitiveData } from './utils/error';
 
-export class CacheService implements ICacheService {
-  private readonly CACHE_KEYS = {
-    SESSION: 'session',
-    HOST: 'host',
-    DOCKER: {
-      CONTAINERS: 'docker:containers',
-      STACKS: 'docker:stacks',
-    },
-    COMMAND: 'command',
-  };
+/**
+ * Main cache service that coordinates all specialized cache services
+ */
+export class CacheService {
+  private readonly _commandCache: CommandCacheService;
+  private readonly _contextCache: ContextCacheService;
+  private readonly _dockerCache: DockerCacheService;
+  private readonly _hostCache: HostCacheService;
+  private readonly _sessionCache: SessionCacheService;
+  private readonly _systemCache: SystemCacheService;
 
-  private readonly CACHE_TTL = {
-    SESSION: 3600, // 1 hour
-    HOST: 300, // 5 minutes
-    DOCKER: {
-      CONTAINERS: 300, // 5 minutes
-      STACKS: 300, // 5 minutes
-    },
-    COMMAND: 86400, // 24 hours
-  };
-
-  private _redis: Redis;
-  private isConnected = false;
-  private readonly metricsCollector: RedisMetricsCollector;
-
-  constructor() {
-    const config = validateConfig();
-    this._redis = new Redis({
-      host: config.connection.host,
-      port: config.connection.port,
-      password: config.connection.password,
-      db: config.connection.db,
-      maxRetriesPerRequest: config.connection.maxRetriesPerRequest,
-      retryStrategy: (times: number): number | null => {
-        if (times > 10) {
-          return null; // Stop retrying after 10 attempts
-        }
-        const delay = Math.min(times * 1000, 30000);
-        return delay;
-      },
-      enableReadyCheck: true,
-      reconnectOnError: (err: Error) => {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          // Only reconnect when the error contains "READONLY"
-          return true;
-        }
-        return false;
-      }
-    });
-
-    // Initialize metrics collector
-    this.metricsCollector = new RedisMetricsCollector(
-      this._redis,
-      config.metrics.interval
-    );
-    this.setupEventHandlers();
-  }
-
-  private setupEventHandlers(): void {
-    this._redis.on('connect', () => {
-      this.isConnected = true;
-      logger.info('Redis connected');
-    });
-
-    this._redis.on('error', (error) => {
-      this.isConnected = false;
-      const metadata: LogMetadata = {
-        error: error.message,
-      };
-      logger.error('Redis error:', metadata);
-    });
-
-    this._redis.on('ready', () => {
-      logger.info('Redis ready');
-    });
-
-    this._redis.on('close', () => {
-      this.isConnected = false;
-      logger.info('Redis connection closed');
-    });
-  }
-
-  public get redis(): Redis {
-    return this._redis;
-  }
-
-  public async healthCheck(): Promise<{
-    status: string;
-    connected: boolean;
-    metrics: RedisMetrics;
-    error?: string;
-  }> {
-    try {
-      await this._redis.ping();
-      return {
-        status: 'ok',
-        connected: this.isConnected,
-        metrics: this.metricsCollector.getMetrics(),
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        connected: false,
-        metrics: this.metricsCollector.getMetrics(),
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
-
-  public async disconnect(): Promise<void> {
-    try {
-      await this._redis.quit();
-      this.isConnected = false;
-      logger.info('Redis disconnected');
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to disconnect from Redis:', metadata);
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
-    }
+  constructor(config: RedisConfig) {
+    this._commandCache = new CommandCacheService(config);
+    this._contextCache = new ContextCacheService(config);
+    this._dockerCache = new DockerCacheService(config);
+    this._hostCache = new HostCacheService(config);
+    this._sessionCache = new SessionCacheService(config);
+    this._systemCache = new SystemCacheService(config);
   }
 
   // Session Management
-  public async getSession(token: string): Promise<string | null> {
+  public async getSession(token: string): Promise<SessionData | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      return await this._redis.get(`${this.CACHE_KEYS.SESSION}:${token}`);
+      return await this._sessionCache.get(token);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        token: this.maskToken(token)
       };
-      logger.error('Failed to get session:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get session', metadata);
+      throw error;
     }
   }
 
-  public async setSession(token: string, user: User, refreshToken: string): Promise<void> {
+  public async setSession(token: string, data: SessionData): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      const sessionData = JSON.stringify({ user, refreshToken });
-      await this._redis.set(
-        `${this.CACHE_KEYS.SESSION}:${token}`,
-        sessionData,
-        'EX',
-        this.CACHE_TTL.SESSION
-      );
+      await this._sessionCache.set(token, data);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        token: this.maskToken(token)
       };
-      logger.error('Failed to set session:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to set session', metadata);
+      throw error;
     }
   }
 
-  public async removeSession(token: string): Promise<void> {
+  public async deleteSession(token: string): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.del(`${this.CACHE_KEYS.SESSION}:${token}`);
+      await this._sessionCache.delete(token);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        token: this.maskToken(token)
       };
-      logger.error('Failed to remove session:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
-    }
-  }
-
-  // Host Management
-  public async getHost(id: string): Promise<string | null> {
-    try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      return await this._redis.get(`${this.CACHE_KEYS.HOST}:${id}`);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to get host:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
-    }
-  }
-
-  public async setHost(id: string, data: string): Promise<void> {
-    try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.set(
-        `${this.CACHE_KEYS.HOST}:${id}`,
-        data,
-        'EX',
-        this.CACHE_TTL.HOST
-      );
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to set host:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
-    }
-  }
-
-  public async removeHost(id: string): Promise<void> {
-    try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.del(`${this.CACHE_KEYS.HOST}:${id}`);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to remove host:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to delete session', metadata);
+      throw error;
     }
   }
 
   // Docker Management
   public async getContainers(hostId: string): Promise<Container[] | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      const data = await this._redis.get(`${this.CACHE_KEYS.DOCKER.CONTAINERS}:${hostId}`);
-      return data ? JSON.parse(data) : null;
+      return await this._dockerCache.getContainers(hostId);
     } catch (error) {
       const metadata: LogMetadata = {
-        hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to get containers:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get containers', metadata);
+      throw error;
     }
   }
 
   public async setContainers(hostId: string, containers: Container[]): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.set(
-        `${this.CACHE_KEYS.DOCKER.CONTAINERS}:${hostId}`,
-        JSON.stringify(containers),
-        'EX',
-        this.CACHE_TTL.DOCKER.CONTAINERS
-      );
+      await this._dockerCache.setContainers(hostId, containers);
     } catch (error) {
       const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
         hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        containerCount: containers.length
       };
-      logger.error('Failed to set containers:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
-    }
-  }
-
-  public async removeContainers(hostId: string): Promise<void> {
-    try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.del(`${this.CACHE_KEYS.DOCKER.CONTAINERS}:${hostId}`);
-    } catch (error) {
-      const metadata: LogMetadata = {
-        hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-      logger.error('Failed to remove containers:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to set containers', metadata);
+      throw error;
     }
   }
 
   public async getStacks(hostId: string): Promise<Stack[] | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      const data = await this._redis.get(`${this.CACHE_KEYS.DOCKER.STACKS}:${hostId}`);
-      return data ? JSON.parse(data) : null;
+      return await this._dockerCache.getStacks(hostId);
     } catch (error) {
       const metadata: LogMetadata = {
-        hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to get stacks:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get stacks', metadata);
+      throw error;
     }
   }
 
   public async setStacks(hostId: string, stacks: Stack[]): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.set(
-        `${this.CACHE_KEYS.DOCKER.STACKS}:${hostId}`,
-        JSON.stringify(stacks),
-        'EX',
-        this.CACHE_TTL.DOCKER.STACKS
-      );
+      await this._dockerCache.setStacks(hostId, stacks);
     } catch (error) {
       const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
         hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        stackCount: stacks.length
       };
-      logger.error('Failed to set stacks:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to set stacks', metadata);
+      throw error;
     }
   }
 
-  public async removeStacks(hostId: string): Promise<void> {
+  // System State Management
+  public async getFileSystemState(hostId: string): Promise<FileSystemState | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.del(`${this.CACHE_KEYS.DOCKER.STACKS}:${hostId}`);
+      return await this._systemCache.getState<FileSystemState>(`filesystem:${hostId}`);
     } catch (error) {
       const metadata: LogMetadata = {
-        hostId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to remove stacks:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get filesystem state', metadata);
+      throw error;
     }
   }
 
-  // Command Management
-  public async getCommand(id: string): Promise<string | null> {
+  public async setFileSystemState(hostId: string, state: FileSystemState): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      return await this._redis.get(`${this.CACHE_KEYS.COMMAND}:${id}`);
+      await this._systemCache.setState(`filesystem:${hostId}`, state);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to get command:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to set filesystem state', metadata);
+      throw error;
     }
   }
 
-  public async setCommand(id: string, data: string): Promise<void> {
+  public async getProcessState(hostId: string): Promise<ProcessState | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.set(
-        `${this.CACHE_KEYS.COMMAND}:${id}`,
-        data,
-        'EX',
-        this.CACHE_TTL.COMMAND
-      );
+      return await this._systemCache.getState<ProcessState>(`process:${hostId}`);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to set command:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get process state', metadata);
+      throw error;
     }
   }
 
-  public async removeCommand(id: string): Promise<void> {
+  public async setProcessState(hostId: string, state: ProcessState): Promise<void> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.del(`${this.CACHE_KEYS.COMMAND}:${id}`);
+      await this._systemCache.setState(`process:${hostId}`, state);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to remove command:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to set process state', metadata);
+      throw error;
     }
   }
 
-  // Cache Management
-  public async clear(): Promise<void> {
+  public async getNetworkState(hostId: string): Promise<NetworkState | null> {
     try {
-      if (!this.isConnected) {
-        throw new RedisError({
-          code: RedisErrorCode.CONNECTION_ERROR,
-          message: REDIS_ERROR_MESSAGES[RedisErrorCode.CONNECTION_ERROR]
-        });
-      }
-
-      await this._redis.flushdb();
+      return await this._systemCache.getState<NetworkState>(`network:${hostId}`);
     } catch (error) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.getErrorMessage(error),
+        hostId
       };
-      logger.error('Failed to clear cache:', metadata);
-
-      if (error instanceof RedisError) {
-        throw error;
-      }
-
-      throw new RedisError({
-        code: RedisErrorCode.OPERATION_ERROR,
-        message: REDIS_ERROR_MESSAGES[RedisErrorCode.OPERATION_ERROR],
-        metadata
-      });
+      LoggingManager.getInstance().error('Failed to get network state', metadata);
+      throw error;
     }
   }
 
-  public getMetrics(): RedisMetrics {
-    return this.metricsCollector.getMetrics();
+  public async setNetworkState(hostId: string, state: NetworkState): Promise<void> {
+    try {
+      await this._systemCache.setState(`network:${hostId}`, state);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
+        hostId
+      };
+      LoggingManager.getInstance().error('Failed to set network state', metadata);
+      throw error;
+    }
+  }
+
+  public async getUserState(userId: string): Promise<UserState | null> {
+    try {
+      return await this._systemCache.getState<UserState>(`user:${userId}`);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
+        userId
+      };
+      LoggingManager.getInstance().error('Failed to get user state', metadata);
+      throw error;
+    }
+  }
+
+  public async setUserState(userId: string, state: UserState): Promise<void> {
+    try {
+      await this._systemCache.setState(`user:${userId}`, state);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
+        userId
+      };
+      LoggingManager.getInstance().error('Failed to set user state', metadata);
+      throw error;
+    }
+  }
+
+  public async getAppState(): Promise<AppState | null> {
+    try {
+      return await this._systemCache.getState<AppState>('app');
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error)
+      };
+      LoggingManager.getInstance().error('Failed to get app state', metadata);
+      throw error;
+    }
+  }
+
+  public async setAppState(state: AppState): Promise<void> {
+    try {
+      await this._systemCache.setState('app', state);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error)
+      };
+      LoggingManager.getInstance().error('Failed to set app state', metadata);
+      throw error;
+    }
+  }
+
+  public async getSystemState(hostId: string): Promise<SystemState | null> {
+    try {
+      return await this._systemCache.getState<SystemState>(`system:${hostId}`);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
+        hostId
+      };
+      LoggingManager.getInstance().error('Failed to get system state', metadata);
+      throw error;
+    }
+  }
+
+  public async setSystemState(hostId: string, state: SystemState): Promise<void> {
+    try {
+      await this._systemCache.setState(`system:${hostId}`, state);
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: this.getErrorMessage(error),
+        hostId
+      };
+      LoggingManager.getInstance().error('Failed to set system state', metadata);
+      throw error;
+    }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    return getErrorMessage(error);
+  }
+
+  private maskToken(token: string): string {
+    return maskSensitiveData(token);
   }
 }
 
-// Export singleton instance
-export const cacheService = new CacheService();

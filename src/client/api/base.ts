@@ -1,6 +1,7 @@
-import { ApiError, ApiResult, createApiError } from '../../types/error';
+﻿import { ApiError, ApiResult, createApiError } from '../../types/error';
 import { logger } from '../../server/utils/logger';
 import type { LogMetadata } from '../../types/logger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export type Endpoints = Record<string, string>;
 
@@ -44,7 +45,7 @@ export abstract class BaseApi {
         method: 'GET',
         path: endpoint,
       };
-      logger.error('API request failed', metadata);
+      loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -75,7 +76,7 @@ export abstract class BaseApi {
         method: 'POST',
         path: endpoint,
       };
-      logger.error('API request failed', metadata);
+      loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -106,7 +107,7 @@ export abstract class BaseApi {
         method: 'PUT',
         path: endpoint,
       };
-      logger.error('API request failed', metadata);
+      loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -137,7 +138,7 @@ export abstract class BaseApi {
         method: 'DELETE',
         path: endpoint,
       };
-      logger.error('API request failed', metadata);
+      loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -146,3 +147,4 @@ export abstract class BaseApi {
     }
   }
 }
+

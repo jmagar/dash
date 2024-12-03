@@ -1,6 +1,6 @@
 import { config as dotenvConfig } from 'dotenv';
 import type { Config } from '../types/config';
-import { logger } from './utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 dotenvConfig();
 
@@ -33,7 +33,7 @@ type EnvVars = RequiredEnvVars | OptionalEnvVars;
 function getEnvVar<T extends EnvVars>(key: T, defaultValue?: string): string {
   const value = process.env[key];
   if (value === undefined && defaultValue === undefined) {
-    logger.error(`Missing required environment variable: ${key}`);
+    LoggingManager.getInstance().error(`Missing required environment variable: ${key}`);
     process.exit(1);
   }
   return value ?? defaultValue!;
@@ -55,15 +55,15 @@ function parseNumber(
   if (value === undefined) return defaultValue;
   const parsed = parseInt(value, 10);
   if (isNaN(parsed)) {
-    logger.warn(`Invalid number format for value: ${value}, using default: ${defaultValue}`);
+    LoggingManager.getInstance().warn(`Invalid number format for value: ${value}, using default: ${defaultValue}`);
     return defaultValue;
   }
   if (min !== undefined && parsed < min) {
-    logger.warn(`Value ${parsed} is below minimum ${min}, using minimum value`);
+    LoggingManager.getInstance().warn(`Value ${parsed} is below minimum ${min}, using minimum value`);
     return min;
   }
   if (max !== undefined && parsed > max) {
-    logger.warn(`Value ${parsed} is above maximum ${max}, using maximum value`);
+    LoggingManager.getInstance().warn(`Value ${parsed} is above maximum ${max}, using maximum value`);
     return max;
   }
   return parsed;
@@ -196,29 +196,29 @@ function validateConfig(cfg: Config): void {
   // Validate JWT secrets in production
   if (cfg.server.env === 'production') {
     if (cfg.server.security.jwtSecret === 'your-secret-key') {
-      logger.error('Production environment detected but using default JWT secret');
+      LoggingManager.getInstance().error('Production environment detected but using default JWT secret');
       process.exit(1);
     }
   }
 
   // Validate monitoring interval
   if (cfg.server.monitoring.interval < 1000) {
-    logger.warn('Monitoring interval is less than 1 second, this may impact performance');
+    LoggingManager.getInstance().warn('Monitoring interval is less than 1 second, this may impact performance');
   }
 
   // Validate rate limiting
   if (cfg.server.rateLimit.max > 1000) {
-    logger.warn('High rate limit detected, this may impact server performance');
+    LoggingManager.getInstance().warn('High rate limit detected, this may impact server performance');
   }
 
   // Validate token refresh interval
   if (cfg.server.security.tokenRefreshInterval < 60000) {
-    logger.warn('Token refresh interval is less than 1 minute, this may cause excessive server load');
+    LoggingManager.getInstance().warn('Token refresh interval is less than 1 minute, this may cause excessive server load');
   }
 
   // Log configuration in development
   if (cfg.server.env === 'development') {
-    logger.debug('Server configuration:', {
+    LoggingManager.getInstance().debug('Server configuration:', {
       ...cfg,
       server: {
         ...cfg.server,
@@ -239,3 +239,4 @@ function validateConfig(cfg: Config): void {
 validateConfig(config);
 
 export default config;
+

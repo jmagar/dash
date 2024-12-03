@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useLogger } from './useLogger';
 import { useErrorHandler } from './useErrorHandler';
 import { useNotification } from './useNotification';
 import { settingsClient } from '../api/settings.client';
 import type { Settings, SettingsPath, SettingsValue } from '../../types/settings';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseSettingsResult {
   // Settings state
@@ -29,7 +30,7 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const logger = useLogger();
+  
   const handleError = useErrorHandler();
   const { showNotification } = useNotification();
 
@@ -39,17 +40,13 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
       setError(null);
 
       // Always load user settings
-      logger.info('Loading user settings', {
-        component: 'useSettings'
-      });
+      loggerLoggingManager.getInstance().();
       const userSettingsData = await settingsClient.getUserSettings();
       setUserSettings(userSettingsData);
 
       // Load admin settings if user is admin
       if (isAdmin) {
-        logger.info('Loading admin settings', {
-          component: 'useSettings'
-        });
+        loggerLoggingManager.getInstance().();
         const adminSettingsData = await settingsClient.getAdminSettings();
         setAdminSettings(adminSettingsData);
       }
@@ -72,10 +69,7 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
     value: SettingsValue
   ) => {
     try {
-      logger.info('Updating user setting', {
-        path,
-        component: 'useSettings'
-      });
+      loggerLoggingManager.getInstance().();
 
       await settingsClient.updateUserSettings(path, value);
       await loadSettings(); // Refresh settings after update
@@ -101,10 +95,7 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
     }
 
     try {
-      logger.info('Updating admin setting', {
-        path,
-        component: 'useSettings'
-      });
+      loggerLoggingManager.getInstance().();
 
       await settingsClient.updateAdminSettings(path, value);
       await loadSettings(); // Refresh settings after update
@@ -123,9 +114,7 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
 
   const resetUserSettings = useCallback(async () => {
     try {
-      logger.info('Resetting user settings', {
-        component: 'useSettings'
-      });
+      loggerLoggingManager.getInstance().();
 
       await settingsClient.resetUserSettings();
       await loadSettings(); // Refresh settings after reset
@@ -157,3 +146,4 @@ export function useSettings(isAdmin: boolean = false): UseSettingsResult {
     refreshSettings: loadSettings
   };
 }
+

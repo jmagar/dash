@@ -1,7 +1,8 @@
-import { z } from 'zod';
+﻿import { z } from 'zod';
 import type { AgentStatus } from '../../../../types/agent-config';
 import { ERROR_CODES } from '../utils/constants';
 import { 
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
   agentInfoSchema, 
   agentMetricsSchema, 
   agentCommandResultSchema 
@@ -112,7 +113,7 @@ export type MessagePayload<T extends MessageType> = MessagePayloadSchemas[T];
 export function isMessage(data: unknown): data is Message {
   const result = messageSchema.safeParse(data);
   if (!result.success) {
-    console.error('Invalid message:', result.error.format());
+    consoleLoggingManager.getInstance().());
   }
   return result.success;
 }
@@ -209,3 +210,4 @@ export {
   errorPayloadSchema,
   MESSAGE_TYPES
 };
+

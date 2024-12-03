@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import type { ProcessInfo } from '../../../types/metrics';
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
@@ -8,6 +8,7 @@ import { ProcessMonitorFactory } from '../../services/process/process-monitor-fa
 import { ProcessCacheImpl } from '../../services/process/process-cache';
 import { hostService } from '../../services/host.service';
 import { io } from '../../server';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 const router = Router();
 
@@ -54,10 +55,7 @@ router.get('/:hostId/processes', async (req, res, next) => {
       data: processes,
     });
   } catch (error) {
-    logger.error('Failed to list processes:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId: req.params.hostId,
-    });
+    loggerLoggingManager.getInstance().();
     next(error);
   }
 });
@@ -85,13 +83,10 @@ router.post('/:hostId/processes/:pid/kill', async (req, res, next) => {
       success: true,
     });
   } catch (error) {
-    logger.error('Failed to kill process:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId: req.params.hostId,
-      pid: req.params.pid,
-    });
+    loggerLoggingManager.getInstance().();
     next(error);
   }
 });
 
 export default router;
+

@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
 import type { LogEntry, LogFilter } from '../../types/logging';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseLogViewerOptions {
   hostIds?: string[];
@@ -90,7 +91,7 @@ export function useLogViewer({
       const [data] = args as [{ error: string }];
       setError(data.error);
       setLoading(false);
-      logger.error('Log viewer error:', { error: data.error });
+      loggerLoggingManager.getInstance().();
     };
 
     socket.on('logs:new', handleNewLog);
@@ -119,3 +120,4 @@ export function useLogViewer({
     autoScroll,
   };
 }
+

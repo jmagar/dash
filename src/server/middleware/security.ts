@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import fileUpload from 'express-fileupload';
 import csrf from 'csurf';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import config from '../config';
 
 // Security headers middleware
@@ -48,7 +48,7 @@ export const requestTracer: RequestHandler = (req: Request, res: Response, next:
   res.setHeader('X-Request-ID', requestId);
 
   // Log request
-  logger.info('Incoming request', {
+  LoggingManager.getInstance().info('Incoming request', {
     requestId,
     method: req.method,
     path: req.path,
@@ -58,7 +58,7 @@ export const requestTracer: RequestHandler = (req: Request, res: Response, next:
   // Log response on finish
   res.on('finish', () => {
     const duration = Date.now() - start;
-    logger.info('Request completed', {
+    LoggingManager.getInstance().info('Request completed', {
       requestId,
       method: req.method,
       path: req.path,
@@ -72,7 +72,7 @@ export const requestTracer: RequestHandler = (req: Request, res: Response, next:
 
 // Error handling middleware
 export const errorHandler: ErrorRequestHandler = (err: Error, req: Request, res: Response, next: NextFunction): void => {
-  logger.error('Unhandled error:', {
+  LoggingManager.getInstance().error('Unhandled error:', {
     error: err.message,
     stack: err.stack,
     path: req.path,
@@ -92,7 +92,7 @@ interface FileUploadError extends Error {
 // File upload error handler
 export const fileUploadErrorHandler: ErrorRequestHandler = (err: FileUploadError, req: Request, res: Response, next: NextFunction) => {
   if (err?.code === 'LIMIT_FILE_SIZE') {
-    logger.warn('File size limit exceeded:', {
+    LoggingManager.getInstance().warn('File size limit exceeded:', {
       error: err.message,
       path: req.path,
     });
@@ -105,7 +105,7 @@ export const fileUploadErrorHandler: ErrorRequestHandler = (err: FileUploadError
   }
   
   if (err?.code === 'LIMIT_UNEXPECTED_FILE') {
-    logger.warn('Unexpected file upload:', {
+    LoggingManager.getInstance().warn('Unexpected file upload:', {
       error: err.message,
       path: req.path,
     });
@@ -121,7 +121,7 @@ export const fileUploadErrorHandler: ErrorRequestHandler = (err: FileUploadError
 
 // Not found handler
 export const notFoundHandler: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
-  logger.warn('Route not found:', {
+  LoggingManager.getInstance().warn('Route not found:', {
     path: req.path,
     method: req.method,
   });
@@ -134,7 +134,7 @@ export const notFoundHandler: RequestHandler = (req: Request, res: Response, nex
 
 // Rate limiting middleware handler
 export const rateLimitHandler: RequestHandler = (req: Request, res: Response, next: NextFunction): void => {
-  logger.warn('Rate limit exceeded:', {
+  LoggingManager.getInstance().warn('Rate limit exceeded:', {
     ip: req.ip,
     path: req.path,
   });
@@ -188,7 +188,7 @@ export function validateRequestSize(req: Request, res: Response, next: NextFunct
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
   
   if (contentLength > config.server.maxRequestSize) {
-    logger.warn('Request too large', {
+    LoggingManager.getInstance().warn('Request too large', {
       size: contentLength,
       maxSize: config.server.maxRequestSize,
       path: req.path,
@@ -269,7 +269,7 @@ const securityHeadersMiddleware = helmet({
 
 // Error handling middleware
 export const securityErrorHandler: ErrorRequestHandler = (err: Error, req: Request, res: Response, next: NextFunction): void => {
-  logger.error('Security middleware error:', {
+  LoggingManager.getInstance().error('Security middleware error:', {
     error: err.message,
     stack: err.stack,
     path: req.path,
@@ -320,7 +320,7 @@ export function configureSecurityMiddleware(app: any): void {
   // Error handler
   app.use(securityErrorHandler);
 
-  logger.info('Security middleware configured');
+  LoggingManager.getInstance().info('Security middleware configured');
 }
 
 // Export middleware for use in routes
@@ -349,3 +349,4 @@ export const security = [
   fileUploadMiddleware,
   securityErrorHandler,
 ];
+

@@ -7,7 +7,7 @@ import type { Request, Response } from 'express';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import type { FileItem, ApiResponse } from '../../types/models-shared';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const isWindows = os.platform() === 'win32';
 
@@ -57,7 +57,7 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
     }
 
     const dirPath = sanitizePath(rawPath);
-    logger.info('Listing files', { path: dirPath });
+    LoggingManager.getInstance().info('Listing files', { path: dirPath });
 
     try {
       const stats = await fs.stat(dirPath);
@@ -95,7 +95,7 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
       }),
     );
 
-    logger.info('Files listed successfully', { count: fileList.length });
+    LoggingManager.getInstance().info('Files listed successfully', { count: fileList.length });
     const result: ApiResponse<FileItem[]> = {
       success: true,
       data: fileList,
@@ -106,7 +106,7 @@ export async function listFiles(req: Request, res: Response): Promise<Response> 
       path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to list files:', metadata);
+    LoggingManager.getInstance().error('Failed to list files:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to list files',
@@ -133,7 +133,7 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
     }
 
     const filePath = sanitizePath(rawPath);
-    logger.info('Reading file', { path: filePath });
+    LoggingManager.getInstance().info('Reading file', { path: filePath });
 
     try {
       const stats = await fs.stat(filePath);
@@ -156,7 +156,7 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
     }
 
     const content = await fs.readFile(filePath, 'utf-8');
-    logger.info('File read successfully', { path: filePath });
+    LoggingManager.getInstance().info('File read successfully', { path: filePath });
 
     const result: ApiResponse<string> = {
       success: true,
@@ -168,7 +168,7 @@ export async function readFile(req: Request, res: Response): Promise<Response> {
       path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to read file:', metadata);
+    LoggingManager.getInstance().error('Failed to read file:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to read file',
@@ -203,14 +203,14 @@ export async function writeFile(req: Request, res: Response): Promise<Response> 
     }
 
     const filePath = sanitizePath(rawPath);
-    logger.info('Writing file', { path: filePath });
+    LoggingManager.getInstance().info('Writing file', { path: filePath });
 
     // Ensure parent directory exists
     const parentDir = path.dirname(filePath);
     await fs.mkdir(parentDir, { recursive: true });
 
     await fs.writeFile(filePath, content, 'utf-8');
-    logger.info('File written successfully', { path: filePath });
+    LoggingManager.getInstance().info('File written successfully', { path: filePath });
 
     const result: ApiResponse<void> = {
       success: true,
@@ -221,7 +221,7 @@ export async function writeFile(req: Request, res: Response): Promise<Response> 
       path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to write file:', metadata);
+    LoggingManager.getInstance().error('Failed to write file:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to write file',
@@ -248,16 +248,16 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
     }
 
     const filePath = sanitizePath(rawPath);
-    logger.info('Deleting file/directory', { path: filePath });
+    LoggingManager.getInstance().info('Deleting file/directory', { path: filePath });
 
     try {
       const stats = await fs.stat(filePath);
       if (stats.isDirectory()) {
         await fs.rmdir(filePath);
-        logger.info('Directory deleted successfully', { path: filePath });
+        LoggingManager.getInstance().info('Directory deleted successfully', { path: filePath });
       } else {
         await fs.unlink(filePath);
-        logger.info('File deleted successfully', { path: filePath });
+        LoggingManager.getInstance().info('File deleted successfully', { path: filePath });
       }
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
@@ -279,7 +279,7 @@ export async function deleteFile(req: Request, res: Response): Promise<Response>
       path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to delete file/directory:', metadata);
+    LoggingManager.getInstance().error('Failed to delete file/directory:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to delete file/directory',
@@ -309,11 +309,11 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
     }
 
     const dirPath = sanitizePath(rawPath);
-    logger.info('Creating directory', { path: dirPath });
+    LoggingManager.getInstance().info('Creating directory', { path: dirPath });
 
     try {
       await fs.mkdir(dirPath, { recursive: true });
-      logger.info('Directory created successfully', { path: dirPath });
+      LoggingManager.getInstance().info('Directory created successfully', { path: dirPath });
     } catch (err) {
       if (err instanceof Error && 'code' in err && err.code === 'EEXIST') {
         const error = createApiError('Directory already exists', err, 409);
@@ -334,7 +334,7 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
       path: getPathFromQuery(rawPath),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to create directory:', metadata);
+    LoggingManager.getInstance().error('Failed to create directory:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to create directory',
@@ -350,3 +350,4 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
     });
   }
 }
+

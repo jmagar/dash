@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../../../../../src/server/utils/logging/LoggingManager';
 // This optional code is used to register a service worker.
 // register() is not called by default.
 
@@ -60,7 +61,7 @@ function registerValidSW(swUrl: string, config?: Config) {
       };
     })
     .catch((error) => {
-      console.error('Error during service worker registration:', error);
+      consoleLoggingManager.getInstance().();
     });
 }
 
@@ -99,7 +100,8 @@ export function unregister() {
         registration.unregister();
       })
       .catch((error) => {
-        console.error(error.message);
+        consoleLoggingManager.getInstance().();
       });
   }
 }
+

@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 /**
  * @deprecated This file is being replaced by the new HostService.
  * All functionality should be migrated to src/server/services/host/host.service.ts
@@ -21,10 +22,7 @@ export async function listHosts(userId: string): Promise<Host[]> {
     );
     return result.rows;
   } catch (error) {
-    logger.error('Failed to list hosts:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to list hosts', error);
   }
 }
@@ -45,11 +43,7 @@ export async function getHost(userId: string, id: string): Promise<Host | null> 
 
     return result.rows[0];
   } catch (error) {
-    logger.error('Failed to get host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId,
-      hostId: id,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to get host', error);
   }
 }
@@ -82,10 +76,7 @@ export async function createHost(userId: string, data: CreateHostRequest): Promi
 
     return result.rows[0];
   } catch (error) {
-    logger.error('Failed to create host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to create host', error);
   }
 }
@@ -122,11 +113,7 @@ export async function updateHost(userId: string, id: string, data: UpdateHostReq
 
     return result.rows[0];
   } catch (error) {
-    logger.error('Failed to update host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId,
-      hostId: id,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to update host', error);
   }
 }
@@ -145,11 +132,7 @@ export async function deleteHost(userId: string, id: string): Promise<void> {
       throw new ApiError('Host not found', null, 404);
     }
   } catch (error) {
-    logger.error('Failed to delete host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId,
-      hostId: id,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to delete host', error);
   }
 }
@@ -191,10 +174,7 @@ export async function testConnection(host: Host): Promise<void> {
         keepaliveInterval: 1000,
         keepaliveCountMax: 3,
         debug: (info: string) => {
-          logger.debug('SSH Debug:', {
-            hostId: host.id,
-            info,
-          });
+          loggerLoggingManager.getInstance().();
         },
       });
     } catch (error) {
@@ -202,11 +182,8 @@ export async function testConnection(host: Host): Promise<void> {
       reject(new Error('Failed to initiate connection'));
     }
   }).catch((error) => {
-    logger.error('Failed to test host connection:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      hostId: host.id,
-      hostname: host.hostname,
-    });
+    loggerLoggingManager.getInstance().();
     throw new ApiError('Failed to test connection', error);
   });
 }
+

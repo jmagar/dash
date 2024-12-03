@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { notificationsService } from './notifications.service';
 import { metricsStorageService } from './metrics-storage.service';
 import type {
@@ -74,7 +74,7 @@ class AlertsService extends EventEmitter {
       this.emit('alert:created', created);
       return created;
     } catch (error) {
-      logger.error('Failed to create alert:', {
+      LoggingManager.getInstance().error('Failed to create alert:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         alert,
       });
@@ -97,7 +97,7 @@ class AlertsService extends EventEmitter {
 
       return result.rows;
     } catch (error) {
-      logger.error('Failed to get active alerts:', {
+      LoggingManager.getInstance().error('Failed to get active alerts:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -124,7 +124,7 @@ class AlertsService extends EventEmitter {
 
       return result.rows;
     } catch (error) {
-      logger.error('Failed to get alert history:', {
+      LoggingManager.getInstance().error('Failed to get alert history:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -156,7 +156,7 @@ class AlertsService extends EventEmitter {
       this.emit('alert:acknowledged', updated);
       return updated;
     } catch (error) {
-      logger.error('Failed to acknowledge alert:', {
+      LoggingManager.getInstance().error('Failed to acknowledge alert:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         alertId,
         userId,
@@ -189,7 +189,7 @@ class AlertsService extends EventEmitter {
       this.emit('alert:resolved', updated);
       return updated;
     } catch (error) {
-      logger.error('Failed to resolve alert:', {
+      LoggingManager.getInstance().error('Failed to resolve alert:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         alertId,
         userId,
@@ -244,7 +244,7 @@ class AlertsService extends EventEmitter {
 
       return result.rows;
     } catch (error) {
-      logger.error('Failed to upsert alert rules:', {
+      LoggingManager.getInstance().error('Failed to upsert alert rules:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -264,7 +264,7 @@ class AlertsService extends EventEmitter {
 
       return result.rows;
     } catch (error) {
-      logger.error('Failed to get alert rules:', {
+      LoggingManager.getInstance().error('Failed to get alert rules:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -322,7 +322,7 @@ class AlertsService extends EventEmitter {
         }
       }
     } catch (error) {
-      logger.error('Failed to check metrics:', {
+      LoggingManager.getInstance().error('Failed to check metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -407,7 +407,7 @@ class AlertsService extends EventEmitter {
         AND resolved_at < NOW() - INTERVAL '30 days'`
       );
     } catch (error) {
-      logger.error('Failed to clean up old alerts:', {
+      LoggingManager.getInstance().error('Failed to clean up old alerts:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
@@ -415,3 +415,4 @@ class AlertsService extends EventEmitter {
 }
 
 export const alertsService = new AlertsService();
+

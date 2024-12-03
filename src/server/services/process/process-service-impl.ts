@@ -1,7 +1,8 @@
-import { EventEmitter } from 'events';
+﻿import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
 import type { ProcessInfo } from '@/types/process';
 import type {
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
   ProcessService,
   ProcessMonitor,
   ProcessMonitorFactory,
@@ -43,13 +44,10 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       await monitor.start();
       this.monitors.set(hostId, monitor);
 
-      logger.info('Process monitoring started:', { hostId });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to start process monitoring:', {
-        hostId,
-        error: errorMessage,
-      });
+      loggerLoggingManager.getInstance().();
       this.emit('error', hostId, errorMessage);
       throw error;
     }
@@ -64,13 +62,10 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     try {
       await monitor.stop();
       this.monitors.delete(hostId);
-      logger.info('Process monitoring stopped:', { hostId });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to stop process monitoring:', {
-        hostId,
-        error: errorMessage,
-      });
+      loggerLoggingManager.getInstance().();
       this.emit('error', hostId, errorMessage);
       throw error;
     }
@@ -86,10 +81,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       return await monitor.getProcesses();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to get processes:', {
-        hostId,
-        error: errorMessage,
-      });
+      loggerLoggingManager.getInstance().();
       this.emit('error', hostId, errorMessage);
       throw error;
     }
@@ -103,15 +95,10 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
 
     try {
       await monitor.killProcess(pid, signal);
-      logger.info('Process killed:', { hostId, pid, signal });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to kill process:', {
-        hostId,
-        pid,
-        signal,
-        error: errorMessage,
-      });
+      loggerLoggingManager.getInstance().();
       this.emit('error', hostId, errorMessage);
       throw error;
     }
@@ -150,3 +137,4 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     this.on('error', callback);
   }
 }
+

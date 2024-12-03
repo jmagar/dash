@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import type { SystemMetrics } from '../../types/metrics.types';
 import type { DBMetric } from '../../types/db-models';
 import type { Host } from '../../types/models-shared';
@@ -186,12 +186,12 @@ class MetricsStorageService {
         ]
       );
 
-      logger.info('Stored metrics:', {
+      LoggingManager.getInstance().info('Stored metrics:', {
         hostId: host.id,
         metricsId: result.rows[0].id,
       });
     } catch (error) {
-      logger.error('Failed to store metrics:', {
+      LoggingManager.getInstance().error('Failed to store metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id,
       });
@@ -219,7 +219,7 @@ class MetricsStorageService {
 
       return result.rows.map(row => this.dbToSystemMetric(row));
     } catch (error) {
-      logger.error('Failed to get historical metrics:', {
+      LoggingManager.getInstance().error('Failed to get historical metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id,
       });
@@ -246,7 +246,7 @@ class MetricsStorageService {
 
       return this.dbToSystemMetric(result.rows[0]);
     } catch (error) {
-      logger.error('Failed to get latest metrics:', {
+      LoggingManager.getInstance().error('Failed to get latest metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id,
       });
@@ -257,3 +257,4 @@ class MetricsStorageService {
 
 // Export singleton instance
 export const metricsStorageService = new MetricsStorageService();
+

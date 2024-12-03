@@ -1,7 +1,8 @@
-import { db } from '../../db';
+﻿import { db } from '../../db';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import { 
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
   NotificationEntity, 
   NotificationFilter, 
   NotificationType,
@@ -31,11 +32,7 @@ export class NotificationDBService {
 
       return result.rows[0];
     } catch (error) {
-      logger.error('Failed to create notification in database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId: notification.id,
-        userId: notification.userId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to create notification', 500);
     }
   }
@@ -53,10 +50,7 @@ export class NotificationDBService {
 
       return result.rows[0];
     } catch (error) {
-      logger.error('Failed to mark notification as read in database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId
-      });
+      loggerLoggingManager.getInstance().();
       throw error instanceof ApiError ? error : new ApiError('Failed to mark notification as read', 500);
     }
   }
@@ -70,10 +64,7 @@ export class NotificationDBService {
 
       return result.rows;
     } catch (error) {
-      logger.error('Failed to mark all notifications as read in database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to mark all notifications as read', 500);
     }
   }
@@ -91,10 +82,7 @@ export class NotificationDBService {
 
       return result.rows[0];
     } catch (error) {
-      logger.error('Failed to delete notification from database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId
-      });
+      loggerLoggingManager.getInstance().();
       throw error instanceof ApiError ? error : new ApiError('Failed to delete notification', 500);
     }
   }
@@ -107,10 +95,7 @@ export class NotificationDBService {
       );
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Failed to get notification by id from database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to get notification', 500);
     }
   }
@@ -162,11 +147,7 @@ export class NotificationDBService {
       const result = await db.query<NotificationEntity>(query, params);
       return result.rows;
     } catch (error) {
-      logger.error('Failed to get notifications by user id from database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId,
-        filter
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to get notifications', 500);
     }
   }
@@ -192,13 +173,11 @@ export class NotificationDBService {
         return acc;
       }, {} as Record<NotificationType, { total: number; unread: number }>);
     } catch (error) {
-      logger.error('Failed to get notification counts from database', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to get notification counts', 500);
     }
   }
 }
 
 export const notificationDBService = new NotificationDBService();
+

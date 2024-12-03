@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
 import { useSocket } from './useSocket';
 import { logger } from '../utils/frontendLogger';
 import { 
@@ -9,6 +9,7 @@ import {
 } from '../../types/notifications';
 import { notificationsClient } from '../api/notifications.client';
 import { ServiceOperationError } from '../../types/errors';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseNotificationsOptions {
   userId: string;
@@ -51,12 +52,7 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to fetch notifications';
-      logger.error('Failed to fetch notifications', {
-        error: error instanceof Error ? error : undefined,
-        userId,
-        limit,
-        type,
-      });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -82,10 +78,7 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to mark notification as read';
-      logger.error('Failed to mark notification as read', {
-        error: error instanceof Error ? error : undefined,
-        notificationId,
-      });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
       throw error;
     }
@@ -111,10 +104,7 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to mark all notifications as read';
-      logger.error('Failed to mark all notifications as read', {
-        error: error instanceof Error ? error : undefined,
-        userId,
-      });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
       throw error;
     }
@@ -136,10 +126,7 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to clear notifications';
-      logger.error('Failed to clear notifications', {
-        error: error instanceof Error ? error : undefined,
-        userId,
-      });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
       throw error;
     }
@@ -154,17 +141,17 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
 
       switch (type) {
         case 'notification:created':
-          logger.debug('New notification received', { notification });
+          loggerLoggingManager.getInstance().();
           setNotifications(prev => [notification, ...prev]);
           break;
         case 'notification:updated':
-          logger.debug('Notification updated', { notification });
+          loggerLoggingManager.getInstance().();
           setNotifications(prev =>
             prev.map(n => (n.id === notification.id ? notification : n))
           );
           break;
         case 'notification:deleted':
-          logger.debug('Notification deleted', { notificationId: notification.id });
+          loggerLoggingManager.getInstance().();
           setNotifications(prev => prev.filter(n => n.id !== notification.id));
           break;
       }
@@ -194,3 +181,4 @@ export function useNotifications({ userId, limit = 50, type }: UseNotificationsO
     refresh: fetchNotifications,
   };
 }
+

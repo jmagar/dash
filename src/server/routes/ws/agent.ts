@@ -1,8 +1,9 @@
-import WebSocket from 'ws';
+﻿import WebSocket from 'ws';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { z } from 'zod';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 // Message type validation
 export const MessageType = z.enum([
@@ -90,7 +91,7 @@ export class AgentConnection extends EventEmitter {
     // Set heartbeat timeout
     this.heartbeatTimeout = setTimeout(() => {
       if (!this.isAlive) {
-        logger.warn('Agent connection is dead', { agentId: this.agentId });
+        loggerLoggingManager.getInstance().();
         this.terminate();
         return;
       }
@@ -129,24 +130,15 @@ export class AgentConnection extends EventEmitter {
             }
           }
 
-          logger.error('Agent error', {
-            agentId: this.agentId,
-            error: errorMessage,
-          });
+          loggerLoggingManager.getInstance().();
           break;
 
         default:
-          logger.warn('Unknown message type', {
-            type: message.type,
-            agentId: this.agentId,
-          });
+          loggerLoggingManager.getInstance().();
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Error handling message', {
-        error: errorMessage,
-        agentId: this.agentId,
-      });
+      loggerLoggingManager.getInstance().();
     }
   }
 
@@ -169,16 +161,10 @@ export class AgentConnection extends EventEmitter {
         },
       });
 
-      logger.info('Agent registered', {
-        agentId: this.agentId,
-        hostname: agentInfo.hostname,
-      });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid registration message';
-      logger.error('Invalid registration message', {
-        error: errorMessage,
-        agentId: this.agentId,
-      });
+      loggerLoggingManager.getInstance().();
       this.terminate();
     }
   }
@@ -190,24 +176,18 @@ export class AgentConnection extends EventEmitter {
       this.emit('heartbeat', heartbeat);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid heartbeat message';
-      logger.error('Invalid heartbeat message', {
-        error: errorMessage,
-        agentId: this.agentId,
-      });
+      loggerLoggingManager.getInstance().();
     }
   }
 
   private handleClose() {
     this.cleanup();
     this.emit('disconnected', this.agentId);
-    logger.info('Agent disconnected', { agentId: this.agentId });
+    loggerLoggingManager.getInstance().();
   }
 
   private handleError(error: Error) {
-    logger.error('WebSocket error', {
-      error: error.message,
-      agentId: this.agentId,
-    });
+    loggerLoggingManager.getInstance().();
     this.cleanup();
   }
 
@@ -223,10 +203,7 @@ export class AgentConnection extends EventEmitter {
       timestamp: new Date().toISOString(),
     }).catch((error) => {
       const errorMessage = error instanceof Error ? error.message : 'Error sending ping';
-      logger.error('Error sending ping', {
-        error: errorMessage,
-        agentId: this.agentId,
-      });
+      loggerLoggingManager.getInstance().();
     });
   }
 
@@ -271,3 +248,4 @@ export class AgentConnection extends EventEmitter {
 
 // Export types for use in other files
 export type { z };
+

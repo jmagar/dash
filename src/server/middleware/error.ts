@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../types/errors';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { ApiErrorResponse, ErrorDetail } from '../types/common.dto';
 import { monitoringService } from '../services/monitoring';
 import { ValidationError } from 'class-validator';
@@ -37,7 +37,7 @@ export function errorHandler(error: Error | unknown, req: Request, res: Response
     details = error.details;
     
     if (statusCode >= 500) {
-      logger.error('API Error:', { error, ...metadata });
+      LoggingManager.getInstance().error('API Error:', { error, ...metadata });
       void monitoringService.updateServiceStatus('api', {
         name: 'api',
         status: 'unhealthy',
@@ -45,7 +45,7 @@ export function errorHandler(error: Error | unknown, req: Request, res: Response
         lastCheck: new Date()
       });
     } else {
-      logger.warn('API Error:', { error, ...metadata });
+      LoggingManager.getInstance().warn('API Error:', { error, ...metadata });
       if (statusCode === 429) {
         void monitoringService.updateServiceStatus('api', {
           name: 'api',
@@ -63,13 +63,13 @@ export function errorHandler(error: Error | unknown, req: Request, res: Response
       message: msg,
       code: 'VALIDATION_ERROR'
     }));
-    logger.warn('Validation Error:', { error, ...metadata });
+    LoggingManager.getInstance().warn('Validation Error:', { error, ...metadata });
   } else if (error instanceof JsonWebTokenError || error instanceof TokenExpiredError) {
     statusCode = 401;
     message = error instanceof TokenExpiredError ? 'Token has expired' : 'Invalid token';
-    logger.warn('Authentication Error:', { error, ...metadata });
+    LoggingManager.getInstance().warn('Authentication Error:', { error, ...metadata });
   } else if (error instanceof Error) {
-    logger.error('Unexpected Error:', {
+    LoggingManager.getInstance().error('Unexpected Error:', {
       error: error.message,
       stack: error.stack,
       ...metadata
@@ -81,7 +81,7 @@ export function errorHandler(error: Error | unknown, req: Request, res: Response
       lastCheck: new Date()
     });
   } else {
-    logger.error('Unknown Error:', {
+    LoggingManager.getInstance().error('Unknown Error:', {
       error,
       ...metadata
     });
@@ -110,7 +110,7 @@ export function errorHandler(error: Error | unknown, req: Request, res: Response
 export function notFoundHandler(req: Request, res: Response) {
   const error = ApiError.notFound(`Route ${req.path} not found`);
   
-  logger.warn('Route not found:', {
+  LoggingManager.getInstance().warn('Route not found:', {
     path: req.path,
     method: req.method,
     requestId: req.requestId,
@@ -132,3 +132,4 @@ export function notFoundHandler(req: Request, res: Response) {
 
   res.status(error.status).json(response);
 }
+

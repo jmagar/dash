@@ -1,7 +1,7 @@
 import { rateLimit } from 'express-rate-limit';
 import { ApiError } from '../types/errors';
 import { RateLimitConfig } from '../types/middleware';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { monitoringService } from '../services/monitoring';
 
 // Helper to create a rate limiter with monitoring
@@ -17,7 +17,7 @@ const createLimiter = (config: RateLimitConfig) => rateLimit({
       config.message || 'Too many requests, please try again later'
     );
     
-    logger.warn('Rate limit exceeded:', {
+    LoggingManager.getInstance().warn('Rate limit exceeded:', {
       path: req.path,
       ip: req.ip,
       userId: req.user?.id,
@@ -64,3 +64,4 @@ export const sensitiveOpLimiter = createLimiter({
   message: 'Too many sensitive operations attempted, please try again later',
   skipSuccessfulRequests: true
 });
+

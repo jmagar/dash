@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 /**
  * @deprecated This file is being replaced by the new AgentService.
  * All functionality should be migrated to src/server/services/agent/agent.service.ts
@@ -127,7 +128,7 @@ EOL
       return { os, arch };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to detect system info', { error: errorMessage });
+      loggerLoggingManager.getInstance().();
       throw new Error('Failed to detect system architecture');
     }
   }
@@ -151,7 +152,7 @@ EOL
       return binaryPath;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to find agent binary', { error: errorMessage, systemInfo });
+      loggerLoggingManager.getInstance().();
       throw new Error(`Agent binary not available for ${systemInfo.os}-${systemInfo.arch}`);
     }
   }
@@ -161,14 +162,11 @@ EOL
    */
   public async install(host: Host, ssh: SSHClient, options: InstallOptions): Promise<void> {
     try {
-      logger.info('Starting agent installation', {
-        hostId: host.id,
-        hostname: host.hostname,
-      });
+      loggerLoggingManager.getInstance().();
 
       // Get system information
       const systemInfo = await this.getSystemInfo(ssh);
-      logger.info('Detected system info', { systemInfo });
+      loggerLoggingManager.getInstance().();
 
       // Get appropriate binary
       const binaryPath = this.getBinaryPath(systemInfo);
@@ -233,18 +231,10 @@ EOL
         `rm -rf ${tempDir}`
       );
 
-      logger.info('Agent installation completed', {
-        hostId: host.id,
-        hostname: host.hostname,
-        systemInfo,
-      });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Agent installation failed', {
-        error: errorMessage,
-        hostId: host.id,
-        hostname: host.hostname,
-      });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -282,3 +272,4 @@ EOL
     });
   }
 }
+

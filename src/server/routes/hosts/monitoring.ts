@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 /**
  * @deprecated This file is being replaced by the new MetricsService.
  * All functionality should be migrated to src/server/services/metrics.service.ts
@@ -84,9 +85,7 @@ export class HostMonitor {
 
       await this.updateHostStatus(host, 'running');
     } catch (error) {
-      logger.error(`Failed to check metrics for host ${host.name}:`, {
-        hostId: host.id,
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       await this.updateHostStatus(host, 'error');
     }
@@ -203,15 +202,9 @@ export class HostMonitor {
       // Record metric
       recordHostMetric(host.id, 'status', status === 'running' ? 1 : status === 'installing' ? 0.5 : 0);
 
-      logger.info(`Updated host status: ${status}`, {
-        hostId: host.id,
-        status,
-      });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
-      logger.error('Failed to update host status', {
-        hostId: host.id,
-        status,
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       throw error;
     }
@@ -223,14 +216,14 @@ export async function invalidateHostCache(req: Request, res: Response): Promise<
 
   try {
     await cache.removeHost(hostId);
-    logger.info('Host cache invalidated', { hostId: String(hostId) });
+    loggerLoggingManager.getInstance().() });
     res.json({ success: true });
   } catch (error) {
     const metadata: LogMetadata = {
       hostId: String(hostId),
       error: error instanceof Error ? error.message : String(error),
     };
-    logger.error('Failed to invalidate host cache:', metadata);
+    loggerLoggingManager.getInstance().();
     errorAggregator.trackError(
       error instanceof Error ? error : new Error('Failed to invalidate host cache'),
       metadata,
@@ -250,7 +243,7 @@ export async function invalidateHostCache(req: Request, res: Response): Promise<
 }
 
 export async function startHostMonitoring(host: Host): Promise<void> {
-  logger.info('Starting host monitoring', { hostId: host.id });
+  loggerLoggingManager.getInstance().();
 
   // Stop existing monitoring
   stopHostMonitoring(host);
@@ -261,9 +254,7 @@ export async function startHostMonitoring(host: Host): Promise<void> {
   // Start monitoring interval with proper promise handling
   const interval = setInterval(() => {
     void monitor.checkHostMetrics(host).catch(error => {
-      logger.error('Error in monitoring interval', {
-        hostId: host.id,
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
     });
   }, monitor.monitoringInterval);
@@ -276,7 +267,7 @@ export async function startHostMonitoring(host: Host): Promise<void> {
 }
 
 export function stopHostMonitoring(host: Host): void {
-  logger.info('Stopping host monitoring', { hostId: host.id });
+  loggerLoggingManager.getInstance().();
 
   const interval = monitoringIntervals.get(host.id);
   if (interval) {
@@ -302,3 +293,4 @@ export async function getMonitoredHosts(): Promise<Host[]> {
 
   return hosts;
 }
+

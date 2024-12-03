@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 /**
  * @deprecated This file is being replaced by the new HostService.
  * All functionality should be migrated to src/server/services/host/host.service.ts
@@ -27,11 +28,7 @@ export async function getConnection(host: Host): Promise<Client> {
 
   return new Promise((resolve, reject) => {
     client.on('ready', () => {
-      logger.info('SSH connection established', {
-        host: host.hostname,
-        port: host.port,
-        username: host.username,
-      });
+      loggerLoggingManager.getInstance().();
       resolve(client);
     });
 
@@ -71,7 +68,7 @@ async function handleHostError(host: Host, error: Error): Promise<void> {
       notify: true,
     });
   } else {
-    logger.error(`Error with host ${host.name}:`, metadata);
+    loggerLoggingManager.getInstance().();
   }
 
   host.status = 'error';
@@ -96,11 +93,7 @@ export async function closeConnection(host: Host): Promise<void> {
   if (client) {
     client.end();
     connections.delete(key);
-    logger.info('SSH connection closed', {
-      host: host.hostname,
-      port: host.port,
-      username: host.username,
-    });
+    loggerLoggingManager.getInstance().();
   }
 }
 
@@ -112,5 +105,6 @@ export async function closeAllConnections(): Promise<void> {
     client.end();
     connections.delete(key);
   }
-  logger.info('All SSH connections closed');
+  loggerLoggingManager.getInstance().();
 }
+

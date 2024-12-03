@@ -1,10 +1,11 @@
-import { EventEmitter } from 'events';
+﻿import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
 import { NotificationEntity, NotificationType, NotificationEvent, NotificationChannel } from '../../../types/notifications';
 import { ServiceStatus } from '../../../types/status';
 import { BatchQueue } from './types';
 import { io } from '../../socket';
 import { NotificationDBService } from './db.service';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class NotificationBatchService extends EventEmitter {
   private batchQueues: Map<string, BatchQueue> = new Map();
@@ -60,20 +61,13 @@ export class NotificationBatchService extends EventEmitter {
         try {
           const entity = await this.dbService.create(notification as NotificationEntity);
           if (!this.isValidNotification(entity)) {
-            logger.error('Invalid notification data returned from database', {
-              userId,
-              notification
-            });
+            loggerLoggingManager.getInstance().();
             failedNotifications.push(notification);
             continue;
           }
           validNotifications.push(entity);
         } catch (error) {
-          logger.error('Failed to create batched notification', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            userId,
-            notification
-          });
+          loggerLoggingManager.getInstance().();
           failedNotifications.push(notification);
         }
       }
@@ -94,17 +88,10 @@ export class NotificationBatchService extends EventEmitter {
       }
 
       if (failedNotifications.length > 0) {
-        logger.warn('Some notifications failed to batch', {
-          userId,
-          failedCount: failedNotifications.length,
-          successCount: validNotifications.length
-        });
+        loggerLoggingManager.getInstance().();
       }
     } catch (error) {
-      logger.error('Failed to process batch queue', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      });
+      loggerLoggingManager.getInstance().();
     }
   }
 
@@ -120,3 +107,4 @@ export class NotificationBatchService extends EventEmitter {
 }
 
 export const batchService = new NotificationBatchService();
+

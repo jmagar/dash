@@ -1,99 +1,83 @@
 export const CACHE_KEYS = {
-  // Existing keys
-  HOST: 'host',
-  SESSION: 'session',
-  COMMAND: 'command',
-  DOCKER: {
-    CONTAINERS: 'docker:containers',
-    STACKS: 'docker:stacks',
-    IMAGES: 'docker:images',
-    NETWORKS: 'docker:networks',
-    VOLUMES: 'docker:volumes'
-  },
-
-  // New context keys
   FILESYSTEM: {
-    EVENTS: 'fs:events',
-    WATCHERS: 'fs:watchers',
-    USAGE: 'fs:usage',
-    RECENT: 'fs:recent'
+    CONTEXT: 'context:filesystem',
+    EVENTS: 'context:filesystem:events',
+    WATCHERS: 'context:filesystem:watchers',
+    USAGE: 'context:filesystem:usage',
+    RECENT: 'context:filesystem:recent'
   },
   PROCESS: {
-    METRICS: 'process:metrics',
-    RESOURCES: 'process:resources',
-    SERVICES: 'process:services'
+    CONTEXT: 'context:process',
+    METRICS: 'context:process:metrics',
+    RESOURCES: 'context:process:resources',
+    SERVICES: 'context:process:services'
   },
   NETWORK: {
-    METRICS: 'network:metrics',
-    CONNECTIONS: 'network:connections',
-    INTERFACES: 'network:interfaces',
-    SSH: 'network:ssh'
+    CONTEXT: 'context:network',
+    CONNECTIONS: 'context:network:connections',
+    INTERFACES: 'context:network:interfaces',
+    METRICS: 'context:network:metrics'
   },
   USER: {
-    ACTIVITY: 'user:activity',
-    PREFERENCES: 'user:preferences',
-    WORKFLOWS: 'user:workflows',
-    ERRORS: 'user:errors'
+    CONTEXT: 'context:user',
+    ACTIVITY: 'context:user:activity',
+    PREFERENCES: 'context:user:preferences',
+    WORKFLOWS: 'context:user:workflows',
+    ERRORS: 'context:user:errors'
   },
   APP: {
-    METRICS: 'app:metrics',
-    HEALTH: 'app:health',
-    FEATURES: 'app:features',
-    ERRORS: 'app:errors'
+    CONTEXT: 'context:app',
+    METRICS: 'context:app:metrics',
+    HEALTH: 'context:app:health',
+    FEATURES: 'context:app:features',
+    ERRORS: 'context:app:errors'
   },
   SYSTEM: {
-    EVENTS: 'system:events',
-    ALERTS: 'system:alerts',
-    DEPENDENCIES: 'system:dependencies'
+    CONTEXT: 'context:system',
+    EVENTS: 'context:system:events',
+    ALERTS: 'context:system:alerts',
+    DEPENDENCIES: 'context:system:dependencies'
   }
 } as const;
 
 export const CACHE_TTL = {
-  // Existing TTLs
-  HOST: 3600,
-  SESSION: 86400,
-  COMMAND: 3600,
-  DOCKER: {
-    CONTAINERS: 60,
-    STACKS: 300,
-    IMAGES: 3600,
-    NETWORKS: 300,
-    VOLUMES: 300
-  },
-
-  // New context TTLs
   FILESYSTEM: {
-    EVENTS: 3600,
-    WATCHERS: 300,
-    USAGE: 300,
-    RECENT: 1800
+    CONTEXT: 3600000,     // 1 hour
+    EVENTS: 3600000,      // 1 hour
+    WATCHERS: 3600000,    // 1 hour
+    USAGE: 1800000,       // 30 minutes
+    RECENT: 3600000       // 1 hour
   },
   PROCESS: {
-    METRICS: 60,
-    RESOURCES: 60,
-    SERVICES: 300
+    CONTEXT: 3600000,     // 1 hour
+    METRICS: 300000,      // 5 minutes
+    RESOURCES: 300000,    // 5 minutes
+    SERVICES: 1800000     // 30 minutes
   },
   NETWORK: {
-    METRICS: 60,
-    CONNECTIONS: 30,
-    INTERFACES: 300,
-    SSH: 1800
+    CONTEXT: 3600000,     // 1 hour
+    CONNECTIONS: 300000,  // 5 minutes
+    INTERFACES: 1800000,  // 30 minutes
+    METRICS: 300000       // 5 minutes
   },
   USER: {
-    ACTIVITY: 86400,
-    PREFERENCES: 86400,
-    WORKFLOWS: 86400,
-    ERRORS: 86400
+    CONTEXT: 86400000,    // 24 hours
+    ACTIVITY: 1800000,    // 30 minutes
+    PREFERENCES: 86400000,// 24 hours
+    WORKFLOWS: 86400000,  // 24 hours
+    ERRORS: 86400000      // 24 hours
   },
   APP: {
-    METRICS: 300,
-    HEALTH: 60,
-    FEATURES: 3600,
-    ERRORS: 3600
+    CONTEXT: 3600000,     // 1 hour
+    METRICS: 300000,      // 5 minutes
+    HEALTH: 300000,       // 5 minutes
+    FEATURES: 86400000,   // 24 hours
+    ERRORS: 86400000      // 24 hours
   },
   SYSTEM: {
-    EVENTS: 86400,
-    ALERTS: 3600,
-    DEPENDENCIES: 3600
+    CONTEXT: 3600000,     // 1 hour
+    EVENTS: 3600000,      // 1 hour
+    ALERTS: 1800000,      // 30 minutes
+    DEPENDENCIES: 86400000// 24 hours
   }
 } as const;

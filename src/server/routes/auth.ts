@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { cacheService } from '../cache/CacheService';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import config from '../config';
 import type { 
   User, 
@@ -88,7 +88,7 @@ router.post('/login', async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error : String(error)
     };
-    logger.error('Login error:', metadata);
+    LoggingManager.getInstance().error('Login error:', metadata);
     return res.status(500).json({
       success: false,
       user: null,
@@ -115,7 +115,7 @@ router.post('/logout', async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error : String(error)
     };
-    logger.error('Logout error:', metadata);
+    LoggingManager.getInstance().error('Logout error:', metadata);
     return res.status(500).json({
       success: false,
       error: 'Internal server error'
@@ -177,7 +177,7 @@ router.get('/validate', async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error : String(error)
     };
-    logger.error('Validate error:', metadata);
+    LoggingManager.getInstance().error('Validate error:', metadata);
     return res.status(500).json({
       success: false,
       valid: false,
@@ -263,7 +263,7 @@ router.post('/refresh', async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error : String(error)
     };
-    logger.error('Refresh token error:', metadata);
+    LoggingManager.getInstance().error('Refresh token error:', metadata);
     return res.status(500).json({
       success: false,
       token: '',
@@ -274,3 +274,4 @@ router.post('/refresh', async (req, res) => {
 });
 
 export default router;
+

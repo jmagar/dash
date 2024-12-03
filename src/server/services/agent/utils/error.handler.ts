@@ -1,8 +1,9 @@
-import { logger } from '../../../utils/logger';
+﻿import { logger } from '../../../utils/logger';
 import type { LogMetadata } from '../../../../types/logger';
 import { ApiError } from '../../../../types/error';
 import { ERROR_CODES, LOG_METADATA } from './constants';
 import { z } from 'zod';
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
 
 // Strict error context typing
 export interface ErrorContext extends Record<string, unknown> {
@@ -37,7 +38,7 @@ export function handleError(error: Error | ApiError | unknown, context: ErrorCon
     metadata.details = error.details;
   }
 
-  logger.error('Agent service error:', metadata);
+  loggerLoggingManager.getInstance().();
 }
 
 export function handleApiError(
@@ -79,3 +80,4 @@ export function createApiError(
 
   return new ApiError(message, errorDetails);
 }
+

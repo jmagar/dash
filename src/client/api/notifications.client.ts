@@ -1,4 +1,4 @@
-import type { ApiResult } from '../../types/api-shared';
+﻿import type { ApiResult } from '../../types/api-shared';
 import type {
   Notification,
   NotificationCount,
@@ -11,6 +11,7 @@ import type {
 import { BaseApiClient } from './base.client';
 import { logger } from '../utils/frontendLogger';
 import { ServiceOperationError } from '../../types/errors';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface GetNotificationsParams {
   userId: string;
@@ -55,10 +56,7 @@ class NotificationsClient extends BaseApiClient {
 
       return this.get<NotificationEntity[]>(`${this.getEndpoint('LIST')}?${queryParams.toString()}`);
     } catch (error) {
-      logger.error('Failed to get notifications:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        params,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to get notifications',
         'getNotifications',
@@ -74,10 +72,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.get<NotificationCount>(`${this.getEndpoint('COUNT')}?userId=${userId}`);
     } catch (error) {
-      logger.error('Failed to get notification count:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to get notification count',
         'getNotificationCount',
@@ -93,10 +88,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.post<void>(this.getEndpoint('READ', notificationId));
     } catch (error) {
-      logger.error('Failed to mark notification as read:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to mark notification as read',
         'markAsRead',
@@ -112,10 +104,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.post<void>(this.getEndpoint('READ_ALL'), { notificationIds });
     } catch (error) {
-      logger.error('Failed to mark notifications as read:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationIds,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to mark notifications as read',
         'markAllAsRead',
@@ -131,10 +120,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.delete<void>(this.getEndpoint('DELETE'), { data: { notificationIds } });
     } catch (error) {
-      logger.error('Failed to delete notifications:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationIds,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to delete notifications',
         'deleteNotifications',
@@ -150,9 +136,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.get<NotificationPreferences>(this.getEndpoint('PREFERENCES'));
     } catch (error) {
-      logger.error('Failed to get notification preferences:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to get notification preferences',
         'getPreferences'
@@ -167,10 +151,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.put<void>(this.getEndpoint('PREFERENCES'), preferences);
     } catch (error) {
-      logger.error('Failed to update notification preferences:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        preferences,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to update notification preferences',
         'updatePreferences',
@@ -186,10 +167,7 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.get<NotificationDelivery[]>(`${this.getEndpoint('DELIVERY')}/${notificationId}`);
     } catch (error) {
-      logger.error('Failed to get notification delivery status:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId,
-      });
+      loggerLoggingManager.getInstance().();
       throw new ServiceOperationError(
         'Failed to get notification delivery status',
         'getDeliveryStatus',
@@ -200,3 +178,4 @@ class NotificationsClient extends BaseApiClient {
 }
 
 export const notificationsClient = new NotificationsClient();
+

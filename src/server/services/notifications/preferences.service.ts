@@ -1,4 +1,4 @@
-import { db } from '../../db';
+﻿import { db } from '../../db';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import { 
@@ -11,6 +11,7 @@ import {
 } from '../../../types/notifications';
 import { DBNotificationPreferences } from './types';
 import { validateNotificationPreferences, validatePartialNotificationPreferences } from '../../validators/notification-preferences.validator';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class NotificationPreferencesService {
   private readonly DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -79,10 +80,7 @@ export class NotificationPreferencesService {
       const dbPrefs = result.rows[0];
       return this.mapDBToPreferences(dbPrefs);
     } catch (error) {
-      logger.error('Failed to get notification preferences', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to get notification preferences', 500);
     }
   }
@@ -123,10 +121,7 @@ export class NotificationPreferencesService {
 
       return this.mapDBToPreferences(result.rows[0]);
     } catch (error) {
-      logger.error('Failed to update notification preferences', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to update notification preferences', 500);
     }
   }
@@ -147,3 +142,4 @@ export class NotificationPreferencesService {
 }
 
 export const preferencesService = new NotificationPreferencesService();
+

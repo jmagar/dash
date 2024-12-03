@@ -1,6 +1,6 @@
 import { Pool, QueryResult, PoolConfig } from 'pg';
 import config from './config';
-import { logger } from './utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { metrics } from './metrics';
 
 // Database configuration
@@ -20,7 +20,7 @@ const requiredConfig = ['user', 'password', 'host', 'database'] as const;
 for (const field of requiredConfig) {
   if (!poolConfig[field]) {
     const error = `Missing required Postgres config: ${field}`;
-    logger.error(error);
+    LoggingManager.getInstance().error(error);
     throw new Error(error);
   }
 }
@@ -31,7 +31,7 @@ const pool = new Pool(poolConfig);
 // Pool error handler
 pool.on('error', (err: unknown) => {
   const error = err instanceof Error ? err : new Error(String(err));
-  logger.error('Unexpected error on idle client', {
+  LoggingManager.getInstance().error('Unexpected error on idle client', {
     error: error.message,
     stack: error.stack,
   });
@@ -40,17 +40,17 @@ pool.on('error', (err: unknown) => {
 
 // Pool event handlers
 pool.on('connect', () => {
-  logger.info('New client connected to database');
+  LoggingManager.getInstance().info('New client connected to database');
   metrics.hostMetrics.set({ metric_type: 'db_connections' }, pool.totalCount);
 });
 
 pool.on('acquire', () => {
-  logger.debug('Client checked out from pool');
+  LoggingManager.getInstance().debug('Client checked out from pool');
   metrics.hostMetrics.set({ metric_type: 'db_acquires' }, pool.totalCount);
 });
 
 pool.on('remove', () => {
-  logger.info('Client removed from pool');
+  LoggingManager.getInstance().info('Client removed from pool');
   metrics.hostMetrics.set({ metric_type: 'db_connections' }, pool.totalCount - 1);
 });
 
@@ -77,7 +77,7 @@ export async function query<T = unknown>(
     // Record metrics
     metrics.hostMetrics.set({ metric_type: 'db_query_duration' }, duration);
     
-    logger.debug('Executed query:', {
+    LoggingManager.getInstance().debug('Executed query:', {
       text,
       duration,
       rows: result.rowCount,
@@ -87,7 +87,7 @@ export async function query<T = unknown>(
   } catch (error) {
     const duration = Date.now() - start;
     
-    logger.error('Query error:', {
+    LoggingManager.getInstance().error('Query error:', {
       text,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
@@ -101,7 +101,7 @@ export async function query<T = unknown>(
     // Reset statement timeout if it was set
     if (options?.timeout) {
       await client.query('RESET statement_timeout').catch(err => {
-        logger.error('Error resetting statement timeout', {
+        LoggingManager.getInstance().error('Error resetting statement timeout', {
           error: err instanceof Error ? err.message : 'Unknown error',
         });
       });
@@ -133,7 +133,7 @@ export async function healthCheck(): Promise<{
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Database health check failed:', { error: errorMessage });
+    LoggingManager.getInstance().error('Database health check failed:', { error: errorMessage });
     metrics.apiErrors.inc({ error_type: 'database_health_check_error' });
     
     return {
@@ -150,9 +150,9 @@ export async function healthCheck(): Promise<{
 export async function end(): Promise<void> {
   try {
     await pool.end();
-    logger.info('Database connections closed');
+    LoggingManager.getInstance().info('Database connections closed');
   } catch (error) {
-    logger.error('Error closing database connections:', {
+    LoggingManager.getInstance().error('Error closing database connections:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw error;
@@ -179,3 +179,4 @@ export const db: DatabaseInterface = {
 };
 
 export default db;
+

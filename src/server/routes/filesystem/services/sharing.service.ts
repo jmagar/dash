@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+﻿import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { FileShare } from '../entities/file-share.entity';
 import { ShareAccessLog } from '../entities/share-access-log.entity';
 import { 
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
     ShareInfoDto, 
     ShareAccessLogEntryDto, 
     ShareStatus, 
@@ -184,7 +185,7 @@ export class SharingService {
         try {
             return await this.cache.get<ShareInfoDto>(key) ?? null;
         } catch (error) {
-            console.error('Cache get error:', error instanceof Error ? error.message : 'Unknown error');
+            consoleLoggingManager.getInstance().();
             return null;
         }
     }
@@ -194,7 +195,7 @@ export class SharingService {
         try {
             await this.cache.set(key, info, CACHE_TTL);
         } catch (error) {
-            console.error('Cache set error:', error instanceof Error ? error.message : 'Unknown error');
+            consoleLoggingManager.getInstance().();
         }
     }
 
@@ -203,7 +204,7 @@ export class SharingService {
         try {
             return await this.cache.get<string>(key) ?? null;
         } catch (error) {
-            console.error('Cache get error:', error instanceof Error ? error.message : 'Unknown error');
+            consoleLoggingManager.getInstance().();
             return null;
         }
     }
@@ -213,7 +214,7 @@ export class SharingService {
         try {
             await this.cache.set(key, token, CACHE_TTL);
         } catch (error) {
-            console.error('Cache set error:', error instanceof Error ? error.message : 'Unknown error');
+            consoleLoggingManager.getInstance().();
         }
     }
 
@@ -222,7 +223,7 @@ export class SharingService {
         try {
             await this.cache.del(key);
         } catch (error) {
-            console.error('Cache delete error:', error instanceof Error ? error.message : 'Unknown error');
+            consoleLoggingManager.getInstance().();
         }
     }
 
@@ -345,7 +346,7 @@ export class SharingService {
     }
 
     private handleError(error: Error): Error {
-        console.error('Operation failed:', error);
+        consoleLoggingManager.getInstance().();
         
         if (error instanceof NotFoundException || 
             error instanceof BadRequestException || 
@@ -388,3 +389,4 @@ export class SharingService {
         return bcrypt.hash(password, SALT_ROUNDS);
     }
 }
+

@@ -49,7 +49,10 @@ data/
 .npm/
 .eslintcache
 .aider.input.history
-.aider.chat.history.md
+
+# Backups
+backups/
+**/backups/
 
 # Python
 __pycache__/
@@ -76,4 +79,5 @@ coverage.xml
 .pytest_cache/
 
 # Code Analysis Module Environment
+scripts/Modules/CodeAnalysis/
 scripts/Modules/CodeAnalysis/env/

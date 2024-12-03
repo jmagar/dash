@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { Client as SSHClient } from 'ssh2';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { metrics, recordHostMetric } from '../metrics';
 import type { OperationLabels, ServiceMetricLabels } from '../metrics';
 import cache from '../cache';
@@ -379,7 +379,7 @@ export class BaseService extends EventEmitter {
           throw serviceError;
         }
 
-        this.logger.warn(`Operation failed (attempt ${attempt}/${retryOpts.maxAttempts})`, {
+        this.LoggingManager.getInstance().warn(`Operation failed (attempt ${attempt}/${retryOpts.maxAttempts})`, {
           error: serviceError.message,
           code: serviceError.code,
           attempt,
@@ -421,7 +421,7 @@ export class BaseService extends EventEmitter {
       retryable: serviceError.retryable
     };
 
-    this.logger.error('Operation failed', metadata);
+    this.LoggingManager.getInstance().error('Operation failed', metadata);
     errorAggregator.trackError(serviceError, metadata);
 
     throw serviceError;
@@ -494,3 +494,4 @@ export class BaseService extends EventEmitter {
     metrics.gauge('error_count', this.errorCount, serviceLabels);
   }
 }
+

@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+﻿import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { logger } from '../../utils/logger';
 import type { RootState } from '../store';
 import type {
@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { NotificationEntity } from '../../../types/notifications';
 import { notificationsApi } from '../../api/notifications';
+import { LoggingManager } from '../../../../../../../../../src/server/utils/logging/LoggingManager';
 
 const initialState: NotificationState = {
   notifications: [],
@@ -33,8 +34,7 @@ export const fetchNotifications = createAsyncThunk<
     }
     return response.data || [];
   } catch (error) {
-    logger.error('Failed to fetch notifications:', {
-      error: error instanceof Error ? error.message : String(error),
+    loggerLoggingManager.getInstance().(),
     });
     throw error;
   }
@@ -51,8 +51,7 @@ export const markAsRead = createAsyncThunk<
       throw new Error(response.error || 'Failed to mark notification as read');
     }
   } catch (error) {
-    logger.error('Failed to mark notification as read:', {
-      error: error instanceof Error ? error.message : String(error),
+    loggerLoggingManager.getInstance().(),
     });
     throw error;
   }
@@ -69,8 +68,7 @@ export const markAllAsRead = createAsyncThunk<
       throw new Error(response.error || 'Failed to mark all notifications as read');
     }
   } catch (error) {
-    logger.error('Failed to mark all notifications as read:', {
-      error: error instanceof Error ? error.message : String(error),
+    loggerLoggingManager.getInstance().(),
     });
     throw error;
   }
@@ -87,8 +85,7 @@ export const clearNotifications = createAsyncThunk<
       throw new Error(response.error || 'Failed to clear notifications');
     }
   } catch (error) {
-    logger.error('Failed to clear notifications:', {
-      error: error instanceof Error ? error.message : String(error),
+    loggerLoggingManager.getInstance().(),
     });
     throw error;
   }
@@ -181,3 +178,4 @@ export const selectIsLoading = (state: RootState) => state.notification.loading;
 export const selectError = (state: RootState) => state.notification.error;
 
 export default notificationSlice.reducer;
+

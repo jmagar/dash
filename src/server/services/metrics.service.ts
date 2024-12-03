@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { getAgentService } from './agent.service';
 import { 
   SystemMetrics, 
@@ -144,7 +144,7 @@ class MetricsService extends EventEmitter {
 
       this.emit('metrics', { hostId, metrics });
     } catch (error) {
-      logger.error('Failed to store metrics:', {
+      LoggingManager.getInstance().error('Failed to store metrics:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId,
       });
@@ -175,7 +175,7 @@ class MetricsService extends EventEmitter {
         }
       }
     } catch (error) {
-      logger.error('Failed to update host status', { 
+      LoggingManager.getInstance().error('Failed to update host status', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -192,7 +192,7 @@ class MetricsService extends EventEmitter {
       }
       return ServiceStatus.INACTIVE;
     } catch (error) {
-      logger.error('Failed to get system status', { 
+      LoggingManager.getInstance().error('Failed to get system status', { 
         error: error instanceof Error ? error : new Error(String(error))
       });
       return ServiceStatus.ERROR;
@@ -221,7 +221,7 @@ class MetricsService extends EventEmitter {
 
       return networkInterfaces.filter(isNetworkInterface);
     } catch (error) {
-      logger.error('Failed to collect network metrics', { 
+      LoggingManager.getInstance().error('Failed to collect network metrics', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -251,7 +251,7 @@ class MetricsService extends EventEmitter {
 
       return agent.metrics.storage;
     } catch (error) {
-      logger.error('Failed to collect storage metrics', { 
+      LoggingManager.getInstance().error('Failed to collect storage metrics', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -276,7 +276,7 @@ class MetricsService extends EventEmitter {
       });
 
       if (validProcesses.length === 0) {
-        logger.warn('No valid process metrics to store', { hostId });
+        LoggingManager.getInstance().warn('No valid process metrics to store', { hostId });
         return;
       }
 
@@ -318,7 +318,7 @@ class MetricsService extends EventEmitter {
         values.flat()
       );
     } catch (error) {
-      logger.error('Failed to store process metrics', { 
+      LoggingManager.getInstance().error('Failed to store process metrics', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -340,7 +340,7 @@ class MetricsService extends EventEmitter {
         return isSystemMetrics(row);
       });
     } catch (error) {
-      logger.error('Failed to get metrics', { 
+      LoggingManager.getInstance().error('Failed to get metrics', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -367,7 +367,7 @@ class MetricsService extends EventEmitter {
           'memory' in row && typeof row.memory === 'number';
       });
     } catch (error) {
-      logger.error('Failed to get process metrics', { 
+      LoggingManager.getInstance().error('Failed to get process metrics', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -424,7 +424,7 @@ class MetricsService extends EventEmitter {
         return isMetricsAlert(row);
       });
     } catch (error) {
-      logger.error('Failed to get metrics alerts', { 
+      LoggingManager.getInstance().error('Failed to get metrics alerts', { 
         error: error instanceof Error ? error : new Error(String(error)),
         hostId 
       });
@@ -522,7 +522,7 @@ class MetricsService extends EventEmitter {
       // Create all alerts
       await Promise.all(alerts.map(alert => this.createMetricsAlert(alert)));
     } catch (error) {
-      logger.error('Failed to process metrics alert', { 
+      LoggingManager.getInstance().error('Failed to process metrics alert', { 
         error: error instanceof Error ? error : new Error(String(error)),
         metrics 
       });
@@ -536,3 +536,4 @@ class MetricsService extends EventEmitter {
 
 // Export singleton instance
 export const metricsService = new MetricsService({} as MetricsConfig);
+

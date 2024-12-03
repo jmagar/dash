@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { logger } from '../utils/frontendLogger';
 import { useSocket } from './useSocket';
 import type { TypedSocket } from './useSocket';
 import type { SystemMetrics } from '../../types/metrics';
 import type { ProcessInfo } from '../../types/process';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseHostMetricsOptions {
   hostId: string;
@@ -60,7 +61,7 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
   const handleMetricsError = useCallback((data: MetricsErrorData) => {
     if (data.hostId === hostId) {
       setError(data.error);
-      logger.error('Host metrics error:', { error: data.error });
+      loggerLoggingManager.getInstance().();
     }
   }, [hostId]);
 
@@ -74,8 +75,7 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
       emit('metrics:subscribe', { hostId });
       emit('process:monitor', { hostId });
     } catch (error) {
-      logger.error('Failed to start monitoring:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         hostId
       });
       setError('Failed to start monitoring');
@@ -89,8 +89,7 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
       emit('metrics:unsubscribe', { hostId });
       emit('process:unmonitor', { hostId });
     } catch (error) {
-      logger.error('Failed to stop monitoring:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         hostId
       });
     }
@@ -113,8 +112,7 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
         unsubError();
       };
     } catch (error) {
-      logger.error('Error in metrics monitoring effect:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         hostId
       });
       setError('Failed to setup metrics monitoring');
@@ -138,3 +136,4 @@ export function useHostMetrics(options: UseHostMetricsOptions | string): {
     refresh: startMonitoring,
   };
 }
+

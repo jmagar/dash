@@ -1,4 +1,4 @@
-import { WebSocket, WebSocketServer } from 'ws';
+﻿import { WebSocket, WebSocketServer } from 'ws';
 import { Server, Socket } from 'socket.io';
 import { 
   ClientToServerEvents, 
@@ -13,6 +13,7 @@ import { ApiError } from '../../../../types/error';
 import { ERROR_CODES, LOG_METADATA, SOCKET_EVENTS, CONNECTION_TIMEOUT } from '../utils/constants';
 import type { LogMetadata } from '../../../../types/logger';
 import { z } from 'zod';
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
 
 // Connection metadata schema with strict validation
 const connectionMetadataSchema = z.object({
@@ -96,7 +97,7 @@ export class ConnectionService {
       logMetadata.errorDetails = error.details;
     }
 
-    logger.error('Connection service error:', logMetadata);
+    loggerLoggingManager.getInstance().();
   }
 
   private setupConnectionTimeout(
@@ -110,11 +111,7 @@ export class ConnectionService {
         connection.emit('disconnect');
       }
       
-      logger.warn('Agent connection timed out during registration', {
-        ...metadata,
-        [LOG_METADATA.CONNECTION_TYPE]: metadata.connectionType,
-        [LOG_METADATA.SOCKET_ID]: metadata.socketId
-      });
+      loggerLoggingManager.getInstance().();
     }, CONNECTION_TIMEOUT);
   }
 
@@ -130,10 +127,7 @@ export class ConnectionService {
         const agentId = result.data.id;
         this.activeConnections.set(agentId, { connection: ws, metadata: { ...metadata, agentId } });
         
-        logger.info('Agent WebSocket connection established', {
-          ...metadata,
-          agentId
-        });
+        loggerLoggingManager.getInstance().();
 
         return {
           success: true,
@@ -181,10 +175,7 @@ export class ConnectionService {
         const agentId = result.data.id;
         this.activeConnections.set(agentId, { connection: socket, metadata: { ...metadata, agentId } });
         
-        logger.info('Agent Socket.IO connection established', {
-          ...metadata,
-          agentId
-        });
+        loggerLoggingManager.getInstance().();
 
         return {
           success: true,
@@ -231,7 +222,7 @@ export class ConnectionService {
       });
 
       try {
-        logger.debug('Agent attempting to connect via WebSocket', metadata);
+        loggerLoggingManager.getInstance().();
 
         const timeout = this.setupConnectionTimeout(ws, metadata);
 
@@ -249,10 +240,7 @@ export class ConnectionService {
           if (entry) {
             const [agentId, { metadata }] = entry;
             this.activeConnections.delete(agentId);
-            logger.info('Agent WebSocket connection closed', {
-              ...metadata,
-              agentId
-            });
+            loggerLoggingManager.getInstance().();
           }
         });
 
@@ -283,7 +271,7 @@ export class ConnectionService {
       });
 
       try {
-        logger.debug('Agent attempting to connect via Socket.IO', metadata);
+        loggerLoggingManager.getInstance().();
 
         const timeout = this.setupConnectionTimeout(socket, metadata);
 
@@ -304,10 +292,7 @@ export class ConnectionService {
           if (entry) {
             const [agentId, { metadata }] = entry;
             this.activeConnections.delete(agentId);
-            logger.info('Agent Socket.IO connection closed', {
-              ...metadata,
-              agentId
-            });
+            loggerLoggingManager.getInstance().();
           }
         });
 
@@ -387,3 +372,4 @@ export class ConnectionService {
     }
   }
 }
+

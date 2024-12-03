@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 import type { LogMetadata } from '../../types/logger';
 import config from '../config';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 // Initialize OpenAI client
 export const openai = new OpenAI({
@@ -50,7 +50,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       provider: 'OpenAI',
       model: 'text-embedding-ada-002',
     };
-    logger.error('Failed to generate embedding', metadata);
+    LoggingManager.getInstance().error('Failed to generate embedding', metadata);
     throw error;
   }
 }
@@ -101,7 +101,7 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
       provider: useOpenRouter ? 'OpenRouter' : 'OpenAI',
       model: useOpenRouter ? config.openrouter.model : config.openai.model,
     };
-    logger.error('Failed to generate completion', metadata);
+    LoggingManager.getInstance().error('Failed to generate completion', metadata);
     throw error;
   }
 }
@@ -110,3 +110,4 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
 function shouldUseOpenRouter(): boolean {
   return !!(config.openrouter.apiKey && !config.openai.apiKey);
 }
+

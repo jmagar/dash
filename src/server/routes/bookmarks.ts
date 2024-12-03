@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { bookmarkService } from '../services/bookmarks.service';
 import { requireAuth } from '../middleware/auth';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
       data: bookmarks,
     });
   } catch (error) {
-    logger.error('Failed to get bookmarks:', {
+    LoggingManager.getInstance().error('Failed to get bookmarks:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       userId: req.user.id,
     });
@@ -54,7 +54,7 @@ router.post('/', async (req, res) => {
       data: bookmark,
     });
   } catch (error) {
-    logger.error('Failed to create bookmark:', {
+    LoggingManager.getInstance().error('Failed to create bookmark:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       userId: req.user.id,
     });
@@ -80,7 +80,7 @@ router.patch('/:hostId/:path', async (req, res) => {
       data: bookmark,
     });
   } catch (error) {
-    logger.error('Failed to update bookmark:', {
+    LoggingManager.getInstance().error('Failed to update bookmark:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       userId: req.user.id,
     });
@@ -102,7 +102,7 @@ router.delete('/:hostId/:path', async (req, res) => {
       success: true,
     });
   } catch (error) {
-    logger.error('Failed to delete bookmark:', {
+    LoggingManager.getInstance().error('Failed to delete bookmark:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       userId: req.user.id,
     });
@@ -124,7 +124,7 @@ router.post('/:hostId/:path/access', async (req, res) => {
       success: true,
     });
   } catch (error) {
-    logger.error('Failed to update bookmark last accessed:', {
+    LoggingManager.getInstance().error('Failed to update bookmark last accessed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       userId: req.user.id,
     });
@@ -136,3 +136,4 @@ router.post('/:hostId/:path/access', async (req, res) => {
 });
 
 export default router;
+

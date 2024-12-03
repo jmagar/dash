@@ -1,10 +1,11 @@
-import SMB2 from '@marsaud/smb2';
+﻿import SMB2 from '@marsaud/smb2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class SMBProvider implements FileSystemProvider {
   readonly type = 'smb' as FileSystemType;
@@ -26,7 +27,7 @@ export class SMBProvider implements FileSystemProvider {
       // Test connection
       await this.client.readdir('/');
     } catch (error) {
-      logger.error('SMB connection error:', error);
+      loggerLoggingManager.getInstance().();
       this.client = null;
       throw error;
     }
@@ -65,7 +66,7 @@ export class SMBProvider implements FileSystemProvider {
       );
       return fileStats;
     } catch (error) {
-      logger.error('SMB list files error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -80,7 +81,7 @@ export class SMBProvider implements FileSystemProvider {
       await fs.unlink(tempPath);
       return content;
     } catch (error) {
-      logger.error('SMB read file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -94,7 +95,7 @@ export class SMBProvider implements FileSystemProvider {
       await this.client.writeFile(path, tempPath);
       await fs.unlink(tempPath);
     } catch (error) {
-      logger.error('SMB write file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -105,7 +106,7 @@ export class SMBProvider implements FileSystemProvider {
     try {
       await this.client.unlink(path);
     } catch (error) {
-      logger.error('SMB delete error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -116,7 +117,7 @@ export class SMBProvider implements FileSystemProvider {
     try {
       await this.client.rename(oldPath, newPath);
     } catch (error) {
-      logger.error('SMB rename error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -127,7 +128,7 @@ export class SMBProvider implements FileSystemProvider {
     try {
       await this.client.mkdir(path);
     } catch (error) {
-      logger.error('SMB mkdir error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -151,7 +152,7 @@ export class SMBProvider implements FileSystemProvider {
         permissions: '644' // Default permissions since SMB doesn't provide Unix-style permissions
       };
     } catch (error) {
-      logger.error('SMB stat error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -163,7 +164,7 @@ export class SMBProvider implements FileSystemProvider {
       const content = await this.readFile(sourcePath);
       await this.writeFile(targetPath, content);
     } catch (error) {
-      logger.error('SMB copy file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -178,7 +179,7 @@ export class SMBProvider implements FileSystemProvider {
     try {
       await this.client.rmdir(path);
     } catch (error) {
-      logger.error('SMB rmdir error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -205,3 +206,4 @@ export class SMBProvider implements FileSystemProvider {
     }
   }
 }
+

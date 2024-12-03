@@ -1,9 +1,10 @@
-import { Server } from 'socket.io';
+﻿import { Server } from 'socket.io';
 import { logger } from '../../utils/logger';
 import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
 import type { ProcessInfo } from '../../../types/metrics';
 import type { ProcessCache } from './types';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class ProcessMonitor {
   private monitoredHosts: Set<string> = new Set();
@@ -58,10 +59,7 @@ export class ProcessMonitor {
             this.stopMonitoringHost(hostId);
           }
         } catch (error) {
-          logger.error('Failed to update process list:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            hostId,
-          });
+          loggerLoggingManager.getInstance().();
           this.io.to(`host:${hostId}`).emit('process:error', {
             hostId,
             error: 'Failed to update process list',
@@ -158,10 +156,7 @@ export class ProcessMonitor {
         })),
       });
     } catch (error) {
-      logger.error('Failed to update process list:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId: host.id,
-      });
+      loggerLoggingManager.getInstance().();
       this.io.to(`host:${host.id}`).emit('process:error', {
         hostId: host.id,
         error: 'Failed to update process list',
@@ -180,3 +175,4 @@ export class ProcessMonitor {
     this.monitoredHosts.clear();
   }
 }
+

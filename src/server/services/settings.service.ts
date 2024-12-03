@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { BaseService } from './base.service';
 import type { Settings, SettingsPath, SettingsValue, SettingsResponse, SettingsError, UserPreferences, AdminSettings } from '../../types/settings';
 import { db } from '../db';
@@ -37,7 +37,7 @@ export class SettingsService extends BaseService {
       const cached = await redis.get(cacheKey);
       return cached ? JSON.parse(cached) : null;
     } catch (error) {
-      logger.warn('Failed to get settings from cache', {
+      LoggingManager.getInstance().warn('Failed to get settings from cache', {
         error: error instanceof Error ? error.message : 'Unknown error',
         cacheKey,
         component: 'SettingsService'
@@ -50,7 +50,7 @@ export class SettingsService extends BaseService {
     try {
       await redis.setex(cacheKey, ttl, JSON.stringify(value));
     } catch (error) {
-      logger.warn('Failed to set settings in cache', {
+      LoggingManager.getInstance().warn('Failed to set settings in cache', {
         error: error instanceof Error ? error.message : 'Unknown error',
         cacheKey,
         component: 'SettingsService'
@@ -61,7 +61,7 @@ export class SettingsService extends BaseService {
   // User Settings
   public async getUserSettings(userId: string): Promise<Settings['user']> {
     try {
-      logger.info('Getting user settings', {
+      LoggingManager.getInstance().info('Getting user settings', {
         userId,
         component: 'SettingsService'
       });
@@ -109,7 +109,7 @@ export class SettingsService extends BaseService {
     value: SettingsValue
   ): Promise<SettingsResponse> {
     try {
-      logger.info('Updating user settings', {
+      LoggingManager.getInstance().info('Updating user settings', {
         userId,
         path,
         component: 'SettingsService'
@@ -167,7 +167,7 @@ export class SettingsService extends BaseService {
   // Admin Settings
   public async getAdminSettings(): Promise<Settings['admin']> {
     try {
-      logger.info('Getting admin settings', {
+      LoggingManager.getInstance().info('Getting admin settings', {
         component: 'SettingsService'
       });
 
@@ -208,7 +208,7 @@ export class SettingsService extends BaseService {
     value: SettingsValue
   ): Promise<SettingsResponse> {
     try {
-      logger.info('Updating admin settings', {
+      LoggingManager.getInstance().info('Updating admin settings', {
         path,
         component: 'SettingsService'
       });
@@ -259,7 +259,7 @@ export class SettingsService extends BaseService {
   // Utility methods
   public async resetUserSettings(userId: string): Promise<SettingsResponse> {
     try {
-      logger.info('Resetting user settings', {
+      LoggingManager.getInstance().info('Resetting user settings', {
         userId,
         component: 'SettingsService'
       });
@@ -303,3 +303,4 @@ export class SettingsService extends BaseService {
 }
 
 export const settingsService = SettingsService.getInstance();
+

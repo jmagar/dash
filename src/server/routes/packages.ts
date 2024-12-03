@@ -5,7 +5,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { Package, ApiResponse } from '../../types/models-shared';
 import { query } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = express.Router();
 
@@ -25,7 +25,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams, PackageListRespon
   const { hostId } = req.params;
 
   try {
-    logger.info('Listing packages', { hostId: String(hostId) });
+    LoggingManager.getInstance().info('Listing packages', { hostId: String(hostId) });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and list installed packages.
@@ -34,7 +34,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams, PackageListRespon
       const metadata: LogMetadata = {
         hostId: String(hostId),
       };
-      logger.error('Database connection failed:', metadata);
+      LoggingManager.getInstance().error('Database connection failed:', metadata);
       throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
@@ -48,7 +48,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams, PackageListRespon
       },
     ];
 
-    logger.info('Packages listed successfully', { hostId: String(hostId), count: packages.length });
+    LoggingManager.getInstance().info('Packages listed successfully', { hostId: String(hostId), count: packages.length });
     const response: PackageListResponse = {
       success: true,
       data: packages,
@@ -59,7 +59,7 @@ const listPackages: AuthenticatedRequestHandler<PackageParams, PackageListRespon
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to list packages:', metadata);
+    LoggingManager.getInstance().error('Failed to list packages:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to list packages',
@@ -85,11 +85,11 @@ const installPackage: AuthenticatedRequestHandler<PackageParams, PackageInstallR
   try {
     if (!packageName) {
       const metadata: LogMetadata = { hostId: String(hostId) };
-      logger.warn('Package installation failed: No package name provided', metadata);
+      LoggingManager.getInstance().warn('Package installation failed: No package name provided', metadata);
       throw new ApiError('Package name is required', undefined, 400, metadata);
     }
 
-    logger.info('Installing package', { hostId: String(hostId), package: packageName });
+    LoggingManager.getInstance().info('Installing package', { hostId: String(hostId), package: packageName });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and install the package.
@@ -99,11 +99,11 @@ const installPackage: AuthenticatedRequestHandler<PackageParams, PackageInstallR
         hostId: String(hostId),
         package: packageName,
       };
-      logger.error('Database connection failed:', metadata);
+      LoggingManager.getInstance().error('Database connection failed:', metadata);
       throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
-    logger.info('Package installed successfully', { hostId: String(hostId), package: packageName });
+    LoggingManager.getInstance().info('Package installed successfully', { hostId: String(hostId), package: packageName });
     const response: PackageInstallResponse = {
       success: true,
     };
@@ -114,7 +114,7 @@ const installPackage: AuthenticatedRequestHandler<PackageParams, PackageInstallR
       package: String(req.body.package),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to install package:', metadata);
+    LoggingManager.getInstance().error('Failed to install package:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to install package',
@@ -134,3 +134,4 @@ router.get('/:hostId', createAuthHandler(listPackages));
 router.post('/:hostId/install', createAuthHandler(installPackage));
 
 export default router;
+

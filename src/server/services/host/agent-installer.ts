@@ -1,6 +1,7 @@
-import { Client as SSHClient } from 'ssh2';
+﻿import { Client as SSHClient } from 'ssh2';
 import { logger } from '../../utils/logger';
 import type { InstallOptions } from './types';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 /**
  * Utility class for agent installation operations
@@ -88,10 +89,7 @@ WantedBy=multi-user.target
     return new Promise((resolve, reject) => {
       ssh.exec(command, (err, stream) => {
         if (err) {
-          this.logger.error('Failed to execute command', { 
-            error: err, 
-            command 
-          });
+          this.loggerLoggingManager.getInstance().();
           reject(err);
           return;
         }
@@ -109,11 +107,7 @@ WantedBy=multi-user.target
 
         stream.on('close', (code: number) => {
           if (code !== 0) {
-            this.logger.error('Command failed', { 
-              code, 
-              error, 
-              command 
-            });
+            this.loggerLoggingManager.getInstance().();
             reject(new Error(`Command failed with code ${code}: ${error}`));
           } else {
             resolve(output.trim());
@@ -123,3 +117,4 @@ WantedBy=multi-user.target
     });
   }
 }
+

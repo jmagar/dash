@@ -1,10 +1,11 @@
-import { spawn } from 'child_process';
+﻿import { spawn } from 'child_process';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../../logger';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class RcloneProvider implements FileSystemProvider {
   readonly type: FileSystemType = 'rclone';
@@ -27,7 +28,7 @@ export class RcloneProvider implements FileSystemProvider {
       // Test connection by listing root directory
       await this.listFiles('/');
     } catch (error) {
-      logger.error('Rclone connection error:', error);
+      loggerLoggingManager.getInstance().();
       await this.cleanup();
       throw error;
     }
@@ -44,7 +45,7 @@ export class RcloneProvider implements FileSystemProvider {
         await fs.rmdir(join(this.configPath, '..'));
       }
     } catch (error) {
-      logger.error('Error cleaning up Rclone provider:', error);
+      loggerLoggingManager.getInstance().();
     } finally {
       this.remoteName = '';
       this.configPath = '';
@@ -97,7 +98,7 @@ export class RcloneProvider implements FileSystemProvider {
         }
       }));
     } catch (error) {
-      logger.error('Rclone list files error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -107,7 +108,7 @@ export class RcloneProvider implements FileSystemProvider {
       const { stdout } = await this.executeRcloneCommand(['cat', `${this.remoteName}:${path}`]);
       return Buffer.from(stdout);
     } catch (error) {
-      logger.error('Rclone read file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -118,7 +119,7 @@ export class RcloneProvider implements FileSystemProvider {
       await fs.writeFile(tempPath, content);
       await this.executeRcloneCommand(['copyto', tempPath, `${this.remoteName}:${path}`]);
     } catch (error) {
-      logger.error('Rclone write file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     } finally {
       await fs.unlink(tempPath).catch(() => {});
@@ -129,7 +130,7 @@ export class RcloneProvider implements FileSystemProvider {
     try {
       await this.executeRcloneCommand(['delete', `${this.remoteName}:${path}`]);
     } catch (error) {
-      logger.error('Rclone delete error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -142,7 +143,7 @@ export class RcloneProvider implements FileSystemProvider {
         `${this.remoteName}:${newPath}`
       ]);
     } catch (error) {
-      logger.error('Rclone rename error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -151,7 +152,7 @@ export class RcloneProvider implements FileSystemProvider {
     try {
       await this.executeRcloneCommand(['mkdir', `${this.remoteName}:${path}`]);
     } catch (error) {
-      logger.error('Rclone mkdir error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -176,7 +177,7 @@ export class RcloneProvider implements FileSystemProvider {
         permissions: '644' // Default permissions since Rclone doesn't provide this
       };
     } catch (error) {
-      logger.error('Rclone stat error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -189,7 +190,7 @@ export class RcloneProvider implements FileSystemProvider {
         `${this.remoteName}:${targetPath}`
       ]);
     } catch (error) {
-      logger.error('Rclone copy file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -202,7 +203,7 @@ export class RcloneProvider implements FileSystemProvider {
         `${this.remoteName}:${targetPath}`
       ]);
     } catch (error) {
-      logger.error('Rclone move file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -211,7 +212,7 @@ export class RcloneProvider implements FileSystemProvider {
     try {
       await this.executeRcloneCommand(['rmdir', `${this.remoteName}:${path}`]);
     } catch (error) {
-      logger.error('Rclone rmdir error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -238,3 +239,4 @@ export class RcloneProvider implements FileSystemProvider {
     }
   }
 }
+

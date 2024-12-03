@@ -1,5 +1,5 @@
 import type { LogMetadata } from '../../types/logger';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 interface ErrorGroup {
   count: number;
@@ -79,7 +79,7 @@ class ErrorAggregator {
 
     // Log error frequency
     if (group.count === 1 || group.count === 10 || group.count === 100 || (group.count % 1000 === 0)) {
-      logger.warn('Error frequency alert:', {
+      LoggingManager.getInstance().warn('Error frequency alert:', {
         error: error.message,
         count: group.count,
         firstSeen: group.firstSeen,
@@ -168,10 +168,11 @@ class ErrorAggregator {
     }
 
     if (flushedCount > 0) {
-      logger.info('Flushed old error groups:', { count: flushedCount });
+      LoggingManager.getInstance().info('Flushed old error groups:', { count: flushedCount });
     }
   }
 }
 
 export const errorAggregator = ErrorAggregator.getInstance();
 export default errorAggregator;
+

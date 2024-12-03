@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { RequestLogMetadata, ResponseLogMetadata } from '../types/middleware';
 import { monitoringService } from '../services/monitoring';
 import { performance } from 'perf_hooks';
@@ -42,7 +42,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     body: sanitizeRequestData(req.body),
     query: sanitizeRequestData(req.query),
   };
-  logger.info('Request started', sanitizedMeta);
+  LoggingManager.getInstance().info('Request started', sanitizedMeta);
 
   // Track memory usage before processing
   const startMemory = process.memoryUsage();
@@ -79,7 +79,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
 
     // Log based on status code and update monitoring
     if (statusCode >= 500) {
-      logger.error('Request failed', responseMeta);
+      LoggingManager.getInstance().error('Request failed', responseMeta);
       monitoringService.updateServiceStatus('api', {
         name: 'api',
         status: 'degraded',
@@ -91,7 +91,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
         },
       });
     } else if (statusCode >= 400) {
-      logger.warn('Request failed', responseMeta);
+      LoggingManager.getInstance().warn('Request failed', responseMeta);
       if (requestMetrics.clientError / requestMetrics.total > 0.1) {
         monitoringService.updateServiceStatus('api', {
           name: 'api',
@@ -104,7 +104,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
         });
       }
     } else {
-      logger.info('Request completed', responseMeta);
+      LoggingManager.getInstance().info('Request completed', responseMeta);
     }
 
     // Monitor response time thresholds
@@ -182,7 +182,7 @@ export function slowRequestLogger(threshold = 1000) {
           checkpoints,
         };
 
-        logger.warn('Slow request detected', slowRequestMeta);
+        LoggingManager.getInstance().warn('Slow request detected', slowRequestMeta);
         
         // Find slowest checkpoint
         const checkpointDurations = Object.entries(checkpoints).map(([name, time], index, arr) => ({
@@ -225,3 +225,4 @@ function sanitizeRequestData(data: unknown): Record<string, unknown> {
   }
   return sanitized;
 }
+

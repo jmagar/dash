@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { ApiError } from '../types/errors';
 import { ApiErrorResponse } from '../types/common.dto';
 import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
@@ -20,7 +20,7 @@ export function authenticateToken(
 ): void {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    logger.warn('No token provided', { path: req.path });
+    LoggingManager.getInstance().warn('No token provided', { path: req.path });
     const response: ApiErrorResponse = {
       success: false,
       message: 'No token provided',
@@ -41,7 +41,7 @@ export function authenticateToken(
       next();
     })
     .catch(error => {
-      logger.warn('Authentication failed:', {
+      LoggingManager.getInstance().warn('Authentication failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         path: req.path,
         method: req.method,
@@ -77,7 +77,7 @@ export function checkRole(requiredRole: string) {
     }
 
     if (user.role !== requiredRole) {
-      logger.warn('Insufficient role:', {
+      LoggingManager.getInstance().warn('Insufficient role:', {
         required: requiredRole,
         actual: user.role,
         userId: user.id,
@@ -129,7 +129,7 @@ export function checkOwnership(userIdParam = 'userId') {
     }
 
     if (user.id !== resourceUserId && user.role !== 'admin') {
-      logger.warn('Unauthorized resource access:', {
+      LoggingManager.getInstance().warn('Unauthorized resource access:', {
         userId: user.id,
         resourceUserId,
         path: req.path
@@ -153,3 +153,4 @@ export function checkOwnership(userIdParam = 'userId') {
 export const requireAuth = authenticateToken;
 export const requireRole = checkRole;
 export const requireOwnership = checkOwnership;
+

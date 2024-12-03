@@ -8,7 +8,7 @@ import type {
 } from '../../types/service';
 import type { Host } from '../../types/host';
 import type { LogMetadata } from '../../types/logger';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { metrics, recordHostMetric } from '../metrics';
 import { errorAggregator } from './errorAggregator';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,7 +74,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
       };
 
       // Log error
-      logger.error('Operation failed', metadata);
+      LoggingManager.getInstance().error('Operation failed', metadata);
 
       // Track error
       errorAggregator.trackError(
@@ -99,7 +99,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
         try {
           await this.cleanupFn();
         } catch (error) {
-          logger.error('Cleanup failed', {
+          LoggingManager.getInstance().error('Cleanup failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
             ...this.context.metadata
           });
@@ -128,7 +128,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
     while (attempt < maxAttempts) {
       try {
         if (attempt > 0) {
-          logger.debug('Retrying operation', {
+          LoggingManager.getInstance().debug('Retrying operation', {
             attempt,
             delay,
             ...this.context.metadata
@@ -181,3 +181,4 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
     return this;
   }
 }
+

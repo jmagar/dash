@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
 import type { ProcessInfo } from '@/types/process';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseProcessMonitorOptions {
   hostId: string;
@@ -96,7 +97,7 @@ export function useProcessMonitor(options: UseProcessMonitorOptions | string): U
       const [data] = args as [{ hostId: string; error: string }];
       if (data.hostId === hostId) {
         setError(data.error);
-        logger.error('Process monitor error:', { error: data.error });
+        loggerLoggingManager.getInstance().();
       }
     };
 
@@ -126,3 +127,4 @@ export function useProcessMonitor(options: UseProcessMonitorOptions | string): U
     refresh: startMonitoring,
   };
 }
+

@@ -1,6 +1,7 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+﻿import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface ApiError {
   status?: number;
@@ -29,7 +30,7 @@ api.interceptors.request.use(
     const apiError: ApiError = {
       message: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('API request error:', apiError);
+    loggerLoggingManager.getInstance().();
     return Promise.reject(error);
   }
 );
@@ -44,7 +45,8 @@ api.interceptors.response.use(
       status: axiosError.response?.status,
       data: axiosError.response?.data,
     };
-    logger.error('API response error:', apiError);
+    loggerLoggingManager.getInstance().();
     return Promise.reject(error);
   }
 );
+

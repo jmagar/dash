@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './useSocket';
 import type { Host } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseHostOptions {
   hostId?: string;
@@ -83,7 +84,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to connect to host';
-      logger.error('Failed to connect to host:', { error: errorMsg, hostId: host.id });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
       throw error;
     } finally {
@@ -115,7 +116,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to disconnect from host';
-      logger.error('Failed to disconnect from host:', { error: errorMsg, hostId: host.id });
+      loggerLoggingManager.getInstance().();
       setError(errorMsg);
       throw error;
     } finally {
@@ -154,7 +155,7 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
   useEffect(() => {
     if (autoConnect && host && socket) {
       connect().catch((error) => {
-        logger.error('Failed to auto-connect:', { error: error.message, hostId: host.id });
+        loggerLoggingManager.getInstance().();
       });
     }
   }, [autoConnect, host, socket, connect]);
@@ -174,3 +175,4 @@ export function useHost({ hostId, autoConnect = true }: UseHostOptions): UseHost
     selectHost,
   };
 }
+

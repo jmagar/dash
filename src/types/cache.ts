@@ -1,5 +1,29 @@
-import type Redis from 'ioredis';
+import type { Redis, RedisOptions } from './redis';
 import type { Container, Stack } from './models-shared';
+import type { 
+  FileSystemState, 
+  ProcessState, 
+  NetworkState, 
+  UserState, 
+  AppState, 
+  SystemState 
+} from './chatbot';
+import type { User } from './auth';
+
+export interface CacheConfig extends RedisOptions {
+  host: string;
+  port?: number;
+  password?: string;
+  db?: number;
+  keyPrefix?: string;
+  retryStrategy?: (times: number) => number | null;
+  reconnectOnError?: (err: Error) => boolean | 1 | 2;
+  enableReadyCheck?: boolean;
+  maxRetriesPerRequest?: number | null;
+  metrics?: {
+    interval: number;
+  };
+}
 
 export interface Cache {
   redis: Redis;
@@ -16,7 +40,11 @@ export interface Cache {
   disconnect(): Promise<void>;
 
   // Health check
-  healthCheck(): Promise<{ status: string; connected: boolean; error?: string }>;
+  healthCheck(): Promise<{
+    status: string;
+    connected: boolean;
+    error?: string;
+  }>;
 
   // Host management
   getHostStatus(id: string): Promise<unknown>;
@@ -32,6 +60,20 @@ export interface Cache {
   // Command history
   cacheCommand(userId: string, hostId: string, command: CacheCommand | CacheCommand[]): Promise<void>;
   getCommands(userId: string, hostId: string): Promise<CacheCommand[] | null>;
+
+  // Context management
+  getFileSystemState(): Promise<Partial<FileSystemState>>;
+  setFileSystemState(state: FileSystemState): Promise<void>;
+  getProcessState(): Promise<Partial<ProcessState>>;
+  setProcessState(state: ProcessState): Promise<void>;
+  getNetworkState(): Promise<Partial<NetworkState>>;
+  setNetworkState(state: NetworkState): Promise<void>;
+  getUserState(): Promise<Partial<UserState>>;
+  setUserState(state: UserState): Promise<void>;
+  getAppState(): Promise<Partial<AppState>>;
+  setAppState(state: AppState): Promise<void>;
+  getSystemState(): Promise<Partial<SystemState>>;
+  setSystemState(state: SystemState): Promise<void>;
 }
 
 export interface CacheCommand {

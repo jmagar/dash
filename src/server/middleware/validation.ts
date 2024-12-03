@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AnyZodObject, ZodError } from 'zod';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { ApiError } from '../../types/error';
 
 export const validateRequest = (schema: AnyZodObject) => {
@@ -14,7 +14,7 @@ export const validateRequest = (schema: AnyZodObject) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        logger.warn('Validation error:', {
+        LoggingManager.getInstance().warn('Validation error:', {
           path: req.path,
           errors: error.errors,
         });
@@ -25,3 +25,4 @@ export const validateRequest = (schema: AnyZodObject) => {
     }
   };
 };
+

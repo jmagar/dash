@@ -1,4 +1,4 @@
-import path from 'path';
+﻿import path from 'path';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
 import type { ExtendedHost, InstallOptions } from '../../../types/agent-config';
@@ -7,6 +7,7 @@ import { unixInstallScript } from './install-scripts';
 import { IAgentHandler } from './types';
 import type { SSHService } from '../ssh.service';
 import config from '../../config';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class LinuxHandler implements IAgentHandler {
   private executeCommand: (host: ExtendedHost, command: string, options?: { sudo?: boolean }) => Promise<void>;
@@ -42,7 +43,7 @@ export class LinuxHandler implements IAgentHandler {
         osType: host.os_type,
         options
       };
-      logger.error('Failed to install Linux agent:', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to install Linux agent', 500);
     }
   }
@@ -85,7 +86,7 @@ export class LinuxHandler implements IAgentHandler {
         error: error instanceof Error ? error.message : String(error),
         hostId: host.id
       };
-      logger.error('Failed to uninstall Linux agent:', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to uninstall Linux agent', 500);
     }
   }
@@ -100,7 +101,7 @@ export class LinuxHandler implements IAgentHandler {
         error: error instanceof Error ? error.message : String(error),
         hostId: host.id
       };
-      logger.error('Failed to start Linux agent:', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to start Linux agent', 500);
     }
   }
@@ -114,7 +115,7 @@ export class LinuxHandler implements IAgentHandler {
         error: error instanceof Error ? error.message : String(error),
         hostId: host.id
       };
-      logger.error('Failed to stop Linux agent:', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to stop Linux agent', 500);
     }
   }
@@ -123,3 +124,4 @@ export class LinuxHandler implements IAgentHandler {
     return unixInstallScript;
   }
 }
+

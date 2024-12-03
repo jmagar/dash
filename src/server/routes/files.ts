@@ -6,7 +6,7 @@ import express from 'express';
 import { ApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = express.Router();
 
@@ -29,7 +29,7 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
   const normalizedPath = normalizePath(req.query.path as string);
 
   try {
-    logger.info('Listing directory', { hostId: String(hostId), path: normalizedPath });
+    LoggingManager.getInstance().info('Listing directory', { hostId: String(hostId), path: normalizedPath });
 
     // This is a placeholder. In a real implementation, this would
     // connect to the host and list files.
@@ -39,7 +39,7 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
         hostId: String(hostId),
         path: normalizedPath,
       };
-      logger.error('Database connection failed:', metadata);
+      LoggingManager.getInstance().error('Database connection failed:', metadata);
       throw new ApiError('Failed to connect to database', undefined, 500, metadata);
     }
 
@@ -53,7 +53,7 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
       },
     ];
 
-    logger.info('Directory listed successfully', {
+    LoggingManager.getInstance().info('Directory listed successfully', {
       hostId: String(hostId),
       path: normalizedPath,
       count: files.length,
@@ -68,7 +68,7 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
       path: normalizedPath,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to list directory:', metadata);
+    LoggingManager.getInstance().error('Failed to list directory:', metadata);
 
     if (error instanceof ApiError) {
       return res.status(error.status).json({
@@ -88,3 +88,4 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
 router.get('/:hostId', createAuthHandler(listFiles));
 
 export default router;
+

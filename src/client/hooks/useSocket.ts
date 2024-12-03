@@ -1,6 +1,7 @@
-import socketIO from 'socket.io-client';
+﻿import socketIO from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -58,7 +59,7 @@ export function useSocket(url: string): SocketHookReturn {
 
   const connect = useCallback((): void => {
     if (isConnected(socketRef.current)) {
-      console.warn('Socket already connected');
+      consoleLoggingManager.getInstance().();
       return;
     }
 
@@ -78,7 +79,7 @@ export function useSocket(url: string): SocketHookReturn {
       };
 
       const handleError = (error: Error) => {
-        console.error('Socket error:', error);
+        consoleLoggingManager.getInstance().();
         setConnectionState('error');
       };
 
@@ -91,7 +92,7 @@ export function useSocket(url: string): SocketHookReturn {
       setConnectionState('connecting');
 
     } catch (error) {
-      console.error('Socket connection error:', error instanceof Error ? error.message : String(error));
+      consoleLoggingManager.getInstance().());
       setConnectionState('error');
     }
   }, [url]);
@@ -99,7 +100,7 @@ export function useSocket(url: string): SocketHookReturn {
   const disconnect = useCallback((): void => {
     const socket = socketRef.current;
     if (!socket) {
-      console.warn('No socket connection to disconnect');
+      consoleLoggingManager.getInstance().();
       return;
     }
 
@@ -108,7 +109,7 @@ export function useSocket(url: string): SocketHookReturn {
       socketRef.current = null;
       setConnectionState('disconnected');
     } catch (error) {
-      console.error('Socket disconnect error:', error instanceof Error ? error.message : String(error));
+      consoleLoggingManager.getInstance().());
       setConnectionState('error');
     }
   }, []);
@@ -119,14 +120,14 @@ export function useSocket(url: string): SocketHookReturn {
   ): void => {
     const socket = socketRef.current;
     if (!isConnected(socket)) {
-      console.warn('Cannot emit: socket not connected');
+      consoleLoggingManager.getInstance().();
       return;
     }
 
     try {
       socket.emit(event, ...args);
     } catch (error) {
-      console.error(`Socket emit error for event ${String(event)}:`, error instanceof Error ? error.message : String(error));
+      consoleLoggingManager.getInstance().()}:`, error instanceof Error ? error.message : String(error));
     }
   }, []);
 
@@ -136,7 +137,7 @@ export function useSocket(url: string): SocketHookReturn {
   ): (() => void) => {
     const socket = socketRef.current;
     if (!socket) {
-      console.warn('Cannot add listener: socket not initialized');
+      consoleLoggingManager.getInstance().();
       return () => undefined;
     }
 
@@ -167,3 +168,4 @@ export function useSocket(url: string): SocketHookReturn {
     on,
   };
 }
+

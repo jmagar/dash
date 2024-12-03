@@ -1,7 +1,8 @@
-import { useEffect, useCallback, useContext } from 'react';
+﻿import { useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext, User, AuthContextType } from '../context/AuthContext';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface LoginResponse {
   success: boolean;
@@ -69,15 +70,13 @@ export function useAuth() {
         dispatch({ type: 'SET_USER', payload: userWithPermissions });
         dispatch({ type: 'SET_TOKEN', payload: token });
 
-        logger.info('Login successful:', { username: user.username });
+        loggerLoggingManager.getInstance().();
         return { success: true };
       } else {
         return { success: false, error: data.error || 'Login failed' };
       }
     } catch (error) {
-      logger.error('Login failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
       return { success: false, error: 'Login failed' };
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -103,14 +102,12 @@ export function useAuth() {
         localStorage.removeItem('token');
         dispatch({ type: 'CLEAR_AUTH' });
         navigate('/login');
-        logger.info('Logout successful');
+        loggerLoggingManager.getInstance().();
       } else {
-        logger.error('Logout failed:', { error: data.error });
+        loggerLoggingManager.getInstance().();
       }
     } catch (error) {
-      logger.error('Logout failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -140,16 +137,14 @@ export function useAuth() {
 
         dispatch({ type: 'SET_USER', payload: userWithPermissions });
         dispatch({ type: 'SET_TOKEN', payload: token });
-        logger.info('Token verification successful');
+        loggerLoggingManager.getInstance().();
       } else {
         localStorage.removeItem('token');
         dispatch({ type: 'CLEAR_AUTH' });
-        logger.warn('Token verification failed');
+        loggerLoggingManager.getInstance().();
       }
     } catch (error) {
-      logger.error('Token verification failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
       localStorage.removeItem('token');
       dispatch({ type: 'CLEAR_AUTH' });
     }
@@ -170,3 +165,4 @@ export function useAuth() {
     verify,
   };
 }
+

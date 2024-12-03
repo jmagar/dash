@@ -1,5 +1,6 @@
-import { logger } from '../../utils/logger';
+﻿import { logger } from '../../utils/logger';
 import type { ProcessInfo } from '../../../types/metrics';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 interface RawProcessInfo {
   pid: string | number;
@@ -93,9 +94,7 @@ export function parseProcessList(output: string): ProcessInfo[] {
 
       processes.push(processInfo);
     } catch (error) {
-      logger.error('Failed to parse process line:', {
-        line,
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
     }
   }
@@ -165,3 +164,4 @@ function parseStartTime(start: string): Date {
 
   return startTime;
 }
+

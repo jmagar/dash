@@ -1,8 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+﻿import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FileSystemManager } from '../services/filesystem/filesystem.manager';
 import { HealthCheckResponse } from '../../types/health';
 import { logger } from '../../logger';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 @ApiTags('Health')
 @Controller('health')
@@ -38,18 +39,11 @@ export class HealthController {
         },
       };
 
-      logger.info('Health check completed', {
-        status: health.status,
-        responseTime,
-        component: 'HealthController',
-      });
+      loggerLoggingManager.getInstance().();
 
       return health;
     } catch (error) {
-      logger.error('Health check failed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        component: 'HealthController',
-      });
+      loggerLoggingManager.getInstance().();
 
       return {
         status: 'unhealthy',
@@ -61,3 +55,4 @@ export class HealthController {
     }
   }
 }
+

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
@@ -9,7 +9,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
   res.on('finish', () => {
     const duration = Date.now() - start;
-    logger.info('Request processed', {
+    LoggingManager.getInstance().info('Request processed', {
       requestId: req.requestId,
       method: req.method,
       url: req.url,
@@ -21,3 +21,4 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
   next();
 };
+

@@ -1,40 +1,50 @@
-import type { User } from '../../types/auth';
-import { BaseRedisService } from './BaseRedisService';
+import { RedisConfig } from '../../types/redis';
+import { BaseCacheService } from './BaseCacheService';
+import type { SessionData } from '../../types/session';
 
-export class SessionCacheService extends BaseRedisService {
-  private readonly CACHE_KEY = 'session';
-  private readonly CACHE_TTL = 3600; // 1 hour
+/**
+ * Service for caching session data in Redis
+ */
+export class SessionCacheService extends BaseCacheService {
+  protected readonly CACHE_KEY = 'session';
+  protected readonly CACHE_TTL = 3600; // 1 hour
 
-  public async getSession(token: string): Promise<string | null> {
-    try {
-      this.checkConnection();
-      return await this._redis.get(`${this.CACHE_KEY}:${token}`);
-    } catch (error) {
-      this.handleError(error, 'get session');
-    }
+  constructor(config: RedisConfig) {
+    super(config);
   }
 
-  public async setSession(token: string, user: User, refreshToken: string): Promise<void> {
-    try {
-      this.checkConnection();
-      const sessionData = JSON.stringify({ user, refreshToken });
-      await this._redis.set(
-        `${this.CACHE_KEY}:${token}`,
-        sessionData,
-        'EX',
-        this.CACHE_TTL
-      );
-    } catch (error) {
-      this.handleError(error, 'set session');
-    }
+  /**
+   * Stores session data
+   */
+  public async set(token: string, data: SessionData): Promise<void> {
+    return super.set(token, data, { token: this.maskToken(token) });
   }
 
-  public async removeSession(token: string): Promise<void> {
-    try {
-      this.checkConnection();
-      await this._redis.del(`${this.CACHE_KEY}:${token}`);
-    } catch (error) {
-      this.handleError(error, 'remove session');
-    }
+  /**
+   * Retrieves session data
+   */
+  public async get(token: string): Promise<SessionData | null> {
+    return super.get<SessionData>(token, { token: this.maskToken(token) });
+  }
+
+  /**
+   * Removes session data
+   */
+  public async delete(token: string): Promise<void> {
+    return super.delete(token, { token: this.maskToken(token) });
+  }
+
+  /**
+   * Cleans up expired sessions
+   */
+  public async cleanup(): Promise<void> {
+    return this.cleanupExpired();
+  }
+
+  /**
+   * Mask token for logging
+   */
+  private maskToken(token: string): string {
+    return this.maskSensitiveData(token);
   }
 }

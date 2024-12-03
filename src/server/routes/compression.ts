@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { compressionService } from '../services/compression.service';
 import { asyncHandler } from '../middleware/async';
 import { requireAuth } from '../middleware/auth';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = Router();
 
@@ -13,7 +13,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { hostId, sourcePaths, targetPath } = req.body;
 
-    logger.info('Compressing files:', {
+    LoggingManager.getInstance().info('Compressing files:', {
       userId: req.user!.id,
       hostId,
       sourcePaths,
@@ -32,7 +32,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { hostId, sourcePath, targetPath } = req.body;
 
-    logger.info('Extracting files:', {
+    LoggingManager.getInstance().info('Extracting files:', {
       userId: req.user!.id,
       hostId,
       sourcePath,
@@ -52,7 +52,7 @@ router.get(
     const hostId = req.params.hostId;
     const archivePath = req.params[0];
 
-    logger.info('Listing archive contents:', {
+    LoggingManager.getInstance().info('Listing archive contents:', {
       userId: req.user!.id,
       hostId,
       archivePath,
@@ -64,3 +64,4 @@ router.get(
 );
 
 export default router;
+

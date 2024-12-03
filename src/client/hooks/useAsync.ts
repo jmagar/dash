@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef, DependencyList } from 'react';
+﻿import { useState, useEffect, useCallback, useRef, DependencyList } from 'react';
 
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export interface UseAsyncOptions<T> {
   immediate?: boolean;
@@ -48,10 +49,10 @@ export function useAsync<T>(
       setLoading(true);
       setError(null);
 
-      logger.debug('Starting async operation');
+      loggerLoggingManager.getInstance().();
       const response = await asyncFunctionRef.current();
 
-      logger.debug('Async operation completed successfully');
+      loggerLoggingManager.getInstance().();
       setData(response);
       setLoading(false);
 
@@ -63,10 +64,7 @@ export function useAsync<T>(
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
 
-      logger.error('Async operation failed:', {
-        error: error.message,
-        stack: error.stack,
-      });
+      loggerLoggingManager.getInstance().();
 
       setError(error.message);
       setLoading(false);
@@ -94,3 +92,4 @@ export function useAsync<T>(
 }
 
 export default useAsync;
+

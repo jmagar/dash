@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import type { Request, Response } from '../../../types/express';
 import type { Host, CreateHostRequest, UpdateHostRequest, ApiResponse } from '../../../types/models-shared';
 import { ApiError } from '../../../types/error';
@@ -9,6 +9,7 @@ import { LinuxHandler } from '../../services/agent-installer/linux-handler';
 import { WindowsHandler } from '../../services/agent-installer/windows-handler';
 import { getAgentService } from '../../services/agent.service';
 import { db } from '../../db';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 const router = Router();
 const agentInstaller = new AgentInstaller(
@@ -52,10 +53,7 @@ router.get('/', async (req: Request, res: Response<HostListResponse>) => {
       data: hosts,
     });
   } catch (error) {
-    logger.error('Failed to list hosts:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -95,11 +93,7 @@ router.get('/:id', async (req: Request<HostParams>, res: Response<HostResponse>)
       data: enrichedHost,
     });
   } catch (error) {
-    logger.error('Failed to get host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-      hostId: req.params.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -145,10 +139,7 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
           },
         });
       } catch (error) {
-        logger.error('Failed to install agent:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId: host.id,
-        });
+        loggerLoggingManager.getInstance().();
         // Continue since host was created successfully
       }
     }
@@ -158,10 +149,7 @@ router.post('/', async (req: Request<unknown, HostResponse, CreateHostRequest>, 
       data: host,
     });
   } catch (error) {
-    logger.error('Failed to create host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -206,11 +194,7 @@ router.put('/:id', async (req: Request<HostParams, HostResponse, UpdateHostReque
       data: result.rows[0],
     });
   } catch (error) {
-    logger.error('Failed to update host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-      hostId: req.params.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -242,10 +226,7 @@ router.delete('/:id', async (req: Request<HostParams>, res: Response<ApiResponse
       try {
         await agentInstaller.uninstallAgent(host);
       } catch (error) {
-        logger.error('Failed to uninstall agent:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId: host.id,
-        });
+        loggerLoggingManager.getInstance().();
         // Continue with deletion
       }
     }
@@ -260,11 +241,7 @@ router.delete('/:id', async (req: Request<HostParams>, res: Response<ApiResponse
       success: true,
     });
   } catch (error) {
-    logger.error('Failed to delete host:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-      hostId: req.params.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -303,11 +280,7 @@ router.post('/:id/agent/install', async (req: Request<HostParams>, res: Response
       message: 'Agent installed successfully',
     });
   } catch (error) {
-    logger.error('Failed to install agent:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-      hostId: req.params.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
@@ -340,13 +313,10 @@ router.post('/:id/agent/uninstall', async (req: Request<HostParams>, res: Respon
       message: 'Agent uninstalled successfully',
     });
   } catch (error) {
-    logger.error('Failed to uninstall agent:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user?.id,
-      hostId: req.params.id,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 });
 
 export default router;
+

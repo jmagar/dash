@@ -1,5 +1,6 @@
-import { Logger, LogMetadata, LogLevel, LogContext } from '../../../types/logger';
+﻿import { Logger, LogMetadata, LogLevel, LogContext } from '../../../types/logger';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 /**
  * Structured logging service that ensures consistent log format and context
@@ -152,15 +153,7 @@ export class LoggingService {
   }): void {
     const { hostId, fromState, toState, reason, metadata = {} } = params;
 
-    this.info(`Host state transition: ${fromState} -> ${toState}`, {
-      ...metadata,
-      hostId,
-      stateTransition: {
-        from: fromState,
-        to: toState,
-        reason
-      }
-    });
+    thisLoggingManager.getInstance().();
   }
 
   /**
@@ -237,3 +230,4 @@ export class LoggingService {
     };
   }
 }
+

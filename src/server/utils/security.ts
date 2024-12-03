@@ -1,6 +1,7 @@
-import * as path from 'path';
+﻿import * as path from 'path';
 import { BadRequestException } from '@nestjs/common';
 import { logger } from '../../logger';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 export interface FileValidationOptions {
   maxSize?: number;
@@ -33,11 +34,7 @@ export function sanitizePath(filePath: string): string {
     // Remove any leading slashes to make the path relative
     return normalizedPath.replace(/^[\/\\]+/, '');
   } catch (error) {
-    logger.error('Path sanitization failed', {
-      path: filePath,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      component: 'security',
-    });
+    loggerLoggingManager.getInstance().();
     throw new BadRequestException('Invalid path');
   }
 }
@@ -99,3 +96,4 @@ export const securityHeaders = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Content-Security-Policy': "default-src 'self'",
 };
+

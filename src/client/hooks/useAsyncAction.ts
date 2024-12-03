@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseAsyncActionOptions<T> {
   onSuccess?: (data: T) => void;
@@ -21,7 +22,7 @@ export function useAsyncAction<T>({ onSuccess, onError, onSettled }: UseAsyncAct
       return result;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('An error occurred');
-      logger.error('Async action failed:', { error });
+      loggerLoggingManager.getInstance().();
       setError(error);
       onError?.(error);
       throw error;
@@ -38,3 +39,4 @@ export function useAsyncAction<T>({ onSuccess, onError, onSettled }: UseAsyncAct
     setError,
   };
 }
+

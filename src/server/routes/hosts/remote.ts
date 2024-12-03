@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { createAuthHandler, type ApiResponse, type RequestQuery, type Response } from '../../../types/express';
 import type { CommandRequest, Command, CommandResult } from '../../../types/models-shared';
 import type { ProcessInfo } from '../../../types/process';
@@ -10,6 +10,7 @@ import { hostService } from '../../services/host.service';
 import { io } from '../../server';
 import { ProcessMonitorFactory } from '../../services/process/process-monitor-factory';
 import { ProcessCacheImpl } from '../../services/process/process-cache';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 interface HostParams {
   hostId: string;
@@ -94,11 +95,7 @@ router.post('/:hostId/execute', createAuthHandler<
       });
     })
     .catch(error => {
-      logger.error('Failed to execute command:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        command: req.body,
-      });
+      loggerLoggingManager.getInstance().();
       next(error);
     });
 }));
@@ -136,11 +133,7 @@ router.post('/:hostId/stream', createAuthHandler<
       });
     })
     .catch(error => {
-      logger.error('Failed to start command stream:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        command,
-      });
+      loggerLoggingManager.getInstance().();
       next(error);
     });
 }));
@@ -180,11 +173,7 @@ router.get('/:hostId/processes/:pid', createAuthHandler<
       });
     })
     .catch(error => {
-      logger.error('Failed to get process status:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        pid,
-      });
+      loggerLoggingManager.getInstance().();
       next(error);
     });
 }));
@@ -220,10 +209,7 @@ router.get('/:hostId/processes', createAuthHandler<
       });
     })
     .catch(error => {
-      logger.error('Failed to list processes:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-      });
+      loggerLoggingManager.getInstance().();
       next(error);
     });
 }));
@@ -259,14 +245,10 @@ router.post('/:hostId/processes/:pid/kill', createAuthHandler<
       });
     })
     .catch(error => {
-      logger.error('Failed to kill process:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        pid,
-        signal,
-      });
+      loggerLoggingManager.getInstance().();
       next(error);
     });
 }));
 
 export default router;
+

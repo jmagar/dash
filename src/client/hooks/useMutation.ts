@@ -1,5 +1,6 @@
-import { useCallback, useReducer } from 'react';
+﻿import { useCallback, useReducer } from 'react';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface MutationState<T> {
   data: T | null;
@@ -88,10 +89,7 @@ export function useMutation<T, V = void>(
         await onSettled?.(data, null, variables);
         return data;
       } catch (error) {
-        logger.error('Mutation error:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          variables,
-        });
+        loggerLoggingManager.getInstance().();
 
         const errorObj = error instanceof Error ? error : new Error('Unknown error');
         dispatch({ type: 'error', payload: errorObj });
@@ -115,3 +113,4 @@ export function useMutation<T, V = void>(
     },
   ];
 }
+

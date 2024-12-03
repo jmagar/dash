@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { preferencesService } from '../services/preferences.service';
 import { asyncHandler } from '../middleware/async';
 import { requireAuth } from '../middleware/auth';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = Router();
 
@@ -23,7 +23,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const { themeMode, accentColor } = req.body;
 
-    logger.info('Updating user preferences:', {
+    LoggingManager.getInstance().info('Updating user preferences:', {
       userId: req.user!.id,
       themeMode,
       accentColor,
@@ -39,3 +39,4 @@ router.put(
 );
 
 export default router;
+

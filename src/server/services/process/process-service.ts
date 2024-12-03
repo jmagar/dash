@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+﻿import { EventEmitter } from 'events';
 import { Server } from 'socket.io';
 import { logger } from '../../utils/logger';
 import { getAgentService } from '../agent.service';
@@ -9,6 +9,7 @@ import type { ProcessMonitor, ProcessCache, ProcessServiceOptions, ProcessServic
 import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
 import type { ProcessInfo } from '../../../types/metrics';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 class MapProcessCache implements ProcessCache {
   private readonly cache = new Map<string, Map<number, ProcessInfo>>();
@@ -110,10 +111,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       }
       return this.listProcesses(hostId);
     } catch (error) {
-      logger.error('Failed to get processes:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-      });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -174,12 +172,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       // Fallback to SSH
       await this.executeCommand(host, `kill -${signal} ${pid}`);
     } catch (error) {
-      logger.error('Failed to kill process:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        pid,
-        signal,
-      });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -198,10 +191,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       // Fallback to SSH
       return await this.listViaSSH(hostId);
     } catch (error) {
-      logger.error('Failed to list processes:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-      });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -219,10 +209,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
             socket.join(`host:${hostId}`);
           }
         } catch (error) {
-          logger.error('Failed to start monitoring:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            hostId,
-          });
+          loggerLoggingManager.getInstance().();
           socket.emit('process:error', {
             hostId,
             error: 'Failed to start monitoring',
@@ -239,11 +226,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
         try {
           await this.killProcess(hostId, pid, signal);
         } catch (error) {
-          logger.error('Failed to kill process:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            hostId,
-            pid,
-          });
+          loggerLoggingManager.getInstance().();
           socket.emit('process:error', {
             hostId,
             error: 'Failed to kill process',
@@ -335,11 +318,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       }
       return result.stdout;
     } catch (error) {
-      logger.error('Command execution failed:', {
-        hostId: host.id,
-        command,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -353,3 +332,4 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     this.removeAllListeners();
   }
 }
+

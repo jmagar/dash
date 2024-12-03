@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { chatService } from '../services/chat.service';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto } from '../routes/chat/dto/chat.dto';
 import { validate } from 'class-validator';
 import { plainToClass } from 'class-transformer';
@@ -31,7 +31,7 @@ router.post('/chat', async (req, res) => {
     const response = await chatService.chat(messageDto, settingsDto);
     res.json(response);
   } catch (error) {
-    logger.error('Chat API error:', {
+    LoggingManager.getInstance().error('Chat API error:', {
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({
@@ -42,3 +42,4 @@ router.post('/chat', async (req, res) => {
 });
 
 export default router;
+

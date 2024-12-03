@@ -1,9 +1,10 @@
-import type { Middleware, MiddlewareAPI, Dispatch } from '@reduxjs/toolkit';
+﻿import type { Middleware, MiddlewareAPI, Dispatch } from '@reduxjs/toolkit';
 import type { AxiosError } from 'axios';
 
 import type { LogMetadata } from '../../types/logger';
 import type { RootState } from '../store/storeTypes';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 /**
  * Type guard to check if an error is an Axios error
@@ -56,21 +57,22 @@ export const apiErrorMiddleware: Middleware<
           const status = error.response?.status;
           if (status) {
             if (status === 401 || status === 403) {
-              logger.warn('API Authentication Error:', metadata);
+              loggerLoggingManager.getInstance().();
             } else if (status >= 500) {
-              logger.error('API Server Error:', metadata);
+              loggerLoggingManager.getInstance().();
             } else if (status >= 400) {
-              logger.error('API Client Error:', metadata);
+              loggerLoggingManager.getInstance().();
             }
           } else if (error.code === 'ECONNABORTED') {
-            logger.error('API Timeout Error:', metadata);
+            loggerLoggingManager.getInstance().();
           } else if (error.code === 'ERR_NETWORK') {
-            logger.error('API Network Error:', metadata);
+            loggerLoggingManager.getInstance().();
           } else {
-            logger.error('API Unknown Error:', metadata);
+            loggerLoggingManager.getInstance().();
           }
         }
       }
 
       return next(action);
     };
+

@@ -1,8 +1,9 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+﻿import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import type { DockerContainer } from '@/types/docker';
 import type { RootState } from '@/client/store/storeTypes';
 import { listContainers, startContainer, stopContainer, removeContainer as removeContainerApi } from '@/client/api/docker.client';
 import { logger } from '@/client/utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface DockerState {
   containers: DockerContainer[];
@@ -29,8 +30,7 @@ export const fetchContainers = createAsyncThunk<
       const containers = await listContainers(hostId);
       return containers;
     } catch (error) {
-      logger.error('Failed to fetch containers:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       throw error;
     }
@@ -44,8 +44,7 @@ export const startContainerThunk = createAsyncThunk<string, { hostId: string; co
       await startContainer(hostId, containerId);
       return containerId;
     } catch (error) {
-      logger.error('Failed to start container:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       throw error;
     }
@@ -59,8 +58,7 @@ export const stopContainerThunk = createAsyncThunk<string, { hostId: string; con
       await stopContainer(hostId, containerId);
       return containerId;
     } catch (error) {
-      logger.error('Failed to stop container:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       throw error;
     }
@@ -74,8 +72,7 @@ export const removeContainerThunk = createAsyncThunk<string, { hostId: string; c
       await removeContainerApi(hostId, containerId);
       return containerId;
     } catch (error) {
-      logger.error('Failed to remove container:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       throw error;
     }
@@ -172,3 +169,4 @@ export const selectSelectedContainer = (state: RootState): DockerContainer | nul
 };
 export const selectIsLoading = (state: RootState): boolean => state.docker.loading;
 export const selectError = (state: RootState): string | null => state.docker.error;
+

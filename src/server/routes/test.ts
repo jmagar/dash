@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { ApiError } from '../../types/error';
 import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = Router();
 
@@ -13,7 +13,7 @@ export const testRoute: RequestHandler = async (req, res) => {
       method: req.method,
       path: req.path,
     };
-    logger.info('Test route accessed:', metadata);
+    LoggingManager.getInstance().info('Test route accessed:', metadata);
 
     return res.json({
       success: true,
@@ -23,7 +23,7 @@ export const testRoute: RequestHandler = async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Test route failed:', metadata);
+    LoggingManager.getInstance().error('Test route failed:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Test route failed',
@@ -41,3 +41,4 @@ export const testRoute: RequestHandler = async (req, res) => {
 router.get('/', testRoute);
 
 export default router;
+

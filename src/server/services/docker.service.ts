@@ -1,6 +1,7 @@
-import { BaseService, type ServiceMetrics } from './base.service';
+﻿import { BaseService, type ServiceMetrics } from './base.service';
 import { getAgentService } from './agent.service';
 import { ApiError } from '../../types/error';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 interface DockerMetrics {
   containers: number;
@@ -113,8 +114,7 @@ export class DockerService extends BaseService {
               state: String(container.State || '')
             };
           } catch (error) {
-            this.logger.error('Failed to parse container data', { 
-              error: error instanceof Error ? error : new Error(String(error)),
+            this.loggerLoggingManager.getInstance().()),
               line 
             });
             return null;
@@ -186,3 +186,4 @@ export class DockerService extends BaseService {
            typeof value.exitCode === 'number';
   }
 }
+

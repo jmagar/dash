@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   CanActivate,
   ExecutionContext,
@@ -9,6 +9,7 @@ import { Observable } from 'rxjs';
 import { Request } from 'express';
 import { rateLimitConfig } from '../utils/security';
 import { logger } from '../../logger';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 interface RateLimitInfo {
   count: number;
@@ -49,12 +50,7 @@ export class RateLimitGuard implements CanActivate {
 
     // Check if the limit has been exceeded
     if (rateLimitInfo.count > rateLimitConfig.limit) {
-      logger.warn('Rate limit exceeded', {
-        ip,
-        count: rateLimitInfo.count,
-        limit: rateLimitConfig.limit,
-        component: 'RateLimitGuard',
-      });
+      loggerLoggingManager.getInstance().();
 
       throw new HttpException(
         {
@@ -81,3 +77,4 @@ export class RateLimitGuard implements CanActivate {
     }
   }
 }
+

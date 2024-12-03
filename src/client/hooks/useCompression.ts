@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+﻿import { useCallback } from 'react';
 import { compressionApi } from '../api/compression';
 import { useLoadingOverlay } from './useLoadingOverlay';
 import { useSnackbar } from './useSnackbar';
 import { frontendLogger } from '../utils/frontendLogger';
 import type { ListArchiveResponse, CompressionError } from '../../types/api/compression';
 import type { NotificationSeverity } from '../store/types';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export function useCompression() {
   const { showLoading, hideLoading } = useLoadingOverlay();
@@ -37,22 +38,13 @@ export function useCompression() {
     async (hostId: string, sourcePaths: string[], targetPath: string): Promise<void> => {
       showLoading();
       try {
-        frontendLogger.debug('Compressing files', {
-          hostId,
-          sourcePaths,
-          targetPath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
 
         await compressionApi.compressFiles(hostId, sourcePaths, targetPath);
         showSnackbar('Files compressed successfully', 'success');
         return;
       } catch (error) {
-        frontendLogger.error('Failed to compress files:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId,
-          sourcePaths,
-          targetPath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
         return handleError(error, 'Failed to compress files');
       } finally {
         hideLoading();
@@ -65,22 +57,13 @@ export function useCompression() {
     async (hostId: string, sourcePath: string, targetPath: string): Promise<void> => {
       showLoading();
       try {
-        frontendLogger.debug('Extracting files', {
-          hostId,
-          sourcePath,
-          targetPath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
 
         await compressionApi.extractFiles(hostId, sourcePath, targetPath);
         showSnackbar('Files extracted successfully', 'success');
         return;
       } catch (error) {
-        frontendLogger.error('Failed to extract files:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId,
-          sourcePath,
-          targetPath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
         return handleError(error, 'Failed to extract files');
       } finally {
         hideLoading();
@@ -93,19 +76,12 @@ export function useCompression() {
     async (hostId: string, archivePath: string): Promise<ListArchiveResponse> => {
       showLoading();
       try {
-        frontendLogger.debug('Listing archive contents', {
-          hostId,
-          archivePath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
 
         const contents = await compressionApi.listArchiveContents(hostId, archivePath);
         return contents;
       } catch (error) {
-        frontendLogger.error('Failed to list archive contents:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId,
-          archivePath,
-        });
+        frontendLoggerLoggingManager.getInstance().();
         return handleError(error, 'Failed to list archive contents');
       } finally {
         hideLoading();
@@ -120,3 +96,4 @@ export function useCompression() {
     listArchiveContents,
   };
 }
+

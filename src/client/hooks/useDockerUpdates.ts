@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import type { Container } from '../../types/models-shared';
 import { listContainers } from '../api/docker.client';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export interface UseDockerUpdatesOptions {
   interval?: number;
@@ -27,8 +28,7 @@ export function useDockerUpdates({ interval = 5000, hostId }: UseDockerUpdatesOp
       const data = await listContainers(hostId);
       setContainers(data);
     } catch (error) {
-      logger.error('Failed to fetch containers:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
       });
       setError('Failed to fetch containers');
     } finally {
@@ -55,3 +55,4 @@ export function useDockerUpdates({ interval = 5000, hostId }: UseDockerUpdatesOp
     refresh: fetchContainers,
   };
 }
+

@@ -1,10 +1,11 @@
 import { RedisClientType } from 'redis';
 import { CACHE_KEYS, CACHE_TTL } from './keys';
 import { FileSystemState, ProcessState, NetworkState, UserState, AppState, SystemState } from '../../types/chatbot';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { metrics } from '../metrics';
 import { errorAggregator } from '../services/errorAggregator';
-import { ApiError } from '../../types/error';
+import { RedisError, RedisErrorCode } from '../../types/redis';
+import { getErrorMessage, wrapError } from './utils/error';
 
 export class ContextCache {
   constructor(private readonly redis: RedisClientType) {}
@@ -21,21 +22,16 @@ export class ContextCache {
       return result;
     } catch (error) {
       metrics.increment('cache.operation.error');
-      const errorMessage = error instanceof Error ? error.message : 'Unknown cache error';
-      const metadata = {
+      const redisError = wrapError(error, 'Cache operation failed', {
+        service: this.constructor.name,
         ...context,
-        error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined,
         duration: Date.now() - startTime
-      };
+      });
 
-      logger.error('Cache operation failed', metadata);
-      errorAggregator.trackError(
-        error instanceof Error ? error : new Error(errorMessage),
-        metadata
-      );
+      LoggingManager.getInstance().error('Cache operation failed', { error: redisError.toJSON() });
+      errorAggregator.trackError(redisError, redisError.metadata);
 
-      throw new ApiError('Cache operation failed', undefined, 500);
+      throw redisError;
     }
   }
 
@@ -207,3 +203,4 @@ export class ContextCache {
     };
   }
 }
+

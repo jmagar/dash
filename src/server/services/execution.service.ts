@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { Server } from 'socket.io';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { getAgentService } from './agent.service';
 import { sshService } from './ssh.service';
 import { db } from '../db';
@@ -57,7 +57,7 @@ class ExecutionService extends EventEmitter {
 
       return await this.executeViaAgent(host.id, command, options);
     } catch (error) {
-      logger.error('Command execution failed:', {
+      LoggingManager.getInstance().error('Command execution failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id,
         command: request.command,
@@ -214,3 +214,4 @@ class ExecutionService extends EventEmitter {
 
 // Export singleton instance with global.io from socket setup
 export const executionService = new ExecutionService(global.io);
+

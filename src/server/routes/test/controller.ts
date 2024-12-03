@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export const testRoute = async (
   req: Request,
@@ -12,14 +13,15 @@ export const testRoute = async (
       method: req.method,
       path: req.path,
     };
-    logger.info('Test route accessed:', metadata);
+    loggerLoggingManager.getInstance().();
 
     res.json(new ApiResponse({
       success: true,
       message: 'Test route working'
     }));
   } catch (error) {
-    logger.error('Error in test route:', error);
+    loggerLoggingManager.getInstance().();
     throw new ApiError(500, 'Test route error');
   }
 };
+

@@ -1,9 +1,10 @@
-import { EventEmitter } from 'events';
+﻿import { EventEmitter } from 'events';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
 import http from 'http';
 import { logger } from '../../utils/logger';
 import { AgentConnection, AgentInfo, HeartbeatInfo, Message } from './agent';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 interface ServerConfig {
   server: http.Server;
@@ -23,7 +24,7 @@ export class AgentManager extends EventEmitter {
   private setupWebSocketServer() {
     this.wss.on('connection', (ws, req) => {
       if (!req.url || !req.headers.host) {
-        logger.warn('Connection attempt with invalid request');
+        loggerLoggingManager.getInstance().();
         ws.close();
         return;
       }
@@ -33,7 +34,7 @@ export class AgentManager extends EventEmitter {
       const agentId = url.searchParams.get('agent_id');
 
       if (!agentId) {
-        logger.warn('Connection attempt without agent ID');
+        loggerLoggingManager.getInstance().();
         ws.close();
         return;
       }
@@ -41,9 +42,7 @@ export class AgentManager extends EventEmitter {
       // Check if agent is already connected
       const existingAgent = this.agents.get(agentId);
       if (existingAgent) {
-        logger.warn('Agent already connected, terminating old connection', {
-          agentId,
-        });
+        loggerLoggingManager.getInstance().();
         existingAgent.terminate();
       }
 
@@ -72,11 +71,11 @@ export class AgentManager extends EventEmitter {
 
     // Handle server errors
     this.wss.on('error', (error) => {
-      logger.error('WebSocket server error', { error });
+      loggerLoggingManager.getInstance().();
     });
 
     // Log server start
-    logger.info('WebSocket server started on /ws/agent');
+    loggerLoggingManager.getInstance().();
   }
 
   // Get all connected agents
@@ -129,9 +128,10 @@ export class AgentManager extends EventEmitter {
 
     return new Promise((resolve) => {
       this.wss.close(() => {
-        logger.info('WebSocket server shut down');
+        loggerLoggingManager.getInstance().();
         resolve();
       });
     });
   }
 }
+

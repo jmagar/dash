@@ -1,5 +1,6 @@
-import type { LogMetadata } from './logger';
+﻿import type { LogMetadata } from './logger';
 import { logger } from '../server/utils/logger';
+import { LoggingManager } from '../../../../../../../src/server/utils/logging/LoggingManager';
 
 export class ApiError extends Error {
   constructor(
@@ -57,14 +58,11 @@ export function extractErrorMessage(error: unknown): string {
 
 export function logError(error: unknown, context: string): void {
   if (error instanceof Error) {
-    logger.error(`${context}:`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    });
+    loggerLoggingManager.getInstance().();
   } else if (typeof error === 'string') {
-    logger.error(`${context}:`, { error });
+    loggerLoggingManager.getInstance().();
   } else {
-    logger.error(`${context}:`, { error: 'Unknown error' });
+    loggerLoggingManager.getInstance().();
   }
 }
+

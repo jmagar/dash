@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
 import type { DockerStats } from '@/types/docker';
 import { logger } from '../utils/frontendLogger';
 import { useQuery } from './useQuery';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseDockerStatsOptions {
   hostId: string;
@@ -62,7 +63,7 @@ export function useDockerStats(options: UseDockerStatsOptions | string): UseDock
     enabled: enabled,
     onSuccess: (data) => setStats(data),
     onError: (err) => {
-      logger.error('Docker stats error:', { error: err.message });
+      loggerLoggingManager.getInstance().();
     }
   });
 
@@ -82,7 +83,7 @@ export function useDockerStats(options: UseDockerStatsOptions | string): UseDock
       const [data] = args;
       const errorData = data as { hostId: string; error: string };
       if (errorData.hostId === hostId) {
-        logger.error('Docker stats error:', { error: errorData.error });
+        loggerLoggingManager.getInstance().();
       }
     }
 
@@ -103,3 +104,4 @@ export function useDockerStats(options: UseDockerStatsOptions | string): UseDock
     refresh: refetch,
   };
 }
+

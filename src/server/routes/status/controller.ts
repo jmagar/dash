@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { monitoringService } from '../../services/monitoring';
 import { HealthCheckResponse } from '../../types/middleware';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 /**
  * Get detailed system status (protected endpoint)
@@ -11,7 +12,7 @@ export async function getStatus(req: Request, res: Response) {
     const health = await monitoringService.performHealthCheck();
     res.json(health);
   } catch (error) {
-    logger.error('Failed to get system status:', error);
+    loggerLoggingManager.getInstance().();
     res.status(500).json({
       success: false,
       message: 'Failed to get system status',
@@ -37,7 +38,7 @@ export async function healthCheck(req: Request, res: Response) {
 
     res.status(statusCode).json(response);
   } catch (error) {
-    logger.error('Health check failed:', error);
+    loggerLoggingManager.getInstance().();
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date(),
@@ -45,3 +46,4 @@ export async function healthCheck(req: Request, res: Response) {
     });
   }
 }
+

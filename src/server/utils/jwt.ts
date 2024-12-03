@@ -1,9 +1,10 @@
-import jwt from 'jsonwebtoken';
+﻿import jwt from 'jsonwebtoken';
 import { promisify } from 'util';
 import ms from 'ms';
 import config from '../config';
 import { logger } from './logger';
 import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 export type TokenPayload = AccessTokenPayloadDto | RefreshTokenPayloadDto;
 
@@ -20,10 +21,7 @@ export async function generateToken(
       expiresIn,
     });
   } catch (error) {
-    logger.error('Failed to generate token:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      payload,
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 }
@@ -43,9 +41,7 @@ export async function verifyToken(token: string): Promise<TokenPayload> {
     });
     return decoded as TokenPayload;
   } catch (error) {
-    logger.error('Failed to verify token:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    loggerLoggingManager.getInstance().();
     throw error;
   }
 }
@@ -57,3 +53,4 @@ export function getTokenExpiry(type: 'access' | 'refresh'): string {
 export function getTokenExpiryMs(type: 'access' | 'refresh'): number {
   return ms(getTokenExpiry(type));
 }
+

@@ -1,4 +1,4 @@
-import type { WebSocket } from 'ws';
+﻿import type { WebSocket } from 'ws';
 import type { Socket } from 'socket.io';
 import type { 
   AgentMessage, 
@@ -20,6 +20,7 @@ import {
 import { logger } from '../../../utils/logger';
 import { MetricsService } from './metrics.service';
 import { ConnectionService } from './connection.service';
+import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
 
 export class MessageHandler {
   private readonly metricsService: MetricsService;
@@ -42,7 +43,7 @@ export class MessageHandler {
       const message = validateAgentMessage(data);
       await this.handleMessage(message, ws, connectionId);
     } catch (error) {
-      logger.error('Failed to handle WebSocket message', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(ws, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
     }
   }
@@ -56,7 +57,7 @@ export class MessageHandler {
       const message = validateAgentMessage(data);
       await this.handleMessage(message, socket, connectionId);
     } catch (error) {
-      logger.error('Failed to handle Socket.IO message', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(socket, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
     }
   }
@@ -92,7 +93,7 @@ export class MessageHandler {
 
       this.metricsService.recordMessageHandlingTime(message.type, Date.now() - startTime);
     } catch (error) {
-      logger.error('Failed to handle message', { error, messageType: message.type, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
       this.metricsService.recordMessageError(message.type);
     }
@@ -109,12 +110,12 @@ export class MessageHandler {
       const agentId = validateAgentId(agentInfo.id);
       await this.connectionService.registerAgent(agentId, connectionId, agentInfo);
       
-      logger.info('Agent registered successfully', { agentId, connectionId });
+      loggerLoggingManager.getInstance().();
       this.metricsService.recordAgentRegistration();
       
       this.sendSuccessResponse(connection, 'register', { agentId });
     } catch (error) {
-      logger.error('Failed to register agent', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.REGISTRATION_ERROR, 'Failed to register agent', error);
       this.metricsService.recordRegistrationError();
     }
@@ -131,12 +132,12 @@ export class MessageHandler {
       const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
       await this.connectionService.updateAgentHeartbeat(agentId, metrics);
       
-      logger.debug('Heartbeat received', { agentId, connectionId });
+      loggerLoggingManager.getInstance().();
       this.metricsService.recordHeartbeat();
       
       this.sendSuccessResponse(connection, 'heartbeat', { agentId });
     } catch (error) {
-      logger.error('Failed to process heartbeat', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.HEARTBEAT_ERROR, 'Failed to process heartbeat', error);
       this.metricsService.recordHeartbeatError();
     }
@@ -153,12 +154,12 @@ export class MessageHandler {
       const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
       await this.metricsService.recordAgentMetrics(agentId, metrics);
       
-      logger.debug('Metrics received', { agentId, connectionId });
+      loggerLoggingManager.getInstance().();
       this.metricsService.recordMetricsUpdate();
       
       this.sendSuccessResponse(connection, 'metrics', { agentId });
     } catch (error) {
-      logger.error('Failed to process metrics', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.METRICS_ERROR, 'Failed to process metrics', error);
       this.metricsService.recordMetricsError();
     }
@@ -175,12 +176,12 @@ export class MessageHandler {
       const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
       await this.connectionService.processCommandResponse(agentId, commandResult);
       
-      logger.info('Command response received', { agentId, connectionId, commandId: commandResult.id });
+      loggerLoggingManager.getInstance().();
       this.metricsService.recordCommandResponse();
       
       this.sendSuccessResponse(connection, 'command_response', { agentId });
     } catch (error) {
-      logger.error('Failed to process command response', { error, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.COMMAND_ERROR, 'Failed to process command response', error);
       this.metricsService.recordCommandError();
     }
@@ -197,12 +198,12 @@ export class MessageHandler {
       const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
       await this.connectionService.recordAgentError(agentId, error);
       
-      logger.error('Agent error received', { agentId, connectionId, error });
+      loggerLoggingManager.getInstance().();
       this.metricsService.recordAgentError();
       
       this.sendSuccessResponse(connection, 'error', { agentId });
     } catch (err) {
-      logger.error('Failed to process agent error', { error: err, connectionId });
+      loggerLoggingManager.getInstance().();
       this.sendErrorResponse(connection, ERROR_CODES.ERROR_HANDLING_ERROR, 'Failed to process agent error', err);
       this.metricsService.recordErrorHandlingError();
     }
@@ -248,3 +249,4 @@ export class MessageHandler {
     }
   }
 }
+

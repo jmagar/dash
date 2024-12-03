@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   // Get from local storage then parse stored json or return initialValue
@@ -11,7 +12,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       const item = window.localStorage.getItem(key);
       return item ? (JSON.parse(item) as T) : initialValue;
     } catch (error) {
-      console.warn(`Error reading localStorage key "${key}":`, error);
+      consoleLoggingManager.getInstance().();
       return initialValue;
     }
   }, [initialValue, key]);
@@ -36,7 +37,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         window.dispatchEvent(new Event('local-storage'));
       }
     } catch (error) {
-      console.warn(`Error setting localStorage key "${key}":`, error);
+      consoleLoggingManager.getInstance().();
     }
   }, [key, storedValue]);
 
@@ -61,3 +62,4 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 }
 
 export default useLocalStorage;
+

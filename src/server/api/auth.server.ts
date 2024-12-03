@@ -14,7 +14,7 @@ import type {
 } from '../../types/auth';
 import config from '../config';
 import { db } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 interface UserRecord {
   id: string;
@@ -128,7 +128,7 @@ export async function login(
       user: authenticatedUser,
     });
   } catch (error) {
-    logger.error('Login failed:', {
+    LoggingManager.getInstance().error('Login failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     res.status(500).json({
@@ -150,7 +150,7 @@ export async function logout(
       success: true,
     });
   } catch (error) {
-    logger.error('Logout failed:', {
+    LoggingManager.getInstance().error('Logout failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     res.status(500).json({
@@ -252,7 +252,7 @@ export async function validate(
       });
     }
   } catch (error) {
-    logger.error('Token validation failed:', {
+    LoggingManager.getInstance().error('Token validation failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     res.status(500).json({
@@ -343,7 +343,7 @@ export async function refresh(
       });
     }
   } catch (error) {
-    logger.error('Token refresh failed:', {
+    LoggingManager.getInstance().error('Token refresh failed:', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     res.status(500).json({
@@ -352,3 +352,4 @@ export async function refresh(
     });
   }
 }
+

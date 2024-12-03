@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+﻿import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface PageParam {
   pageParam?: number;
@@ -112,9 +113,7 @@ export function useInfiniteQuery<T>(
         onSuccess?.([data]);
       }
     } catch (error) {
-      logger.error('Infinite query error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
 
       if (mountedRef.current) {
         const errorObj = error instanceof Error ? error : new Error('Unknown error');
@@ -145,9 +144,7 @@ export function useInfiniteQuery<T>(
         onSuccess?.([...state.pages, data]);
       }
     } catch (error) {
-      logger.error('Infinite query next page error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
 
       if (mountedRef.current) {
         const errorObj = error instanceof Error ? error : new Error('Unknown error');
@@ -179,3 +176,4 @@ export function useInfiniteQuery<T>(
     fetchNextPage,
   };
 }
+

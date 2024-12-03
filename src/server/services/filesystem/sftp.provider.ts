@@ -1,8 +1,9 @@
-import { Client, SFTPWrapper } from 'ssh2';
+﻿import { Client, SFTPWrapper } from 'ssh2';
 import type { ClientConfig, SFTPStats } from 'ssh2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 interface SFTPFileEntry {
   filename: string;
@@ -55,7 +56,7 @@ export class SFTPProvider implements FileSystemProvider {
         this.client.connect(config);
       });
     } catch (error) {
-      logger.error('Failed to connect to SFTP server', { error });
+      loggerLoggingManager.getInstance().();
       await this.disconnect();
       throw error;
     }
@@ -72,7 +73,7 @@ export class SFTPProvider implements FileSystemProvider {
         this.sftp = null;
       }
     } catch (error) {
-      logger.error('Error disconnecting from SFTP server', { error });
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -257,3 +258,4 @@ export class SFTPProvider implements FileSystemProvider {
     }
   }
 }
+

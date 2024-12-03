@@ -1,7 +1,7 @@
 import { performance } from 'perf_hooks';
 import type { Response, NextFunction } from 'express';
 import type { Request } from 'express';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { monitoringService } from '../services/monitoring';
 
 export interface RequestTiming {
@@ -81,7 +81,7 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
 
     // Log based on status code
     if (res.statusCode >= 500) {
-      logger.error('Server error response:', metadata);
+      LoggingManager.getInstance().error('Server error response:', metadata);
       void monitoringService.updateServiceStatus('api', {
         name: 'api',
         status: 'unhealthy',
@@ -89,9 +89,9 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
         lastCheck: new Date()
       });
     } else if (res.statusCode >= 400) {
-      logger.warn('Client error response:', metadata);
+      LoggingManager.getInstance().warn('Client error response:', metadata);
     } else {
-      logger.info('Request completed:', metadata);
+      LoggingManager.getInstance().info('Request completed:', metadata);
     }
 
     if (extendedRes.__originalJson) {
@@ -107,7 +107,7 @@ export function requestTracer(req: Request, res: Response, next: NextFunction): 
 
   // Handle request errors
   res.on('error', (error: Error) => {
-    logger.error('Request error:', {
+    LoggingManager.getInstance().error('Request error:', {
       error: error.message,
       stack: error.stack,
       method: req.method,
@@ -131,7 +131,7 @@ export function performanceMonitor(threshold = 1000) {
     res.on('finish', () => {
       const duration = performance.now() - start;
       if (duration > threshold) {
-        logger.warn('Slow request detected:', {
+        LoggingManager.getInstance().warn('Slow request detected:', {
           duration,
           method: req.method,
           path: req.path,
@@ -151,3 +151,4 @@ export function performanceMonitor(threshold = 1000) {
     next();
   };
 }
+

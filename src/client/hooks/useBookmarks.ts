@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { Bookmark } from '@prisma/client';
 import {
   listBookmarks,
@@ -8,6 +8,7 @@ import {
   updateLastAccessed,
 } from '../api/bookmarks.client';
 import { frontendLogger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface BookmarkContext {
   path: string;
@@ -35,9 +36,7 @@ async function updateChatContext(bookmarks: BookmarkContext[]): Promise<void> {
       throw new Error(data.error || 'Failed to update chat context');
     }
   } catch (error) {
-    frontendLogger.error('Failed to update chat context:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    frontendLoggerLoggingManager.getInstance().();
     // Don't throw error for context updates
   }
 }
@@ -54,9 +53,7 @@ export function useBookmarks() {
         const data = await listBookmarks();
         setBookmarks(data);
       } catch (error) {
-        frontendLogger.error('Failed to load bookmarks:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        frontendLoggerLoggingManager.getInstance().();
         setError(error instanceof Error ? error : new Error('Failed to load bookmarks'));
       } finally {
         setLoading(false);
@@ -93,11 +90,7 @@ export function useBookmarks() {
 
       return bookmark;
     } catch (error) {
-      frontendLogger.error('Failed to add bookmark:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        path,
-      });
+      frontendLoggerLoggingManager.getInstance().();
       throw error;
     }
   }, [bookmarks]);
@@ -117,11 +110,7 @@ export function useBookmarks() {
         }));
       void updateChatContext(contextBookmarks);
     } catch (error) {
-      frontendLogger.error('Failed to remove bookmark:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        path,
-      });
+      frontendLoggerLoggingManager.getInstance().();
       throw error;
     }
   }, [bookmarks]);
@@ -147,11 +136,7 @@ export function useBookmarks() {
       }));
       void updateChatContext(contextBookmarks);
     } catch (error) {
-      frontendLogger.error('Failed to update bookmark notes:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        path,
-      });
+      frontendLoggerLoggingManager.getInstance().();
       throw error;
     }
   }, [bookmarks]);
@@ -168,11 +153,7 @@ export function useBookmarks() {
         )
       );
     } catch (error) {
-      frontendLogger.error('Failed to update bookmark last accessed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        path,
-      });
+      frontendLoggerLoggingManager.getInstance().();
       // Don't throw error for last accessed updates
     }
   }, []);
@@ -197,3 +178,4 @@ export function useBookmarks() {
     getBookmark,
   };
 }
+

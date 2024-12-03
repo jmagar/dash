@@ -1,7 +1,7 @@
 import { BaseService } from './base.service';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { cacheService } from '../cache/cache.service';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { ApiError } from '../types/api-error';
 import config from '../config';
 import { PrismaClient } from '@prisma/client';
@@ -101,7 +101,7 @@ export class AuthService extends BaseService {
 
       return response;
     } catch (error) {
-      logger.error('Login failed', { error });
+      LoggingManager.getInstance().error('Login failed', { error });
       const response = new LoginResponseDto();
       response.success = false;
       response.error = error instanceof ApiError ? error.message : 'Login failed';
@@ -134,7 +134,7 @@ export class AuthService extends BaseService {
 
       return response;
     } catch (error) {
-      logger.error('Token validation failed', { error });
+      LoggingManager.getInstance().error('Token validation failed', { error });
       return {
         success: false,
         valid: false,
@@ -184,7 +184,7 @@ export class AuthService extends BaseService {
 
       return response;
     } catch (error) {
-      logger.error('Token refresh failed', { error });
+      LoggingManager.getInstance().error('Token refresh failed', { error });
       const response = new RefreshTokenResponseDto();
       response.success = false;
       response.error = error instanceof ApiError ? error.message : 'Token refresh failed';
@@ -200,7 +200,7 @@ export class AuthService extends BaseService {
       response.success = true;
       return response;
     } catch (error) {
-      logger.error('Logout failed', { error });
+      LoggingManager.getInstance().error('Logout failed', { error });
       const response = new LogoutResponseDto();
       response.success = false;
       response.error = error instanceof ApiError ? error.message : 'Logout failed';
@@ -215,3 +215,4 @@ export class AuthService extends BaseService {
 }
 
 export const authService = new AuthService();
+

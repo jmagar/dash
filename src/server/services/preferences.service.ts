@@ -1,6 +1,6 @@
 import { UserPreferences } from '@prisma/client';
 import { prisma } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 export class PreferencesService {
   async getPreferences(userId: string): Promise<UserPreferences | null> {
@@ -9,7 +9,7 @@ export class PreferencesService {
         where: { userId },
       });
     } catch (error) {
-      logger.error('Failed to get user preferences:', {
+      LoggingManager.getInstance().error('Failed to get user preferences:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
       });
@@ -31,7 +31,7 @@ export class PreferencesService {
         },
       });
     } catch (error) {
-      logger.error('Failed to update user preferences:', {
+      LoggingManager.getInstance().error('Failed to update user preferences:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         data,
@@ -42,3 +42,4 @@ export class PreferencesService {
 }
 
 export const preferencesService = new PreferencesService();
+

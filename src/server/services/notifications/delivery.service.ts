@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { logger } from '../../utils/logger';
 import { Server as SocketIOServer } from 'socket.io';
 import config from '../../config';
@@ -15,6 +15,7 @@ import {
   NotificationEvent
 } from '../../../types/notifications';
 import { NotificationDeliveryOptions } from './types';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class NotificationDeliveryService {
   private readonly GOTIFY_PRIORITIES: Record<NotificationType, number> = {
@@ -52,18 +53,9 @@ export class NotificationDeliveryService {
         await this.sendGotifyNotification(notification, preferences);
       }
 
-      logger.info('Notification delivered', {
-        notificationId: notification.id,
-        userId: notification.userId,
-        type: notification.type
-      });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
-      logger.error('Failed to deliver notification', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId: notification.id,
-        userId: notification.userId,
-        type: notification.type
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to deliver notification', 500);
     }
   }
@@ -90,19 +82,10 @@ export class NotificationDeliveryService {
 
         this.io.to(`user:${notification.userId}`).emit('notification', event);
 
-        logger.info('Web notification sent', {
-          notificationId: notification.id,
-          userId: notification.userId,
-          type: notification.type
-        });
+        loggerLoggingManager.getInstance().();
         resolve();
       } catch (error) {
-        logger.error('Failed to send web notification', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          notificationId: notification.id,
-          userId: notification.userId,
-          type: notification.type
-        });
+        loggerLoggingManager.getInstance().();
         reject(new ApiError('Failed to send web notification', 500));
       }
     });
@@ -143,19 +126,10 @@ export class NotificationDeliveryService {
 
         this.io.to(`user:${notification.userId}`).emit('notification', event);
 
-        logger.info('Desktop notification sent', {
-          notificationId: notification.id,
-          userId: notification.userId,
-          type: notification.type
-        });
+        loggerLoggingManager.getInstance().();
         resolve();
       } catch (error) {
-        logger.error('Failed to send desktop notification', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          notificationId: notification.id,
-          userId: notification.userId,
-          type: notification.type
-        });
+        loggerLoggingManager.getInstance().();
         reject(new ApiError('Failed to send desktop notification', 500));
       }
     });
@@ -167,10 +141,7 @@ export class NotificationDeliveryService {
   ): Promise<void> {
     try {
       if (!this.gotifyUrl || !this.gotifyToken) {
-        logger.warn('Gotify not configured', {
-          notificationId: notification.id,
-          userId: notification.userId
-        });
+        loggerLoggingManager.getInstance().();
         return;
       }
 
@@ -206,18 +177,9 @@ export class NotificationDeliveryService {
 
       this.io.to(`user:${notification.userId}`).emit('notification', event);
 
-      logger.info('Gotify notification sent', {
-        notificationId: notification.id,
-        userId: notification.userId,
-        type: notification.type
-      });
+      loggerLoggingManager.getInstance().();
     } catch (error) {
-      logger.error('Failed to send Gotify notification', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        notificationId: notification.id,
-        userId: notification.userId,
-        type: notification.type
-      });
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to send Gotify notification', 500);
     }
   }
@@ -281,3 +243,4 @@ export let deliveryService: NotificationDeliveryService;
 export function initializeDeliveryService(io: SocketIOServer) {
   deliveryService = new NotificationDeliveryService(io);
 }
+

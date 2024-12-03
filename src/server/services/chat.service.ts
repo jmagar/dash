@@ -1,7 +1,7 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import config from '../config';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto, ChatRole } from '../routes/chat/dto/chat.dto';
 import { plainToClass } from 'class-transformer';
 
@@ -69,7 +69,7 @@ class ChatService {
         success: true
       });
     } catch (error) {
-      logger.error('Chat service error:', {
+      LoggingManager.getInstance().error('Chat service error:', {
         error: error instanceof Error ? error.message : String(error),
       });
       
@@ -87,3 +87,4 @@ class ChatService {
 }
 
 export const chatService = new ChatService();
+

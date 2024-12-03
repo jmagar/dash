@@ -1,6 +1,6 @@
 import { ApiError, createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 export interface ConnectionConfig {
   connectionTimeout: number;
@@ -29,7 +29,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.connectionTimeout,
       minimumRequired: 1000,
     };
-    logger.warn('Invalid connection timeout:', metadata);
+    LoggingManager.getInstance().warn('Invalid connection timeout:', metadata);
     throw new ApiError('Connection timeout must be at least 1000ms', undefined, 400, metadata);
   }
 
@@ -39,7 +39,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.keepAliveInterval,
       minimumRequired: 1000,
     };
-    logger.warn('Invalid keep alive interval:', metadata);
+    LoggingManager.getInstance().warn('Invalid keep alive interval:', metadata);
     throw new ApiError('Keep alive interval must be at least 1000ms', undefined, 400, metadata);
   }
 
@@ -49,7 +49,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.keepAliveCountMax,
       minimumRequired: 1,
     };
-    logger.warn('Invalid keep alive count max:', metadata);
+    LoggingManager.getInstance().warn('Invalid keep alive count max:', metadata);
     throw new ApiError('Keep alive count max must be at least 1', undefined, 400, metadata);
   }
 
@@ -59,7 +59,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.maxRetries,
       minimumRequired: 0,
     };
-    logger.warn('Invalid max retries:', metadata);
+    LoggingManager.getInstance().warn('Invalid max retries:', metadata);
     throw new ApiError('Max retries cannot be negative', undefined, 400, metadata);
   }
 
@@ -69,7 +69,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.retryDelay,
       minimumRequired: 100,
     };
-    logger.warn('Invalid retry delay:', metadata);
+    LoggingManager.getInstance().warn('Invalid retry delay:', metadata);
     throw new ApiError('Retry delay must be at least 100ms', undefined, 400, metadata);
   }
 
@@ -79,7 +79,7 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.maxConnections,
       minimumRequired: 1,
     };
-    logger.warn('Invalid max connections:', metadata);
+    LoggingManager.getInstance().warn('Invalid max connections:', metadata);
     throw new ApiError('Max connections must be at least 1', undefined, 400, metadata);
   }
 
@@ -89,12 +89,12 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
       value: config.idleTimeout,
       minimumRequired: 1000,
     };
-    logger.warn('Invalid idle timeout:', metadata);
+    LoggingManager.getInstance().warn('Invalid idle timeout:', metadata);
     throw new ApiError('Idle timeout must be at least 1000ms', undefined, 400, metadata);
   }
 
   // Log successful validation
-  logger.info('Connection configuration validated', {
+  LoggingManager.getInstance().info('Connection configuration validated', {
     connectionTimeout: config.connectionTimeout,
     keepAliveInterval: config.keepAliveInterval,
     keepAliveCountMax: config.keepAliveCountMax,
@@ -110,3 +110,4 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
 export const connectionConfig = validateConfig();
 
 export default connectionConfig;
+

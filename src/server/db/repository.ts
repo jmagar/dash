@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { metrics } from '../metrics';
 import { errorAggregator } from '../services/errorAggregator';
 import { ApiError } from '../../types/error';
@@ -21,7 +21,7 @@ export class DatabaseRepository {
 
     // Log all database queries in debug mode
     this.prisma.$on('query', (e: any) => {
-      logger.debug('Database query', {
+      LoggingManager.getInstance().debug('Database query', {
         query: e.query,
         params: e.params,
         duration: e.duration,
@@ -30,7 +30,7 @@ export class DatabaseRepository {
 
     // Log all database errors
     this.prisma.$on('error', (e: any) => {
-      logger.error('Database error', {
+      LoggingManager.getInstance().error('Database error', {
         message: e.message,
         target: e.target,
       });
@@ -87,7 +87,7 @@ export class DatabaseRepository {
         duration: Date.now() - startTime,
       };
 
-      logger.error('Database operation failed', metadata);
+      LoggingManager.getInstance().error('Database operation failed', metadata);
       errorAggregator.trackError(
         error instanceof Error ? error : new Error(errorMessage),
         metadata
@@ -384,3 +384,4 @@ export class DatabaseRepository {
     await this.prisma.$disconnect();
   }
 }
+

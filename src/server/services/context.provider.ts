@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 import { cache } from '../cache';
 import { db } from '../db';
 import { metrics } from '../metrics';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 export class ContextProvider extends EventEmitter {
   private static instance: ContextProvider;
@@ -77,7 +77,7 @@ export class ContextProvider extends EventEmitter {
         metrics: systemMetrics
       };
     } catch (error) {
-      logger.error('Failed to update system state', {
+      LoggingManager.getInstance().error('Failed to update system state', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -210,3 +210,4 @@ export class ContextProvider extends EventEmitter {
     this.emit('context:query:updated', this.context.lastQuery);
   }
 }
+

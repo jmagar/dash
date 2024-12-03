@@ -5,7 +5,7 @@ import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { cacheService } from '../cache/CacheService';
 import { db } from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ interface StatusResponse {
 
 const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
   try {
-    logger.info('Checking system status');
+    LoggingManager.getInstance().info('Checking system status');
 
     // Check database connection
     const dbHealth = await db.healthCheck();
@@ -35,7 +35,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
       const metadata: LogMetadata = {
         error: dbHealth.error,
       };
-      logger.error('Database connection failed:', metadata);
+      LoggingManager.getInstance().error('Database connection failed:', metadata);
       throw new ApiError(`Database connection failed: ${dbHealth.error}`, undefined, 500, metadata);
     }
 
@@ -45,7 +45,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
       const metadata: LogMetadata = {
         error: cacheHealth.error,
       };
-      logger.error('Cache connection failed:', metadata);
+      LoggingManager.getInstance().error('Cache connection failed:', metadata);
       throw new ApiError(`Cache connection failed: ${cacheHealth.error}`, undefined, 500, metadata);
     }
 
@@ -66,7 +66,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
       memory,
     };
 
-    logger.info('System status check completed', status);
+    LoggingManager.getInstance().info('System status check completed', status);
 
     return res.json({
       success: true,
@@ -76,7 +76,7 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
     const metadata: LogMetadata = {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to get system status:', metadata);
+    LoggingManager.getInstance().error('Failed to get system status:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to get system status',
@@ -105,3 +105,4 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
 router.get('/', getStatus);
 
 export default router;
+

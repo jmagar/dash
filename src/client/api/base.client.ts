@@ -1,9 +1,10 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+﻿import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import { Socket, io } from 'socket.io-client';
 import { config } from '../config';
 import { logger } from '../utils/frontendLogger';
 import { createApiError } from '../../types/error';
 import type { ApiResponse } from '../../types/express';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export interface BaseClientConfig {
   baseURL?: string;
@@ -53,9 +54,7 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
         return config;
       },
       (error) => {
-        logger.error('API request error:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        loggerLoggingManager.getInstance().();
         return Promise.reject(error);
       }
     );
@@ -65,11 +64,7 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
       (response) => response,
       (error: unknown) => {
         const axiosError = error as AxiosError;
-        logger.error('API response error:', {
-          message: axiosError.message,
-          status: axiosError.response?.status,
-          data: axiosError.response?.data,
-        });
+        loggerLoggingManager.getInstance().();
         return Promise.reject(error);
       }
     );
@@ -77,17 +72,15 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
 
   private setupSocketHandlers() {
     this.socket.on('connect', () => {
-      logger.info('Socket connected');
+      loggerLoggingManager.getInstance().();
     });
 
     this.socket.on('disconnect', (reason) => {
-      logger.warn('Socket disconnected:', { reason });
+      loggerLoggingManager.getInstance().();
     });
 
     this.socket.on('connect_error', (error) => {
-      logger.error('Socket connection error:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      loggerLoggingManager.getInstance().();
     });
   }
 
@@ -135,3 +128,4 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     return endpoint;
   }
 }
+

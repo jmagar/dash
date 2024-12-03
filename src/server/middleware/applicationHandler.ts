@@ -2,7 +2,7 @@ import type { Application, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../../types/error';
 import { errorHandler, notFoundHandler } from './error';
 import type { LogMetadata } from '../../types/logger';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 /**
  * Configure global application handlers for logging, monitoring, and error handling
@@ -23,7 +23,7 @@ export function configureApplicationHandlers(app: Application): void {
         stack: error.stack,
       },
     };
-    logger.error('Uncaught Exception:', metadata);
+    LoggingManager.getInstance().error('Uncaught Exception:', metadata);
 
     // Give logger time to write before exiting
     setTimeout(() => {
@@ -36,10 +36,10 @@ export function configureApplicationHandlers(app: Application): void {
     const metadata: LogMetadata = {
       error: reason instanceof Error ? reason : String(reason)
     };
-    logger.error('Unhandled Rejection:', metadata);
+    LoggingManager.getInstance().error('Unhandled Rejection:', metadata);
   });
 
-  logger.info('Application handlers configured');
+  LoggingManager.getInstance().info('Application handlers configured');
 }
 
 /**
@@ -62,7 +62,7 @@ export function createRouteErrorHandler(routeName: string) {
       userId: req.user?.id,
     };
 
-    logger.error('Route error:', metadata);
+    LoggingManager.getInstance().error('Route error:', metadata);
 
     res.status(500).json({
       success: false,
@@ -70,3 +70,4 @@ export function createRouteErrorHandler(routeName: string) {
     });
   };
 }
+

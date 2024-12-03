@@ -1,7 +1,8 @@
-import { useEffect, useCallback } from 'react';
+﻿import { useEffect, useCallback } from 'react';
 import { logger } from '../utils/frontendLogger';
 import { useSocket } from './useSocket';
 import type { DesktopNotification } from '../../types/notifications';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseDesktopNotificationsResult {
   requestPermission: () => Promise<boolean>;
@@ -16,7 +17,7 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (!('Notification' in window)) {
-      logger.warn('This browser does not support desktop notifications');
+      loggerLoggingManager.getInstance().();
       return false;
     }
 
@@ -29,8 +30,7 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
         const permission = await Notification.requestPermission();
         return permission === 'granted';
       } catch (error) {
-        logger.error('Failed to request notification permission:', {
-          error: error instanceof Error ? error.message : String(error),
+        loggerLoggingManager.getInstance().(),
         });
         return false;
       }
@@ -69,8 +69,7 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
         setTimeout(() => notification.close(), duration);
       }
     } catch (error) {
-      logger.error('Failed to show desktop notification:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         title,
         message,
       });
@@ -97,3 +96,4 @@ export function useDesktopNotifications(): UseDesktopNotificationsResult {
     enabled: 'Notification' in window && Notification.permission === 'granted',
   };
 }
+

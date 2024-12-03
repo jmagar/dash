@@ -7,7 +7,7 @@ import {
   Histogram,
   Gauge,
 } from 'prom-client';
-import { logger } from './utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 // Create a new registry
 const register = new Registry();
@@ -140,14 +140,14 @@ export function setupMetrics(app: Application, io: SocketServer): void {
         res.send(metrics);
       })
       .catch(error => {
-        logger.error('Error generating metrics', {
+        LoggingManager.getInstance().error('Error generating metrics', {
           error: error instanceof Error ? error.message : 'Unknown error'
         });
         res.status(500).send('Error generating metrics');
       });
   });
 
-  logger.info('Metrics setup complete');
+  LoggingManager.getInstance().info('Metrics setup complete');
 }
 
 // Handle socket disconnect
@@ -155,7 +155,7 @@ function handleSocketDisconnect(hostId: string): void {
   try {
     hostMetrics.set({ host_id: hostId, metric_type: 'connected' }, 0);
   } catch (error) {
-    logger.error('Error handling socket disconnect', {
+    LoggingManager.getInstance().error('Error handling socket disconnect', {
       error: error instanceof Error ? error.message : 'Unknown error',
       hostId
     });
@@ -170,11 +170,11 @@ export const metrics = {
   hostMetrics,
   serviceMetrics,
   initialize(): void {
-    logger.info('Initializing metrics collection...');
+    LoggingManager.getInstance().info('Initializing metrics collection...');
     collectDefaultMetrics({ register });
   },
   cleanup(): void {
-    logger.info('Cleaning up metrics...');
+    LoggingManager.getInstance().info('Cleaning up metrics...');
     register.clear();
   },
   histogram(name: string, value: number, labels: Record<string, string | number>): void {
@@ -200,3 +200,4 @@ export function recordHostMetric(hostId: string, metricType: string, value: numb
 }
 
 export type { MetricLabels, ErrorLabels, HostMetricLabels, OperationLabels, ServiceMetricLabels };
+

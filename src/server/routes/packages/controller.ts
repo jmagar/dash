@@ -1,10 +1,11 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
 import { query } from '../../db';
 import { PackageParams, InstallPackageDto } from './dto/packages.dto';
 import { Package } from '../../types/models-shared';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export const listPackages = async (
   req: Request<PackageParams>,
@@ -13,7 +14,7 @@ export const listPackages = async (
   const { hostId } = req.params;
   const logMeta = { userId: req.user!.id, hostId };
 
-  logger.info('Listing packages', logMeta);
+  loggerLoggingManager.getInstance().();
 
   try {
     const result = await query(
@@ -40,7 +41,7 @@ export const listPackages = async (
 
     res.json(new ApiResponse(packages));
   } catch (error) {
-    logger.error('Error listing packages:', error, logMeta);
+    loggerLoggingManager.getInstance().();
     throw new ApiError(500, 'Failed to list packages');
   }
 };
@@ -58,7 +59,7 @@ export const installPackage = async (
     package: packageName,
   };
 
-  logger.info('Installing package', logMeta);
+  loggerLoggingManager.getInstance().();
 
   try {
     // Check if package exists
@@ -83,10 +84,11 @@ export const installPackage = async (
 
     res.json(new ApiResponse(undefined));
   } catch (error) {
-    logger.error('Error installing package:', error, logMeta);
+    loggerLoggingManager.getInstance().();
     if (error instanceof ApiError) {
       throw error;
     }
     throw new ApiError(500, 'Failed to install package');
   }
 };
+

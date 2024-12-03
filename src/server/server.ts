@@ -11,7 +11,7 @@ import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { createClient } from 'redis';
 import config from './config';
-import { logger } from './utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { errorHandler, notFoundHandler, corsConfig } from './middleware/security';
 import { setupMetrics, metrics } from './metrics';
 import { ProcessMonitorFactory } from './services/process/process-monitor-factory';
@@ -100,7 +100,7 @@ class Server {
       });
 
       redisClient.on('error', (err) => {
-        logger.error('Redis client error:', {
+        LoggingManager.getInstance().error('Redis client error:', {
           error: err instanceof Error ? err.message : 'Unknown error',
           stack: err instanceof Error ? err.stack : undefined,
         });
@@ -131,7 +131,7 @@ class Server {
 
       // Socket.IO connection handling
       this.io.on('connection', (socket) => {
-        logger.info('Client connected:', {
+        LoggingManager.getInstance().info('Client connected:', {
           id: socket.id,
           handshake: {
             address: socket.handshake.address,
@@ -141,11 +141,11 @@ class Server {
         });
 
         socket.on('disconnect', () => {
-          logger.info('Client disconnected:', { id: socket.id });
+          LoggingManager.getInstance().info('Client disconnected:', { id: socket.id });
         });
 
         socket.on('error', (error: Error) => {
-          logger.error('Socket error:', {
+          LoggingManager.getInstance().error('Socket error:', {
             id: socket.id,
             error: error.message,
             stack: error.stack,
@@ -156,10 +156,10 @@ class Server {
       // Start listening
       const port = config.server.port;
       this.httpServer.listen(port, () => {
-        logger.info(`Server started on port ${port}`);
+        LoggingManager.getInstance().info(`Server started on port ${port}`);
       });
     } catch (error) {
-      logger.error('Failed to initialize server:', {
+      LoggingManager.getInstance().error('Failed to initialize server:', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -179,7 +179,7 @@ class Server {
       this.io.close();
       this.httpServer.close();
     } catch (error) {
-      logger.error('Error during server cleanup:', {
+      LoggingManager.getInstance().error('Error during server cleanup:', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -190,7 +190,7 @@ class Server {
 const server = new Server();
 
 server.initialize().catch((error) => {
-  logger.error('Error initializing server:', {
+  LoggingManager.getInstance().error('Error initializing server:', {
     error: error instanceof Error ? error.message : String(error),
   });
   process.exit(1);
@@ -198,13 +198,14 @@ server.initialize().catch((error) => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Starting graceful shutdown...');
+  LoggingManager.getInstance().info('SIGTERM received. Starting graceful shutdown...');
   server.cleanup().then(() => {
     process.exit(0);
   }).catch((error) => {
-    logger.error('Error during server cleanup:', {
+    LoggingManager.getInstance().error('Error during server cleanup:', {
       error: error instanceof Error ? error.message : String(error),
     });
     process.exit(1);
   });
 });
+

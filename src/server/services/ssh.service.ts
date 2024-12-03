@@ -1,6 +1,6 @@
 import { Client } from 'ssh2';
 import { EventEmitter } from 'events';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import type { Host, CommandResult } from '../../types/models-shared';
 import type { LogMetadata } from '../../types/logger';
 import { db } from '../db';
@@ -73,7 +73,7 @@ export class SSHService extends EventEmitter {
           level: err.level,
           hostname: host.hostname
         };
-        logger.error('SSH connection error', metadata);
+        LoggingManager.getInstance().error('SSH connection error', metadata);
         reject(new ApiError(`Failed to connect to host: ${err.message}`, 500));
       });
 
@@ -81,7 +81,7 @@ export class SSHService extends EventEmitter {
         const connection = this.connections.get(host.id);
         if (connection) {
           connection.connected = false;
-          logger.info('SSH connection ended', { hostname: host.hostname });
+          LoggingManager.getInstance().info('SSH connection ended', { hostname: host.hostname });
         }
       });
 
@@ -127,7 +127,7 @@ export class SSHService extends EventEmitter {
             hostname: host.hostname,
             command
           };
-          logger.error('SSH command execution error', metadata);
+          LoggingManager.getInstance().error('SSH command execution error', metadata);
           reject(new ApiError(`Command execution failed: ${err.message}`, 500));
         });
 
@@ -169,7 +169,7 @@ export class SSHService extends EventEmitter {
             localPath,
             remotePath
           };
-          logger.error('Failed to create SFTP session', metadata);
+          LoggingManager.getInstance().error('Failed to create SFTP session', metadata);
           reject(new ApiError(`Failed to create SFTP session: ${err.message}`, 500));
           return;
         }
@@ -187,7 +187,7 @@ export class SSHService extends EventEmitter {
               localPath,
               remotePath
             };
-            logger.error('Failed to transfer file', metadata);
+            LoggingManager.getInstance().error('Failed to transfer file', metadata);
             reject(new ApiError(`Failed to transfer file: ${err.message}`, 500));
             return;
           }
@@ -214,7 +214,7 @@ export class SSHService extends EventEmitter {
         error: error instanceof Error ? error.message : String(error),
         hostname: host.hostname
       };
-      logger.error('SSH operation failed', metadata);
+      LoggingManager.getInstance().error('SSH operation failed', metadata);
       throw new ApiError(`SSH operation failed: ${error instanceof Error ? error.message : String(error)}`, 500);
     } finally {
       // Don't disconnect - connection is managed by connection pool
@@ -249,7 +249,7 @@ export class SSHService extends EventEmitter {
 
       return result.rows[0];
     } catch (error) {
-      logger.error('Failed to get host from database', {
+      LoggingManager.getInstance().error('Failed to get host from database', {
         error: error instanceof Error ? error.message : String(error),
         hostname
       });
@@ -260,3 +260,4 @@ export class SSHService extends EventEmitter {
 
 // Export singleton instance
 export const sshService = new SSHService();
+

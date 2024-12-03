@@ -1,8 +1,9 @@
-import { Client as SSHClient } from 'ssh2';
+﻿import { Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import type { Host } from '../../../types/host';
 import type { EmergencyOperations, OperationResult } from './types';
 import { HostState } from './types';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 /**
  * EmergencyService provides critical operations when the agent is unavailable
@@ -42,7 +43,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
           await this.execCommand(ssh, 'sudo systemctl restart shh-agent');
           return;
         } catch (error) {
-          this.logger.warn('Failed to restart agent via systemctl', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
+          this.loggerLoggingManager.getInstance().();
         }
 
         // Fallback to process kill
@@ -60,7 +61,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
         state: HostState.MAINTENANCE
       };
     } catch (error) {
-      this.logger.error('Failed to restart agent', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
+      this.loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error : new Error('Unknown error'),
@@ -92,7 +93,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
         state: HostState.ACTIVE
       };
     } catch (error) {
-      this.logger.error('Failed to kill process', { error: error instanceof Error ? error.message : 'Unknown error', hostId, pid });
+      this.loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error : new Error('Unknown error'),
@@ -131,7 +132,7 @@ export class EmergencyService extends BaseService implements EmergencyOperations
         state: HostState.ACTIVE
       };
     } catch (error) {
-      this.logger.error('Host connectivity check failed', { error: error instanceof Error ? error.message : 'Unknown error', hostId });
+      this.loggerLoggingManager.getInstance().();
       return {
         success: false,
         error: error instanceof Error ? error : new Error('Unknown error'),
@@ -216,3 +217,4 @@ export class EmergencyService extends BaseService implements EmergencyOperations
     await this.execCommand(ssh, 'curl -s -S --max-time 5 https://google.com > /dev/null');
   }
 }
+

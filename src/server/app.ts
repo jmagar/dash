@@ -2,7 +2,7 @@ import express, { json, urlencoded } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { logger } from './utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestLogger, slowRequestLogger } from './middleware/logging';
 import { apiLimiter } from './middleware/rateLimit';
@@ -66,7 +66,7 @@ app.use(errorHandler);
 
 // Unhandled rejection handler
 process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
-  logger.error('Unhandled Rejection at:', {
+  LoggingManager.getInstance().error('Unhandled Rejection at:', {
     promise,
     reason: reason instanceof Error ? reason.message : reason,
     stack: reason instanceof Error ? reason.stack : undefined
@@ -75,21 +75,21 @@ process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) =>
 
 // Uncaught exception handler
 process.on('uncaughtException', (error: Error) => {
-  logger.error('Uncaught Exception:', {
+  LoggingManager.getInstance().error('Uncaught Exception:', {
     error: error.message,
     stack: error.stack
   });
   
   // Perform graceful shutdown
   setTimeout(() => {
-    logger.info('Shutting down due to uncaught exception');
+    LoggingManager.getInstance().info('Shutting down due to uncaught exception');
     process.exit(1);
   }, 1000);
 });
 
 // Graceful shutdown handler
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Performing graceful shutdown...');
+  LoggingManager.getInstance().info('SIGTERM received. Performing graceful shutdown...');
   
   // Stop monitoring
   void monitoringService.stopMonitoring();
@@ -97,7 +97,7 @@ process.on('SIGTERM', () => {
   // Close server
   if (server) {
     server.close(() => {
-      logger.info('Server closed');
+      LoggingManager.getInstance().info('Server closed');
       process.exit(0);
     });
   } else {
@@ -108,7 +108,7 @@ process.on('SIGTERM', () => {
 // Start server
 const PORT = process.env.PORT || 3000;
 server = app.listen(PORT, () => {
-  logger.info(`Server started on port ${PORT}`);
+  LoggingManager.getInstance().info(`Server started on port ${PORT}`);
   
   // Start monitoring service
   void monitoringService.startMonitoring();
@@ -120,3 +120,4 @@ server = app.listen(PORT, () => {
 });
 
 export { app, server };
+

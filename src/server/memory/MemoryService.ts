@@ -2,7 +2,7 @@ import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
 import config from '../config';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 interface Memory {
   id: string;
@@ -34,7 +34,7 @@ export class MemoryService extends EventEmitter {
     super();
     this.startMonitoring();
     this.initializePython().catch(error => {
-      logger.error('Failed to initialize MemoryService:', {
+      LoggingManager.getInstance().error('Failed to initialize MemoryService:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     });
@@ -67,7 +67,7 @@ export class MemoryService extends EventEmitter {
 
       if (this.pythonProcess.stderr) {
         this.pythonProcess.stderr.on('data', (data: Buffer) => {
-          logger.error('Python process error:', {
+          LoggingManager.getInstance().error('Python process error:', {
             error: data.toString(),
           });
         });
@@ -82,7 +82,7 @@ export class MemoryService extends EventEmitter {
         this.pythonProcess.on('error', reject);
         this.pythonProcess.on('close', (code: number) => {
           if (code !== 0) {
-            logger.error('Python process exited with code:', { code });
+            LoggingManager.getInstance().error('Python process exited with code:', { code });
             this.isInitialized = false;
             reject(new Error(`Python process exited with code ${code}`));
           } else {
@@ -92,7 +92,7 @@ export class MemoryService extends EventEmitter {
         });
       });
     } catch (error) {
-      logger.error('Failed to initialize Python process:', {
+      LoggingManager.getInstance().error('Failed to initialize Python process:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
@@ -164,7 +164,7 @@ export class MemoryService extends EventEmitter {
 
       this.emit('stats', this.stats);
     } catch (error) {
-      logger.error('Failed to update memory stats:', {
+      LoggingManager.getInstance().error('Failed to update memory stats:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
@@ -202,7 +202,7 @@ export class MemoryService extends EventEmitter {
         ], user_id="${userId}")
       `);
     } catch (error) {
-      logger.error('Failed to add memory:', {
+      LoggingManager.getInstance().error('Failed to add memory:', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -219,7 +219,7 @@ export class MemoryService extends EventEmitter {
       `);
       return memories;
     } catch (error) {
-      logger.error('Failed to search memories:', {
+      LoggingManager.getInstance().error('Failed to search memories:', {
         userId,
         query,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -236,7 +236,7 @@ export class MemoryService extends EventEmitter {
       `);
       return memories;
     } catch (error) {
-      logger.error('Failed to get all memories:', {
+      LoggingManager.getInstance().error('Failed to get all memories:', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -266,3 +266,4 @@ export class MemoryService extends EventEmitter {
 }
 
 export const memoryService = new MemoryService();
+

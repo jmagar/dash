@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+﻿import { useCallback } from 'react';
 import { socket } from '../socket';
 import { logger } from '../utils/frontendLogger';
 import { useQuery } from './useQuery';
@@ -6,6 +6,7 @@ import { useMutation } from './useMutation';
 
 import type { NotificationPreferences, NotificationType } from '@/types/notifications';
 import type { NotificationPreferencesResponse } from '@/types/socket-events';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 interface UseNotificationPreferencesOptions {
   userId: string;
@@ -39,7 +40,7 @@ export function useNotificationPreferences({ userId, enabled = true }: UseNotifi
   } = useQuery(fetchPreferences, {
     enabled,
     onError: (err) => {
-      logger.error('Failed to load notification preferences:', { error: err.message });
+      loggerLoggingManager.getInstance().();
     }
   });
 
@@ -71,7 +72,7 @@ export function useNotificationPreferences({ userId, enabled = true }: UseNotifi
 
   const [updatePreferences, updateState] = useMutation(updatePreferencesFn, {
     onError: (err) => {
-      logger.error('Failed to update notification preferences:', { error: err.message });
+      loggerLoggingManager.getInstance().();
     }
   });
 
@@ -84,3 +85,4 @@ export function useNotificationPreferences({ userId, enabled = true }: UseNotifi
       updatePreferences({ channel, types }),
   };
 }
+

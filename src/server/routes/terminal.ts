@@ -6,7 +6,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { ApiResponse } from '../../types/models-shared';
 import cache from '../cache';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = express.Router();
 
@@ -71,7 +71,7 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
     const commandId = String(hostId);
     await cache.setCommand(commandId, JSON.stringify(commandData));
 
-    logger.info('Command cached', {
+    LoggingManager.getInstance().info('Command cached', {
       userId: req.user.id,
       hostId: String(hostId),
       command,
@@ -90,7 +90,7 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
       workingDirectory,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to cache command:', metadata);
+    LoggingManager.getInstance().error('Failed to cache command:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to cache command',
@@ -146,7 +146,7 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to get command history:', metadata);
+    LoggingManager.getInstance().error('Failed to get command history:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to get command history',
@@ -166,3 +166,4 @@ router.post('/:hostId/command', createAuthHandler(cacheCommand));
 router.get('/:hostId/history', createAuthHandler(getCommandHistory));
 
 export default router;
+

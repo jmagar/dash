@@ -1,6 +1,7 @@
-import { api } from './api';
+﻿import { api } from './api';
 import { frontendLogger } from '../utils/frontendLogger';
 import type {
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
   CompressionRequest,
   ExtractionRequest,
   ListArchiveRequest,
@@ -53,11 +54,7 @@ class CompressionApiClient implements CompressionApi {
         'compression'
       );
 
-      frontendLogger.debug('Sending compress request', {
-        hostId,
-        sourcePaths,
-        targetPath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       const request: CompressionRequest = {
         hostId,
@@ -67,12 +64,7 @@ class CompressionApiClient implements CompressionApi {
 
       await api.post<void>('/api/compression/compress', request);
     } catch (error) {
-      frontendLogger.error('Failed to compress files:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        sourcePaths,
-        targetPath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       throw CompressionApiError.fromError(error, 'COMPRESSION_ERROR', {
         hostId,
@@ -89,11 +81,7 @@ class CompressionApiClient implements CompressionApi {
         'extraction'
       );
 
-      frontendLogger.debug('Sending extract request', {
-        hostId,
-        sourcePath,
-        targetPath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       const request: ExtractionRequest = {
         hostId,
@@ -103,12 +91,7 @@ class CompressionApiClient implements CompressionApi {
 
       await api.post<void>('/api/compression/extract', request);
     } catch (error) {
-      frontendLogger.error('Failed to extract files:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        sourcePath,
-        targetPath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       throw CompressionApiError.fromError(error, 'EXTRACTION_ERROR', {
         hostId,
@@ -125,10 +108,7 @@ class CompressionApiClient implements CompressionApi {
         'list'
       );
 
-      frontendLogger.debug('Listing archive contents', {
-        hostId,
-        archivePath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       const response = await api.get<ListArchiveResponse>(
         `/api/compression/list/${encodeURIComponent(hostId)}/${encodeURIComponent(archivePath)}`
@@ -136,11 +116,7 @@ class CompressionApiClient implements CompressionApi {
 
       return response.data;
     } catch (error) {
-      frontendLogger.error('Failed to list archive contents:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-        archivePath,
-      });
+      frontendLoggerLoggingManager.getInstance().();
 
       throw CompressionApiError.fromError(error, 'LIST_ERROR', {
         hostId,
@@ -151,3 +127,4 @@ class CompressionApiClient implements CompressionApi {
 }
 
 export const compressionApi = new CompressionApiClient();
+

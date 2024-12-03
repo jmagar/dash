@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { notificationsService } from '../services/notifications.service';
 import { validateRequest } from '../middleware/validation';
 import { requireAuth } from '../middleware/auth';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import type { AuthenticatedRequest } from '../../types/express';
 import type { ApiResult } from '../../types/api-shared';
 import type { NotificationType } from '../../types/notifications';
@@ -55,7 +55,7 @@ router.get(
       };
       res.json(response);
     } catch (error) {
-      logger.error('Failed to get notifications:', {
+      LoggingManager.getInstance().error('Failed to get notifications:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -91,7 +91,7 @@ router.get(
       };
       res.json(response);
     } catch (error) {
-      logger.error('Failed to get notification counts:', {
+      LoggingManager.getInstance().error('Failed to get notification counts:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -120,7 +120,7 @@ router.post(
       await notificationsService.markAsRead(req.user.id, [req.params.id]);
       res.json({ success: true });
     } catch (error) {
-      logger.error('Failed to mark notification as read:', {
+      LoggingManager.getInstance().error('Failed to mark notification as read:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -150,7 +150,7 @@ router.post(
       await notificationsService.markAsRead(req.user.id, notificationIds);
       res.json({ success: true });
     } catch (error) {
-      logger.error('Failed to mark notifications as read:', {
+      LoggingManager.getInstance().error('Failed to mark notifications as read:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -180,7 +180,7 @@ router.delete(
       await notificationsService.deleteNotifications(req.user.id, notificationIds);
       res.json({ success: true });
     } catch (error) {
-      logger.error('Failed to delete notifications:', {
+      LoggingManager.getInstance().error('Failed to delete notifications:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -208,7 +208,7 @@ router.get(
       };
       res.json(response);
     } catch (error) {
-      logger.error('Failed to get notification preferences:', {
+      LoggingManager.getInstance().error('Failed to get notification preferences:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -271,7 +271,7 @@ router.put(
       });
       res.json({ success: true });
     } catch (error) {
-      logger.error('Failed to update notification preferences:', {
+      LoggingManager.getInstance().error('Failed to update notification preferences:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       res.status(500).json({
@@ -283,3 +283,4 @@ router.put(
 );
 
 export default router;
+

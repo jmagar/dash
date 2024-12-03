@@ -1,7 +1,8 @@
-import { createClient, WebDAVClient, FileStat } from 'webdav';
+﻿import { createClient, WebDAVClient, FileStat } from 'webdav';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class WebDAVProvider implements FileSystemProvider {
   readonly type = 'webdav' as FileSystemType;
@@ -21,7 +22,7 @@ export class WebDAVProvider implements FileSystemProvider {
       // Test connection
       await this.client.getDirectoryContents('/');
     } catch (error) {
-      logger.error('WebDAV connection error:', error);
+      loggerLoggingManager.getInstance().();
       this.client = null;
       throw error;
     }
@@ -49,7 +50,7 @@ export class WebDAVProvider implements FileSystemProvider {
         }
       }));
     } catch (error) {
-      logger.error('WebDAV list files error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -64,7 +65,7 @@ export class WebDAVProvider implements FileSystemProvider {
       }
       return Buffer.from(response as Buffer);
     } catch (error) {
-      logger.error('WebDAV read file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -75,7 +76,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.putFileContents(path, content);
     } catch (error) {
-      logger.error('WebDAV write file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -86,7 +87,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.deleteFile(path);
     } catch (error) {
-      logger.error('WebDAV delete error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -97,7 +98,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.moveFile(oldPath, newPath);
     } catch (error) {
-      logger.error('WebDAV rename error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -108,7 +109,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.createDirectory(path);
     } catch (error) {
-      logger.error('WebDAV mkdir error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -132,7 +133,7 @@ export class WebDAVProvider implements FileSystemProvider {
         permissions: '644' // Default permissions since WebDAV doesn't provide this
       };
     } catch (error) {
-      logger.error('WebDAV stat error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -143,7 +144,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.copyFile(sourcePath, targetPath);
     } catch (error) {
-      logger.error('WebDAV copy file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -154,7 +155,7 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.moveFile(sourcePath, targetPath);
     } catch (error) {
-      logger.error('WebDAV move file error:', error);
+      loggerLoggingManager.getInstance().();
       throw error;
     }
   }
@@ -185,3 +186,4 @@ export class WebDAVProvider implements FileSystemProvider {
     }
   }
 }
+

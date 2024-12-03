@@ -1,4 +1,4 @@
-import { 
+﻿import { 
   createLogger,
   transports,
   format,
@@ -25,6 +25,7 @@ import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { GotifyTransport } from './gotifyTransport';
 import * as os from 'os';
+import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
 
 // Use platform-specific log directory
 const isWindows = os.platform() === 'win32';
@@ -35,7 +36,7 @@ const logFile = join(logDir, 'app.log');
 try {
   mkdirSync(logDir, { recursive: true });
 } catch (error) {
-  console.warn(`Failed to create log directory: ${error}`);
+  consoleLoggingManager.getInstance().();
 }
 
 // Custom format that includes metadata
@@ -94,7 +95,7 @@ class ServerLogger implements Logger {
     // Handle uncaught promise rejections
     process.on('unhandledRejection', (reason: Error | unknown) => {
       const error = reason instanceof Error ? reason : new Error(String(reason));
-      this.error('Unhandled Promise Rejection', { error: error.message, stack: error.stack });
+      thisLoggingManager.getInstance().();
     });
   }
 
@@ -109,23 +110,23 @@ class ServerLogger implements Logger {
   }
 
   debug(message: string, meta?: LogMetadata): void {
-    this.logger.debug(message, this.formatMessage('debug', message, meta));
+    this.loggerLoggingManager.getInstance().());
   }
 
   info(message: string, meta?: LogMetadata): void {
-    this.logger.info(message, this.formatMessage('info', message, meta));
+    this.loggerLoggingManager.getInstance().());
   }
 
   warn(message: string, meta?: LogMetadata): void {
-    this.logger.warn(message, this.formatMessage('warn', message, meta));
+    this.loggerLoggingManager.getInstance().());
   }
 
   error(message: string, meta?: LogMetadata): void {
-    this.logger.error(message, this.formatMessage('error', message, meta));
+    this.loggerLoggingManager.getInstance().());
   }
 
   critical(message: string, meta?: LogMetadata): void {
-    this.logger.error(message, this.formatMessage('critical', message, meta));
+    this.loggerLoggingManager.getInstance().());
   }
 
   withContext(context: Record<string, unknown>): Logger {
@@ -139,4 +140,5 @@ class ServerLogger implements Logger {
   }
 }
 
-export const logger = new ServerLogger();
+export 
+

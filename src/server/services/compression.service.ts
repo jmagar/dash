@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { BaseService } from './base.service';
 import type { LogMetadata } from '../../types/logger';
 
@@ -11,7 +11,7 @@ const execAsync = promisify(exec);
 export class CompressionService extends BaseService {
   async compressFiles(hostId: string, sourcePaths: string[], targetPath: string): Promise<void> {
     try {
-      logger.info('Starting file compression', {
+      LoggingManager.getInstance().info('Starting file compression', {
         hostId,
         sourcePaths,
         targetPath,
@@ -46,7 +46,7 @@ export class CompressionService extends BaseService {
           throw new Error('Unsupported compression format');
       }
 
-      logger.debug('Executing compression command', {
+      LoggingManager.getInstance().debug('Executing compression command', {
         command,
         hostId,
         sourcePaths,
@@ -56,7 +56,7 @@ export class CompressionService extends BaseService {
       const { stdout, stderr } = await execAsync(command);
 
       if (stderr) {
-        logger.warn('Compression command produced stderr output', {
+        LoggingManager.getInstance().warn('Compression command produced stderr output', {
           stderr,
           hostId,
           sourcePaths,
@@ -64,7 +64,7 @@ export class CompressionService extends BaseService {
         });
       }
 
-      logger.info('File compression completed', {
+      LoggingManager.getInstance().info('File compression completed', {
         hostId,
         sourcePaths,
         targetPath,
@@ -84,7 +84,7 @@ export class CompressionService extends BaseService {
         const tempDir = `/tmp/compression-${hostId}-${Date.now()}`;
         await fs.rm(tempDir, { recursive: true, force: true });
       } catch (error) {
-        logger.warn('Failed to cleanup temporary directory', {
+        LoggingManager.getInstance().warn('Failed to cleanup temporary directory', {
           error: error instanceof Error ? error.message : 'Unknown error',
           hostId,
         });
@@ -94,7 +94,7 @@ export class CompressionService extends BaseService {
 
   async extractFiles(hostId: string, sourcePath: string, targetPath: string): Promise<void> {
     try {
-      logger.info('Starting file extraction', {
+      LoggingManager.getInstance().info('Starting file extraction', {
         hostId,
         sourcePath,
         targetPath,
@@ -122,7 +122,7 @@ export class CompressionService extends BaseService {
           throw new Error('Unsupported archive format');
       }
 
-      logger.debug('Executing extraction command', {
+      LoggingManager.getInstance().debug('Executing extraction command', {
         command,
         hostId,
         sourcePath,
@@ -132,7 +132,7 @@ export class CompressionService extends BaseService {
       const { stdout, stderr } = await execAsync(command);
 
       if (stderr) {
-        logger.warn('Extraction command produced stderr output', {
+        LoggingManager.getInstance().warn('Extraction command produced stderr output', {
           stderr,
           hostId,
           sourcePath,
@@ -140,7 +140,7 @@ export class CompressionService extends BaseService {
         });
       }
 
-      logger.info('File extraction completed', {
+      LoggingManager.getInstance().info('File extraction completed', {
         hostId,
         sourcePath,
         targetPath,
@@ -159,7 +159,7 @@ export class CompressionService extends BaseService {
 
   async listArchiveContents(hostId: string, archivePath: string): Promise<string[]> {
     try {
-      logger.info('Listing archive contents', {
+      LoggingManager.getInstance().info('Listing archive contents', {
         hostId,
         archivePath,
       });
@@ -186,7 +186,7 @@ export class CompressionService extends BaseService {
           throw new Error('Unsupported archive format');
       }
 
-      logger.debug('Executing list command', {
+      LoggingManager.getInstance().debug('Executing list command', {
         command,
         hostId,
         archivePath,
@@ -195,7 +195,7 @@ export class CompressionService extends BaseService {
       const { stdout, stderr } = await execAsync(command);
 
       if (stderr) {
-        logger.warn('List command produced stderr output', {
+        LoggingManager.getInstance().warn('List command produced stderr output', {
           stderr,
           hostId,
           archivePath,
@@ -204,7 +204,7 @@ export class CompressionService extends BaseService {
 
       const files = stdout.trim().split('\n').filter(Boolean);
 
-      logger.info('Archive contents listed', {
+      LoggingManager.getInstance().info('Archive contents listed', {
         hostId,
         archivePath,
         fileCount: files.length,
@@ -223,3 +223,4 @@ export class CompressionService extends BaseService {
 }
 
 export const compressionService = new CompressionService();
+

@@ -19,6 +19,7 @@ import { batchService } from './batch.service';
 import { deliveryService } from './delivery.service';
 import { notificationDBService } from './db.service';
 import { preferencesService } from './preferences.service';
+import { LoggingManager } from '../../utils/logging/LoggingManager';
 
 export class NotificationsService extends EventEmitter {
   private socketIO: SocketIOServer | null = null;
@@ -38,7 +39,7 @@ export class NotificationsService extends EventEmitter {
 
   private emitNotificationEvent(event: NotificationEvent, userId: string): void {
     if (!this.socketIO) {
-      logger.warn('Socket.IO not initialized, cannot emit notification event');
+      LoggingManager.getInstance().error('SocketIO instance not initialized');
       return;
     }
 
@@ -50,10 +51,9 @@ export class NotificationsService extends EventEmitter {
         serviceName: 'notifications'
       });
     } catch (error) {
-      logger.error('Failed to emit notification event', {
+      LoggingManager.getInstance().error('Failed to emit notification event', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        userId,
-        event
+        userId
       });
     }
   }
@@ -63,7 +63,7 @@ export class NotificationsService extends EventEmitter {
       const counts = await notificationDBService.getNotificationCounts(userId);
       // Cache update logic here
     } catch (error) {
-      logger.error('Failed to update notification counts cache', {
+      LoggingManager.getInstance().error('Failed to update notification counts cache', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId
       });
@@ -96,6 +96,10 @@ export class NotificationsService extends EventEmitter {
 
   private convertToNotification(entity: NotificationEntity): NotificationEntity {
     if (!isNotificationEntity(entity)) {
+      LoggingManager.getInstance().error('Invalid notification entity', {
+        entity,
+        error: 'Entity validation failed'
+      });
       throw new ApiError('Invalid notification entity', 500);
     }
     return entity;
@@ -146,10 +150,9 @@ export class NotificationsService extends EventEmitter {
             id: `batch-${Date.now()}`
           } as NotificationEntity;
         } catch (error) {
-          logger.error('Failed to add notification to batch queue', {
+          LoggingManager.getInstance().error('Failed to batch notification', {
             error: error instanceof Error ? error.message : 'Unknown error',
-            userId,
-            type
+            userId
           });
           throw new ApiError('Failed to batch notification', 500);
         }
@@ -159,6 +162,10 @@ export class NotificationsService extends EventEmitter {
       const savedEntity = await notificationDBService.create(notificationEntity);
 
       if (!isNotificationEntity(savedEntity)) {
+        LoggingManager.getInstance().error('Invalid notification data returned from database', {
+          entity: savedEntity,
+          error: 'Entity validation failed'
+        });
         throw new ApiError('Invalid notification data returned from database', 500);
       }
 
@@ -169,10 +176,9 @@ export class NotificationsService extends EventEmitter {
           preferences
         });
       } catch (error) {
-        logger.error('Failed to deliver notification', {
+        LoggingManager.getInstance().error('Failed to deliver notification', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          userId,
-          notificationId: savedEntity.id
+          userId
         });
       }
 
@@ -188,10 +194,9 @@ export class NotificationsService extends EventEmitter {
 
       return savedEntity;
     } catch (error) {
-      logger.error('Failed to create notification', {
+      LoggingManager.getInstance().error('Failed to create notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        userId: options.userId,
-        type: options.type
+        userId
       });
       throw error instanceof ApiError ? error : new ApiError('Failed to create notification', 500);
     }
@@ -205,11 +210,19 @@ export class NotificationsService extends EventEmitter {
 
       const existingNotification = await notificationDBService.getById(notificationId);
       if (!existingNotification || !isNotificationEntity(existingNotification)) {
+        LoggingManager.getInstance().error('Invalid notification entity', {
+          entity: existingNotification,
+          error: 'Entity validation failed'
+        });
         throw new ApiError('Notification not found', 404);
       }
 
       const updatedEntity = await notificationDBService.markAsRead(notificationId);
       if (!isNotificationEntity(updatedEntity)) {
+        LoggingManager.getInstance().error('Invalid notification data returned from database', {
+          entity: updatedEntity,
+          error: 'Entity validation failed'
+        });
         throw new ApiError('Invalid notification data returned from database', 500);
       }
 
@@ -229,14 +242,13 @@ export class NotificationsService extends EventEmitter {
       try {
         await this.updateNotificationCountsCache(updatedEntity.userId);
       } catch (error) {
-        logger.warn('Failed to update notification counts cache', {
+        LoggingManager.getInstance().error('Failed to update notification counts cache', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          userId: updatedEntity.userId,
-          notificationId
+          userId: updatedEntity.userId
         });
       }
     } catch (error) {
-      logger.error('Failed to mark notification as read', {
+      LoggingManager.getInstance().error('Failed to mark notification as read', {
         error: error instanceof Error ? error.message : 'Unknown error',
         notificationId
       });
@@ -257,15 +269,18 @@ export class NotificationsService extends EventEmitter {
 
       const updatedEntities = await notificationDBService.markAllAsRead(userId);
       if (!Array.isArray(updatedEntities)) {
+        LoggingManager.getInstance().error('Invalid response from database', {
+          error: 'Invalid response format'
+        });
         throw new ApiError('Invalid response from database', 500);
       }
       
       const validEntities: NotificationEntity[] = [];
       for (const entity of updatedEntities) {
         if (!isNotificationEntity(entity)) {
-          logger.warn('Invalid notification data returned from database', { 
-            notificationId: entity?.id || 'unknown',
-            userId 
+          LoggingManager.getInstance().error('Invalid notification entity', {
+            entity,
+            error: 'Entity validation failed'
           });
           continue;
         }
@@ -302,13 +317,13 @@ export class NotificationsService extends EventEmitter {
       try {
         await this.updateNotificationCountsCache(userId);
       } catch (error) {
-        logger.warn('Failed to update notification counts cache', {
+        LoggingManager.getInstance().error('Failed to update notification counts cache', {
           error: error instanceof Error ? error.message : 'Unknown error',
           userId
         });
       }
     } catch (error) {
-      logger.error('Failed to mark all notifications as read', {
+      LoggingManager.getInstance().error('Failed to mark all notifications as read', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId
       });
@@ -324,11 +339,19 @@ export class NotificationsService extends EventEmitter {
 
       const existingNotification = await notificationDBService.getById(notificationId);
       if (!existingNotification || !isNotificationEntity(existingNotification)) {
+        LoggingManager.getInstance().error('Invalid notification entity', {
+          entity: existingNotification,
+          error: 'Entity validation failed'
+        });
         throw new ApiError('Notification not found', 404);
       }
 
       const deletedEntity = await notificationDBService.delete(notificationId);
       if (!isNotificationEntity(deletedEntity)) {
+        LoggingManager.getInstance().error('Invalid notification data returned from database', {
+          entity: deletedEntity,
+          error: 'Entity validation failed'
+        });
         throw new ApiError('Invalid notification data returned from database', 500);
       }
 
@@ -348,14 +371,13 @@ export class NotificationsService extends EventEmitter {
       try {
         await this.updateNotificationCountsCache(deletedEntity.userId);
       } catch (error) {
-        logger.warn('Failed to update notification counts cache after deletion', {
+        LoggingManager.getInstance().error('Failed to update notification counts cache', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          userId: deletedEntity.userId,
-          notificationId
+          userId: deletedEntity.userId
         });
       }
     } catch (error) {
-      logger.error('Failed to delete notification', {
+      LoggingManager.getInstance().error('Failed to delete notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
         notificationId
       });
@@ -376,16 +398,16 @@ export class NotificationsService extends EventEmitter {
       }
 
       if (!isNotificationEntity(entity)) {
-        logger.error('Invalid notification data returned from database', {
-          notificationId,
-          entityData: entity
+        LoggingManager.getInstance().error('Invalid notification entity', {
+          entity,
+          error: 'Entity validation failed'
         });
         throw new ApiError('Invalid notification data returned from database', 500);
       }
 
       return this.convertToNotification(entity);
     } catch (error) {
-      logger.error('Failed to get notification by ID', {
+      LoggingManager.getInstance().error('Failed to get notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
         notificationId
       });
@@ -404,27 +426,25 @@ export class NotificationsService extends EventEmitter {
       return entities.map(entity => {
         try {
           if (!isNotificationEntity(entity)) {
-            logger.error('Invalid notification entity found', {
-              entityId: entity.id,
-              userId
+            LoggingManager.getInstance().error('Invalid notification entity', {
+              entity,
+              error: 'Entity validation failed'
             });
             return null;
           }
           return this.convertToNotification(entity);
         } catch (error) {
-          logger.error('Failed to convert notification entity', {
-            error,
-            entityId: entity.id,
-            userId
+          LoggingManager.getInstance().error('Failed to convert notification', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            entity
           });
           return null;
         }
       }).filter((notification): notification is NotificationEntity => notification !== null);
     } catch (error) {
-      logger.error('Failed to fetch notifications for user', {
-        error,
-        userId,
-        filter
+      LoggingManager.getInstance().error('Failed to fetch notifications', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId
       });
       throw new ApiError(`Failed to fetch notifications: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
     }
@@ -439,21 +459,30 @@ export class NotificationsService extends EventEmitter {
       const counts = await notificationDBService.getNotificationCounts(userId);
       
       if (!counts || typeof counts !== 'object') {
+        LoggingManager.getInstance().error('Invalid notification counts returned from database', {
+          error: 'Invalid response format'
+        });
         throw new ApiError('Invalid notification counts returned from database', 500);
       }
 
       Object.entries(counts).forEach(([type, count]) => {
         if (!isNotificationType(type)) {
-          logger.warn('Invalid notification type in counts', { type, userId });
+          LoggingManager.getInstance().error('Invalid notification type', {
+            type,
+            error: 'Type validation failed'
+          });
         }
         if (!count || typeof count.total !== 'number' || typeof count.unread !== 'number') {
-          logger.warn('Invalid count structure for notification type', { type, count, userId });
+          LoggingManager.getInstance().error('Invalid notification count', {
+            count,
+            error: 'Count validation failed'
+          });
         }
       });
 
       return counts;
     } catch (error) {
-      logger.error('Failed to get notification counts', {
+      LoggingManager.getInstance().error('Failed to get notification counts', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId
       });
@@ -474,13 +503,16 @@ export class NotificationsService extends EventEmitter {
       }
 
       if (!isNotificationPreferences(preferences)) {
-        logger.error('Invalid preferences data returned', { userId });
+        LoggingManager.getInstance().error('Invalid preferences data', {
+          preferences,
+          error: 'Preferences validation failed'
+        });
         throw new ApiError('Invalid preferences data', 500);
       }
 
       return preferences;
     } catch (error) {
-      logger.error('Failed to get notification preferences', {
+      LoggingManager.getInstance().error('Failed to get notification preferences', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId
       });
@@ -499,12 +531,20 @@ export class NotificationsService extends EventEmitter {
       }
 
       if (!isPartialNotificationPreferences(preferences)) {
+        LoggingManager.getInstance().error('Invalid preferences format', {
+          preferences,
+          error: 'Preferences validation failed'
+        });
         throw new ApiError('Invalid preferences format', 400);
       }
 
       const updatedPreferences = await preferencesService.updatePreferences(userId, preferences);
       
       if (!updatedPreferences || !isNotificationPreferences(updatedPreferences)) {
+        LoggingManager.getInstance().error('Invalid preferences data returned after update', {
+          preferences: updatedPreferences,
+          error: 'Preferences validation failed'
+        });
         throw new ApiError('Invalid preferences data returned after update', 500);
       }
 
@@ -535,10 +575,9 @@ export class NotificationsService extends EventEmitter {
 
       return updatedPreferences;
     } catch (error) {
-      logger.error('Failed to update notification preferences', {
+      LoggingManager.getInstance().error('Failed to update notification preferences', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        userId,
-        preferences
+        userId
       });
       throw error instanceof ApiError ? error : new ApiError('Failed to update notification preferences', 500);
     }

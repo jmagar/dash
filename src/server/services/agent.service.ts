@@ -1,6 +1,6 @@
 import { Server as SocketServer, Socket, Namespace } from 'socket.io';
 import { EventEmitter } from 'events';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 import { AgentStatus } from '../../types/agent-config';
 import type {
   ClientToServerEvents,
@@ -33,7 +33,7 @@ class AgentService extends EventEmitter {
 
   private setupSocketServer(): void {
     this.namespace.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>) => {
-      logger.debug('Agent attempting to connect');
+      LoggingManager.getInstance().debug('Agent attempting to connect');
 
       // Handle registration
       socket.once('agent:connected', (data: { info: AgentInfo }) => {
@@ -43,7 +43,7 @@ class AgentService extends EventEmitter {
       // Set connection timeout
       const timeout = setTimeout(() => {
         if (!socket.data.agentId) {
-          logger.warn('Agent failed to register in time');
+          LoggingManager.getInstance().warn('Agent failed to register in time');
           socket.disconnect(true);
         }
       }, 5000);
@@ -66,7 +66,7 @@ class AgentService extends EventEmitter {
     // Check if agent is already connected
     const existing = this.agents.get(id);
     if (existing) {
-      logger.info('Agent reconnecting, closing old connection', { agentId: id });
+      LoggingManager.getInstance().info('Agent reconnecting, closing old connection', { agentId: id });
       existing.socket.disconnect(true);
     }
 
@@ -83,7 +83,7 @@ class AgentService extends EventEmitter {
     // Setup agent event handlers
     this.setupAgentHandlers(socket, id);
 
-    logger.info('Agent registered', {
+    LoggingManager.getInstance().info('Agent registered', {
       agentId: id,
       hostname: info.hostname,
       version: info.version,
@@ -120,7 +120,7 @@ class AgentService extends EventEmitter {
     // Handle errors
     socket.on('error', (error) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Agent error', {
+      LoggingManager.getInstance().error('Agent error', {
         agentId,
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined,
@@ -152,7 +152,7 @@ class AgentService extends EventEmitter {
   private handleDisconnect(agentId: string): void {
     const agent = this.agents.get(agentId);
     if (agent) {
-      logger.info('Agent disconnected', { agentId });
+      LoggingManager.getInstance().info('Agent disconnected', { agentId });
       this.agents.delete(agentId);
       this.emit('agent:disconnected', { hostId: agentId });
     }
@@ -309,3 +309,4 @@ export const getAgentService = (): AgentService => {
   }
   return agentServiceInstance;
 };
+

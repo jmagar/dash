@@ -5,7 +5,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { Container, Stack, ApiResponse } from '../../types/models-shared';
 import cache from '../cache';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 const router = express.Router();
 
@@ -64,7 +64,7 @@ const getContainers: AuthenticatedRequestHandler<DockerParams, ContainersRespons
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to get Docker containers:', metadata);
+    LoggingManager.getInstance().error('Failed to get Docker containers:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to get Docker containers',
@@ -102,7 +102,7 @@ const getStacks: AuthenticatedRequestHandler<DockerParams, StacksResponse> = asy
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to get Docker stacks:', metadata);
+    LoggingManager.getInstance().error('Failed to get Docker stacks:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to get Docker stacks',
@@ -145,7 +145,7 @@ const cacheContainers: AuthenticatedRequestHandler<DockerParams, EmptyResponse, 
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to cache Docker containers:', metadata);
+    LoggingManager.getInstance().error('Failed to cache Docker containers:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to cache Docker containers',
@@ -188,7 +188,7 @@ const cacheStacks: AuthenticatedRequestHandler<DockerParams, EmptyResponse, Stac
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    logger.error('Failed to cache Docker stacks:', metadata);
+    LoggingManager.getInstance().error('Failed to cache Docker stacks:', metadata);
 
     const apiError = createApiError(
       error instanceof Error ? error.message : 'Failed to cache Docker stacks',
@@ -209,3 +209,4 @@ router.post('/:hostId/containers', createAuthHandler(cacheContainers));
 router.post('/:hostId/stacks', createAuthHandler(cacheStacks));
 
 export default router;
+

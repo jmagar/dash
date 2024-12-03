@@ -1,6 +1,6 @@
 import { Bookmark } from '@prisma/client';
 import prisma from '../db';
-import { logger } from '../utils/logger';
+import { LoggingManager } from '../utils/logging/LoggingManager';
 
 export class BookmarkService {
   async getBookmarks(userId: string): Promise<Bookmark[]> {
@@ -10,7 +10,7 @@ export class BookmarkService {
         orderBy: { lastAccessed: 'desc' },
       });
     } catch (error) {
-      logger.error('Failed to get bookmarks:', {
+      LoggingManager.getInstance().error('Failed to get bookmarks:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
       });
@@ -24,7 +24,7 @@ export class BookmarkService {
         where: { userId, hostId, path },
       });
     } catch (error) {
-      logger.error('Failed to get bookmark:', {
+      LoggingManager.getInstance().error('Failed to get bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -54,7 +54,7 @@ export class BookmarkService {
         },
       });
     } catch (error) {
-      logger.error('Failed to create bookmark:', {
+      LoggingManager.getInstance().error('Failed to create bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -76,7 +76,7 @@ export class BookmarkService {
         data: updates,
       });
     } catch (error) {
-      logger.error('Failed to update bookmark:', {
+      LoggingManager.getInstance().error('Failed to update bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -92,7 +92,7 @@ export class BookmarkService {
         where: { userId_hostId_path: { userId, hostId, path } },
       });
     } catch (error) {
-      logger.error('Failed to delete bookmark:', {
+      LoggingManager.getInstance().error('Failed to delete bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -108,7 +108,7 @@ export class BookmarkService {
         lastAccessed: new Date(),
       });
     } catch (error) {
-      logger.error('Failed to update bookmark last accessed:', {
+      LoggingManager.getInstance().error('Failed to update bookmark last accessed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -120,3 +120,4 @@ export class BookmarkService {
 }
 
 export const bookmarkService = new BookmarkService();
+

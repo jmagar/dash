@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
 import { socket } from '../socket';
 import type { DockerComposeConfig, DockerComposeState } from '@/types/docker';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
 
 export function useDockerCompose(hostId: string) {
   const [configs, setConfigs] = useState<DockerComposeConfig[]>([]);
@@ -15,7 +16,7 @@ export function useDockerCompose(hostId: string) {
     socket.emit('docker:compose:list', { hostId }, (response: { error?: string; configs?: DockerComposeConfig[] }) => {
       if (response.error) {
         setError(response.error);
-        logger.error('Failed to fetch Docker Compose configs:', { error: response.error });
+        loggerLoggingManager.getInstance().();
       } else if (response.configs) {
         setConfigs(response.configs);
       }
@@ -28,7 +29,7 @@ export function useDockerCompose(hostId: string) {
       return new Promise((resolve, reject) => {
         socket.emit('docker:compose:create', { hostId, name, content }, (response: { error?: string }) => {
           if (response.error) {
-            logger.error('Failed to create Docker Compose config:', { error: response.error });
+            loggerLoggingManager.getInstance().();
             reject(new Error(response.error));
           } else {
             fetchConfigs();
@@ -45,7 +46,7 @@ export function useDockerCompose(hostId: string) {
       return new Promise((resolve, reject) => {
         socket.emit('docker:compose:update', { hostId, name, content }, (response: { error?: string }) => {
           if (response.error) {
-            logger.error('Failed to update Docker Compose config:', { error: response.error });
+            loggerLoggingManager.getInstance().();
             reject(new Error(response.error));
           } else {
             fetchConfigs();
@@ -62,7 +63,7 @@ export function useDockerCompose(hostId: string) {
       return new Promise((resolve, reject) => {
         socket.emit('docker:compose:delete', { hostId, name }, (response: { error?: string }) => {
           if (response.error) {
-            logger.error('Failed to delete Docker Compose config:', { error: response.error });
+            loggerLoggingManager.getInstance().();
             reject(new Error(response.error));
           } else {
             fetchConfigs();
@@ -79,7 +80,7 @@ export function useDockerCompose(hostId: string) {
       return new Promise((resolve, reject) => {
         socket.emit('docker:compose:get', { hostId, name }, (response: { error?: string; config?: DockerComposeConfig }) => {
           if (response.error || !response.config) {
-            logger.error('Failed to get Docker Compose config:', { error: response.error });
+            loggerLoggingManager.getInstance().();
             reject(new Error(response.error || 'Config not found'));
           } else {
             resolve(response.config);
@@ -105,3 +106,4 @@ export function useDockerCompose(hostId: string) {
     refresh: fetchConfigs,
   };
 }
+

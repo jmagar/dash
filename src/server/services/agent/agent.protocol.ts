@@ -1,10 +1,11 @@
-import { WebSocket } from 'ws';
+﻿import { WebSocket } from 'ws';
 import { Socket } from 'socket.io';
 import { logger } from '../../utils/logger';
 import type { AgentCommandResult, AgentInfo, AgentMetrics } from './agent.types';
 import { MessageData } from './types/message.types';
 import { MessageParser } from './utils/message.parser';
 import { MessageHandler } from './services/message.handler';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class ProtocolHandler {
   private readonly messageHandler: MessageHandler;
@@ -30,8 +31,7 @@ export class ProtocolHandler {
 
       await this.messageHandler.handleMessage(message, ws);
     } catch (error) {
-      logger.error('Error handling WebSocket message:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         data: data.toString()
       });
     }
@@ -41,8 +41,7 @@ export class ProtocolHandler {
     try {
       await this.messageHandler.handleMessage(message, socket);
     } catch (error) {
-      logger.error('Error handling Socket.IO message:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         socketId: socket.id
       });
     }
@@ -54,21 +53,19 @@ export class ProtocolHandler {
     });
 
     ws.on('error', (error: Error) => {
-      logger.error('WebSocket error:', { error: error.message });
+      loggerLoggingManager.getInstance().();
       this.onDisconnect(ws);
     });
 
     ws.on('close', (code: number, reason: Buffer) => {
-      logger.debug('WebSocket closed:', { 
-        code, 
-        reason: reason.toString('utf8') 
+      loggerLoggingManager.getInstance().() 
       });
       this.onDisconnect(ws);
     });
   }
 
   handleSocketIOConnection(socket: Socket): void {
-    logger.debug('Browser client connected via Socket.IO');
+    loggerLoggingManager.getInstance().();
 
     socket.on('agent:register', (data: { info: AgentInfo }) => {
       void this.handleSocketIOMessage(socket, {
@@ -98,12 +95,12 @@ export class ProtocolHandler {
     });
 
     socket.on('disconnect', (reason: string) => {
-      logger.debug('Socket.IO client disconnected:', { reason });
+      loggerLoggingManager.getInstance().();
       this.onDisconnect(socket);
     });
 
     socket.on('error', (error: Error) => {
-      logger.error('Socket.IO error:', { error: error.message });
+      loggerLoggingManager.getInstance().();
       void this.handleSocketIOMessage(socket, {
         type: 'error',
         id: socket.id,
@@ -127,8 +124,7 @@ export class ProtocolHandler {
     try {
       await this.messageHandler.handleMessage(message, null as unknown as WebSocket | Socket);
     } catch (error) {
-      logger.error('Failed to send command:', {
-        error: error instanceof Error ? error.message : String(error),
+      loggerLoggingManager.getInstance().(),
         agentId,
         command
       });
@@ -136,3 +132,4 @@ export class ProtocolHandler {
     }
   }
 }
+

@@ -1,8 +1,9 @@
-import type { ExtendedHost, InstallOptions } from '../../../types/agent';
+﻿import type { ExtendedHost, InstallOptions } from '../../../types/agent';
 import { IAgentHandler } from './types';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
 import { ApiError } from '../../../types/error';
+import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
 
 export class AgentInstaller {
   constructor(
@@ -21,7 +22,7 @@ export class AgentInstaller {
         hostId: host.id,
         osType: host.os_type
       };
-      logger.error('Failed to install agent', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to install agent', 500);
     }
   }
@@ -37,7 +38,7 @@ export class AgentInstaller {
         hostId: host.id,
         osType: host.os_type
       };
-      logger.error('Failed to uninstall agent', metadata);
+      loggerLoggingManager.getInstance().();
       throw new ApiError('Failed to uninstall agent', 500);
     }
   }
@@ -55,3 +56,4 @@ export class AgentInstaller {
 }
 
 export type { InstallOptions } from '../../../types/agent';
+
