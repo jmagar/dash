@@ -1,4 +1,4 @@
-﻿import { PrismaClient, Prisma, Metric } from '@prisma/client';
+import { PrismaClient, Prisma, Metric } from '@prisma/client';
 import { AgentMetrics, AgentMetricsSchema } from '../types/metrics';
 import { handleError } from '../utils/error.handler';
 import { ERROR_CODES } from '../utils/constants';
@@ -10,7 +10,7 @@ import { AgentMetrics as AgentMetricsType, AgentError } from '../agent.types';
 import { logger } from '../../../utils/logger';
 import { ERROR_CODES as ERROR_CODES_IMPORT, LOG_METADATA } from '../utils/constants';
 import { z } from 'zod';
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
 
 type MetricsServiceDeps = {
   prisma: PrismaClient;
@@ -343,4 +343,5 @@ export class MetricsService {
     this.metricsBuffer.delete(connectionId);
   }
 }
+
 

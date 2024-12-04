@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 import { cache } from '../cache';
 import { db } from '../db';
 import { metrics } from '../metrics';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 export class ContextProvider extends EventEmitter {
   private static instance: ContextProvider;
@@ -210,4 +210,5 @@ export class ContextProvider extends EventEmitter {
     this.emit('context:query:updated', this.context.lastQuery);
   }
 }
+
 

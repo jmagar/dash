@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState, useCallback } from 'react';
 import {
   Dialog,
@@ -178,3 +179,4 @@ export const CompressionDialog: React.FC<CompressionDialogProps> = ({
     </Dialog>
   );
 };
+

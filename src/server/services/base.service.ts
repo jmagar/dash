@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { Client as SSHClient } from 'ssh2';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { metrics, recordHostMetric } from '../metrics';
 import type { OperationLabels, ServiceMetricLabels } from '../metrics';
 import cache from '../cache';
@@ -494,4 +494,5 @@ export class BaseService extends EventEmitter {
     metrics.gauge('error_count', this.errorCount, serviceLabels);
   }
 }
+
 

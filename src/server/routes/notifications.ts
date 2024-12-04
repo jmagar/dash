@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { notificationsService } from '../services/notifications.service';
 import { validateRequest } from '../middleware/validation';
 import { requireAuth } from '../middleware/auth';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import type { AuthenticatedRequest } from '../../types/express';
 import type { ApiResult } from '../../types/api-shared';
 import type { NotificationType } from '../../types/notifications';
@@ -283,4 +283,5 @@ router.put(
 );
 
 export default router;
+
 

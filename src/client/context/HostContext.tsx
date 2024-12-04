@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 import { listHosts } from '../api/hosts.client';
@@ -71,3 +72,4 @@ export function useHost() {
   }
   return context;
 }
+

@@ -1,6 +1,6 @@
 ﻿import bcrypt from 'bcrypt';
 import { logger } from './logger';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from './logging/LoggingManager';
 
 const SALT_ROUNDS = 10;
 

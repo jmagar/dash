@@ -5,7 +5,7 @@ import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
 import { cacheService } from '../cache/CacheService';
 import { db } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = express.Router();
 
@@ -105,4 +105,5 @@ const getStatus: RequestHandler<unknown, StatusResponse> = async (req, res) => {
 router.get('/', getStatus);
 
 export default router;
+
 

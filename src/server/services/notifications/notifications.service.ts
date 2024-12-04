@@ -19,7 +19,7 @@ import { batchService } from './batch.service';
 import { deliveryService } from './delivery.service';
 import { notificationDBService } from './db.service';
 import { preferencesService } from './preferences.service';
-import { LoggingManager } from '../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class NotificationsService extends EventEmitter {
   private socketIO: SocketIOServer | null = null;
@@ -585,3 +585,4 @@ export class NotificationsService extends EventEmitter {
 }
 
 export const notificationsService = new NotificationsService();
+

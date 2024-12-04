@@ -1,4 +1,4 @@
-import express, { json, urlencoded, Request, Response, NextFunction } from 'express';
+﻿import express, { json, urlencoded, Request, Response, NextFunction } from 'express';
 import { Server as SocketServer } from 'socket.io';
 import WebSocket from 'ws';
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../types/socket-events';
@@ -11,7 +11,7 @@ import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { createClient } from 'redis';
 import config from './config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 import { errorHandler, notFoundHandler, corsConfig } from './middleware/security';
 import { setupMetrics, metrics } from './metrics';
 import { ProcessMonitorFactory } from './services/process/process-monitor-factory';

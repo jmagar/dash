@@ -1,7 +1,7 @@
 ﻿import { ApiError, ApiResult, createApiError } from '../../types/error';
 import { logger } from '../../server/utils/logger';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export type Endpoints = Record<string, string>;
 

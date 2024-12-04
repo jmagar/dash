@@ -1,11 +1,11 @@
-﻿import { EventEmitter } from 'events';
+import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
 import { NotificationEntity, NotificationType, NotificationEvent, NotificationChannel } from '../../../types/notifications';
 import { ServiceStatus } from '../../../types/status';
 import { BatchQueue } from './types';
 import { io } from '../../socket';
 import { NotificationDBService } from './db.service';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class NotificationBatchService extends EventEmitter {
   private batchQueues: Map<string, BatchQueue> = new Map();
@@ -107,4 +107,5 @@ export class NotificationBatchService extends EventEmitter {
 }
 
 export const batchService = new NotificationBatchService();
+
 

@@ -2,7 +2,7 @@
 import type { Container } from '../../types/models-shared';
 import { listContainers } from '../api/docker.client';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export interface UseDockerUpdatesOptions {
   interval?: number;

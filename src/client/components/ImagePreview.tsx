@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { logger } from '../utils/frontendLogger';
@@ -118,3 +119,4 @@ export function ImagePreview({ file, hostId, zoom, rotation, onError }: ImagePre
     </Box>
   );
 }
+

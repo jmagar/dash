@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   // Get from local storage then parse stored json or return initialValue

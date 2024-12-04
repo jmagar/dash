@@ -1,6 +1,6 @@
 ﻿import type { LogMetadata } from './logger';
 import { logger } from '../server/utils/logger';
-import { LoggingManager } from '../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../server/utils/logging/LoggingManager';
 
 export class ApiError extends Error {
   constructor(

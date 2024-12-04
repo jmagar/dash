@@ -5,7 +5,7 @@ import { useSnackbar } from './useSnackbar';
 import { frontendLogger } from '../utils/frontendLogger';
 import type { ListArchiveResponse, CompressionError } from '../../types/api/compression';
 import type { NotificationSeverity } from '../store/types';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export function useCompression() {
   const { showLoading, hideLoading } = useLoadingOverlay();

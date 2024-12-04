@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { BaseService } from './base.service';
 import type { Settings, SettingsPath, SettingsValue, SettingsResponse, SettingsError, UserPreferences, AdminSettings } from '../../types/settings';
 import { db } from '../db';
@@ -303,4 +303,5 @@ export class SettingsService extends BaseService {
 }
 
 export const settingsService = SettingsService.getInstance();
+
 

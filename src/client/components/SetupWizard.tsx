@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -32,6 +32,7 @@ import { api } from '../api/api.client';
 import { frontendLogger } from '../utils/frontendLogger';
 import type { ApiResponse } from '../../types/api/common';
 import type { Host } from '../../types/models-shared';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface SetupForm {
   friendlyName: string;
@@ -162,7 +163,7 @@ export function SetupWizard(): JSX.Element {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error occurred';
-      frontendLogger.error('Connection test failed:', { error: message });
+      frontendLoggingManager.getInstance().();
       setError(`Connection test failed: ${message}`);
       setTestPassed(false);
       updateStatus('Connection test failed', 25, message);
@@ -229,7 +230,7 @@ export function SetupWizard(): JSX.Element {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error occurred';
-      frontendLogger.error('Installation failed:', { error: message });
+      frontendLoggingManager.getInstance().();
       setError(`Installation failed: ${message}`);
       updateStatus('Installation failed', status.progress, message);
     } finally {
@@ -396,3 +397,4 @@ export function SetupWizard(): JSX.Element {
     </Box>
   );
 }
+

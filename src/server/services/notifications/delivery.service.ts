@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { logger } from '../../utils/logger';
 import { Server as SocketIOServer } from 'socket.io';
 import config from '../../config';
@@ -15,7 +15,7 @@ import {
   NotificationEvent
 } from '../../../types/notifications';
 import { NotificationDeliveryOptions } from './types';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class NotificationDeliveryService {
   private readonly GOTIFY_PRIORITIES: Record<NotificationType, number> = {
@@ -243,4 +243,5 @@ export let deliveryService: NotificationDeliveryService;
 export function initializeDeliveryService(io: SocketIOServer) {
   deliveryService = new NotificationDeliveryService(io);
 }
+
 

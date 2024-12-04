@@ -2,7 +2,7 @@ import type { Application, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../../types/error';
 import { errorHandler, notFoundHandler } from './error';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 /**
  * Configure global application handlers for logging, monitoring, and error handling
@@ -70,4 +70,5 @@ export function createRouteErrorHandler(routeName: string) {
     });
   };
 }
+
 

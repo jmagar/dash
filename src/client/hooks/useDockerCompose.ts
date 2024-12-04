@@ -2,7 +2,7 @@
 import { socket } from '../socket';
 import type { DockerComposeConfig, DockerComposeState } from '@/types/docker';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export function useDockerCompose(hostId: string) {
   const [configs, setConfigs] = useState<DockerComposeConfig[]>([]);

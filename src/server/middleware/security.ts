@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import fileUpload from 'express-fileupload';
 import csrf from 'csurf';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import config from '../config';
 
 // Security headers middleware
@@ -349,4 +349,5 @@ export const security = [
   fileUploadMiddleware,
   securityErrorHandler,
 ];
+
 

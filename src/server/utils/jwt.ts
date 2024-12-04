@@ -4,7 +4,7 @@ import ms from 'ms';
 import config from '../config';
 import { logger } from './logger';
 import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from './logging/LoggingManager';
 
 export type TokenPayload = AccessTokenPayloadDto | RefreshTokenPayloadDto;
 

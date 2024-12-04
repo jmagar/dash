@@ -1,9 +1,9 @@
-﻿import type { ExtendedHost, InstallOptions } from '../../../types/agent';
+import type { ExtendedHost, InstallOptions } from '../../../types/agent';
 import { IAgentHandler } from './types';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
 import { ApiError } from '../../../types/error';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class AgentInstaller {
   constructor(
@@ -56,4 +56,5 @@ export class AgentInstaller {
 }
 
 export type { InstallOptions } from '../../../types/agent';
+
 

@@ -4,7 +4,7 @@ import { useErrorHandler } from './useErrorHandler';
 import { useNotification } from './useNotification';
 import { settingsClient } from '../api/settings.client';
 import type { Settings, SettingsPath, SettingsValue } from '../../types/settings';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseSettingsResult {
   // Settings state

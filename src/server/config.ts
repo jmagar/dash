@@ -1,6 +1,6 @@
-import { config as dotenvConfig } from 'dotenv';
+﻿import { config as dotenvConfig } from 'dotenv';
 import type { Config } from '../types/config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 
 dotenvConfig();
 

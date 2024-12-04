@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { preferencesService } from '../services/preferences.service';
 import { asyncHandler } from '../middleware/async';
 import { requireAuth } from '../middleware/auth';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = Router();
 
@@ -39,4 +39,5 @@ router.put(
 );
 
 export default router;
+
 

@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import type { Request, Response } from '../../../types/express';
 import type { Host, CreateHostRequest, UpdateHostRequest, ApiResponse } from '../../../types/models-shared';
 import { ApiError } from '../../../types/error';
@@ -9,7 +9,7 @@ import { LinuxHandler } from '../../services/agent-installer/linux-handler';
 import { WindowsHandler } from '../../services/agent-installer/windows-handler';
 import { getAgentService } from '../../services/agent.service';
 import { db } from '../../db';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 const router = Router();
 const agentInstaller = new AgentInstaller(
@@ -319,4 +319,5 @@ router.post('/:id/agent/uninstall', async (req: Request<HostParams>, res: Respon
 });
 
 export default router;
+
 

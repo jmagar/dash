@@ -1,4 +1,4 @@
-import type { Application, Request, Response, NextFunction } from 'express';
+﻿import type { Application, Request, Response, NextFunction } from 'express';
 import type { Server as SocketServer } from 'socket.io';
 import {
   Registry,
@@ -7,7 +7,7 @@ import {
   Histogram,
   Gauge,
 } from 'prom-client';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 
 // Create a new registry
 const register = new Registry();

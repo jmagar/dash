@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -335,3 +336,4 @@ export default function DockerCompose({ hostId }: DockerComposeProps) {
     </Box>
   );
 }
+

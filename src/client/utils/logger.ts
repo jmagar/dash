@@ -1,4 +1,4 @@
-﻿import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 /**
  * @deprecated Use frontendLogger.ts instead. This logger will be removed in a future version.
  * Import from '../utils/frontendLogger' instead of '../utils/logger'.
@@ -51,4 +51,5 @@ export const logger = new Logger({
   level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
   prefix: 'Client',
 });
+
 

@@ -1,7 +1,7 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import config from '../config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto, ChatRole } from '../routes/chat/dto/chat.dto';
 import { plainToClass } from 'class-transformer';
 
@@ -87,4 +87,5 @@ class ChatService {
 }
 
 export const chatService = new ChatService();
+
 

@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 import type { LogMetadata } from '../../types/logger';
 import config from '../config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 // Initialize OpenAI client
 export const openai = new OpenAI({
@@ -110,4 +110,5 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
 function shouldUseOpenRouter(): boolean {
   return !!(config.openrouter.apiKey && !config.openai.apiKey);
 }
+
 

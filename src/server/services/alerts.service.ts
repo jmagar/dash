@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { notificationsService } from './notifications.service';
 import { metricsStorageService } from './metrics-storage.service';
 import type {
@@ -415,4 +415,5 @@ class AlertsService extends EventEmitter {
 }
 
 export const alertsService = new AlertsService();
+
 

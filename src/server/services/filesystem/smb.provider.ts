@@ -1,11 +1,11 @@
-﻿import SMB2 from '@marsaud/smb2';
+import SMB2 from '@marsaud/smb2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class SMBProvider implements FileSystemProvider {
   readonly type = 'smb' as FileSystemType;
@@ -206,4 +206,5 @@ export class SMBProvider implements FileSystemProvider {
     }
   }
 }
+
 

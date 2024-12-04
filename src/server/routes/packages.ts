@@ -5,7 +5,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { Package, ApiResponse } from '../../types/models-shared';
 import { query } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = express.Router();
 
@@ -134,4 +134,5 @@ router.get('/:hostId', createAuthHandler(listPackages));
 router.post('/:hostId/install', createAuthHandler(installPackage));
 
 export default router;
+
 

@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState } from 'react';
 import { IconButton, Tooltip, CircularProgress } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
@@ -119,3 +120,4 @@ export function BookmarkButton({ file, hostId }: BookmarkButtonProps) {
     </>
   );
 }
+

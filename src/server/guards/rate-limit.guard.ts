@@ -1,4 +1,4 @@
-﻿import {
+import {
   Injectable,
   CanActivate,
   ExecutionContext,
@@ -9,7 +9,7 @@ import { Observable } from 'rxjs';
 import { Request } from 'express';
 import { rateLimitConfig } from '../utils/security';
 import { logger } from '../../logger';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 interface RateLimitInfo {
   count: number;
@@ -77,4 +77,5 @@ export class RateLimitGuard implements CanActivate {
     }
   }
 }
+
 

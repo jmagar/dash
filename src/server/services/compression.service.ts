@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { BaseService } from './base.service';
 import type { LogMetadata } from '../../types/logger';
 
@@ -223,4 +223,5 @@ export class CompressionService extends BaseService {
 }
 
 export const compressionService = new CompressionService();
+
 

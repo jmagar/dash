@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { createAuthHandler, type ApiResponse, type RequestQuery, type Response } from '../../../types/express';
 import type { CommandRequest, Command, CommandResult } from '../../../types/models-shared';
 import type { ProcessInfo } from '../../../types/process';
@@ -10,7 +10,7 @@ import { hostService } from '../../services/host.service';
 import { io } from '../../server';
 import { ProcessMonitorFactory } from '../../services/process/process-monitor-factory';
 import { ProcessCacheImpl } from '../../services/process/process-cache';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 interface HostParams {
   hostId: string;
@@ -251,4 +251,5 @@ router.post('/:hostId/processes/:pid/kill', createAuthHandler<
 }));
 
 export default router;
+
 

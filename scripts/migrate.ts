@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 import dotenv from 'dotenv';
 import { Pool, PoolClient } from 'pg';
-import { LoggingManager } from '../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../src/server/utils/logging/LoggingManager';
 
 // Resolve __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);

@@ -6,7 +6,7 @@ import express from 'express';
 import { ApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import { query } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = express.Router();
 
@@ -88,4 +88,5 @@ const listFiles: AuthenticatedRequestHandler<FileParams> = async (req, res) => {
 router.get('/:hostId', createAuthHandler(listFiles));
 
 export default router;
+
 

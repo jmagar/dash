@@ -1,7 +1,7 @@
 ﻿import { api } from './api';
 import { frontendLogger } from '../utils/frontendLogger';
 import type {
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
   CompressionRequest,
   ExtractionRequest,
   ListArchiveRequest,

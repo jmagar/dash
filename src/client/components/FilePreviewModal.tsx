@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { useSnackbar } from '../hooks/useSnackbar';
 import { useLoadingOverlay } from '../hooks/useLoadingOverlay';
 import { logger } from '../utils/logger';
 import type { FileType } from '../../types/files';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface FilePreviewModalProps {
   open: boolean;
@@ -44,7 +45,7 @@ export function FilePreviewModal({ open, onClose, file, hostId }: FilePreviewMod
   const handleZoomIn = () => {
     setZoom((prev) => {
       const newZoom = Math.min(prev + 0.25, 3);
-      logger.debug('Zooming in', { prevZoom: prev, newZoom });
+      LoggingManager.getInstance().();
       return newZoom;
     });
   };
@@ -52,7 +53,7 @@ export function FilePreviewModal({ open, onClose, file, hostId }: FilePreviewMod
   const handleZoomOut = () => {
     setZoom((prev) => {
       const newZoom = Math.max(prev - 0.25, 0.25);
-      logger.debug('Zooming out', { prevZoom: prev, newZoom });
+      LoggingManager.getInstance().();
       return newZoom;
     });
   };
@@ -60,7 +61,7 @@ export function FilePreviewModal({ open, onClose, file, hostId }: FilePreviewMod
   const handleRotateLeft = () => {
     setRotation((prev) => {
       const newRotation = (prev - 90) % 360;
-      logger.debug('Rotating left', { prevRotation: prev, newRotation });
+      LoggingManager.getInstance().();
       return newRotation;
     });
   };
@@ -68,13 +69,13 @@ export function FilePreviewModal({ open, onClose, file, hostId }: FilePreviewMod
   const handleRotateRight = () => {
     setRotation((prev) => {
       const newRotation = (prev + 90) % 360;
-      logger.debug('Rotating right', { prevRotation: prev, newRotation });
+      LoggingManager.getInstance().();
       return newRotation;
     });
   };
 
   const handleReset = () => {
-    logger.debug('Resetting preview controls', { prevZoom: zoom, prevRotation: rotation });
+    LoggingManager.getInstance().();
     setZoom(1);
     setRotation(0);
   };
@@ -233,3 +234,4 @@ export function FilePreviewModal({ open, onClose, file, hostId }: FilePreviewMod
     </Dialog>
   );
 }
+

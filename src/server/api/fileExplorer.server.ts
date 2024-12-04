@@ -7,7 +7,7 @@ import type { Request, Response } from 'express';
 import { createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
 import type { FileItem, ApiResponse } from '../../types/models-shared';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const isWindows = os.platform() === 'win32';
 
@@ -350,4 +350,5 @@ export async function createDirectory(req: Request, res: Response): Promise<Resp
     });
   }
 }
+
 

@@ -1,11 +1,11 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
 import cache from '../../cache';
 import { Container, Stack } from '../../types/models-shared';
 import { DockerParams, CacheContainersDto, CacheStacksDto } from './dto/docker.dto';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 function validateContainers(containers: unknown): containers is Container[] {
   return Array.isArray(containers) && containers.every(container =>
@@ -100,4 +100,5 @@ export const cacheStacks = async (
   await cache.set(`docker:stacks:${hostId}`, stacks);
   res.json(new ApiResponse(undefined));
 };
+
 

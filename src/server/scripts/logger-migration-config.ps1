@@ -119,6 +119,48 @@ function Get-RelativePath {
     return $relativePath
 }
 
+# Calculate relative path for imports
+function Get-LoggingManagerImportPath {
+    param([string]$filePath)
+    
+    # Convert to Unix-style paths for consistency
+    $filePath = $filePath.Replace('\', '/')
+    $fileDir = Split-Path $filePath -Parent
+    
+    # Calculate relative path from file to LoggingManager
+    $relativePath = Get-RelativePath -from $fileDir -to $config.ManagerPath
+    
+    # Ensure path starts with ./ or ../
+    if (-not $relativePath.StartsWith('.')) {
+        $relativePath = "./$relativePath"
+    }
+    
+    return $relativePath
+}
+
+# Update import statements
+function Update-ImportStatements {
+    param(
+        [string]$content,
+        [string]$filePath
+    )
+
+    # Get the correct relative import path
+    $importPath = Get-LoggingManagerImportPath -filePath $filePath
+    
+    # Replace existing LoggingManager imports with the correct path
+    if ($content -match "import.*LoggingManager.*from") {
+        $content = $content -replace "import\s*{\s*LoggingManager\s*}\s*from\s*['""].*?['""]", 
+            "import { LoggingManager } from '$importPath'"
+    }
+    # Add LoggingManager import if it doesn't exist but logger is used
+    elseif ($content -match "logger\.(info|error|warn|debug)\(") {
+        $content = "import { LoggingManager } from '$importPath'`n$content"
+    }
+
+    return $content
+}
+
 # Helper function to get TypeScript files
 function Get-TypeScriptFiles {
     param(

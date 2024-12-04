@@ -1,10 +1,10 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { compressionService } from '../../services/compression.service';
 import { CompressFilesDto, DecompressFileDto } from './dto/compression.dto';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export const compressFiles = async (
   req: Request<Record<string, never>, any, CompressFilesDto>,
@@ -29,4 +29,5 @@ export const decompressFile = async (
   const result = await compressionService.decompressFile(hostId, sourcePath, targetPath);
   res.json(new ApiResponse(result));
 };
+
 

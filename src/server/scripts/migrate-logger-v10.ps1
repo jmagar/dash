@@ -30,8 +30,12 @@ function Test-ShouldProcessFile {
     
     if ($ForceCheck) { return $true }
     
+    # More comprehensive pattern matching
     return ($content -match "import.*logger.*from" -or 
-            $content -match "logger\.(info|error|warn|debug)\(" -or
+            $content -match "logger\." -or  # Catch any logger usage
+            $content -match "const\s+logger" -or  # Catch logger declarations
+            $content -match "let\s+logger" -or
+            $content -match "var\s+logger" -or
             $content -match "$($config.ManagerName)\.getInstance\(\)")
 }
 
@@ -51,6 +55,85 @@ function Backup-File {
     }
 }
 
+# Process a single file
+function Process-File {
+    param([System.IO.FileInfo]$file)
+    
+    Write-Verbose "`nProcessing $($file.FullName)..."
+    
+    try {
+        # Read file content
+        $content = Get-Content $file.FullName -Raw -Encoding UTF8
+        if (-not $content) {
+            Write-Verbose "Skipped - Empty file"
+            return
+        }
+        
+        $modified = $false
+        $changes = @()
+        
+        # Step 1: Update imports
+        $newContent = Update-ImportStatements -content $content -filePath $file.FullName
+        if ($newContent -ne $content) {
+            $modified = $true
+            $changes += "Updated LoggingManager import"
+            $content = $newContent
+        }
+        
+        # Step 2: Replace logger declarations
+        if ($content -match "(const|let|var)\s+logger\s*=") {
+            $updatedContent = $content -replace "(const|let|var)\s+logger\s*=.*?;", ""
+            if ($updatedContent -ne $content) {
+                $modified = $true
+                $changes += "Removed logger declaration"
+                $content = $updatedContent
+            }
+        }
+        
+        # Step 3: Replace logger usage patterns
+        if ($content -match "logger\.") {
+            $updatedContent = $content -replace "logger\.(info|error|warn|debug)\((.*?)(?=\))\)", 
+                "LoggingManager.getInstance().$1($2)"
+            if ($updatedContent -ne $content) {
+                $modified = $true
+                $changes += "Updated logger method calls"
+                $content = $updatedContent
+            }
+        }
+        
+        # Only save if modifications were made
+        if ($modified) {
+            if (-not $DryRun) {
+                # Create backup if enabled
+                if ($BackupFiles) {
+                    $backupDir = Join-Path $config.BackupDir (Split-Path -Parent $file.FullName)
+                    if (-not (Test-Path $backupDir)) {
+                        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+                    }
+                    $backupFile = Join-Path $backupDir $file.Name
+                    Copy-Item $file.FullName $backupFile -Force
+                }
+                
+                # Save changes
+                $content | Set-Content $file.FullName -Encoding UTF8 -NoNewline
+                Write-Host "Modified $($file.FullName) - $($changes -join ', ')"
+                
+                # Track modified files for summary
+                $script:modifiedFiles += @{
+                    Path = $file.FullName
+                    Changes = $changes
+                }
+                $script:stats.Modified++
+            } else {
+                Write-Host "[DRY RUN] Would modify $($file.FullName) - $($changes -join ', ')"
+            }
+        }
+    } catch {
+        Write-Error "Error processing $($file.FullName): $_"
+        $script:stats.Errors++
+    }
+}
+
 # Get all TypeScript files
 $files = Get-TypeScriptFiles -SingleFile $SingleFile
 $stats.TotalFiles = $files.Count
@@ -62,77 +145,16 @@ foreach ($file in $files) {
     Write-Host "`nProcessing $($stats.Processed)/$($stats.TotalFiles): $($file.FullName)..." -ForegroundColor Yellow
     
     try {
-        $content = Get-Content -Path $file.FullName -Raw
+        Process-File -file $file
         
         # Check if file needs migration
-        if (-not (Test-ShouldProcessFile -content $content -filePath $file.FullName)) {
+        if (-not (Test-ShouldProcessFile -content (Get-Content -Path $file.FullName -Raw) -filePath $file.FullName)) {
             $stats.Skipped++
             Write-VerboseLog "Skipped - No logger usage found" "Gray"
             continue
         }
         
         $stats.NeedsMigration++
-        
-        # Backup file if needed
-        Backup-File -FilePath $file.FullName
-        
-        # Perform the migration
-        $newContent = $content
-        $modified = $false
-        $changes = @()
-
-        # Step 1: Update imports
-        if ($content -match "import.*logger.*from.*['""]$($config.OldImportPattern)['""]") {
-            $newContent = $newContent -replace "import\s*{\s*logger\s*}\s*from\s*['""]$($config.OldImportPattern)['""]", 
-                "import { $($config.ManagerName) } from '$(Get-RelativePath -from (Split-Path -Parent $file.FullName) -to $config.ManagerPath)'"
-            $modified = $true
-            $changes += "Updated logger import"
-        }
-        
-        # Step 2: Replace logger variable declarations
-        if ($content -match '\b(const|let|var)\s+logger\s*=') {
-            $newContent = $newContent -replace '\b(const|let|var)\s+logger\s*=.*?;', ""
-            $modified = $true
-            $changes += "Removed logger variable declaration"
-        }
-
-        # Step 3: Replace logger usage patterns
-        if ($content -match "logger\.(info|error|warn|debug)\(") {
-            $logMatches = $content -replace "logger\.(info|error|warn|debug)\((.*?)(?=\))\)", 
-                "$($config.ManagerName).getInstance().$1($2)"
-            $newContent = $logMatches
-            $modified = $true
-            $changes += "Updated logger method calls"
-        }
-
-        # Step 4: Add import if using manager without import
-        if ($newContent -match "$($config.ManagerName)\.getInstance\(\)" -and 
-            -not ($newContent -match "import.*$($config.ManagerName)")) {
-            
-            $insertPoint = 0
-            if ($newContent -match "^import.*`n") {
-                $matches = [regex]::Matches($newContent, "^import.*`n", [System.Text.RegularExpressions.RegexOptions]::Multiline)
-                if ($matches.Count -gt 0) {
-                    $insertPoint = $matches[$matches.Count - 1].Index + $matches[$matches.Count - 1].Length
-                }
-            }
-            
-            $importStatement = "import { $($config.ManagerName) } from '$(Get-RelativePath -from (Split-Path -Parent $file.FullName) -to $config.ManagerPath)';`n"
-            $newContent = $newContent.Insert($insertPoint, $importStatement)
-            $modified = $true
-            $changes += "Added LoggingManager import"
-        }
-
-        if ($modified) {
-            if (-not $DryRun) {
-                $newContent | Set-Content -Path $file.FullName -Force -Encoding UTF8
-                $modifiedFiles += @{
-                    Path = $file.FullName
-                    Changes = $changes
-                }
-            }
-            $stats.Modified++
-        }
     }
     catch {
         Write-Host "Error processing $($file.FullName): $_" -ForegroundColor Red

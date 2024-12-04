@@ -1,8 +1,8 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { monitoringService } from '../../services/monitoring';
 import { HealthCheckResponse } from '../../types/middleware';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 /**
  * Get detailed system status (protected endpoint)
@@ -46,4 +46,5 @@ export async function healthCheck(req: Request, res: Response) {
     });
   }
 }
+
 

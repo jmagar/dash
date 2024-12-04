@@ -1,4 +1,4 @@
-﻿import { db } from '../../db';
+import { db } from '../../db';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import { 
@@ -11,7 +11,7 @@ import {
 } from '../../../types/notifications';
 import { DBNotificationPreferences } from './types';
 import { validateNotificationPreferences, validatePartialNotificationPreferences } from '../../validators/notification-preferences.validator';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class NotificationPreferencesService {
   private readonly DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -142,4 +142,5 @@ export class NotificationPreferencesService {
 }
 
 export const preferencesService = new NotificationPreferencesService();
+
 

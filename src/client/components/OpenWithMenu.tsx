@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React from 'react';
 import {
   Menu,
@@ -85,3 +86,4 @@ export function OpenWithMenu({ file, anchorEl, onClose, hostId }: OpenWithMenuPr
     </Menu>
   );
 }
+

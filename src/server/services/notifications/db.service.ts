@@ -1,8 +1,8 @@
-﻿import { db } from '../../db';
+import { db } from '../../db';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import { 
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
   NotificationEntity, 
   NotificationFilter, 
   NotificationType,
@@ -180,4 +180,5 @@ export class NotificationDBService {
 }
 
 export const notificationDBService = new NotificationDBService();
+
 

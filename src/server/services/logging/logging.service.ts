@@ -1,6 +1,6 @@
-﻿import { Logger, LogMetadata, LogLevel, LogContext } from '../../../types/logger';
+import { Logger, LogMetadata, LogLevel, LogContext } from '../../../types/logger';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 /**
  * Structured logging service that ensures consistent log format and context
@@ -230,4 +230,5 @@ export class LoggingService {
     };
   }
 }
+
 

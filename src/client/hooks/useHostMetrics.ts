@@ -4,7 +4,7 @@ import { useSocket } from './useSocket';
 import type { TypedSocket } from './useSocket';
 import type { SystemMetrics } from '../../types/metrics';
 import type { ProcessInfo } from '../../types/process';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseHostMetricsOptions {
   hostId: string;

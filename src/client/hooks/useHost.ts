@@ -2,7 +2,7 @@
 import { useSocket } from './useSocket';
 import type { Host } from '../../types/models-shared';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseHostOptions {
   hostId?: string;

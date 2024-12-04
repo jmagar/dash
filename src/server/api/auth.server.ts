@@ -14,7 +14,7 @@ import type {
 } from '../../types/auth';
 import config from '../config';
 import { db } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 interface UserRecord {
   id: string;
@@ -352,4 +352,5 @@ export async function refresh(
     });
   }
 }
+
 

@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { ChatRole } from '../routes/chat/dto/chat.dto';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { MessageSanitizer } from '../utils/messageSanitizer';
 
 export class StreamService {
@@ -69,4 +69,5 @@ export class StreamService {
     res.end();
   }
 }
+
 

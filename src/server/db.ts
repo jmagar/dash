@@ -1,6 +1,6 @@
-import { Pool, QueryResult, PoolConfig } from 'pg';
+﻿import { Pool, QueryResult, PoolConfig } from 'pg';
 import config from './config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 import { metrics } from './metrics';
 
 // Database configuration

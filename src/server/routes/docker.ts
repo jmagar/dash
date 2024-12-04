@@ -5,7 +5,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { Container, Stack, ApiResponse } from '../../types/models-shared';
 import cache from '../cache';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = express.Router();
 
@@ -209,4 +209,5 @@ router.post('/:hostId/containers', createAuthHandler(cacheContainers));
 router.post('/:hostId/stacks', createAuthHandler(cacheStacks));
 
 export default router;
+
 

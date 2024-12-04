@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { cacheService } from '../cache/CacheService';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import config from '../config';
 import type { 
   User, 
@@ -274,4 +274,5 @@ router.post('/refresh', async (req, res) => {
 });
 
 export default router;
+
 

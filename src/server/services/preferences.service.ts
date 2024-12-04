@@ -1,6 +1,6 @@
 import { UserPreferences } from '@prisma/client';
 import { prisma } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 export class PreferencesService {
   async getPreferences(userId: string): Promise<UserPreferences | null> {
@@ -42,4 +42,5 @@ export class PreferencesService {
 }
 
 export const preferencesService = new PreferencesService();
+
 

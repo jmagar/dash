@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { bookmarkService } from '../services/bookmarks.service';
 import { requireAuth } from '../middleware/auth';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = Router();
 
@@ -136,4 +136,5 @@ router.post('/:hostId/:path/access', async (req, res) => {
 });
 
 export default router;
+
 

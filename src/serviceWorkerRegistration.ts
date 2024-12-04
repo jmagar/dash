@@ -1,4 +1,4 @@
-﻿import { LoggingManager } from '../../../../../../src/server/utils/logging/LoggingManager';
+﻿import { LoggingManager } from './server/utils/logging/LoggingManager';
 // This optional code is used to register a service worker.
 // register() is not called by default.
 

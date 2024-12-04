@@ -1,6 +1,6 @@
 import { RedisClientType } from 'redis';
 import { cache } from '../cache';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { ChatRole } from '../routes/chat/dto/chat.dto';
 
 interface ConversationMessage {
@@ -69,4 +69,5 @@ export class ConversationCache {
 }
 
 export const conversationCache = new ConversationCache();
+
 

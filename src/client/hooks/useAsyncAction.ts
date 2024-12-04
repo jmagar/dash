@@ -1,6 +1,6 @@
 ﻿import { useState, useCallback } from 'react';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseAsyncActionOptions<T> {
   onSuccess?: (data: T) => void;

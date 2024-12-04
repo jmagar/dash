@@ -2,7 +2,7 @@
 import type { ClientToServerEvents, ServerToClientEvents } from '../types/socket-events';
 import { config } from './config';
 import { logger } from './utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../server/utils/logging/LoggingManager';
 
 // Socket configuration
 const socketConfig = {

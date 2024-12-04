@@ -9,7 +9,7 @@ import {
 } from '../../types/notifications';
 import { notificationsClient } from '../api/notifications.client';
 import { ServiceOperationError } from '../../types/errors';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseNotificationsOptions {
   userId: string;

@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../types/errors';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { ApiErrorResponse, ErrorDetail } from '../types/common.dto';
 import { monitoringService } from '../services/monitoring';
 import { ValidationError } from 'class-validator';
@@ -132,4 +132,5 @@ export function notFoundHandler(req: Request, res: Response) {
 
   res.status(error.status).json(response);
 }
+
 

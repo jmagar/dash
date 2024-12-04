@@ -1,5 +1,5 @@
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 interface ErrorGroup {
   count: number;
@@ -175,4 +175,5 @@ class ErrorAggregator {
 
 export const errorAggregator = ErrorAggregator.getInstance();
 export default errorAggregator;
+
 

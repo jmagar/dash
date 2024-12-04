@@ -1,4 +1,4 @@
-﻿import { EventEmitter } from 'events';
+import { EventEmitter } from 'events';
 import { Server } from 'socket.io';
 import { logger } from '../../utils/logger';
 import { getAgentService } from '../agent.service';
@@ -9,7 +9,7 @@ import type { ProcessMonitor, ProcessCache, ProcessServiceOptions, ProcessServic
 import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
 import type { ProcessInfo } from '../../../types/metrics';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 class MapProcessCache implements ProcessCache {
   private readonly cache = new Map<string, Map<number, ProcessInfo>>();
@@ -332,4 +332,5 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     this.removeAllListeners();
   }
 }
+
 

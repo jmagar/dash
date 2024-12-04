@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import config from '../config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 if (!config.openai.apiKey) {
   LoggingManager.getInstance().error('OpenAI API key is not configured');
@@ -51,4 +51,5 @@ export async function generateCompletion(prompt: string): Promise<string> {
     throw error;
   }
 }
+
 

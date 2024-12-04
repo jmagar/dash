@@ -1,11 +1,11 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import path from 'path';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
 import { query } from '../../db';
 import { FileParams } from './dto/files.dto';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 // Normalize file path to prevent directory traversal
 function normalizePath(filePath?: string): string {
@@ -67,4 +67,5 @@ export const listFiles = async (
     throw new ApiError(500, 'Failed to list files');
   }
 };
+
 

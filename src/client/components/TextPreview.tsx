@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { logger } from '../utils/frontendLogger';
@@ -90,3 +91,4 @@ export function TextPreview({ file, hostId, onError }: TextPreviewProps) {
     </Box>
   );
 }
+

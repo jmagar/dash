@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { AuthContext, User, AuthContextType } from '../context/AuthContext';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface LoginResponse {
   success: boolean;

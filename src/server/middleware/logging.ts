@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { RequestLogMetadata, ResponseLogMetadata } from '../types/middleware';
 import { monitoringService } from '../services/monitoring';
 import { performance } from 'perf_hooks';
@@ -225,4 +225,5 @@ function sanitizeRequestData(data: unknown): Record<string, unknown> {
   }
   return sanitized;
 }
+
 

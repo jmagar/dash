@@ -1,4 +1,4 @@
-﻿import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { Server, Socket } from 'socket.io';
 import { 
   ClientToServerEvents, 
@@ -13,7 +13,7 @@ import { ApiError } from '../../../../types/error';
 import { ERROR_CODES, LOG_METADATA, SOCKET_EVENTS, CONNECTION_TIMEOUT } from '../utils/constants';
 import type { LogMetadata } from '../../../../types/logger';
 import { z } from 'zod';
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
 
 // Connection metadata schema with strict validation
 const connectionMetadataSchema = z.object({
@@ -372,4 +372,5 @@ export class ConnectionService {
     }
   }
 }
+
 

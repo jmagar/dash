@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -328,3 +329,4 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     </>
   );
 }
+

@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import { preferencesClient } from '../api/preferences.client';
@@ -134,3 +135,4 @@ export function useTheme() {
   }
   return context;
 }
+

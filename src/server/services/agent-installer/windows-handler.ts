@@ -1,4 +1,4 @@
-﻿import path from 'path';
+import path from 'path';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
 import type { ExtendedHost, InstallOptions } from '../../../types/agent-config';
@@ -7,7 +7,7 @@ import { windowsInstallScript } from './install-scripts';
 import { IAgentHandler } from './types';
 import type { SSHService } from '../ssh.service';
 import config from '../../config';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class WindowsHandler implements IAgentHandler {
   private executeCommand: (host: ExtendedHost, command: string) => Promise<void>;
@@ -95,4 +95,5 @@ export class WindowsHandler implements IAgentHandler {
     return windowsInstallScript;
   }
 }
+
 

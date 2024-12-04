@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 
 import {
   Send,
@@ -38,6 +38,7 @@ import { useHost } from '../hooks/useHost';
 import { logger } from '../utils/logger';
 
 import type { CommandRequest, CommandResult } from '../../types/models-shared';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export function RemoteExecution() {
   const { selectedHost } = useHost({ autoConnect: false });
@@ -99,13 +100,13 @@ export function RemoteExecution() {
   const handleNavigateToHosts = (e: React.MouseEvent) => {
     e.preventDefault();
     // TODO: Implement navigation to hosts page
-    logger.info('Navigate to hosts page');
+    LoggingManager.getInstance().();
   };
 
   const handleNavigateToHost = (e: React.MouseEvent) => {
     e.preventDefault();
     // TODO: Implement navigation to host details page
-    logger.info('Navigate to host details page');
+    LoggingManager.getInstance().();
   };
 
   if (!selectedHost) {
@@ -275,7 +276,7 @@ export function RemoteExecution() {
                         </Tooltip>
                         <IconButton
                           onClick={() => {
-                            logger.info('Download functionality not implemented yet');
+                            LoggingManager.getInstance().();
                           }}
                           size="small"
                           title="Download output"
@@ -333,3 +334,4 @@ export function RemoteExecution() {
     </Box>
   );
 }
+

@@ -1,6 +1,6 @@
 import { Client } from 'ssh2';
 import { EventEmitter } from 'events';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import type { Host, CommandResult } from '../../types/models-shared';
 import type { LogMetadata } from '../../types/logger';
 import { db } from '../db';
@@ -260,4 +260,5 @@ export class SSHService extends EventEmitter {
 
 // Export singleton instance
 export const sshService = new SSHService();
+
 

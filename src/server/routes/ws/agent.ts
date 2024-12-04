@@ -1,9 +1,9 @@
-﻿import WebSocket from 'ws';
+import WebSocket from 'ws';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { z } from 'zod';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 // Message type validation
 export const MessageType = z.enum([
@@ -248,4 +248,5 @@ export class AgentConnection extends EventEmitter {
 
 // Export types for use in other files
 export type { z };
+
 

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { metrics } from '../metrics';
 import { errorAggregator } from '../services/errorAggregator';
 import { ApiError } from '../../types/error';
@@ -384,4 +384,5 @@ export class DatabaseRepository {
     await this.prisma.$disconnect();
   }
 }
+
 

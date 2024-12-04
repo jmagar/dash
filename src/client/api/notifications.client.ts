@@ -11,7 +11,7 @@ import type {
 import { BaseApiClient } from './base.client';
 import { logger } from '../utils/frontendLogger';
 import { ServiceOperationError } from '../../types/errors';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface GetNotificationsParams {
   userId: string;

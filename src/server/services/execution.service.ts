@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { Server } from 'socket.io';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { getAgentService } from './agent.service';
 import { sshService } from './ssh.service';
 import { db } from '../db';
@@ -214,4 +214,5 @@ class ExecutionService extends EventEmitter {
 
 // Export singleton instance with global.io from socket setup
 export const executionService = new ExecutionService(global.io);
+
 

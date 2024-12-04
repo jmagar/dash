@@ -1,8 +1,8 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export const testRoute = async (
   req: Request,
@@ -24,4 +24,5 @@ export const testRoute = async (
     throw new ApiError(500, 'Test route error');
   }
 };
+
 

@@ -1,8 +1,8 @@
-﻿import { EventEmitter } from 'events';
+import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
 import type { ProcessInfo } from '@/types/process';
 import type {
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
   ProcessService,
   ProcessMonitor,
   ProcessMonitorFactory,
@@ -137,4 +137,5 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     this.on('error', callback);
   }
 }
+
 

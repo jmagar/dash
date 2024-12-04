@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
-import { FileSystemManager } from '../../services/filesystem/filesystem.manager';
+import { FileSystemManager } from '../../managers/services/FileSystemManager';
 import { FileSystemLocation, FileListResponse, Space, QuickAccessResponse } from '../../../types/filesystem';
 import {
   CreateLocationDto,
@@ -288,3 +288,4 @@ export class FilesystemController {
     return this.filesystemManager.selectFiles(dto);
   }
 }
+

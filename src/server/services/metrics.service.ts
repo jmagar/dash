@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { getAgentService } from './agent.service';
 import { 
   SystemMetrics, 
@@ -536,4 +536,5 @@ class MetricsService extends EventEmitter {
 
 // Export singleton instance
 export const metricsService = new MetricsService({} as MetricsConfig);
+
 

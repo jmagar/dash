@@ -1,6 +1,6 @@
 import os from 'os';
 import { SystemMetrics, ProcessMetrics, ServiceStatus, HealthCheckResponse } from '../types/middleware';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 class MonitoringService {
   private static instance: MonitoringService;
@@ -279,4 +279,5 @@ class MonitoringService {
 }
 
 export const monitoringService = MonitoringService.getInstance();
+
 

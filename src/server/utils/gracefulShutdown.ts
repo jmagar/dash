@@ -3,7 +3,7 @@
 import { logger } from './logger';
 import cache from '../cache';
 import { db } from '../db';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from './logging/LoggingManager';
 
 export function configureGracefulShutdown(server: Server) {
   // Handle process termination signals

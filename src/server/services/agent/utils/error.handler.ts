@@ -1,9 +1,9 @@
-﻿import { logger } from '../../../utils/logger';
+import { logger } from '../../../utils/logger';
 import type { LogMetadata } from '../../../../types/logger';
 import { ApiError } from '../../../../types/error';
 import { ERROR_CODES, LOG_METADATA } from './constants';
 import { z } from 'zod';
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
 
 // Strict error context typing
 export interface ErrorContext extends Record<string, unknown> {
@@ -80,4 +80,5 @@ export function createApiError(
 
   return new ApiError(message, errorDetails);
 }
+
 

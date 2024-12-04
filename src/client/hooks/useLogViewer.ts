@@ -2,7 +2,7 @@
 import { socket } from '../socket';
 import type { LogEntry, LogFilter } from '../../types/logging';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseLogViewerOptions {
   hostIds?: string[];

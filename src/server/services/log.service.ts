@@ -1,6 +1,6 @@
 import { Server as SocketServer } from 'socket.io';
 import { EventEmitter } from 'events';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { getAgentService } from './agent.service';
 import type { ServerToClientEvents, ClientToServerEvents } from '../../types/socket-events';
 
@@ -146,4 +146,5 @@ class LogService extends EventEmitter {
 
 // Export singleton instance
 export const logService = new LogService(global.io);
+
 

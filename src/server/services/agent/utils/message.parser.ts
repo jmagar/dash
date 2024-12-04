@@ -1,7 +1,7 @@
-﻿import { RawData } from 'ws';
+import { RawData } from 'ws';
 import { logger } from '../../../utils/logger';
 import { Message, MessageData } from '../types/message.types';
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
 
 export class MessageParser {
   static parse(data: RawData): MessageData | null {
@@ -110,4 +110,5 @@ export class MessageParser {
     return message.type === expectedType;
   }
 }
+
 

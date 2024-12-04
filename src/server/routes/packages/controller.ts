@@ -1,11 +1,11 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
 import { query } from '../../db';
 import { PackageParams, InstallPackageDto } from './dto/packages.dto';
 import { Package } from '../../types/models-shared';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export const listPackages = async (
   req: Request<PackageParams>,
@@ -91,4 +91,5 @@ export const installPackage = async (
     throw new ApiError(500, 'Failed to install package');
   }
 };
+
 

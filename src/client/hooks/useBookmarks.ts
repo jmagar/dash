@@ -8,7 +8,7 @@ import {
   updateLastAccessed,
 } from '../api/bookmarks.client';
 import { frontendLogger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface BookmarkContext {
   path: string;

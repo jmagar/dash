@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState, useRef, useEffect } from 'react';
 import type { KeyboardEvent } from 'react';
 import {
@@ -193,3 +194,4 @@ export function Chat({ onError }: ChatProps) {
     </Paper>
   );
 }
+

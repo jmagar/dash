@@ -1,9 +1,9 @@
-﻿import { Client, SFTPWrapper } from 'ssh2';
+import { Client, SFTPWrapper } from 'ssh2';
 import type { ClientConfig, SFTPStats } from 'ssh2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 interface SFTPFileEntry {
   filename: string;
@@ -258,4 +258,5 @@ export class SFTPProvider implements FileSystemProvider {
     }
   }
 }
+
 

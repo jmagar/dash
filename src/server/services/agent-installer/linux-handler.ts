@@ -1,4 +1,4 @@
-﻿import path from 'path';
+import path from 'path';
 import { logger } from '../../utils/logger';
 import type { LogMetadata } from '../../../types/logger';
 import type { ExtendedHost, InstallOptions } from '../../../types/agent-config';
@@ -7,7 +7,7 @@ import { unixInstallScript } from './install-scripts';
 import { IAgentHandler } from './types';
 import type { SSHService } from '../ssh.service';
 import config from '../../config';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class LinuxHandler implements IAgentHandler {
   private executeCommand: (host: ExtendedHost, command: string, options?: { sudo?: boolean }) => Promise<void>;
@@ -124,4 +124,5 @@ export class LinuxHandler implements IAgentHandler {
     return unixInstallScript;
   }
 }
+
 

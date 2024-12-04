@@ -2,7 +2,7 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { logger } from '../logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../logging/LoggingManager';
 
 const window = new JSDOM('').window;
 const purify = DOMPurify(window as unknown as Window);

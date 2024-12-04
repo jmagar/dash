@@ -1,5 +1,5 @@
 ﻿import type { Logger, LogLevel, LogMetadata } from '../../types/logging';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,

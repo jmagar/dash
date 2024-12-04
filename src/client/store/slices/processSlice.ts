@@ -2,7 +2,7 @@
 import type { ProcessInfo, ProcessStats } from '@/types/process';
 import type { RootState } from '@/client/store/storeTypes';
 import { logger } from '@/client/utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../../server/utils/logging/LoggingManager';
 
 interface ProcessState {
   processes: ProcessInfo[];

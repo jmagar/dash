@@ -3,7 +3,7 @@ import type { DockerContainer } from '@/types/docker';
 import type { RootState } from '@/client/store/storeTypes';
 import { listContainers, startContainer, stopContainer, removeContainer as removeContainerApi } from '@/client/api/docker.client';
 import { logger } from '@/client/utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../../server/utils/logging/LoggingManager';
 
 interface DockerState {
   containers: DockerContainer[];

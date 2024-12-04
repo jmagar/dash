@@ -1,9 +1,9 @@
-﻿import { Client as SSHClient } from 'ssh2';
+import { Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import type { Host } from '../../../types/host';
 import type { EmergencyOperations, OperationResult } from './types';
 import { HostState } from './types';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 /**
  * EmergencyService provides critical operations when the agent is unavailable
@@ -217,4 +217,5 @@ export class EmergencyService extends BaseService implements EmergencyOperations
     await this.execCommand(ssh, 'curl -s -S --max-time 5 https://google.com > /dev/null');
   }
 }
+
 

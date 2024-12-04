@@ -6,7 +6,7 @@ import { useMutation } from './useMutation';
 
 import type { NotificationPreferences, NotificationType } from '@/types/notifications';
 import type { NotificationPreferencesResponse } from '@/types/socket-events';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseNotificationPreferencesOptions {
   userId: string;

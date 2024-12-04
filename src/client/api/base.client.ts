@@ -4,7 +4,7 @@ import { config } from '../config';
 import { logger } from '../utils/frontendLogger';
 import { createApiError } from '../../types/error';
 import type { ApiResponse } from '../../types/express';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export interface BaseClientConfig {
   baseURL?: string;

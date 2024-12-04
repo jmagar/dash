@@ -1,9 +1,9 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { BaseService, ServiceConfig } from './base.service';
 import { ServiceStatus } from '../types/status';
 import { HealthMonitorService } from './health-monitor';
 import { EventEmitter } from 'events';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 interface ServiceRegistryEvents {
   'service:registered': (name: string) => void;
@@ -364,4 +364,5 @@ export class ServiceRegistry extends BaseService {
     this.registryEmitter.removeAllListeners();
   }
 }
+
 

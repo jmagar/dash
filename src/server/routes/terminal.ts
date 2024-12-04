@@ -6,7 +6,7 @@ import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types
 import type { LogMetadata } from '../../types/logger';
 import type { ApiResponse } from '../../types/models-shared';
 import cache from '../cache';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = express.Router();
 
@@ -166,4 +166,5 @@ router.post('/:hostId/command', createAuthHandler(cacheCommand));
 router.get('/:hostId/history', createAuthHandler(getCommandHistory));
 
 export default router;
+
 

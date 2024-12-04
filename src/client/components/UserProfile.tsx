@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 
 import {
   Avatar,
@@ -29,6 +29,7 @@ import {
 
 import { useAuth } from '../hooks/useAuth';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export function UserProfile() {
   const theme = useTheme();
@@ -86,7 +87,7 @@ export function UserProfile() {
         setSuccess(false);
       }, 1500);
       
-      logger.info('Profile updated successfully');
+      LoggingManager.getInstance().();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to update profile');
       logger.error('Profile update failed:', {
@@ -372,3 +373,4 @@ export function UserProfile() {
     </Box>
   );
 }
+

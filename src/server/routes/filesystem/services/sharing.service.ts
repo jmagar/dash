@@ -1,4 +1,4 @@
-﻿import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -13,7 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { FileShare } from '../entities/file-share.entity';
 import { ShareAccessLog } from '../entities/share-access-log.entity';
 import { 
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
     ShareInfoDto, 
     ShareAccessLogEntryDto, 
     ShareStatus, 
@@ -389,4 +389,5 @@ export class SharingService {
         return bcrypt.hash(password, SALT_ROUNDS);
     }
 }
+
 

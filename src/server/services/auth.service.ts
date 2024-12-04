@@ -1,7 +1,7 @@
 import { BaseService } from './base.service';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { cacheService } from '../cache/cache.service';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { ApiError } from '../types/api-error';
 import config from '../config';
 import { PrismaClient } from '@prisma/client';
@@ -215,4 +215,5 @@ export class AuthService extends BaseService {
 }
 
 export const authService = new AuthService();
+
 

@@ -1,6 +1,6 @@
 import { ApiError, createApiError } from '../../types/error';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 export interface ConnectionConfig {
   connectionTimeout: number;
@@ -110,4 +110,5 @@ export function validateConfig(config: ConnectionConfig = DEFAULT_CONFIG): Conne
 export const connectionConfig = validateConfig();
 
 export default connectionConfig;
+
 

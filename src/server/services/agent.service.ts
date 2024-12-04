@@ -1,6 +1,6 @@
 import { Server as SocketServer, Socket, Namespace } from 'socket.io';
 import { EventEmitter } from 'events';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { AgentStatus } from '../../types/agent-config';
 import type {
   ClientToServerEvents,
@@ -309,4 +309,5 @@ export const getAgentService = (): AgentService => {
   }
   return agentServiceInstance;
 };
+
 

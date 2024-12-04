@@ -2,7 +2,7 @@ import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
 import config from '../config';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 interface Memory {
   id: string;
@@ -266,4 +266,5 @@ export class MemoryService extends EventEmitter {
 }
 
 export const memoryService = new MemoryService();
+
 

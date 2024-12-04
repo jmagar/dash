@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { conversationService } from '../../services/conversation.service';
 import { SendMessageDto } from './dto/chat.dto';
 import { ChatSettingsDto } from './dto/chat.dto'; // Assuming ChatSettingsDto is defined in the same file
@@ -7,7 +7,7 @@ import { validate } from 'class-validator';
 import { ApiError } from '../../utils/error';
 import { ApiResponse } from '../../types/express';
 import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export const handleChatMessage = async (
   req: Request<Record<string, never>, any, SendMessageDto>,
@@ -28,7 +28,7 @@ export const handleChatMessage = async (
     const response = await conversationService.chat(messageDto, settingsDto, sessionId);
     return res.json(new ApiResponse(response));
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    logger.error('Error processing chat message', { error });
     if (error instanceof ApiError) {
       throw error;
     }
@@ -46,7 +46,7 @@ export async function getChatHistory(req: Request, res: Response) {
     const history = await conversationService.getConversationHistory(sessionId);
     return res.json(new ApiResponse(history));
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    logger.error('Error getting chat history', { error });
     if (error instanceof ApiError) {
       return res.status(error.status).json(new ApiResponse(null, error));
     }
@@ -64,7 +64,7 @@ export async function clearChatHistory(req: Request, res: Response) {
     await conversationService.clearHistory(sessionId);
     return res.json(new ApiResponse({ message: 'Chat history cleared successfully' }));
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    logger.error('Error clearing chat history', { error });
     if (error instanceof ApiError) {
       return res.status(error.status).json(new ApiResponse(null, error));
     }
@@ -87,7 +87,7 @@ export async function streamChatMessage(req: Request, res: Response) {
     // Start streaming response
     await conversationService.streamChat(messageDto, settingsDto, sessionId, res);
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    logger.error('Error streaming chat message', { error });
     if (!res.headersSent) {
       if (error instanceof ApiError) {
         return res.status(error.status).json(new ApiResponse(null, error));

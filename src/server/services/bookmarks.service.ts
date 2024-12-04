@@ -1,6 +1,6 @@
 import { Bookmark } from '@prisma/client';
 import prisma from '../db';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 export class BookmarkService {
   async getBookmarks(userId: string): Promise<Bookmark[]> {
@@ -120,4 +120,5 @@ export class BookmarkService {
 }
 
 export const bookmarkService = new BookmarkService();
+
 

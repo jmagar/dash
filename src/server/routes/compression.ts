@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { compressionService } from '../services/compression.service';
 import { asyncHandler } from '../middleware/async';
 import { requireAuth } from '../middleware/auth';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = Router();
 
@@ -64,4 +64,5 @@ router.get(
 );
 
 export default router;
+
 

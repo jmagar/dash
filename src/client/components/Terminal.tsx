@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 
 import { Terminal as XTerm } from '@xterm/xterm';
 
@@ -16,6 +16,7 @@ const importWebLinksAddon = () => import('@xterm/addon-web-links').then(m => m.W
 const importSearchAddon = () => import('@xterm/addon-search').then(m => m.SearchAddon);
 
 import '@xterm/xterm/css/xterm.css';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface TerminalProps {
   hostId: string;
@@ -94,7 +95,7 @@ export function Terminal({
       resizeHandlerRef.current = handleResize;
       window.addEventListener('resize', handleResize);
     }).catch(error => {
-      logger.error('Failed to initialize terminal addons', { error });
+      LoggingManager.getInstance().();
     });
 
     const handleData = (data: string) => {
@@ -152,3 +153,4 @@ export function Terminal({
     />
   );
 }
+

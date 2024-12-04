@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import type { ProcessInfo } from '../../../types/metrics';
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
@@ -8,7 +8,7 @@ import { ProcessMonitorFactory } from '../../services/process/process-monitor-fa
 import { ProcessCacheImpl } from '../../services/process/process-cache';
 import { hostService } from '../../services/host.service';
 import { io } from '../../server';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 const router = Router();
 
@@ -89,4 +89,5 @@ router.post('/:hostId/processes/:pid/kill', async (req, res, next) => {
 });
 
 export default router;
+
 

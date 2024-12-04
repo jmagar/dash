@@ -1,8 +1,8 @@
-import express, { json, urlencoded } from 'express';
+﻿import express, { json, urlencoded } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestLogger, slowRequestLogger } from './middleware/logging';
 import { apiLimiter } from './middleware/rateLimit';

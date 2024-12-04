@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -86,3 +87,4 @@ export function PDFPreview({ file, hostId, zoom, rotation, onError }: PDFPreview
     </Box>
   );
 }
+

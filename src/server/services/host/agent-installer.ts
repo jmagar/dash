@@ -1,7 +1,7 @@
-﻿import { Client as SSHClient } from 'ssh2';
+import { Client as SSHClient } from 'ssh2';
 import { logger } from '../../utils/logger';
 import type { InstallOptions } from './types';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 /**
  * Utility class for agent installation operations
@@ -117,4 +117,5 @@ WantedBy=multi-user.target
     });
   }
 }
+
 

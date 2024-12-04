@@ -4,7 +4,7 @@ import type { AxiosError } from 'axios';
 import type { LogMetadata } from '../../types/logger';
 import type { RootState } from '../store/storeTypes';
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 /**
  * Type guard to check if an error is an Axios error

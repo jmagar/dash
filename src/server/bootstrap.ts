@@ -1,9 +1,9 @@
-import 'reflect-metadata';
+﻿import 'reflect-metadata';
 import type { Server } from 'http';
 import { cacheService } from './cache/CacheService';
 import { db } from './db';
 import { server } from './server';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from './utils/logging/LoggingManager';
 import { metrics } from './metrics';
 import config from './config';
 

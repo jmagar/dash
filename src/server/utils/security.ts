@@ -1,7 +1,7 @@
 ﻿import * as path from 'path';
 import { BadRequestException } from '@nestjs/common';
 import { logger } from '../../logger';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from './logging/LoggingManager';
 
 export interface FileValidationOptions {
   maxSize?: number;

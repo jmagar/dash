@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import { useState } from 'react';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import type { NotificationType, NotificationPreferences } from '@/types/notifications';
@@ -220,3 +221,4 @@ export function NotificationSettings({ userId }: NotificationSettingsProps) {
     </div>
   );
 }
+

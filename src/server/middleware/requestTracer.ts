@@ -1,7 +1,7 @@
 import { performance } from 'perf_hooks';
 import type { Response, NextFunction } from 'express';
 import type { Request } from 'express';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { monitoringService } from '../services/monitoring';
 
 export interface RequestTiming {
@@ -151,4 +151,5 @@ export function performanceMonitor(threshold = 1000) {
     next();
   };
 }
+
 

@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { ApiError } from '../../types/error';
 import { type RequestHandler } from '../../types/express';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 const router = Router();
 
@@ -41,4 +41,5 @@ export const testRoute: RequestHandler = async (req, res) => {
 router.get('/', testRoute);
 
 export default router;
+
 

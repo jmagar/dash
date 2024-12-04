@@ -2,7 +2,7 @@
 import { logger } from '../utils/frontendLogger';
 import { useSocket } from './useSocket';
 import type { DesktopNotification } from '../../types/notifications';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface UseDesktopNotificationsResult {
   requestPermission: () => Promise<boolean>;

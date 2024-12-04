@@ -1,8 +1,8 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 import type { AgentStatus } from '../../../../types/agent-config';
 import { ERROR_CODES } from '../utils/constants';
 import { 
-import { LoggingManager } from '../../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../../managers/utils/LoggingManager';
   agentInfoSchema, 
   agentMetricsSchema, 
   agentCommandResultSchema 
@@ -210,4 +210,5 @@ export {
   errorPayloadSchema,
   MESSAGE_TYPES
 };
+
 

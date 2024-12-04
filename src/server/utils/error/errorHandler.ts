@@ -1,7 +1,7 @@
 ﻿import { logger } from '../logger';
 import type { LogMetadata } from '../../../types/logger';
 import { ApiError } from '../../../types/error';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../logging/LoggingManager';
 
 export interface ErrorContext {
   code?: string;

@@ -8,7 +8,7 @@ import type {
 } from '../../types/service';
 import type { Host } from '../../types/host';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { metrics, recordHostMetric } from '../metrics';
 import { errorAggregator } from './errorAggregator';
 import { v4 as uuidv4 } from 'uuid';
@@ -181,4 +181,5 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
     return this;
   }
 }
+
 

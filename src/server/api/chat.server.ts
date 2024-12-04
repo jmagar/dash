@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { chatService } from '../services/chat.service';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto } from '../routes/chat/dto/chat.dto';
 import { validate } from 'class-validator';
 import { plainToClass } from 'class-transformer';
@@ -42,4 +42,5 @@ router.post('/chat', async (req, res) => {
 });
 
 export default router;
+
 

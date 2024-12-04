@@ -1,11 +1,11 @@
-﻿import { SFTPWrapper, Client as SSHClient } from 'ssh2';
+import { SFTPWrapper, Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import { Host } from '../../../types/host.types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
 import type { LogMetadata } from '../../../types/logger';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 interface SSHClientWithSFTP extends SSHClient {
   sftp(callback: (err: Error | null, sftp: SFTPWrapper) => void): void;
@@ -243,4 +243,5 @@ export class SFTPService extends BaseService {
     });
   }
 }
+
 

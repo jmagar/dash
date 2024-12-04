@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import {
   Box,
@@ -20,6 +20,7 @@ import {
 import { useCopilotChat } from '@copilotkit/react-core';
 import type { Message } from '@copilotkit/shared';
 import { logger } from '../utils/frontendLogger';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface ChatBotProps {
   onError?: (error: Error) => void;
@@ -42,7 +43,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
     id: 'main-chat',
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Chat error:', { error: errorMessage });
+      LoggingManager.getInstance().();
       if (onError) {
         onError(error instanceof Error ? error : new Error(errorMessage));
       }
@@ -62,7 +63,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
       await sendMessage(message);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to send message:', { error: errorMessage });
+      LoggingManager.getInstance().();
       if (onError) {
         onError(error instanceof Error ? error : new Error('Failed to send message'));
       }
@@ -226,3 +227,4 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
     </Paper>
   );
 };
+

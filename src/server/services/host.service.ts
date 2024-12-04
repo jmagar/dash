@@ -1,6 +1,6 @@
 import type { Host } from '../../types/models-shared';
 import type { ProcessInfo } from '../../types/metrics';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 
 class HostService {
   private initialized = false;
@@ -98,4 +98,5 @@ class HostService {
 }
 
 export const hostService = new HostService();
+
 

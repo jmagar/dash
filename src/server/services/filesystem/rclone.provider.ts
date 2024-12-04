@@ -1,11 +1,11 @@
-﻿import { spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
 import { FileItem } from '../../../types/models-shared';
 import { logger } from '../../../logger';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { LoggingManager } from '../../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class RcloneProvider implements FileSystemProvider {
   readonly type: FileSystemType = 'rclone';
@@ -239,4 +239,5 @@ export class RcloneProvider implements FileSystemProvider {
     }
   }
 }
+
 

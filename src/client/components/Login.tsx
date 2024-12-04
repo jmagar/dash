@@ -1,3 +1,4 @@
+﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager'
 import React, { useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
@@ -257,3 +258,4 @@ export default function Login(): JSX.Element {
     </Box>
   );
 }
+

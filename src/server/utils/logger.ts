@@ -25,7 +25,7 @@ import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { GotifyTransport } from './gotifyTransport';
 import * as os from 'os';
-import { LoggingManager } from '../../../../../../../../../utils/logging/LoggingManager';
+import { LoggingManager } from './logging/LoggingManager';
 
 // Use platform-specific log directory
 const isWindows = os.platform() === 'win32';

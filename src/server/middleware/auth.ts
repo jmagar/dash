@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
-import { LoggingManager } from '../utils/logging/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager';
 import { ApiError } from '../types/errors';
 import { ApiErrorResponse } from '../types/common.dto';
 import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
@@ -153,4 +153,5 @@ export function checkOwnership(userIdParam = 'userId') {
 export const requireAuth = authenticateToken;
 export const requireRole = checkRole;
 export const requireOwnership = checkOwnership;
+
 

@@ -1,7 +1,7 @@
 ﻿import socketIO from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LoggingManager } from '../../../../../../../../src/server/utils/logging/LoggingManager';
+import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
