@@ -1,13 +1,21 @@
-import { Router } from 'express';
-import { asyncAuthHandler } from '../../middleware/async';
-import * as controller from './controller';
-import { SendMessageDto } from './dto/chat.dto';
+import { createRouter, logRouteAccess } from '../routeUtils';
+import chatRouter from '../../api/chat.server';
+import { authenticateToken } from '../../middleware/auth';
 
-const router = Router();
+export const router = createRouter();
+
+// Apply authentication middleware to all chat routes
+router.use(authenticateToken);
 
 // Main chat endpoint that handles both CopilotKit and mem0ai
-router.post('/chat', asyncAuthHandler<Record<string, never>, any, SendMessageDto>(
-  controller.handleChatMessage
-));
+router.use('/', chatRouter);
 
-export default router;
+// Logging middleware for chat routes
+router.use((req, res, next) => {
+  logRouteAccess('Chat route accessed', {
+    method: req.method,
+    path: req.path,
+    userId: req.user?.id
+  });
+  next();
+});

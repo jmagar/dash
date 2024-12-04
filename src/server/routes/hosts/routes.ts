@@ -1,3 +1,4 @@
+import { createRouter, logRouteAccess } from '../routeUtils';
 import { Router } from 'express';
 import type { CreateHostRequest, UpdateHostRequest } from '../../../types/models-shared';
 import { asyncAuthHandler } from '../../middleware/async';

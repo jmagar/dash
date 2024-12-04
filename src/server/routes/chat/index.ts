@@ -13,4 +13,7 @@ router.post('/stream', streamChatMessage);
 router.get('/history/:sessionId', getChatHistory);
 router.delete('/history/:sessionId', clearChatHistory);
 
+export * from './routes';
+export * from './controller';
+export * from './dto';
 export default router;

@@ -1,14 +1,12 @@
-import express from 'express';
+import { createRouter, logRouteAccess } from '../routeUtils';
+import type { CacheCommand } from '../../../types/cache';
+import { ApiError } from '../../../types/error';
+import { createAuthHandler, type AuthenticatedRequestHandler } from '../../../types/express';
+import type { LogMetadata } from '../../../types/logger';
+import type { ApiResponse } from '../../../types/models-shared';
+import cache from '../../cache';
 
-import type { CacheCommand } from '../../types/cache';
-import { ApiError } from '../../types/error';
-import { createAuthHandler, type AuthenticatedRequestHandler } from '../../types/express';
-import type { LogMetadata } from '../../types/logger';
-import type { ApiResponse } from '../../types/models-shared';
-import cache from '../cache';
-import { LoggingManager } from '../managers/utils/LoggingManager';
-
-const router = express.Router();
+export const router = createRouter();
 
 interface TerminalParams {
   hostId: string;
@@ -71,7 +69,7 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
     const commandId = String(hostId);
     await cache.setCommand(commandId, JSON.stringify(commandData));
 
-    LoggingManager.getInstance().info('Command cached', {
+    logRouteAccess('Command cached', {
       userId: req.user.id,
       hostId: String(hostId),
       command,
@@ -90,7 +88,7 @@ const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse,
       workingDirectory,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    LoggingManager.getInstance().error('Failed to cache command:', metadata);
+    logRouteAccess('Failed to cache command:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to cache command',
@@ -146,7 +144,7 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
       hostId: String(hostId),
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    LoggingManager.getInstance().error('Failed to get command history:', metadata);
+    logRouteAccess('Failed to get command history:', metadata);
 
     const apiError = new ApiError(
       error instanceof Error ? error.message : 'Failed to get command history',
@@ -164,7 +162,3 @@ const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResp
 // Register routes
 router.post('/:hostId/command', createAuthHandler(cacheCommand));
 router.get('/:hostId/history', createAuthHandler(getCommandHistory));
-
-export default router;
-
-
