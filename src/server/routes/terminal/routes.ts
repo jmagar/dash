@@ -1,164 +1,124 @@
-import { createRouter, logRouteAccess } from '../routeUtils';
-import type { CacheCommand } from '../../../types/cache';
+import { z } from 'zod';
+import { createRouter, createRouteHandler, logRouteAccess } from '../routeUtils';
+import { cache } from '../../cache';
+import { requireAuth } from '../../middleware/auth';
 import { ApiError } from '../../../types/error';
-import { createAuthHandler, type AuthenticatedRequestHandler } from '../../../types/express';
+import type { CacheCommand } from '../../../types/cache';
 import type { LogMetadata } from '../../../types/logger';
 import type { ApiResponse } from '../../../types/models-shared';
-import cache from '../../cache';
+
+// Validation schemas
+const terminalIdSchema = z.object({
+  params: z.object({
+    hostId: z.string()
+  })
+});
+
+const cacheCommandSchema = z.object({
+  body: z.object({
+    command: z.string(),
+    workingDirectory: z.string().optional()
+  })
+});
+
+const getCommandHistorySchema = z.object({
+  params: z.object({
+    hostId: z.string()
+  })
+});
 
 export const router = createRouter();
 
-interface TerminalParams {
-  hostId: string;
-}
+// Apply authentication to all terminal routes
+router.use(requireAuth);
 
-interface CommandBody {
-  command: string;
-  workingDirectory?: string;
-}
+// Cache a terminal command for a specific host
+router.post('/:hostId/command', createRouteHandler(
+  async (req) => {
+    const { hostId } = req.params;
+    const { command, workingDirectory } = req.body;
+    if (!command.trim()) {
+      throw new ApiError('Command cannot be empty', 400);
+    }
 
-type CommandResponse = ApiResponse<null>;
-type HistoryResponse = ApiResponse<CacheCommand[]>;
+    try {
+      const commandData: CacheCommand = {
+        command,
+        workingDirectory,
+        timestamp: new Date(),
+      };
 
-function validateCommand(command: unknown): command is CommandBody {
-  return typeof command === 'object' &&
-    command !== null &&
-    typeof (command as { command: string }).command === 'string' &&
-    ((command as { workingDirectory?: string }).workingDirectory === undefined ||
-      typeof (command as { workingDirectory?: string }).workingDirectory === 'string');
-}
+      const commandId = String(hostId);
+      await cache.setCommand(commandId, JSON.stringify(commandData));
 
-/**
- * Cache a terminal command for a specific host
- */
-const cacheCommand: AuthenticatedRequestHandler<TerminalParams, CommandResponse, CommandBody> = async (req, res) => {
-  const hostId = parseInt(req.params.hostId, 10);
-  if (isNaN(hostId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid host ID',
-    });
-  }
-
-  if (!req.user) {
-    throw new ApiError('Authentication required', undefined, 401);
-  }
-
-  if (!validateCommand(req.body)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid command format',
-    });
-  }
-
-  const { command, workingDirectory } = req.body;
-  if (!command.trim()) {
-    return res.status(400).json({
-      success: false,
-      error: 'Command cannot be empty',
-    });
-  }
-
-  try {
-    const commandData: CacheCommand = {
-      command,
-      workingDirectory,
-      timestamp: new Date(),
-    };
-
-    const commandId = String(hostId);
-    await cache.setCommand(commandId, JSON.stringify(commandData));
-
-    logRouteAccess('Command cached', {
-      userId: req.user.id,
-      hostId: String(hostId),
-      command,
-      workingDirectory,
-    });
-
-    return res.json({
-      success: true,
-      data: null,
-    });
-  } catch (error) {
-    const metadata: LogMetadata = {
-      userId: req.user?.id,
-      hostId: String(hostId),
-      command,
-      workingDirectory,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logRouteAccess('Failed to cache command:', metadata);
-
-    const apiError = new ApiError(
-      error instanceof Error ? error.message : 'Failed to cache command',
-      undefined,
-      500,
-      metadata
-    );
-    return res.status(apiError.status).json({
-      success: false,
-      error: apiError.message,
-    });
-  }
-};
-
-/**
- * Get command history for a specific host
- */
-const getCommandHistory: AuthenticatedRequestHandler<TerminalParams, HistoryResponse> = async (req, res) => {
-  const hostId = parseInt(req.params.hostId, 10);
-  if (isNaN(hostId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid host ID',
-    });
-  }
-
-  if (!req.user) {
-    throw new ApiError('Authentication required', undefined, 401);
-  }
-
-  try {
-    const commandId = String(hostId);
-    const commandData = await cache.getCommand(commandId);
-    if (!commandData) {
-      return res.json({
-        success: true,
-        data: [],
+      logRouteAccess('Command cached', {
+        userId: req.user.id,
+        hostId: String(hostId),
+        command,
+        workingDirectory,
       });
+
+      return { success: true, data: null };
+    } catch (error) {
+      const metadata: LogMetadata = {
+        userId: req.user?.id,
+        hostId: String(hostId),
+        command,
+        workingDirectory,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logRouteAccess('Failed to cache command:', metadata);
+
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to cache command',
+        undefined,
+        500,
+        metadata
+      );
     }
-
-    const commands = JSON.parse(commandData);
-    if (!Array.isArray(commands)) {
-      throw new Error('Invalid command history format');
-    }
-
-    return res.json({
-      success: true,
-      data: commands,
-    });
-  } catch (error) {
-    const metadata: LogMetadata = {
-      userId: req.user?.id,
-      hostId: String(hostId),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logRouteAccess('Failed to get command history:', metadata);
-
-    const apiError = new ApiError(
-      error instanceof Error ? error.message : 'Failed to get command history',
-      undefined,
-      500,
-      metadata
-    );
-    return res.status(apiError.status).json({
-      success: false,
-      error: apiError.message,
-    });
+  },
+  {
+    requireAuth: true,
+    schema: cacheCommandSchema.merge(terminalIdSchema)
   }
-};
+));
 
-// Register routes
-router.post('/:hostId/command', createAuthHandler(cacheCommand));
-router.get('/:hostId/history', createAuthHandler(getCommandHistory));
+// Get command history for a specific host
+router.get('/:hostId/history', createRouteHandler(
+  async (req) => {
+    const { hostId } = req.params;
+
+    try {
+      const commandId = String(hostId);
+      const commandData = await cache.getCommand(commandId);
+      if (!commandData) {
+        return { success: true, data: [] };
+      }
+
+      const commands = JSON.parse(commandData);
+      if (!Array.isArray(commands)) {
+        throw new Error('Invalid command history format');
+      }
+
+      return { success: true, data: commands };
+    } catch (error) {
+      const metadata: LogMetadata = {
+        userId: req.user?.id,
+        hostId: String(hostId),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      logRouteAccess('Failed to get command history:', metadata);
+
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to get command history',
+        undefined,
+        500,
+        metadata
+      );
+    }
+  },
+  {
+    requireAuth: true,
+    schema: getCommandHistorySchema
+  }
+));

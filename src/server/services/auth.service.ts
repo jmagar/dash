@@ -4,8 +4,10 @@ import { cacheService } from '../cache/cache.service';
 import { LoggingManager } from '../managers/utils/LoggingManager';
 import { ApiError } from '../types/api-error';
 import config from '../config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, User } from '@prisma/client';
 import { z } from 'zod';
+import * as bcrypt from 'bcrypt';
+import { validate, validateSafe, validateBatch } from '../utils/validation/validator';
 import { 
   UserRole, 
   AuthenticatedUserDto, 
@@ -21,49 +23,98 @@ import {
   ValidationResponse
 } from '../routes/auth/dto/auth.dto';
 
-const sessionSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
-  username: z.string(),
-  role: z.enum(['admin', 'user', 'guest']),
-  is_active: z.boolean(),
-  refreshToken: z.string(),
-  createdAt: z.date(),
-  lastActivity: z.date(),
-  expiresAt: z.date().optional(),
-  device: z.object({
-    id: z.string(),
-    type: z.string(),
-    name: z.string(),
-    platform: z.string(),
-    browser: z.string()
-  }).optional(),
-  metadata: z.record(z.unknown()).optional()
+// Zod schemas for validation
+const LoginSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  rememberMe: z.boolean().optional().default(false)
+});
+
+const TokenSchema = z.object({
+  token: z.string().min(1, "Token is required")
+});
+
+const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, "Refresh token is required")
 });
 
 export class AuthService extends BaseService {
   private prisma: PrismaClient;
+  private logger: LoggingManager;
 
   constructor() {
     super();
     this.prisma = new PrismaClient();
+    this.logger = LoggingManager.getInstance();
   }
 
-  async login(username: string, password: string, rememberMe = false): Promise<LoginResponseDto> {
-    try {
-      const user = await this.prisma.user.findFirst({
-        where: { OR: [{ username }, { email: username }] }
+  // Centralized user validation method with Zod validation
+  private async validateUserCredentials(
+    loginData: z.infer<typeof LoginSchema>
+  ): Promise<User> {
+    // Validate input first
+    const validatedData = validate(LoginSchema, loginData);
+
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [
+        { username: validatedData.username }, 
+        { email: validatedData.username }
+      ]}
+    });
+
+    if (!user) {
+      this.logger.warn('Login attempt with non-existent user', { 
+        username: validatedData.username 
       });
+      throw new ApiError('Invalid credentials', 401);
+    }
 
-      if (!user) {
-        throw new ApiError('Invalid credentials', 401);
-      }
+    const isValidPassword = await this.comparePasswords(
+      validatedData.password, 
+      user.password
+    );
 
-      const isValidPassword = await this.validatePassword(password, user.password);
-      if (!isValidPassword) {
-        throw new ApiError('Invalid credentials', 401);
-      }
+    if (!isValidPassword) {
+      this.logger.warn('Failed login attempt', { 
+        username: validatedData.username 
+      });
+      throw new ApiError('Invalid credentials', 401);
+    }
 
+    return user;
+  }
+
+  // Password comparison with consistent error handling
+  private async comparePasswords(
+    inputPassword: string, 
+    storedHash: string
+  ): Promise<boolean> {
+    try {
+      return await bcrypt.compare(inputPassword, storedHash);
+    } catch (error) {
+      this.logger.error('Password comparison failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw new ApiError('Authentication error', 500);
+    }
+  }
+
+  // Main login method with comprehensive validation
+  async login(
+    loginData: { 
+      username: string; 
+      password: string; 
+      rememberMe?: boolean 
+    }
+  ): Promise<LoginResponseDto> {
+    try {
+      // Validate input
+      const validatedLoginData = validate(LoginSchema, loginData);
+
+      // Validate user credentials
+      const user = await this.validateUserCredentials(validatedLoginData);
+
+      // Create session and tokens
       const tokenPayload: TokenPayloadDto = {
         id: user.id,
         userId: user.id,
@@ -85,135 +136,142 @@ export class AuthService extends BaseService {
         refreshToken,
         createdAt: new Date(),
         lastActivity: new Date(),
-        expiresAt: rememberMe ? undefined : tokenExpiration
+        expiresAt: validatedLoginData.rememberMe ? undefined : tokenExpiration
       };
 
       await cacheService.setSession(user.id, session);
 
-      const response = new LoginResponseDto();
-      response.success = true;
-      response.data = {
-        token,
-        refreshToken,
-        tokenExpiration,
-        ...user
-      } as AuthenticatedUserDto;
+      this.logger.info('User logged in successfully', { 
+        username: user.username, 
+        userId: user.id 
+      });
 
-      return response;
-    } catch (error) {
-      LoggingManager.getInstance().error('Login failed', { error });
-      const response = new LoginResponseDto();
-      response.success = false;
-      response.error = error instanceof ApiError ? error.message : 'Login failed';
-      return response;
-    }
-  }
-
-  async validate(token: string): Promise<ValidateResponseDto> {
-    try {
-      const decoded = await verifyToken(token);
-      const session = await cacheService.getSession(decoded.userId);
-
-      if (!session) {
-        throw new ApiError('Invalid session', 401);
-      }
-
-      const sessionData = sessionSchema.parse(session);
-      const tokenExpiration = new Date(Date.now() + config.security.tokenExpiration);
-
-      const response: ValidateResponseDto = {
+      return {
         success: true,
-        valid: true,
         data: {
           token,
-          refreshToken: sessionData.refreshToken,
+          refreshToken,
           tokenExpiration,
-          ...decoded
-        }
+          ...user
+        } as AuthenticatedUserDto
       };
-
-      return response;
     } catch (error) {
-      LoggingManager.getInstance().error('Token validation failed', { error });
-      return {
-        success: false,
-        valid: false,
-        error: error instanceof ApiError ? error.message : 'Token validation failed'
-      };
+      this.logger.error('Login failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      
+      throw new ApiError('Login failed', 500);
     }
   }
 
-  async refresh(refreshToken: string): Promise<RefreshTokenResponseDto> {
+  // Token validation with Zod validation
+  async validateToken(tokenInput: { token: string }): Promise<ValidateResponseDto> {
     try {
-      const decoded = await verifyToken(refreshToken);
-      const session = await cacheService.getSession(decoded.userId);
+      // Validate token format first
+      const validatedToken = validate(TokenSchema, tokenInput);
 
-      if (!session || session.refreshToken !== refreshToken) {
-        throw new ApiError('Invalid refresh token', 401);
+      // Verify token
+      const payload = await verifyToken(validatedToken.token);
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId }
+      });
+
+      if (!user) {
+        throw new ApiError('User not found', 401);
       }
 
-      const tokenPayload: TokenPayloadDto = {
-        id: decoded.id,
-        userId: decoded.userId,
-        username: decoded.username,
-        role: decoded.role as UserRole,
-        is_active: decoded.is_active
+      return {
+        success: true,
+        data: {
+          id: user.id,
+          username: user.username,
+          role: user.role as UserRole,
+          is_active: user.is_active
+        }
       };
-
-      const newToken = await generateToken(tokenPayload);
-      const newRefreshToken = await generateRefreshToken(tokenPayload);
-      const tokenExpiration = new Date(Date.now() + config.security.tokenExpiration);
-
-      const updatedSession: SessionDto = {
-        ...session,
-        refreshToken: newRefreshToken,
-        lastActivity: new Date(),
-        expiresAt: session.expiresAt
-      };
-
-      await cacheService.setSession(decoded.userId, updatedSession);
-
-      const response = new RefreshTokenResponseDto();
-      response.success = true;
-      response.data = {
-        token: newToken,
-        refreshToken: newRefreshToken,
-        tokenExpiration,
-        ...decoded
-      } as AuthenticatedUserDto;
-
-      return response;
     } catch (error) {
-      LoggingManager.getInstance().error('Token refresh failed', { error });
-      const response = new RefreshTokenResponseDto();
-      response.success = false;
-      response.error = error instanceof ApiError ? error.message : 'Token refresh failed';
-      return response;
+      this.logger.warn('Token validation failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      throw new ApiError('Invalid token', 401);
     }
   }
 
+  // Token refresh with Zod validation
+  async refreshToken(
+    refreshTokenInput: { refreshToken: string }
+  ): Promise<RefreshTokenResponseDto> {
+    try {
+      // Validate refresh token format
+      const validatedRefreshToken = validate(RefreshTokenSchema, refreshTokenInput);
+
+      // Verify token
+      const payload = await verifyToken(
+        validatedRefreshToken.refreshToken, 
+        true
+      );
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId }
+      });
+
+      if (!user) {
+        throw new ApiError('User not found', 401);
+      }
+
+      // Generate new access token
+      const newTokenPayload: TokenPayloadDto = {
+        id: user.id,
+        userId: user.id,
+        username: user.username,
+        role: user.role as UserRole,
+        is_active: user.is_active
+      };
+
+      const newAccessToken = await generateToken(newTokenPayload);
+
+      this.logger.info('Token refreshed', { userId: user.id });
+
+      return {
+        success: true,
+        data: {
+          token: newAccessToken
+        }
+      };
+    } catch (error) {
+      this.logger.error('Token refresh failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      throw new ApiError('Token refresh failed', 401);
+    }
+  }
+
+  // Logout method
   async logout(userId: string): Promise<LogoutResponseDto> {
     try {
-      await cacheService.removeSession(userId);
-      
-      const response = new LogoutResponseDto();
-      response.success = true;
-      return response;
-    } catch (error) {
-      LoggingManager.getInstance().error('Logout failed', { error });
-      const response = new LogoutResponseDto();
-      response.success = false;
-      response.error = error instanceof ApiError ? error.message : 'Logout failed';
-      return response;
-    }
-  }
+      await cacheService.deleteSession(userId);
 
-  private async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
-    // Implement password validation logic here
-    return true; // Placeholder
+      this.logger.info('User logged out', { userId });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      this.logger.error('Logout failed', { 
+        userId, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      throw new ApiError('Logout failed', 500);
+    }
   }
 }
 
 export const authService = new AuthService();
-
-

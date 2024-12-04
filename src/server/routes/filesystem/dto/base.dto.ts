@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsObject, IsBoolean, IsEnum, IsArray } from 'class-validator';
+import { FileType } from './metadata.dto';
 
 /**
  * File system type enum
@@ -32,10 +33,10 @@ export class BaseFileSystemEntityDto {
   @IsString()
   path: string;
 
-  @ApiPropertyOptional({ description: 'Entity type', enum: FileSystemType })
+  @ApiPropertyOptional({ description: 'Entity type', enum: FileType })
+  @IsEnum(FileType)
   @IsOptional()
-  @IsEnum(FileSystemType)
-  type?: FileSystemType;
+  type?: FileType;
 
   @ApiPropertyOptional({ description: 'Entity permissions', enum: FileSystemPermission, isArray: true })
   @IsOptional()

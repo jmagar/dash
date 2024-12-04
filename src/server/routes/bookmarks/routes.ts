@@ -1,7 +1,31 @@
-import { createRouter, logRouteAccess } from '../routeUtils';
-import { Router } from 'express';
+import { z } from 'zod';
+import { createRouter, createRouteHandler } from '../../utils/routeUtils';
 import { bookmarkService } from '../../services/bookmarks.service';
 import { requireAuth } from '../../middleware/auth';
+
+// Validation schemas
+const createBookmarkSchema = z.object({
+  body: z.object({
+    hostId: z.string(),
+    path: z.string(),
+    name: z.string(),
+    isDirectory: z.boolean().optional(),
+    notes: z.string().optional()
+  })
+});
+
+const pathParamsSchema = z.object({
+  params: z.object({
+    hostId: z.string(),
+    path: z.string()
+  })
+});
+
+const updateBookmarkSchema = z.object({
+  body: z.object({
+    notes: z.string().optional()
+  })
+});
 
 export const router = createRouter();
 
@@ -9,128 +33,68 @@ export const router = createRouter();
 router.use(requireAuth);
 
 // Get all bookmarks for the current user
-router.get('/', async (req, res) => {
-  try {
-    const bookmarks = await bookmarkService.getBookmarks(req.user.id);
-    res.json({
-      success: true,
-      data: bookmarks,
-    });
-  } catch (error) {
-    logRouteAccess('Failed to get bookmarks:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get bookmarks',
-    });
-  }
-});
+router.get('/', createRouteHandler(
+  async (req) => await bookmarkService.getBookmarks(req.user.id),
+  { requireAuth: true }
+));
 
 // Create a new bookmark
-router.post('/', async (req, res) => {
-  try {
+router.post('/', createRouteHandler(
+  async (req) => {
     const { hostId, path, name, isDirectory, notes } = req.body;
-
-    if (!hostId || !path || !name) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-      });
-    }
-
-    const bookmark = await bookmarkService.createBookmark(
+    return await bookmarkService.createBookmark(
       req.user.id,
       hostId,
       path,
       name,
       isDirectory,
-      notes,
+      notes
     );
-
-    res.json({
-      success: true,
-      data: bookmark,
-    });
-  } catch (error) {
-    logRouteAccess('Failed to create bookmark:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create bookmark',
-    });
+  },
+  {
+    requireAuth: true,
+    schema: createBookmarkSchema
   }
-});
+));
 
 // Update a bookmark's notes
-router.patch('/:hostId/:path', async (req, res) => {
-  try {
+router.patch('/:hostId/:path', createRouteHandler(
+  async (req) => {
     const { hostId, path } = req.params;
     const { notes } = req.body;
-
-    const bookmark = await bookmarkService.updateBookmark(req.user.id, hostId, path, {
+    return await bookmarkService.updateBookmark(req.user.id, hostId, path, {
       notes,
     });
-
-    res.json({
-      success: true,
-      data: bookmark,
-    });
-  } catch (error) {
-    logRouteAccess('Failed to update bookmark:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update bookmark',
-    });
+  },
+  {
+    requireAuth: true,
+    schema: {
+      ...pathParamsSchema,
+      ...updateBookmarkSchema
+    }
   }
-});
+));
 
 // Delete a bookmark
-router.delete('/:hostId/:path', async (req, res) => {
-  try {
+router.delete('/:hostId/:path', createRouteHandler(
+  async (req) => {
     const { hostId, path } = req.params;
-
-    await bookmarkService.deleteBookmark(req.user.id, hostId, path);
-
-    res.json({
-      success: true,
-    });
-  } catch (error) {
-    logRouteAccess('Failed to delete bookmark:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete bookmark',
-    });
+    return await bookmarkService.deleteBookmark(req.user.id, hostId, path);
+  },
+  {
+    requireAuth: true,
+    schema: pathParamsSchema
   }
-});
+));
 
 // Update last accessed time
-router.post('/:hostId/:path/access', async (req, res) => {
-  try {
+router.post('/:hostId/:path/access', createRouteHandler(
+  async (req) => {
     const { hostId, path } = req.params;
-
-    await bookmarkService.updateLastAccessed(req.user.id, hostId, path);
-
-    res.json({
-      success: true,
-    });
-  } catch (error) {
-    logRouteAccess('Failed to update bookmark last accessed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userId: req.user.id,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update bookmark last accessed',
-    });
+    return await bookmarkService.updateLastAccessed(req.user.id, hostId, path);
+  },
+  {
+    requireAuth: true,
+    schema: pathParamsSchema
   }
-});
+));

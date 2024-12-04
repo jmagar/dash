@@ -1,11 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { BaseService } from '../services/base.service';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+
+// Filesystem related imports
+import { IFileSystemManagerController } from '../routes/filesystem/interfaces/filesystem-manager.interface';
+import { FileSystemEntryDto } from '../routes/filesystem/dto/filesystem-entry.dto';
+import { FileSystemStatsDto } from '../routes/filesystem/dto/filesystem-stats.dto';
+import { FileType } from '../routes/filesystem/dto/metadata.dto';
+
+// Error and security imports
+import { SecurityError } from '../utils/errorHandler';
+import { ConfigManager } from './ConfigManager';
+import { SecurityManager } from './SecurityManager';
+
+// Metrics imports (if needed)
+import { Metrics } from '../utils/metrics'; // Adjust import based on your actual metrics implementation
 
 // Zod schema for robust file metadata validation
 const FileMetadataSchema = z.object({
@@ -38,7 +53,7 @@ interface FileSystemManagerDependencies {
 }
 
 @Injectable()
-export class FileSystemManager extends BaseService {
+export class FileSystemManager extends BaseService implements IFileSystemManagerController {
   private static instance: FileSystemManager;
   private baseStoragePath: string;
   private tempStoragePath: string;
@@ -66,11 +81,8 @@ export class FileSystemManager extends BaseService {
     this.setupMetrics();
   }
 
-  public static getInstance(dependencies?: FileSystemManagerDependencies): FileSystemManager {
+  public static getInstance(dependencies: FileSystemManagerDependencies): FileSystemManager {
     if (!FileSystemManager.instance) {
-      if (!dependencies) {
-        throw new Error('Dependencies must be provided when initializing FileSystemManager');
-      }
       FileSystemManager.instance = new FileSystemManager(dependencies);
     }
     return FileSystemManager.instance;
@@ -499,6 +511,419 @@ export class FileSystemManager extends BaseService {
         stack: error instanceof Error ? error.stack : undefined 
       });
       this.metrics.incrementCounter('filesystem_errors_total', { operation: 'bulk_delete', type: 'files' });
+      throw error;
+    }
+  }
+
+  /**
+   * Validate user access to a specific path
+   * @param userId User identifier
+   * @param hostId Host/location identifier
+   * @param path Path to validate
+   * @throws {SecurityError} If access is not permitted
+   */
+  private async validatePathAccess(userId: string, hostId: string, path: string): Promise<void> {
+    // Validate input parameters
+    if (!userId) {
+      throw new SecurityError('User ID is required', { 
+        operation: 'path_access', 
+        details: 'Missing user ID' 
+      });
+    }
+
+    if (!hostId) {
+      throw new SecurityError('Host ID is required', { 
+        operation: 'path_access', 
+        details: 'Missing host ID' 
+      });
+    }
+
+    if (!path) {
+      throw new SecurityError('Path is required', { 
+        operation: 'path_access', 
+        details: 'Missing path' 
+      });
+    }
+
+    // Validate user permissions
+    const hasAccess = await this.dependencies.securityManager.validateUserPathAccess(userId, hostId, path);
+    if (!hasAccess) {
+      this.logger.warn('Unauthorized path access attempt', {
+        userId,
+        hostId,
+        path,
+        operation: 'path_access'
+      });
+
+      throw new SecurityError('Access denied to specified path', {
+        userId,
+        hostId,
+        path,
+        operation: 'path_access'
+      });
+    }
+
+    // Sanitize and validate path
+    const sanitizedPath = this.sanitizePath(path);
+    if (!this.isPathWithinBaseStorage(sanitizedPath)) {
+      this.logger.error('Path outside allowed storage', {
+        userId,
+        hostId,
+        path: sanitizedPath,
+        baseStoragePath: this.baseStoragePath,
+        operation: 'path_validation'
+      });
+
+      throw new SecurityError('Path is outside allowed storage', {
+        userId,
+        hostId,
+        path: sanitizedPath,
+        operation: 'path_validation'
+      });
+    }
+  }
+
+  /**
+   * Sanitize and validate file path
+   * @param path Raw path
+   * @returns Sanitized absolute path
+   */
+  private sanitizePath(path: string): string {
+    // Resolve and normalize path, remove potential directory traversal
+    const resolvedPath = path
+      .replace(/\.\./g, '')     // Remove directory traversal
+      .replace(/\/+/g, '/')     // Normalize multiple slashes
+      .replace(/^\/+/, '')      // Remove leading slashes
+      .trim();                  // Remove leading/trailing whitespace
+
+    // Resolve to absolute path within base storage
+    return path.resolve(this.baseStoragePath, resolvedPath);
+  }
+
+  /**
+   * Check if path is within base storage
+   * @param path Absolute path
+   * @returns Whether path is within base storage
+   */
+  private isPathWithinBaseStorage(path: string): boolean {
+    // Normalize paths to prevent bypassing checks
+    const normalizedBasePath = path.normalize(this.baseStoragePath);
+    const normalizedPath = path.normalize(path);
+
+    return normalizedPath.startsWith(normalizedBasePath);
+  }
+
+  /**
+   * Convert filesystem stats to DTO
+   * @param stats Raw filesystem stats
+   * @returns FileSystemStatsDto
+   */
+  private convertToStatsDto(stats: fs.Stats): FileSystemStatsDto {
+    return {
+      size: stats.size,
+      atime: stats.atime,
+      mtime: stats.mtime,
+      ctime: stats.ctime,
+      birthtime: stats.birthtime,
+      mode: stats.mode.toString(8)
+    };
+  }
+
+  /**
+   * Convert filesystem entry to DTO
+   * @param entry Filesystem entry
+   * @param relativePath Relative path from base storage
+   * @returns FileSystemEntryDto
+   */
+  private async convertToEntryDto(entry: fs.Dirent, relativePath: string): Promise<FileSystemEntryDto> {
+    const fullPath = path.join(this.baseStoragePath, relativePath, entry.name);
+    const stats = await fs.stat(fullPath);
+
+    return {
+      name: entry.name,
+      type: this.determineFileType(entry),
+      isDirectory: entry.isDirectory(),
+      isFile: entry.isFile(),
+      isSymbolicLink: entry.isSymbolicLink(),
+      size: stats.size.toString(),
+      modifiedTime: stats.mtime.toISOString(),
+      creationTime: stats.birthtime.toISOString(),
+      accessTime: stats.atime.toISOString(),
+      mode: stats.mode.toString(8)
+    };
+  }
+
+  /**
+   * Determine file type based on Dirent
+   * @param entry Filesystem entry
+   * @returns FileType
+   */
+  private determineFileType(entry: fs.Dirent): FileType {
+    if (entry.isDirectory()) return FileType.DIRECTORY;
+    if (entry.isFile()) return FileType.FILE;
+    if (entry.isSymbolicLink()) return FileType.SYMLINK;
+    return FileType.UNKNOWN;
+  }
+
+  /**
+   * List directory contents
+   * @inheritdoc
+   */
+  public async listDirectory(userId: string, hostId: string, path: string): Promise<FileSystemEntryDto[]> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      const entries = await fs.readdir(sanitizedPath, { withFileTypes: true });
+
+      // Convert entries to DTOs
+      const entriesDtos = await Promise.all(
+        entries.map(entry => this.convertToEntryDto(entry, path))
+      );
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'list_directory', 
+        type: 'success' 
+      });
+
+      return entriesDtos;
+    } catch (error) {
+      this.logger.error('Failed to list directory', { 
+        userId, 
+        hostId, 
+        path, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'list_directory', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Get file/directory stats
+   * @inheritdoc
+   */
+  public async getStats(userId: string, hostId: string, path: string): Promise<FileSystemStatsDto> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      const stats = await fs.stat(sanitizedPath);
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'get_stats', 
+        type: 'success' 
+      });
+
+      return this.convertToStatsDto(stats);
+    } catch (error) {
+      this.logger.error('Failed to get file stats', { 
+        userId, 
+        hostId, 
+        path, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'get_stats', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Create a directory
+   * @inheritdoc
+   */
+  public async createDirectory(userId: string, hostId: string, path: string, recursive = false): Promise<void> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      await fs.mkdir(sanitizedPath, { recursive });
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'create_directory', 
+        type: 'success' 
+      });
+    } catch (error) {
+      this.logger.error('Failed to create directory', { 
+        userId, 
+        hostId, 
+        path, 
+        recursive, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'create_directory', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a file or directory
+   * @inheritdoc
+   */
+  public async delete(userId: string, hostId: string, path: string): Promise<void> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      const stats = await fs.stat(sanitizedPath);
+
+      // Determine deletion method based on type
+      if (stats.isDirectory()) {
+        await fs.rmdir(sanitizedPath, { recursive: true });
+      } else {
+        await fs.unlink(sanitizedPath);
+      }
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'delete', 
+        type: 'success' 
+      });
+    } catch (error) {
+      this.logger.error('Failed to delete file/directory', { 
+        userId, 
+        hostId, 
+        path, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'delete', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Move or rename a file/directory
+   * @inheritdoc
+   */
+  public async move(userId: string, hostId: string, sourcePath: string, destinationPath: string): Promise<void> {
+    try {
+      // Validate access for both source and destination
+      await Promise.all([
+        this.validatePathAccess(userId, hostId, sourcePath),
+        this.validatePathAccess(userId, hostId, destinationPath)
+      ]);
+
+      const sanitizedSourcePath = this.sanitizePath(sourcePath);
+      const sanitizedDestinationPath = this.sanitizePath(destinationPath);
+
+      await fs.rename(sanitizedSourcePath, sanitizedDestinationPath);
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'move', 
+        type: 'success' 
+      });
+    } catch (error) {
+      this.logger.error('Failed to move file/directory', { 
+        userId, 
+        hostId, 
+        sourcePath, 
+        destinationPath, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'move', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Write file contents
+   * @inheritdoc
+   */
+  public async writeFile(userId: string, hostId: string, path: string, content: string, encoding: string = 'utf8'): Promise<void> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      await fs.writeFile(sanitizedPath, content, { encoding });
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'write_file', 
+        type: 'success' 
+      });
+    } catch (error) {
+      this.logger.error('Failed to write file', { 
+        userId, 
+        hostId, 
+        path, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'write_file', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Read file contents
+   * @inheritdoc
+   */
+  public async readFile(userId: string, hostId: string, path: string): Promise<string> {
+    try {
+      // Validate access
+      await this.validatePathAccess(userId, hostId, path);
+
+      const sanitizedPath = this.sanitizePath(path);
+      const content = await fs.readFile(sanitizedPath, 'utf8');
+
+      // Track metrics
+      this.metrics.counter('filesystem_operations_total')?.inc({ 
+        operation: 'read_file', 
+        type: 'success' 
+      });
+
+      return content;
+    } catch (error) {
+      this.logger.error('Failed to read file', { 
+        userId, 
+        hostId, 
+        path, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+
+      this.metrics.counter('filesystem_errors_total')?.inc({ 
+        operation: 'read_file', 
+        type: error instanceof SecurityError ? 'security' : 'system' 
+      });
+
       throw error;
     }
   }
