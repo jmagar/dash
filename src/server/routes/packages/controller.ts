@@ -1,29 +1,65 @@
 import { Request, Response } from 'express';
-import { ApiError } from '../../utils/error';
-import { ApiResponse } from '../../types/express';
-import { logger } from '../../utils/logger';
+import { ApiError } from '../../../types/error';
+import type { ApiResponse } from '../../../types/express';
 import { query } from '../../db';
-import { PackageParams, InstallPackageDto } from './dto/packages.dto';
-import { Package } from '../../types/models-shared';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import type { PackageParams, InstallPackageDto } from './dto/packages.dto';
+import type { Package } from '../../../types/models-shared';
+import { LoggingManager } from '../../managers/LoggingManager';
+import type { LogMetadata as BaseLogMetadata } from '../../../types/logger';
+
+interface PackageRow {
+  name: string;
+  version: string;
+  description: string | null;
+  installed: boolean;
+  latest_version: string | null;
+  size: number | null;
+  dependencies: string[] | null;
+  repository: string | null;
+  license: string | null;
+  homepage: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+interface LogMetadata extends BaseLogMetadata {
+  userId: string;
+  hostId: string;
+  package?: string;
+}
+
+const logger = LoggingManager.getInstance();
 
 export const listPackages = async (
   req: Request<PackageParams>,
-  res: Response
+  res: Response<ApiResponse<Package[]>>
 ): Promise<void> => {
-  const { hostId } = req.params;
-  const logMeta = { userId: req.user!.id, hostId };
+  if (!req.user?.id) {
+    throw new ApiError('Authentication required', undefined, 401);
+  }
 
-  loggerLoggingManager.getInstance().();
+  const { hostId } = req.params;
+  const logMeta: LogMetadata = { 
+    userId: req.user.id, 
+    hostId 
+  };
+
+  logger.info('Fetching packages for host', logMeta);
 
   try {
-    const result = await query(
+    const result = await query<PackageRow>(
       `
       SELECT
         name,
         version,
         description,
-        installed
+        installed,
+        latest_version,
+        size,
+        dependencies,
+        repository,
+        license,
+        homepage,
+        metadata
       FROM packages
       WHERE host_id = $1
       ORDER BY
@@ -32,48 +68,68 @@ export const listPackages = async (
       [hostId]
     );
 
-    const packages = result.rows.map(row => ({
+    const packages: Package[] = result.rows.map(row => ({
       name: row.name,
       version: row.version,
-      description: row.description,
+      description: row.description ?? undefined,
       installed: row.installed,
+      updateAvailable: Boolean(row.latest_version && row.latest_version !== row.version),
+      latestVersion: row.latest_version ?? undefined,
+      size: row.size ?? undefined,
+      dependencies: row.dependencies ?? undefined,
+      repository: row.repository ?? undefined,
+      license: row.license ?? undefined,
+      homepage: row.homepage ?? undefined,
+      metadata: row.metadata ?? undefined
     }));
 
-    res.json(new ApiResponse(packages));
+    res.json({
+      success: true,
+      data: packages
+    });
   } catch (error) {
-    loggerLoggingManager.getInstance().();
-    throw new ApiError(500, 'Failed to list packages');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to list packages', { 
+      ...logMeta, 
+      error: errorMessage
+    });
+    throw new ApiError('Failed to list packages', error);
   }
 };
 
 export const installPackage = async (
-  req: Request<PackageParams, any, InstallPackageDto>,
-  res: Response
+  req: Request<PackageParams, ApiResponse<void>, InstallPackageDto>,
+  res: Response<ApiResponse<void>>
 ): Promise<void> => {
+  if (!req.user?.id) {
+    throw new ApiError('Authentication required', undefined, 401);
+  }
+
   const { hostId } = req.params;
   const { package: packageName } = req.body;
 
-  const logMeta = {
-    userId: req.user!.id,
+  const logMeta: LogMetadata = {
+    userId: req.user.id,
     hostId,
     package: packageName,
   };
 
-  loggerLoggingManager.getInstance().();
+  logger.info('Installing package', logMeta);
 
   try {
     // Check if package exists
-    const packageResult = await query(
+    const packageResult = await query<{ installed: boolean }>(
       'SELECT installed FROM packages WHERE host_id = $1 AND name = $2',
       [hostId, packageName]
     );
 
     if (packageResult.rows.length === 0) {
-      throw new ApiError(404, 'Package not found');
+      throw new ApiError('Package not found', undefined, 404);
     }
 
-    if (packageResult.rows[0].installed) {
-      throw new ApiError(400, 'Package already installed');
+    const installedStatus = packageResult.rows[0]?.installed;
+    if (installedStatus) {
+      throw new ApiError('Package already installed', undefined, 400);
     }
 
     // Update package status
@@ -82,14 +138,19 @@ export const installPackage = async (
       [hostId, packageName]
     );
 
-    res.json(new ApiResponse(undefined));
+    res.json({
+      success: true
+    });
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to install package', { 
+      ...logMeta, 
+      error: errorMessage
+    });
+    
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(500, 'Failed to install package');
+    throw new ApiError('Failed to install package', error);
   }
 };
-
-

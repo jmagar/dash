@@ -3,7 +3,6 @@ import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/
 import type { SystemMetrics } from '../../../types/metrics';
 import { AgentStatus } from '../../../types/agent-config';
 import { ApiError } from '../../../types/error';
-import { logger } from '../../utils/logger';
 import * as hostService from './service';
 import { getAgentService } from '../../services/agent.service';
 import { metricsStorageService } from '../../services/metrics-storage.service';

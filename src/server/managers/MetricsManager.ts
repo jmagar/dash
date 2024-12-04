@@ -1,60 +1,62 @@
-import { Registry, Counter, Gauge, Histogram, Summary, collectDefaultMetrics } from 'prom-client';
-import { BaseService } from './base/BaseService';
+import { Counter, Gauge, Histogram, Registry, Summary } from 'prom-client';
+import { BaseService, ServiceConfig } from '../services/base.service';
 import { LoggingManager } from './LoggingManager';
 import { ConfigManager } from './ConfigManager';
-import { ServiceHealth, ServiceStatus } from './base/types';
-import { z } from 'zod';
+import { ServiceHealth } from '../../types/service';
+import { BaseManagerDependencies } from './ManagerContainer';
+import { metricsService, MetricName } from '../services/metrics.service';
+import { metrics } from '../metrics';
 
-export interface MetricLabels {
-  [key: string]: string | number;
-}
-
-export interface MetricOptions {
-  name: string;
-  help: string;
-  labelNames?: string[];
-  buckets?: number[];
-  percentiles?: number[];
-}
-
-const MetricsConfigSchema = z.object({
-  enabled: z.boolean(),
-  defaultMetrics: z.boolean(),
-  prefix: z.string(),
-  defaultLabels: z.record(z.string()),
-  interval: z.number(),
-  gcMetrics: z.boolean(),
-  eventLoopMetrics: z.boolean(),
-  processMetrics: z.boolean()
-});
-
-type MetricsConfig = z.infer<typeof MetricsConfigSchema>;
+const METRICS_SERVICE_CONFIG: ServiceConfig = {
+  retryOptions: {
+    maxAttempts: 3,
+    initialDelay: 1000,
+    maxDelay: 5000,
+    factor: 2,
+    timeout: 30000
+  },
+  cacheOptions: {
+    ttl: 300,
+    prefix: 'metrics:'
+  },
+  metricsEnabled: true,
+  loggingEnabled: true,
+  validation: {
+    strict: true
+  }
+};
 
 export class MetricsManager extends BaseService {
   private static instance: MetricsManager;
-  private registry: Registry;
-  private metrics: Map<string, Counter | Gauge | Histogram | Summary>;
-  private defaultMetricsInterval?: NodeJS.Timer;
-  private config: MetricsConfig;
-  private logger: LoggingManager;
+  private readonly registry: Registry;
+  private readonly metricStore: Map<string, Counter<string> | Gauge<string> | Histogram<string> | Summary<string>>;
+  private configManager?: ConfigManager;
+  private loggingManager?: LoggingManager;
 
-  // Internal metrics
-  private metricsCreated: Counter;
-  private metricsScrapes: Counter;
-  private metricsErrors: Counter;
-  private activeMetrics: Gauge;
-  private scrapeLatency: Histogram;
+  protected override readonly metrics = {
+    httpRequestDuration: metrics.httpRequestDuration,
+    apiErrors: metrics.apiErrors,
+    operationDuration: metrics.operationDuration,
+    hostMetrics: metrics.hostMetrics,
+    serviceMetrics: metrics.serviceMetrics,
+    initialize: () => metrics.initialize(),
+    cleanup: () => metrics.cleanup(),
+    histogram: (name: string, value: number, labels: Record<string, string | number>) => 
+      metrics.histogram(name, value, labels),
+    increment: (name: string, value: number, labels: Record<string, string | number>) => 
+      metrics.increment(name, value, labels),
+    gauge: (name: string, value: number, labels?: Record<string, string | number>) => 
+      metrics.gauge(name, value, labels),
+    observeHttpDuration: (method: string, route: string, statusCode: string, duration: number) => 
+      metrics.observeHttpDuration(method, route, statusCode, duration),
+    incrementApiError: (method: string, route: string, errorType: string) => 
+      metrics.incrementApiError(method, route, errorType)
+  };
 
   private constructor() {
-    super({
-      name: 'MetricsManager',
-      version: '1.0.0',
-      dependencies: ['LoggingManager', 'ConfigManager']
-    });
-
+    super(METRICS_SERVICE_CONFIG);
     this.registry = new Registry();
-    this.metrics = new Map();
-    this.initializeInternalMetrics();
+    this.metricStore = new Map();
   }
 
   public static getInstance(): MetricsManager {
@@ -64,267 +66,142 @@ export class MetricsManager extends BaseService {
     return MetricsManager.instance;
   }
 
-  private initializeInternalMetrics(): void {
-    this.metricsCreated = new Counter({
-      name: 'metrics_created_total',
-      help: 'Total number of metrics created',
-      labelNames: ['type'],
-      registers: [this.registry]
-    });
+  public initialize(deps: BaseManagerDependencies): void {
+    if (!deps.configManager || !deps.loggingManager) {
+      throw new Error('Required dependencies not provided');
+    }
 
-    this.metricsScrapes = new Counter({
-      name: 'metrics_scrapes_total',
-      help: 'Total number of metric scrapes',
-      registers: [this.registry]
-    });
-
-    this.metricsErrors = new Counter({
-      name: 'metrics_errors_total',
-      help: 'Total number of metric operation errors',
-      labelNames: ['operation'],
-      registers: [this.registry]
-    });
-
-    this.activeMetrics = new Gauge({
-      name: 'active_metrics',
-      help: 'Number of active metrics',
-      labelNames: ['type'],
-      registers: [this.registry]
-    });
-
-    this.scrapeLatency = new Histogram({
-      name: 'metrics_scrape_duration_seconds',
-      help: 'Duration of metric scrape operations',
-      buckets: [0.001, 0.005, 0.015, 0.05, 0.1, 0.5],
-      registers: [this.registry]
-    });
+    this.configManager = deps.configManager;
+    this.loggingManager = deps.loggingManager;
+    this.metrics.initialize();
   }
 
-  async init(): Promise<void> {
-    this.logger = LoggingManager.getInstance();
-    const configManager = ConfigManager.getInstance();
+  public getRegistry(): Registry {
+    return this.registry;
+  }
 
+  public recordServiceMetric(
+    name: MetricName, 
+    value: number, 
+    labels?: Record<string, string>
+  ): void {
     try {
-      // Load and validate config
-      const rawConfig = await configManager.get('metrics');
-      this.config = MetricsConfigSchema.parse({
-        enabled: true,
-        defaultMetrics: true,
-        prefix: 'dash_',
-        defaultLabels: {
-          app: 'dash',
-          service: this.name,
-          version: this.version,
-          env: process.env.NODE_ENV || 'development'
-        },
-        interval: 10000,
-        gcMetrics: true,
-        eventLoopMetrics: true,
-        processMetrics: true,
-        ...rawConfig
-      });
+      // Record in Prometheus registry
+      const counter = this.createCounter(name);
+      counter.inc(value);
 
-      // Set default labels
-      this.registry.setDefaultLabels(this.config.defaultLabels);
-
-      // Start collecting metrics if enabled
-      if (this.config.enabled) {
-        if (this.config.defaultMetrics) {
-          this.startDefaultMetrics();
-        }
-        if (this.config.gcMetrics) {
-          this.startGCMetrics();
-        }
-        if (this.config.eventLoopMetrics) {
-          this.startEventLoopMetrics();
-        }
-        if (this.config.processMetrics) {
-          this.startProcessMetrics();
-        }
-      }
-
-      this.logger.info('MetricsManager initialized successfully', {
-        enabled: this.config.enabled,
-        defaultMetrics: this.config.defaultMetrics,
-        interval: this.config.interval
-      });
+      // Record in metrics service
+      metricsService.recordMetric(name, value, labels);
     } catch (error) {
-      this.logger.error('Failed to initialize MetricsManager', { error });
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.loggingManager?.error('Failed to record service metric', { 
+        error: errorMessage,
+        metricName: name,
+        metricValue: value
+      });
     }
   }
 
-  async cleanup(): Promise<void> {
-    if (this.defaultMetricsInterval) {
-      clearInterval(this.defaultMetricsInterval);
-    }
-
-    this.registry.clear();
-    this.metrics.clear();
-    this.logger.info('MetricsManager cleanup completed');
+  public createCounter(name: string): Counter<string>;
+  public createCounter(name: string, help: string): Counter<string>;
+  public createCounter(name: string, help: string, labelNames?: string[]): Counter<string>;
+  public createCounter(name: string, help?: string, labelNames?: string[]): Counter<string> {
+    const counter = new Counter({
+      name,
+      help: help || name,
+      labelNames,
+      registers: [this.registry]
+    });
+    this.metricStore.set(name, counter);
+    return counter;
   }
 
-  async getHealth(): Promise<ServiceHealth> {
-    return {
-      status: ServiceStatus.HEALTHY,
-      version: this.version,
-      details: {
-        metricsCount: this.metrics.size,
-        defaultMetricsEnabled: !!this.defaultMetricsInterval,
-        metrics: {
-          created: await this.metricsCreated.get(),
-          scrapes: await this.metricsScrapes.get(),
-          errors: await this.metricsErrors.get(),
-          active: await this.activeMetrics.get()
-        }
+  public createGauge(name: string): Gauge<string>;
+  public createGauge(name: string, help: string): Gauge<string>;
+  public createGauge(name: string, help: string, labelNames?: string[]): Gauge<string>;
+  public createGauge(name: string, help?: string, labelNames?: string[]): Gauge<string> {
+    const gauge = new Gauge({
+      name,
+      help: help || name,
+      labelNames,
+      registers: [this.registry]
+    });
+    this.metricStore.set(name, gauge);
+    return gauge;
+  }
+
+  public createHistogram(name: string): Histogram<string>;
+  public createHistogram(name: string, help: string): Histogram<string>;
+  public createHistogram(name: string, help: string, labelNames?: string[]): Histogram<string>;
+  public createHistogram(name: string, help: string, labelNames?: string[], buckets?: number[]): Histogram<string>;
+  public createHistogram(name: string, help?: string, labelNames?: string[], buckets?: number[]): Histogram<string> {
+    const histogram = new Histogram({
+      name,
+      help: help || name,
+      labelNames,
+      buckets,
+      registers: [this.registry]
+    });
+    this.metricStore.set(name, histogram);
+    return histogram;
+  }
+
+  public incrementCounter(name: string, labels?: Record<string, string>): void {
+    const metric = this.metricStore.get(name);
+    if (metric instanceof Counter) {
+      if (labels) {
+        metric.inc(labels);
+      } else {
+        metric.inc(1);
       }
+    }
+  }
+
+  public incrementHistogram(name: string, value: number, labels?: Record<string, string>): void {
+    const metric = this.metricStore.get(name);
+    if (metric instanceof Histogram) {
+      if (labels) {
+        metric.observe(labels, value);
+      } else {
+        metric.observe(value);
+      }
+    }
+  }
+
+  public setGauge(name: string, value: number, labels?: Record<string, string>): void {
+    const metric = this.metricStore.get(name);
+    if (metric instanceof Gauge) {
+      if (labels) {
+        metric.set(labels, value);
+      } else {
+        metric.set(value);
+      }
+    }
+  }
+
+  public getHealth(): ServiceHealth {
+    return {
+      status: 'healthy',
+      details: {
+        metrics: {
+          status: 'available',
+          lastUpdate: new Date()
+        },
+        resources: {
+          memory: process.memoryUsage().heapUsed,
+          cpu: process.cpuUsage().system,
+          connections: this.metricStore.size
+        }
+      },
+      lastCheck: new Date()
     };
   }
 
-  private startDefaultMetrics(): void {
-    collectDefaultMetrics({
-      register: this.registry,
-      prefix: this.config.prefix,
-      gcDurationBuckets: [0.001, 0.01, 0.1, 1, 2, 5],
-    });
-
-    this.logger.debug('Started collecting default metrics');
-  }
-
-  private startGCMetrics(): void {
-    // Implement GC metrics collection
-    this.logger.debug('Started collecting GC metrics');
-  }
-
-  private startEventLoopMetrics(): void {
-    // Implement event loop metrics collection
-    this.logger.debug('Started collecting event loop metrics');
-  }
-
-  private startProcessMetrics(): void {
-    // Implement process metrics collection
-    this.logger.debug('Started collecting process metrics');
-  }
-
-  createCounter(options: MetricOptions): Counter {
-    try {
-      const counter = new Counter({
-        name: this.config.prefix + options.name,
-        help: options.help,
-        labelNames: options.labelNames,
-        registers: [this.registry]
-      });
-
-      this.metrics.set(options.name, counter);
-      this.metricsCreated.inc({ type: 'counter' });
-      this.activeMetrics.inc({ type: 'counter' });
-      
-      return counter;
-    } catch (error) {
-      this.metricsErrors.inc({ operation: 'create_counter' });
-      throw error;
-    }
-  }
-
-  createGauge(options: MetricOptions): Gauge {
-    try {
-      const gauge = new Gauge({
-        name: this.config.prefix + options.name,
-        help: options.help,
-        labelNames: options.labelNames,
-        registers: [this.registry]
-      });
-
-      this.metrics.set(options.name, gauge);
-      this.metricsCreated.inc({ type: 'gauge' });
-      this.activeMetrics.inc({ type: 'gauge' });
-      
-      return gauge;
-    } catch (error) {
-      this.metricsErrors.inc({ operation: 'create_gauge' });
-      throw error;
-    }
-  }
-
-  createHistogram(options: MetricOptions): Histogram {
-    try {
-      const histogram = new Histogram({
-        name: this.config.prefix + options.name,
-        help: options.help,
-        labelNames: options.labelNames,
-        buckets: options.buckets,
-        registers: [this.registry]
-      });
-
-      this.metrics.set(options.name, histogram);
-      this.metricsCreated.inc({ type: 'histogram' });
-      this.activeMetrics.inc({ type: 'histogram' });
-      
-      return histogram;
-    } catch (error) {
-      this.metricsErrors.inc({ operation: 'create_histogram' });
-      throw error;
-    }
-  }
-
-  createSummary(options: MetricOptions): Summary {
-    try {
-      const summary = new Summary({
-        name: this.config.prefix + options.name,
-        help: options.help,
-        labelNames: options.labelNames,
-        percentiles: options.percentiles,
-        registers: [this.registry]
-      });
-
-      this.metrics.set(options.name, summary);
-      this.metricsCreated.inc({ type: 'summary' });
-      this.activeMetrics.inc({ type: 'summary' });
-      
-      return summary;
-    } catch (error) {
-      this.metricsErrors.inc({ operation: 'create_summary' });
-      throw error;
-    }
-  }
-
-  async getMetrics(): Promise<string> {
-    const startTime = process.hrtime();
-    
-    try {
-      const metrics = await this.registry.metrics();
-      this.metricsScrapes.inc();
-      
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      this.scrapeLatency.observe(seconds + nanoseconds / 1e9);
-      
-      return metrics;
-    } catch (error) {
-      this.metricsErrors.inc({ operation: 'scrape' });
-      throw error;
-    }
-  }
-
-  getMetric(name: string): Counter | Gauge | Histogram | Summary | undefined {
-    return this.metrics.get(name);
-  }
-
-  removeMetric(name: string): void {
-    const metric = this.metrics.get(name);
-    if (metric) {
-      this.registry.removeSingleMetric(this.config.prefix + name);
-      this.metrics.delete(name);
-      this.activeMetrics.dec({ type: metric.constructor.name.toLowerCase() });
-      this.logger.debug('Removed metric', { name });
-    }
-  }
-
-  clearMetrics(): void {
-    this.registry.clear();
-    this.metrics.clear();
-    this.activeMetrics.set(0);
-    this.logger.info('Cleared all metrics');
+  public async cleanup(): Promise<void> {
+    await Promise.all([
+      Promise.resolve(this.metrics.cleanup()),
+      Promise.resolve(this.metricStore.clear()),
+      Promise.resolve(this.registry.clear())
+    ]);
   }
 }
-
-export default MetricsManager.getInstance();

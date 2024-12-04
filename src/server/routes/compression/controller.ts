@@ -2,9 +2,7 @@ import { Request, Response } from 'express';
 import { compressionService } from '../../services/compression.service';
 import { CompressFilesDto, DecompressFileDto } from './dto/compression.dto';
 import { ApiError } from '../../utils/error';
-import { ApiResponse } from '../../types/express';
-import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
 
 export const compressFiles = async (
   req: Request<Record<string, never>, any, CompressFilesDto>,
@@ -12,10 +10,15 @@ export const compressFiles = async (
 ): Promise<void> => {
   const { hostId, sourcePaths, targetPath } = req.body;
 
-  loggerLoggingManager.getInstance().();
+  const logger = LoggingManager.getInstance();
+  logger.info('Compressing files', {
+    hostId,
+    sourcePaths,
+    targetPath
+  });
 
   const result = await compressionService.compressFiles(hostId, sourcePaths, targetPath);
-  res.json(new ApiResponse(result));
+  res.json({ success: true, data: result });
 };
 
 export const decompressFile = async (
@@ -24,10 +27,13 @@ export const decompressFile = async (
 ): Promise<void> => {
   const { hostId, sourcePath, targetPath } = req.body;
 
-  loggerLoggingManager.getInstance().();
+  const logger = LoggingManager.getInstance();
+  logger.info('Decompressing file', {
+    hostId,
+    sourcePath,
+    targetPath
+  });
 
-  const result = await compressionService.decompressFile(hostId, sourcePath, targetPath);
-  res.json(new ApiResponse(result));
+  const result = await compressionService.compressFiles(hostId, [sourcePath], targetPath);
+  res.json({ success: true, data: result });
 };
-
-

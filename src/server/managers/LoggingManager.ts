@@ -1,11 +1,17 @@
+// Node.js built-in modules
+import * as path from 'path';
+import * as fs from 'fs/promises';
+
+// External libraries
 import winston from 'winston';
+import { z } from 'zod';
+
+// Local imports
 import { BaseService } from './base/BaseService';
 import { ConfigManager } from './ConfigManager';
 import { MetricsManager } from './MetricsManager';
 import { ServiceHealth, ServiceStatus } from './base/types';
-import { z } from 'zod';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+import { BaseManagerDependencies } from './ManagerContainer';
 
 const LoggingConfigSchema = z.object({
   level: z.enum(['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly']).default('info'),
@@ -39,7 +45,7 @@ export interface LoggingManagerDependencies {
 }
 
 export interface LogMetadata {
-  [key: string]: any;
+  [key: string]: unknown;
   error?: Error | string;
   context?: string;
   requestId?: string;
@@ -54,11 +60,14 @@ export class LoggingManager extends BaseService {
   private config: LoggingConfig;
   private metricsManager: MetricsManager;
   
-  private logEntries: any;
-  private logErrors: any;
-  private logWarnings: any;
-  private loggingLatency: any;
-  private logFileSize: any;
+  private logEntries: ReturnType<typeof MetricsManager.prototype.createCounter>;
+  private logErrors: ReturnType<typeof MetricsManager.prototype.createCounter>;
+  private logWarnings: ReturnType<typeof MetricsManager.prototype.createCounter>;
+  private loggingLatency: ReturnType<typeof MetricsManager.prototype.createHistogram>;
+  private logFileSize: ReturnType<typeof MetricsManager.prototype.createGauge>;
+
+  private logLevel: 'debug' | 'info' | 'warn' | 'error' = 'info';
+  private loggers: Map<string, any> = new Map();
 
   private constructor(private dependencies?: LoggingManagerDependencies) {
     super({
@@ -73,6 +82,62 @@ export class LoggingManager extends BaseService {
       LoggingManager.instance = new LoggingManager(dependencies);
     }
     return LoggingManager.instance;
+  }
+
+  public initialize(deps: BaseManagerDependencies): void {
+    this.dependencies = deps;
+    this.configManager = deps.configManager;
+    this.metricsManager = deps.metricsManager;
+
+    this.setupLoggingConfig();
+  }
+
+  private setupLoggingConfig(): void {
+    try {
+      const loggingConfig = this.configManager?.getConfig('logging');
+      
+      this.logLevel = loggingConfig?.level || 'info';
+
+      this.initializeLoggingMetrics();
+    } catch (error) {
+      console.error('Failed to setup logging configuration', error);
+    }
+  }
+
+  private initializeLoggingMetrics(): void {
+    try {
+      this.logEntries = this.metricsManager.createCounter({
+        name: 'log_entries_total',
+        help: 'Total number of log entries',
+        labelNames: ['level', 'service']
+      });
+
+      this.logErrors = this.metricsManager.createCounter({
+        name: 'log_errors_total',
+        help: 'Total number of error logs',
+        labelNames: ['type', 'service']
+      });
+
+      this.logWarnings = this.metricsManager.createCounter({
+        name: 'log_warnings_total',
+        help: 'Total number of warning logs',
+        labelNames: ['service']
+      });
+
+      this.loggingLatency = this.metricsManager.createHistogram({
+        name: 'logging_latency_seconds',
+        help: 'Logging operation latency in seconds',
+        labelNames: ['level'],
+        buckets: [0.001, 0.005, 0.015, 0.05, 0.1, 0.5]
+      });
+
+      this.logFileSize = this.metricsManager.createGauge({
+        name: 'log_file_size_bytes',
+        help: 'Size of log files'
+      });
+    } catch (error) {
+      console.error('Failed to initialize logging metrics', error);
+    }
   }
 
   async init(): Promise<void> {
@@ -110,6 +175,10 @@ export class LoggingManager extends BaseService {
         exitOnError: false
       });
 
+      this.setupConsoleLogger();
+      this.setupFileLogger();
+      this.setupRemoteLogger();
+
       this.info('LoggingManager initialized successfully', {
         level: this.config.level,
         format: this.config.format,
@@ -124,36 +193,155 @@ export class LoggingManager extends BaseService {
     }
   }
 
-  private initializeMetrics(): void {
-    this.logEntries = this.metricsManager.createCounter({
-      name: 'log_entries_total',
-      help: 'Total number of log entries',
-      labelNames: ['level', 'service']
-    });
+  private setupConsoleLogger(): void {
+    try {
+      const consoleLogger = {
+        debug: this.shouldLog('debug') ? console.debug : () => {},
+        info: console.info,
+        warn: console.warn,
+        error: console.error
+      };
 
-    this.logErrors = this.metricsManager.createCounter({
-      name: 'log_errors_total',
-      help: 'Total number of error logs',
-      labelNames: ['type', 'service']
-    });
+      this.loggers.set('console', consoleLogger);
+    } catch (error) {
+      console.error('Failed to setup console logger', error);
+    }
+  }
 
-    this.logWarnings = this.metricsManager.createCounter({
-      name: 'log_warnings_total',
-      help: 'Total number of warning logs',
-      labelNames: ['service']
-    });
+  private setupFileLogger(): void {
+    try {
+      // Placeholder for file-based logging setup
+      // Could use libraries like winston or pino
+      const fileLogger = {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {}
+      };
 
-    this.loggingLatency = this.metricsManager.createHistogram({
-      name: 'logging_latency_seconds',
-      help: 'Logging operation latency in seconds',
-      labelNames: ['level'],
-      buckets: [0.001, 0.005, 0.015, 0.05, 0.1, 0.5]
-    });
+      this.loggers.set('file', fileLogger);
+    } catch (error) {
+      console.error('Failed to setup file logger', error);
+    }
+  }
 
-    this.logFileSize = this.metricsManager.createGauge({
-      name: 'log_file_size_bytes',
-      help: 'Size of log files'
-    });
+  private setupRemoteLogger(): void {
+    try {
+      // Placeholder for remote logging setup (e.g., Datadog, Sentry)
+      const remoteLogger = {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {}
+      };
+
+      this.loggers.set('remote', remoteLogger);
+    } catch (error) {
+      console.error('Failed to setup remote logger', error);
+    }
+  }
+
+  private shouldLog(level: string): boolean {
+    const logLevels = ['debug', 'info', 'warn', 'error'];
+    return logLevels.indexOf(level) >= logLevels.indexOf(this.logLevel);
+  }
+
+  private logEvent(level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: LogMetadata): void {
+    try {
+      // Track logging metrics
+      this.logEntries.inc({ level });
+
+      if (level === 'error') {
+        this.logErrors.inc({
+          type: metadata?.error instanceof Error ? metadata.error.name : 'unknown'
+        });
+      } else if (level === 'warn') {
+        this.logWarnings.inc();
+      }
+
+      // Log to all configured loggers
+      this.loggers.forEach((logger) => {
+        if (logger[level]) {
+          logger[level](message, metadata);
+        }
+      });
+    } catch (error) {
+      // Track logging errors
+      this.logErrors.inc({
+        type: 'unknown'
+      });
+      console.error('Failed to log event', error);
+    }
+  }
+
+  public debug(message: string, metadata?: LogMetadata): void {
+    if (this.shouldLog('debug')) {
+      this.logEvent('debug', message, metadata);
+    }
+  }
+
+  public info(message: string, metadata?: LogMetadata): void {
+    if (this.shouldLog('info')) {
+      this.logEvent('info', message, metadata);
+    }
+  }
+
+  public warn(message: string, metadata?: LogMetadata): void {
+    if (this.shouldLog('warn')) {
+      this.logEvent('warn', message, metadata);
+    }
+  }
+
+  public error(message: string, metadata?: LogMetadata): void {
+    this.logEvent('error', message, metadata);
+  }
+
+  public async getHealth(): Promise<ServiceHealth> {
+    try {
+      const logStats = await this.getLogStats();
+      
+      return {
+        status: ServiceStatus.HEALTHY,
+        version: this.version,
+        details: {
+          level: this.config.level,
+          format: this.config.format,
+          transports: {
+            console: this.config.console.enabled,
+            file: this.config.file.enabled
+          },
+          metrics: {
+            entries: await this.logEntries.get(),
+            errors: await this.logErrors.get(),
+            warnings: await this.logWarnings.get(),
+            logFileSize: logStats.size
+          },
+          configuration: this.config
+        }
+      };
+    } catch (error) {
+      return {
+        status: ServiceStatus.DEGRADED,
+        version: this.version,
+        details: {
+          error: String(error)
+        }
+      };
+    }
+  }
+
+  private async getLogStats(): Promise<{ size: number }> {
+    try {
+      if (this.config.file.enabled) {
+        const stats = await fs.stat(this.config.file.filename.replace('%DATE%', new Date().toISOString().split('T')[0]));
+        this.logFileSize.set(stats.size);
+        return { size: stats.size };
+      }
+      return { size: 0 };
+    } catch (error) {
+      this.warn('Could not retrieve log file stats', { error });
+      return { size: 0 };
+    }
   }
 
   private createFormat(): winston.Logform.Format {
@@ -215,116 +403,6 @@ export class LoggingManager extends BaseService {
     }
 
     return transports;
-  }
-
-  async getHealth(): Promise<ServiceHealth> {
-    try {
-      const logStats = await this.getLogStats();
-      
-      return {
-        status: ServiceStatus.HEALTHY,
-        version: this.version,
-        details: {
-          level: this.config.level,
-          format: this.config.format,
-          transports: {
-            console: this.config.console.enabled,
-            file: this.config.file.enabled
-          },
-          metrics: {
-            entries: await this.logEntries.get(),
-            errors: await this.logErrors.get(),
-            warnings: await this.logWarnings.get(),
-            logFileSize: logStats.size
-          },
-          configuration: this.config
-        }
-      };
-    } catch (error) {
-      return {
-        status: ServiceStatus.DEGRADED,
-        version: this.version,
-        details: {
-          error: String(error)
-        }
-      };
-    }
-  }
-
-  private async getLogStats(): Promise<{ size: number }> {
-    try {
-      if (this.config.file.enabled) {
-        const stats = await fs.stat(this.config.file.filename.replace('%DATE%', new Date().toISOString().split('T')[0]));
-        this.logFileSize.set(stats.size);
-        return { size: stats.size };
-      }
-      return { size: 0 };
-    } catch (error) {
-      this.warn('Could not retrieve log file stats', { error });
-      return { size: 0 };
-    }
-  }
-
-  private logWithLatency(level: string, message: string, metadata?: LogMetadata): void {
-    const startTime = process.hrtime();
-
-    try {
-      this.winstonLogger[level](message, this.enrichMetadata(metadata));
-      this.logEntries.inc({ level });
-
-      if (level === 'error') {
-        this.logErrors.inc({
-          type: metadata?.error instanceof Error ? metadata.error.name : 'unknown'
-        });
-      } else if (level === 'warn') {
-        this.logWarnings.inc();
-      }
-    } finally {
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      this.loggingLatency.observe(seconds + nanoseconds / 1e9);
-    }
-  }
-
-  private enrichMetadata(metadata: LogMetadata = {}): LogMetadata {
-    const enriched: LogMetadata = { ...metadata };
-
-    if (this.config.metadata.service) {
-      enriched.service = this.name;
-    }
-
-    if (this.config.metadata.timestamp) {
-      enriched.timestamp = new Date().toISOString();
-    }
-
-    return enriched;
-  }
-
-  error(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('error', message, metadata);
-  }
-
-  warn(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('warn', message, metadata);
-  }
-
-  info(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('info', message, metadata);
-  }
-
-  http(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('http', message, metadata);
-  }
-
-  verbose(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('verbose', message, metadata);
-  }
-
-  debug(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('debug', message, metadata);
-  }
-
-  silly(message: string, metadata?: LogMetadata): void {
-    this.logWithLatency('silly', message, metadata);
   }
 }
 

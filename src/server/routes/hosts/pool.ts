@@ -1,111 +1,125 @@
-import { LoggingManager } from '../../managers/utils/LoggingManager';
-/**
- * @deprecated This file is being replaced by the new HostService.
- * All functionality should be migrated to src/server/services/host/host.service.ts
- * TODO: Remove this file once migration is complete.
- */
-
-import { Client } from 'ssh2';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LogMetadata } from '../../../types/logger';
 import type { Host } from '../../../types/models-shared';
-import { logger } from '../../utils/logger';
+import { Client as SSHClient } from 'ssh2';
 
-// Connection pool to reuse SSH connections
-const connections = new Map<string, Client>();
+const logger = LoggingManager.getInstance();
 
-/**
- * Get an SSH connection to a host
- */
-export async function getConnection(host: Host): Promise<Client> {
-  const key = `${host.hostname}:${host.port}`;
-  const existingClient = connections.get(key);
+interface HostConnection {
+  host: Host;
+  client: SSHClient;
+  lastActivity: Date;
+}
 
-  if (existingClient) {
-    return existingClient;
+const connections = new Map<string, HostConnection>();
+
+function getConnectionKey(host: Host): string {
+  return `${host.id}:${host.hostname}:${host.port}`;
+}
+
+export async function getConnection(host: Host): Promise<SSHClient> {
+  const key = getConnectionKey(host);
+  const existing = connections.get(key);
+
+  if (existing) {
+    existing.lastActivity = new Date();
+    return existing.client;
   }
 
-  const client = new Client();
-  connections.set(key, client);
+  logger.info('Creating new SSH connection', {
+    hostId: host.id,
+    hostname: host.hostname
+  } as LogMetadata);
 
-  return new Promise((resolve, reject) => {
+  const client = new SSHClient();
+  
+  return new Promise<SSHClient>((resolve, reject) => {
     client.on('ready', () => {
-      loggerLoggingManager.getInstance().();
+      connections.set(key, {
+        host,
+        client,
+        lastActivity: new Date()
+      });
       resolve(client);
     });
 
-    client.on('error', async (error) => {
-      await handleHostError(host, error);
-      connections.delete(key);
+    client.on('error', (error) => {
+      logger.error('SSH connection error', {
+        hostId: host.id,
+        error
+      } as LogMetadata);
       reject(error);
     });
 
-    client.connect({
+    void client.connect({
       host: host.hostname,
       port: host.port,
       username: host.username,
-      password: host.password,
-      keepaliveInterval: 10000,
-      keepaliveCountMax: 3,
-      readyTimeout: 20000,
-      debug: process.env.NODE_ENV === 'development' ? console.log : undefined,
+      privateKey: host.privateKey
     });
   });
 }
 
-async function handleHostError(host: Host, error: Error): Promise<void> {
-  const metadata = {
+export async function handleHostError(host: Host, error: Error): Promise<void> {
+  const key = getConnectionKey(host);
+  const connection = connections.get(key);
+
+  if (connection) {
+    logger.error('Host connection error', {
+      hostId: host.id,
+      error
+    } as LogMetadata);
+
+    await closeConnection(host);
+  }
+
+  logger.error('Host error handling complete', {
     hostId: host.id,
-    error: {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    },
-  };
-
-  // Critical notification if host is unreachable
-  if (error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT')) {
-    logger.critical(`Host ${host.name} is unreachable`, {
-      ...metadata,
-      notify: true,
-    });
-  } else {
-    loggerLoggingManager.getInstance().();
-  }
-
-  host.status = 'error';
-  host.metadata = {
-    ...host.metadata,
-    lastError: {
-      message: error.message,
-      timestamp: new Date().toISOString()
-    }
-  };
-  // Assuming hostService is defined somewhere
-  // await this.hostService.updateHost(host);
+    error
+  } as LogMetadata);
 }
 
-/**
- * Close an SSH connection
- */
 export async function closeConnection(host: Host): Promise<void> {
-  const key = `${host.hostname}:${host.port}`;
-  const client = connections.get(key);
+  const key = getConnectionKey(host);
+  const connection = connections.get(key);
 
-  if (client) {
-    client.end();
+  if (connection) {
+    logger.info('Closing SSH connection', {
+      hostId: host.id,
+      hostname: host.hostname
+    } as LogMetadata);
+
+    connection.client.end();
     connections.delete(key);
-    loggerLoggingManager.getInstance().();
   }
 }
 
-/**
- * Close all SSH connections
- */
 export async function closeAllConnections(): Promise<void> {
-  for (const [key, client] of connections.entries()) {
-    client.end();
+  for (const [key, connection] of connections) {
+    logger.info('Closing SSH connection', {
+      hostId: connection.host.id,
+      hostname: connection.host.hostname
+    } as LogMetadata);
+
+    connection.client.end();
     connections.delete(key);
   }
-  loggerLoggingManager.getInstance().();
 }
 
+// Start cleanup interval
+setInterval(() => {
+  const now = new Date();
+  for (const [key, connection] of connections) {
+    const inactiveTime = now.getTime() - connection.lastActivity.getTime();
+    if (inactiveTime > 5 * 60 * 1000) { // 5 minutes
+      logger.info('Closing inactive SSH connection', {
+        hostId: connection.host.id,
+        hostname: connection.host.hostname,
+        inactiveTime
+      } as LogMetadata);
 
+      connection.client.end();
+      connections.delete(key);
+    }
+  }
+}, 60 * 1000); // Check every minute

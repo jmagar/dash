@@ -1,12 +1,17 @@
+// Node.js built-in modules
+import { randomUUID } from 'crypto';
+
+// External libraries
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+
+// Local imports
 import { BaseService } from '../services/base.service';
 import { MetricsManager } from './MetricsManager';
 import { LoggingManager } from './LoggingManager';
 import { ConfigManager } from './ConfigManager';
 import { SecurityManager } from './SecurityManager';
 import { ApiError } from '../types/error';
-import { randomUUID } from 'crypto';
 
 // Rate Limit Configuration Schema
 const RateLimitSchema = z.object({
@@ -122,7 +127,7 @@ export class RequestManager extends BaseService {
     return async (req: Request, res: Response, next: NextFunction) => {
       try {
         const validatedData = await schema.parseAsync(req.body);
-        req.validatedData = validatedData;
+        (req as Request & { validatedData: T }).validatedData = validatedData;
         next();
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -178,8 +183,8 @@ export class RequestManager extends BaseService {
       const requestId = randomUUID();
       const startTime = process.hrtime();
 
-      req.requestId = requestId;
-      res.locals.startTime = startTime;
+      (req as Request & { requestId: string }).requestId = requestId;
+      (res as Response & { locals: { startTime: [number, number] } }).locals.startTime = startTime;
       res.setHeader('X-Request-ID', requestId);
 
       res.on('finish', () => {
@@ -225,7 +230,7 @@ export class RequestManager extends BaseService {
         : new ApiError(error.message, 500);
 
       this.loggingManager.error('Request error', {
-        requestId: req.requestId,
+        requestId: (req as Request & { requestId?: string }).requestId,
         method: req.method,
         path: req.path,
         error: apiError
@@ -251,8 +256,8 @@ export class RequestManager extends BaseService {
   public formatResponse() {
     return (req: Request, res: Response, next: NextFunction) => {
       const originalJson = res.json;
-      res.json = function(body: any) {
-        if (body && !body.hasOwnProperty('success')) {
+      res.json = function(body: unknown) {
+        if (body && typeof body === 'object' && !('success' in body)) {
           body = {
             success: true,
             data: body
@@ -265,4 +270,4 @@ export class RequestManager extends BaseService {
   }
 }
 
-export default RequestManager;
+export default RequestManager.getInstance();

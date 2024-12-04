@@ -1,26 +1,45 @@
 import { Request, Response } from 'express';
-import { ApiError } from '../../utils/error';
-import { ApiResponse } from '../../types/express';
-import { logger } from '../../utils/logger';
+import { ApiError, ApiResponse } from '../../../types/api-error';
+import { DockerContainer, isDockerContainer } from '../../../types/docker.types';
+import { LoggingManager } from '../../managers/LoggingManager';
 import cache from '../../cache';
-import { Container, Stack } from '../../types/models-shared';
-import { DockerParams, CacheContainersDto, CacheStacksDto } from './dto/docker.dto';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
 
-function validateContainers(containers: unknown): containers is Container[] {
-  return Array.isArray(containers) && containers.every(container =>
-    typeof container === 'object' && container !== null &&
-    typeof container.id === 'string' &&
-    typeof container.name === 'string'
-  );
+// Docker route parameter types
+export interface DockerParams {
+  hostId: string;
 }
 
-function validateStacks(stacks: unknown): stacks is Stack[] {
-  return Array.isArray(stacks) && stacks.every(stack =>
-    typeof stack === 'object' && stack !== null &&
-    typeof stack.id === 'string' &&
-    typeof stack.name === 'string'
-  );
+// Stack type definition
+export interface DockerStack {
+  id: string;
+  name: string;
+  services: DockerContainer[];
+}
+
+// DTO types
+export interface CacheContainersDto {
+  containers: DockerContainer[];
+}
+
+export interface CacheStacksDto {
+  stacks: DockerStack[];
+}
+
+function validateContainers(containers: unknown): containers is DockerContainer[] {
+  if (!Array.isArray(containers)) return false;
+  return containers.every((container): container is DockerContainer => isDockerContainer(container));
+}
+
+function validateStacks(stacks: unknown): stacks is DockerStack[] {
+  if (!Array.isArray(stacks)) return false;
+  return stacks.every((stack): stack is DockerStack => {
+    if (!stack || typeof stack !== 'object') return false;
+    const typedStack = stack as Partial<DockerStack>;
+    return typeof typedStack.id === 'string' &&
+           typeof typedStack.name === 'string' &&
+           Array.isArray(typedStack.services) &&
+           typedStack.services.every((service): service is DockerContainer => isDockerContainer(service));
+  });
 }
 
 export const getContainers = async (
@@ -28,20 +47,25 @@ export const getContainers = async (
   res: Response
 ): Promise<void> => {
   const { hostId } = req.params;
-  const logMeta = { userId: req.user!.id, hostId };
+  const logMeta = { userId: req.user?.id, hostId };
+  const logger = LoggingManager.getInstance();
 
-  loggerLoggingManager.getInstance().();
+  logger.info('Getting containers from cache', logMeta);
 
-  const containers = await cache.get(`docker:containers:${hostId}`);
+  const containers = await cache.get<DockerContainer[]>(`docker:containers:${hostId}`);
   if (!containers) {
-    throw new ApiError(404, 'No cached containers found');
+    throw new ApiError('No cached containers found', 404);
   }
 
   if (!validateContainers(containers)) {
-    throw new ApiError(500, 'Invalid container data in cache');
+    throw new ApiError('Invalid container data in cache', 500);
   }
 
-  res.json(new ApiResponse(containers));
+  const response: ApiResponse<DockerContainer[]> = {
+    success: true,
+    data: containers
+  };
+  res.json(response);
 };
 
 export const getStacks = async (
@@ -49,56 +73,63 @@ export const getStacks = async (
   res: Response
 ): Promise<void> => {
   const { hostId } = req.params;
-  const logMeta = { userId: req.user!.id, hostId };
+  const logMeta = { userId: req.user?.id, hostId };
+  const logger = LoggingManager.getInstance();
 
-  loggerLoggingManager.getInstance().();
+  logger.info('Getting stacks from cache', logMeta);
 
-  const stacks = await cache.get(`docker:stacks:${hostId}`);
+  const stacks = await cache.get<DockerStack[]>(`docker:stacks:${hostId}`);
   if (!stacks) {
-    throw new ApiError(404, 'No cached stacks found');
+    throw new ApiError('No cached stacks found', 404);
   }
 
   if (!validateStacks(stacks)) {
-    throw new ApiError(500, 'Invalid stack data in cache');
+    throw new ApiError('Invalid stack data in cache', 500);
   }
 
-  res.json(new ApiResponse(stacks));
+  const response: ApiResponse<DockerStack[]> = {
+    success: true,
+    data: stacks
+  };
+  res.json(response);
 };
 
 export const cacheContainers = async (
-  req: Request<DockerParams, any, CacheContainersDto>,
+  req: Request<DockerParams, unknown, CacheContainersDto>,
   res: Response
 ): Promise<void> => {
   const { hostId } = req.params;
   const { containers } = req.body;
-  const logMeta = { userId: req.user!.id, hostId };
+  const logMeta = { userId: req.user?.id, hostId };
+  const logger = LoggingManager.getInstance();
 
-  loggerLoggingManager.getInstance().();
+  logger.info('Caching containers', logMeta);
 
   if (!validateContainers(containers)) {
-    throw new ApiError(400, 'Invalid container data');
+    throw new ApiError('Invalid container data', 400);
   }
 
   await cache.set(`docker:containers:${hostId}`, containers);
-  res.json(new ApiResponse(undefined));
+  const response: ApiResponse = { success: true };
+  res.json(response);
 };
 
 export const cacheStacks = async (
-  req: Request<DockerParams, any, CacheStacksDto>,
+  req: Request<DockerParams, unknown, CacheStacksDto>,
   res: Response
 ): Promise<void> => {
   const { hostId } = req.params;
   const { stacks } = req.body;
-  const logMeta = { userId: req.user!.id, hostId };
+  const logMeta = { userId: req.user?.id, hostId };
+  const logger = LoggingManager.getInstance();
 
-  loggerLoggingManager.getInstance().();
+  logger.info('Caching stacks', logMeta);
 
   if (!validateStacks(stacks)) {
-    throw new ApiError(400, 'Invalid stack data');
+    throw new ApiError('Invalid stack data', 400);
   }
 
   await cache.set(`docker:stacks:${hostId}`, stacks);
-  res.json(new ApiResponse(undefined));
+  const response: ApiResponse = { success: true };
+  res.json(response);
 };
-
-

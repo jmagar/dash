@@ -1,66 +1,97 @@
 import { EventEmitter } from 'events';
-import { Server } from 'socket.io';
-import { logger } from '../../utils/logger';
+import { Server, Socket } from 'socket.io';
+import { LoggingManager } from '../../managers/LoggingManager';
 import { getAgentService } from '../agent.service';
 import { sshService } from '../ssh.service';
 import { db } from '../../db';
 import { parseProcessList } from './process-parser';
-import type { ProcessMonitor, ProcessCache, ProcessServiceOptions, ProcessService } from './types';
+import { 
+  ProcessMonitor, 
+  ProcessCache, 
+  ProcessServiceOptions, 
+  ProcessService,
+  ProcessEventPayload,
+  BaseErrorPayload,
+  ProcessInfo,
+  ProcessId,
+  createProcessId
+} from './types';
 import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
-import type { ProcessInfo } from '../../../types/metrics';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 class MapProcessCache implements ProcessCache {
-  private readonly cache = new Map<string, Map<number, ProcessInfo>>();
+  private readonly cache = new Map<string, Map<ProcessId, ProcessInfo>>();
+  private readonly logger: LoggingManager;
 
-  get(hostId: string): Map<number, ProcessInfo> | undefined {
+  constructor() {
+    this.logger = LoggingManager.getInstance();
+  }
+
+  get(hostId: string): Map<ProcessId, ProcessInfo> | undefined {
     return this.cache.get(hostId);
   }
 
-  set(hostId: string, processes: Map<number, ProcessInfo>): void {
-    // Create a new Map to avoid reference issues
-    const newMap = new Map<number, ProcessInfo>();
-    // Safely copy entries from the source map
-    processes?.forEach?.((value: ProcessInfo, key: number) => {
-      if (value && typeof key === 'number') {
-        newMap.set(key, { ...value });
+  set(hostId: string, processes: Map<ProcessId, ProcessInfo>): void {
+    try {
+      const newMap = new Map<ProcessId, ProcessInfo>();
+      processes?.forEach?.((value: ProcessInfo, key: ProcessId) => {
+        if (value && key) {
+          newMap.set(key, { ...value });
+        }
+      });
+      
+      if (newMap.size > 0) {
+        this.cache.set(hostId, newMap);
       }
-    });
-    // Only set the cache if we have valid entries
-    if (newMap.size > 0) {
-      this.cache.set(hostId, newMap);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error setting process cache', { 
+        hostId, 
+        error: errorMessage 
+      });
     }
   }
 
   delete(hostId: string): void {
     this.cache.delete(hostId);
   }
+
+  clear(): void {
+    this.cache.clear();
+  }
 }
 
 export class ProcessServiceImpl extends EventEmitter implements ProcessService {
   private readonly monitors: Map<string, ProcessMonitor> = new Map();
-  private readonly options: ProcessServiceOptions;
+  private readonly options: Required<ProcessServiceOptions>;
   private readonly processCache: ProcessCache;
+  private readonly logger: LoggingManager;
+  private readonly agentService: ReturnType<typeof getAgentService>;
 
   constructor(
     private readonly io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents>,
     { monitorFactory, ...options }: ProcessServiceOptions
   ) {
     super();
+    this.logger = LoggingManager.getInstance();
+    this.agentService = getAgentService();
+    
     if (!monitorFactory) {
-      throw new Error('Monitor factory is required');
+      this.logger.error('Process monitor factory not provided');
+      throw new Error('Process monitor factory is required');
     }
+
     this.options = {
       monitorFactory,
-      defaultInterval: 5000,
-      maxMonitoredHosts: 100,
-      includeChildren: true,
-      excludeSystemProcesses: false,
-      sortBy: 'cpu',
-      sortOrder: 'desc',
-      maxProcesses: 100,
-      ...options
+      defaultInterval: options.defaultInterval ?? 5000,
+      maxMonitoredHosts: options.maxMonitoredHosts ?? 100,
+      includeChildren: options.includeChildren ?? false,
+      excludeSystemProcesses: options.excludeSystemProcesses ?? false,
+      sortBy: options.sortBy ?? 'cpu',
+      sortOrder: options.sortOrder ?? 'desc',
+      maxProcesses: options.maxProcesses ?? 1000,
+      pollInterval: options.pollInterval ?? 5000,
+      cacheEnabled: options.cacheEnabled ?? true
     };
 
     this.processCache = new MapProcessCache();
@@ -68,17 +99,12 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
   }
 
   async monitor(hostId: string): Promise<void> {
-    const maxMonitoredHosts = this.options.maxMonitoredHosts ?? 100;
-    if (this.monitors.size >= maxMonitoredHosts) {
-      throw new Error(`Maximum number of monitored hosts (${maxMonitoredHosts}) reached`);
+    if (this.monitors.size >= this.options.maxMonitoredHosts) {
+      throw new Error(`Maximum number of monitored hosts (${this.options.maxMonitoredHosts}) reached`);
     }
 
     if (this.monitors.has(hostId)) {
       return;
-    }
-
-    if (!this.options.monitorFactory) {
-      throw new Error('Monitor factory is not available');
     }
 
     const monitor = this.options.monitorFactory.create({
@@ -86,8 +112,8 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       interval: this.options.defaultInterval,
       includeChildren: this.options.includeChildren,
       excludeSystemProcesses: this.options.excludeSystemProcesses,
-      sortBy: this.options.sortBy as 'cpu' | 'memory' | 'pid' | 'name',
-      sortOrder: this.options.sortOrder as 'asc' | 'desc',
+      sortBy: this.options.sortBy,
+      sortOrder: this.options.sortOrder,
       maxProcesses: this.options.maxProcesses
     });
 
@@ -100,6 +126,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     if (monitor) {
       await monitor.stop();
       this.monitors.delete(hostId);
+      this.processCache.delete(hostId);
     }
   }
 
@@ -109,9 +136,13 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       if (monitor) {
         return await monitor.getProcesses();
       }
-      return this.listProcesses(hostId);
+      return await this.listProcesses(hostId);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error getting processes', { 
+        hostId, 
+        error: errorMessage 
+      });
       throw error;
     }
   }
@@ -120,7 +151,7 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     return this.getProcesses(hostId);
   }
 
-  async getProcessById(hostId: string, pid: number): Promise<ProcessInfo | null> {
+  async getProcessById(hostId: string, pid: ProcessId): Promise<ProcessInfo | null> {
     const processes = await this.getProcesses(hostId);
     return processes.find(p => p.pid === pid) || null;
   }
@@ -145,11 +176,17 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     this.on('process:change', callback);
   }
 
-  onError(callback: (hostId: string, error: string) => void): void {
-    this.on('error', callback);
+  onError(callback: (hostId: string, payload: ProcessEventPayload & BaseErrorPayload) => void): void {
+    this.on('error', (hostId: string, error: string) => {
+      callback(hostId, {
+        processId: createProcessId(0),
+        timestamp: new Date().toISOString(),
+        error
+      });
+    });
   }
 
-  async killProcess(hostId: string, pid: number, signal = 'SIGTERM'): Promise<void> {
+  async killProcess(hostId: string, pid: ProcessId, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
     try {
       const monitor = this.monitors.get(hostId);
       if (monitor) {
@@ -162,128 +199,139 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
         throw new Error('Host not found');
       }
 
-      // Try agent first if available
-      const agentService = getAgentService();
-      if (agentService.isConnected(hostId)) {
-        await agentService.executeCommand(hostId, 'kill', ['-' + signal, pid.toString()]);
+      if (this.agentService.isConnected(hostId)) {
+        await this.agentService.executeCommand(hostId, 'kill', ['-' + signal, pid.toString()]);
         return;
       }
 
-      // Fallback to SSH
       await this.executeCommand(host, `kill -${signal} ${pid}`);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error killing process', { 
+        hostId, 
+        pid, 
+        error: errorMessage 
+      });
       throw error;
     }
   }
 
-  /**
-   * List processes on a host
-   */
-  public async listProcesses(hostId: string): Promise<ProcessInfo[]> {
+  async listProcesses(hostId: string): Promise<ProcessInfo[]> {
     try {
-      // Try agent first if available
-      const agentService = getAgentService();
-      if (agentService.isConnected(hostId)) {
+      if (this.agentService.isConnected(hostId)) {
         return await this.listViaAgent(hostId);
       }
-
-      // Fallback to SSH
       return await this.listViaSSH(hostId);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error listing processes', { 
+        hostId, 
+        error: errorMessage 
+      });
       throw error;
     }
   }
 
-  /**
-   * Setup Socket.IO event handlers
-   */
   private setupSocketHandlers(): void {
-    this.io.on('connection', (socket) => {
-      socket.on('process:monitor', async ({ hostId }) => {
-        try {
-          const host = await this.getHost(hostId);
-          if (host) {
-            await this.monitor(hostId);
-            socket.join(`host:${hostId}`);
+    this.io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
+      socket.on('process:monitor', ({ hostId }) => {
+        void (async () => {
+          try {
+            const host = await this.getHost(hostId);
+            if (host) {
+              await this.monitor(hostId);
+              await socket.join(`host:${hostId}`);
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Error monitoring host', { 
+              hostId, 
+              error: errorMessage 
+            });
+            socket.emit('process:error', {
+              hostId,
+              processId: createProcessId(0),
+              timestamp: new Date().toISOString(),
+              error: 'Failed to start monitoring'
+            });
           }
-        } catch (error) {
-          loggerLoggingManager.getInstance().();
-          socket.emit('process:error', {
-            hostId,
-            error: 'Failed to start monitoring',
-          });
-        }
+        })();
       });
 
       socket.on('process:unmonitor', ({ hostId }) => {
-        this.unmonitor(hostId);
-        socket.leave(`host:${hostId}`);
+        void (async () => {
+          try {
+            await this.unmonitor(hostId);
+            await socket.leave(`host:${hostId}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Error unmonitoring host', { 
+              hostId, 
+              error: errorMessage 
+            });
+          }
+        })();
       });
 
-      socket.on('process:kill', async ({ hostId, pid, signal }) => {
-        try {
-          await this.killProcess(hostId, pid, signal);
-        } catch (error) {
-          loggerLoggingManager.getInstance().();
-          socket.emit('process:error', {
-            hostId,
-            error: 'Failed to kill process',
-          });
-        }
+      socket.on('process:kill', ({ hostId, pid, signal }) => {
+        void (async () => {
+          try {
+            await this.killProcess(hostId, createProcessId(pid), signal);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Error killing process', { 
+              hostId, 
+              pid, 
+              error: errorMessage 
+            });
+            socket.emit('process:error', {
+              hostId,
+              processId: createProcessId(pid),
+              timestamp: new Date().toISOString(),
+              error: 'Failed to kill process'
+            });
+          }
+        })();
       });
     });
   }
 
-  /**
-   * List processes via agent
-   */
   private async listViaAgent(hostId: string): Promise<ProcessInfo[]> {
-    return new Promise((resolve, reject) => {
-      const agentService = getAgentService();
+    return new Promise<ProcessInfo[]>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        agentService.removeListener('agent:commandResult', handler);
+        this.agentService.removeListener('agent:commandResult', handler);
         reject(new Error('Command timed out'));
-      }, 30000); // 30 second timeout
+      }, 30000);
 
       const handler = ({ hostId: resultHostId, command, result }: { hostId: string; command: string; result: string }) => {
         if (resultHostId === hostId && command === 'ps') {
           try {
             clearTimeout(timeout);
-            agentService.removeListener('agent:commandResult', handler);
+            this.agentService.removeListener('agent:commandResult', handler);
             const processes = parseProcessList(result);
             resolve(processes);
           } catch (error) {
             clearTimeout(timeout);
-            agentService.removeListener('agent:commandResult', handler);
+            this.agentService.removeListener('agent:commandResult', handler);
             reject(error);
           }
         }
       };
 
-      try {
-        const executeCommand = agentService.executeCommand?.bind(agentService);
-        if (!executeCommand) {
-          throw new Error('Agent service execute command not available');
-        }
-        executeCommand(hostId, 'ps', ['-eo', 'pid,ppid,user,%cpu,%mem,stat,start,comm,args'])
-          .catch(error => {
-            clearTimeout(timeout);
-            agentService.removeListener('agent:commandResult', handler);
-            reject(error);
-          });
-        agentService.on('agent:commandResult', handler);
-      } catch (error) {
+      void this.agentService.executeCommand(
+        hostId, 
+        'ps', 
+        ['-eo', 'pid,ppid,user,%cpu,%mem,stat,start,comm,args']
+      ).catch(error => {
         clearTimeout(timeout);
+        this.agentService.removeListener('agent:commandResult', handler);
         reject(error);
-      }
+      });
+
+      this.agentService.on('agent:commandResult', handler);
     });
   }
 
-  /**
-   * List processes via SSH
-   */
   private async listViaSSH(hostId: string): Promise<ProcessInfo[]> {
     const host = await this.getHost(hostId);
     if (!host) {
@@ -296,20 +344,23 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
     return parseProcessList(output);
   }
 
-  /**
-   * Get host from database
-   */
   private async getHost(hostId: string): Promise<Host | null> {
-    const result = await db.query<Host>(
-      'SELECT * FROM hosts WHERE id = $1',
-      [hostId]
-    );
-    return result.rows[0] || null;
+    try {
+      const result = await db.query<Host>(
+        'SELECT * FROM hosts WHERE id = $1',
+        [hostId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error fetching host', { 
+        hostId, 
+        error: errorMessage 
+      });
+      return null;
+    }
   }
 
-  /**
-   * Execute command via SSH
-   */
   private async executeCommand(host: Host, command: string): Promise<string> {
     try {
       const result = await sshService.executeCommand(host.id, command);
@@ -318,19 +369,21 @@ export class ProcessServiceImpl extends EventEmitter implements ProcessService {
       }
       return result.stdout;
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error executing command', { 
+        hostId: host.id, 
+        command, 
+        error: errorMessage 
+      });
       throw error;
     }
   }
 
-  /**
-   * Stop the service and clean up all monitors
-   */
-  public stop(): void {
-    this.monitors.forEach(monitor => monitor.stop());
-    this.processCache.delete('*');
+  stop(): void {
+    void Promise.all(
+      Array.from(this.monitors.values()).map(monitor => monitor.stop())
+    );
+    this.processCache.clear();
     this.removeAllListeners();
   }
 }
-
-

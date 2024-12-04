@@ -1,21 +1,34 @@
-import { z } from 'zod';
-import { BaseService } from '../services/base.service';
+// Node.js built-in modules
+import { EventEmitter } from 'events';
+
+// External libraries
 import { PrismaClient } from '@prisma/client';
+import { Sequelize, Options as SequelizeOptions } from 'sequelize';
+import { z } from 'zod';
+
+// Local imports
+import { BaseService } from '../services/base.service';
 import { ConfigManager } from './ConfigManager';
-import { MetricsManager } from './MetricsManager';
 import { LoggingManager } from './LoggingManager';
+import { MetricsManager } from './MetricsManager';
+import { SecurityManager } from './SecurityManager';
+import { BaseManagerDependencies } from './ManagerContainer';
 
 // Zod Schemas for Configuration
 const DatabaseConfigSchema = z.object({
-  url: z.string().url('Invalid database connection URL'),
-  maxConnections: z.number().int().min(1).max(100).default(10),
-  connectionTimeout: z.number().int().min(1000).max(60000).default(5000),
-  idleTimeout: z.number().int().min(1000).max(60000).default(10000),
-  maxRetries: z.number().int().min(0).max(10).default(5),
-  retryDelay: z.number().int().min(100).max(30000).default(5000),
-  logQueries: z.boolean().default(false),
-  logLevel: z.enum(['error', 'warn', 'info', 'query']).default('error')
-}).strict();
+  primary: z.object({
+    type: z.enum(['prisma', 'sequelize']),
+    url: z.string().url(),
+    maxConnections: z.number().positive().default(10),
+    connectionTimeout: z.number().positive().default(30000),
+  }),
+  secondary: z.object({
+    type: z.enum(['prisma', 'sequelize']).optional(),
+    url: z.string().url().optional(),
+    maxConnections: z.number().positive().default(5),
+    connectionTimeout: z.number().positive().default(30000),
+  }).optional(),
+});
 
 // Transaction Options Schema
 const TransactionOptionsSchema = z.object({
@@ -23,269 +36,271 @@ const TransactionOptionsSchema = z.object({
   maxAttempts: z.number().int().min(1).max(10).optional().default(3)
 }).strict();
 
+// Dependency interface for explicit dependency injection
+interface DatabaseManagerDependencies extends BaseManagerDependencies {
+  securityManager?: SecurityManager;
+}
+
 export class DatabaseManager extends BaseService {
   private static instance: DatabaseManager;
-  private prisma: PrismaClient;
-  private configManager: ConfigManager;
-  private logger: LoggingManager;
-  private metrics: MetricsManager;
 
-  private isConnected: boolean = false;
-  private connectionRetries: number = 0;
-  private databaseConfig: z.infer<typeof DatabaseConfigSchema>;
+  private prismaClient: PrismaClient;
+  private sequelizeClient: Sequelize;
+  private dependencies: DatabaseManagerDependencies;
+  private config: z.infer<typeof DatabaseConfigSchema>;
+  private eventEmitter: EventEmitter;
 
-  private constructor(
-    configManager: ConfigManager,
-    logger: LoggingManager,
-    metrics: MetricsManager
-  ) {
+  private constructor() {
     super({
       name: 'database-manager',
       version: '1.0.0'
     });
 
-    this.configManager = configManager;
-    this.logger = logger;
-    this.metrics = metrics;
-
-    // Load and validate database configuration
-    this.databaseConfig = DatabaseConfigSchema.parse(
-      this.configManager.get('database', {
-        url: process.env.DATABASE_URL || 'postgresql://localhost:5432/mydb',
-        maxConnections: 10,
-        connectionTimeout: 5000,
-        idleTimeout: 10000,
-        maxRetries: 5,
-        retryDelay: 5000,
-        logQueries: false,
-        logLevel: 'error'
-      })
-    );
-
-    this.prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: this.databaseConfig.url
-        }
-      },
-      log: [
-        { emit: 'event', level: this.databaseConfig.logLevel }
-      ],
-      errorFormat: 'pretty'
-    });
-
-    this.setupMetrics();
-    this.setupPrismaListeners();
-    this.setupErrorHandling();
+    this.eventEmitter = new EventEmitter();
   }
 
-  public static getInstance(
-    configManager: ConfigManager,
-    logger: LoggingManager,
-    metrics: MetricsManager
-  ): DatabaseManager {
+  public static getInstance(): DatabaseManager {
     if (!DatabaseManager.instance) {
-      DatabaseManager.instance = new DatabaseManager(
-        configManager, 
-        logger, 
-        metrics
-      );
+      DatabaseManager.instance = new DatabaseManager();
     }
     return DatabaseManager.instance;
   }
 
+  public initialize(deps: DatabaseManagerDependencies): void {
+    this.dependencies = deps;
+    this.dependencies.loggingManager?.info('Database Manager initializing');
+
+    // Validate and parse database configuration
+    const rawConfig = deps.configManager.getConfig('database');
+    this.config = DatabaseConfigSchema.parse(rawConfig);
+
+    this.setupMetrics();
+    this.setupClients();
+    this.setupErrorHandling();
+  }
+
   private setupErrorHandling(): void {
     process.on('unhandledRejection', (reason, promise) => {
-      this.logger.error('Unhandled Rejection in DatabaseManager', { 
+      this.dependencies.loggingManager?.error('Unhandled Rejection in DatabaseManager', { 
         reason, 
         promise 
       });
-      this.metrics.incrementCounter('database_unhandled_rejections_total');
+      this.dependencies.metricsManager?.incrementCounter('database_unhandled_rejections_total');
     });
 
     process.on('uncaughtException', (error) => {
-      this.logger.error('Uncaught Exception in DatabaseManager', { error });
-      this.metrics.incrementCounter('database_uncaught_exceptions_total');
+      this.dependencies.loggingManager?.error('Uncaught Exception in DatabaseManager', { error });
+      this.dependencies.metricsManager?.incrementCounter('database_uncaught_exceptions_total');
     });
   }
 
   private setupMetrics(): void {
-    // Enhanced metrics with more detailed tracking
-    this.metrics.createCounter('database_queries_total', 'Total number of database queries', ['type', 'status']);
-    this.metrics.createCounter('database_errors_total', 'Total number of database errors', ['type', 'code']);
-    this.metrics.createHistogram('database_query_duration_seconds', 'Duration of database queries', ['type', 'status']);
-    this.metrics.createGauge('database_connection_status', 'Database connection status');
-    this.metrics.createGauge('database_connection_retries', 'Number of connection retries');
-    this.metrics.createCounter('database_unhandled_rejections_total', 'Total unhandled rejections');
-    this.metrics.createCounter('database_uncaught_exceptions_total', 'Total uncaught exceptions');
+    // Comprehensive database operation metrics
+    this.dependencies.metricsManager?.createCounter('database_connections_total', 'Total number of database connections', ['type', 'status']);
+    this.dependencies.metricsManager?.createCounter('database_operations_total', 'Total number of database operations', ['type', 'operation']);
+    this.dependencies.metricsManager?.createHistogram('database_operation_duration_seconds', 'Duration of database operations', ['type', 'operation']);
+    this.dependencies.metricsManager?.createGauge('database_active_connections', 'Number of active database connections', ['type']);
+    this.dependencies.metricsManager?.createCounter('database_errors_total', 'Total number of database errors', ['type', 'error']);
+    this.dependencies.metricsManager?.createCounter('database_queries_total', 'Total number of database queries', ['type', 'status']);
+    this.dependencies.metricsManager?.createHistogram('database_query_duration_seconds', 'Duration of database queries', ['type', 'status']);
+    this.dependencies.metricsManager?.createGauge('database_connection_status', 'Database connection status');
+    this.dependencies.metricsManager?.createGauge('database_connection_retries', 'Number of connection retries');
+    this.dependencies.metricsManager?.createCounter('database_unhandled_rejections_total', 'Total unhandled rejections');
+    this.dependencies.metricsManager?.createCounter('database_uncaught_exceptions_total', 'Total uncaught exceptions');
   }
 
-  private setupPrismaListeners(): void {
-    // @ts-ignore - Prisma events are not properly typed
-    this.prisma.$on('query', (e: any) => {
-      const duration = e.duration / 1000; // Convert to seconds
-      const queryType = e.query.toLowerCase().split(' ')[0];
-      
-      this.metrics.incrementCounter('database_queries_total', { 
-        type: queryType, 
-        status: 'success' 
-      });
-      
-      this.metrics.observeHistogram('database_query_duration_seconds', duration, { 
-        type: queryType,
-        status: 'success'
-      });
-
-      if (this.databaseConfig.logQueries) {
-        this.logger.info('Database Query', { 
-          query: e.query, 
-          duration: e.duration 
+  private setupClients(): void {
+    try {
+      // Initialize Prisma client
+      if (this.config.primary.type === 'prisma') {
+        this.prismaClient = new PrismaClient({
+          datasources: {
+            db: {
+              url: this.config.primary.url
+            }
+          },
+          log: [
+            { level: 'query', emit: 'event' },
+            { level: 'error', emit: 'event' },
+            { level: 'info', emit: 'event' },
+            { level: 'warn', emit: 'event' }
+          ]
         });
+
+        // Attach Prisma event listeners for logging and metrics
+        this.attachPrismaListeners();
       }
+
+      // Initialize Sequelize client (optional)
+      if (this.config.primary.type === 'sequelize' || this.config.secondary?.type === 'sequelize') {
+        const sequelizeOptions: SequelizeOptions = {
+          dialect: 'postgres', // Adjust based on your database type
+          host: new URL(this.config.primary.url).hostname,
+          port: parseInt(new URL(this.config.primary.url).port || '5432'),
+          username: new URL(this.config.primary.url).username,
+          password: new URL(this.config.primary.url).password,
+          database: new URL(this.config.primary.url).pathname.replace('/', ''),
+          pool: {
+            max: this.config.primary.maxConnections,
+            min: 0,
+            acquire: this.config.primary.connectionTimeout,
+          },
+          logging: false // Disable default logging
+        };
+
+        this.sequelizeClient = new Sequelize(sequelizeOptions);
+        this.attachSequelizeListeners();
+      }
+    } catch (error) {
+      this.dependencies.loggingManager?.error('Failed to initialize database clients', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined 
+      });
+      throw error;
+    }
+  }
+
+  private attachPrismaListeners(): void {
+    this.prismaClient.$on('query', (event) => {
+      this.dependencies.metricsManager?.incrementCounter('database_operations_total', { type: 'prisma', operation: 'query' });
+      this.dependencies.loggingManager?.debug('Prisma Query', { query: event.query, params: event.params });
     });
 
-    // @ts-ignore - Prisma events are not properly typed
-    this.prisma.$on('error', (e: any) => {
-      this.metrics.incrementCounter('database_errors_total', { 
-        type: e.target || 'unknown',
-        code: e.code || 'unknown'
-      });
-      
-      this.logger.error('Database Error', { 
-        error: e,
-        target: e.target,
-        code: e.code
-      });
+    this.prismaClient.$on('error', (event) => {
+      this.dependencies.metricsManager?.incrementCounter('database_errors_total', { type: 'prisma', error: 'query' });
+      this.dependencies.loggingManager?.error('Prisma Error', { error: event });
+    });
+  }
+
+  private attachSequelizeListeners(): void {
+    this.sequelizeClient.addListener('query', (sql) => {
+      this.dependencies.metricsManager?.incrementCounter('database_operations_total', { type: 'sequelize', operation: 'query' });
+      this.dependencies.loggingManager?.debug('Sequelize Query', { query: sql });
+    });
+
+    this.sequelizeClient.addListener('error', (error) => {
+      this.dependencies.metricsManager?.incrementCounter('database_errors_total', { type: 'sequelize', error: 'connection' });
+      this.dependencies.loggingManager?.error('Sequelize Error', { error });
     });
   }
 
   public async init(): Promise<void> {
     try {
-      await this.connect();
-      this.logger.info('Database manager initialized successfully');
+      // Test database connections
+      await this.testConnections();
+
+      this.dependencies.loggingManager?.info('Database manager initialized successfully', {
+        primaryType: this.config.primary.type,
+        secondaryType: this.config.secondary?.type
+      });
     } catch (error) {
-      this.logger.error('Failed to initialize database manager', { error });
+      this.dependencies.loggingManager?.error('Failed to initialize Database manager', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined 
+      });
+      throw error;
+    }
+  }
+
+  private async testConnections(): Promise<void> {
+    try {
+      // Test Prisma connection
+      if (this.prismaClient) {
+        await this.prismaClient.$connect();
+        this.dependencies.metricsManager?.incrementCounter('database_connections_total', { type: 'prisma', status: 'success' });
+      }
+
+      // Test Sequelize connection
+      if (this.sequelizeClient) {
+        await this.sequelizeClient.authenticate();
+        this.dependencies.metricsManager?.incrementCounter('database_connections_total', { type: 'sequelize', status: 'success' });
+      }
+    } catch (error) {
+      this.dependencies.metricsManager?.incrementCounter('database_connections_total', { 
+        type: this.config.primary.type, 
+        status: 'failed' 
+      });
+      this.dependencies.loggingManager?.error('Database connection test failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined 
+      });
       throw error;
     }
   }
 
   public async cleanup(): Promise<void> {
     try {
-      await this.disconnect();
-      this.logger.info('Database manager cleaned up successfully');
+      // Disconnect Prisma client
+      if (this.prismaClient) {
+        await this.prismaClient.$disconnect();
+      }
+
+      // Close Sequelize connection
+      if (this.sequelizeClient) {
+        await this.sequelizeClient.close();
+      }
+
+      this.dependencies.loggingManager?.info('Database manager cleaned up successfully');
     } catch (error) {
-      this.logger.error('Error during database manager cleanup', { error });
+      this.dependencies.loggingManager?.error('Error during Database manager cleanup', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined 
+      });
       throw error;
     }
   }
 
-  public async getHealth(): Promise<{ 
-    status: 'healthy' | 'unhealthy' | 'degraded'; 
-    details?: Record<string, unknown>; 
-  }> {
+  public async getHealth(): Promise<{ status: 'healthy' | 'unhealthy' | 'degraded'; details?: Record<string, unknown>; }> {
     try {
-      if (!this.isConnected) {
-        return {
-          status: 'unhealthy',
-          details: {
-            connection: false,
-            retries: this.connectionRetries,
-            config: {
-              url: this.databaseConfig.url.replace(/\/\/.*:.*@/, '//[REDACTED]@')
-            }
-          }
-        };
+      const connectionTests = [];
+
+      // Test Prisma connection
+      if (this.prismaClient) {
+        connectionTests.push(
+          this.prismaClient.$connect()
+            .then(() => ({ type: 'prisma', status: 'healthy' }))
+            .catch((error) => ({ type: 'prisma', status: 'unhealthy', error }))
+        );
       }
 
-      // Test database connection with a simple query
-      const startTime = Date.now();
-      await this.prisma.$queryRaw`SELECT 1`;
-      const queryDuration = Date.now() - startTime;
+      // Test Sequelize connection
+      if (this.sequelizeClient) {
+        connectionTests.push(
+          this.sequelizeClient.authenticate()
+            .then(() => ({ type: 'sequelize', status: 'healthy' }))
+            .catch((error) => ({ type: 'sequelize', status: 'unhealthy', error }))
+        );
+      }
+
+      const connectionResults = await Promise.allSettled(connectionTests);
+
+      const unhealthyConnections = connectionResults.filter(
+        result => result.status === 'rejected' || 
+        (result.status === 'fulfilled' && result.value.status === 'unhealthy')
+      );
 
       return {
-        status: queryDuration > 1000 ? 'degraded' : 'healthy',
+        status: unhealthyConnections.length > 0 
+          ? (unhealthyConnections.length === connectionTests.length ? 'unhealthy' : 'degraded')
+          : 'healthy',
         details: {
-          connection: true,
-          retries: this.connectionRetries,
-          queryDuration,
-          config: {
-            url: this.databaseConfig.url.replace(/\/\/.*:.*@/, '//[REDACTED]@')
-          }
+          connections: connectionResults.map(result => 
+            result.status === 'fulfilled' ? result.value : { status: 'unknown', error: result.reason }
+          )
         }
       };
     } catch (error) {
-      this.logger.error('Database health check failed', { error });
+      this.dependencies.loggingManager?.error('Database manager health check failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined 
+      });
       return {
         status: 'unhealthy',
         details: {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          connection: false,
-          retries: this.connectionRetries,
-          config: {
-            url: this.databaseConfig.url.replace(/\/\/.*:.*@/, '//[REDACTED]@')
-          }
+          error: error instanceof Error ? error.message : 'Unknown error'
         }
       };
     }
-  }
-
-  private async connect(): Promise<void> {
-    while (this.connectionRetries < this.databaseConfig.maxRetries) {
-      try {
-        const startTime = Date.now();
-        await this.prisma.$connect();
-        
-        const connectionTime = Date.now() - startTime;
-        this.isConnected = true;
-        
-        this.metrics.setGauge('database_connection_status', 1);
-        this.metrics.setGauge('database_connection_retries', this.connectionRetries);
-        
-        this.logger.info('Successfully connected to database', { 
-          connectionTime,
-          retries: this.connectionRetries 
-        });
-        
-        return;
-      } catch (error) {
-        this.connectionRetries++;
-        
-        this.metrics.setGauge('database_connection_status', 0);
-        this.metrics.setGauge('database_connection_retries', this.connectionRetries);
-        
-        this.logger.error('Failed to connect to database', {
-          error,
-          retry: this.connectionRetries,
-          maxRetries: this.databaseConfig.maxRetries
-        });
-
-        if (this.connectionRetries < this.databaseConfig.maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, this.databaseConfig.retryDelay));
-        }
-      }
-    }
-
-    throw new Error(`Failed to connect to database after ${this.databaseConfig.maxRetries} attempts`);
-  }
-
-  private async disconnect(): Promise<void> {
-    try {
-      await this.prisma.$disconnect();
-      this.isConnected = false;
-      
-      this.metrics.setGauge('database_connection_status', 0);
-      this.logger.info('Successfully disconnected from database');
-    } catch (error) {
-      this.logger.error('Error disconnecting from database', { error });
-      throw error;
-    }
-  }
-
-  public getPrisma(): PrismaClient {
-    if (!this.isConnected) {
-      throw new Error('Database is not connected');
-    }
-    return this.prisma;
   }
 
   public async transaction<T>(
@@ -298,14 +313,14 @@ export class DatabaseManager extends BaseService {
 
     while (attempts < validatedOptions.maxAttempts) {
       try {
-        const result = await this.prisma.$transaction(
+        const result = await this.prismaClient.$transaction(
           async (prisma) => fn(prisma),
           { 
             timeout: validatedOptions.timeout 
           }
         );
 
-        this.metrics.observeHistogram(
+        this.dependencies.metricsManager?.observeHistogram(
           'database_query_duration_seconds',
           (Date.now() - startTime) / 1000,
           { 
@@ -318,19 +333,19 @@ export class DatabaseManager extends BaseService {
       } catch (error) {
         attempts++;
         
-        this.metrics.incrementCounter('database_errors_total', { 
+        this.dependencies.metricsManager?.incrementCounter('database_errors_total', { 
           type: 'transaction',
           code: error instanceof Error ? error.name : 'unknown'
         });
 
         if (attempts === validatedOptions.maxAttempts) {
-          this.logger.error('Transaction failed', {
+          this.dependencies.loggingManager?.error('Transaction failed', {
             error,
             attempts,
             duration: Date.now() - startTime
           });
           
-          this.metrics.observeHistogram(
+          this.dependencies.metricsManager?.observeHistogram(
             'database_query_duration_seconds',
             (Date.now() - startTime) / 1000,
             { 
@@ -353,5 +368,23 @@ export class DatabaseManager extends BaseService {
     }
 
     throw new Error('Unexpected transaction failure');
+  }
+
+  // Expose database clients for advanced use cases
+  public getPrismaClient(): PrismaClient | null {
+    return this.prismaClient || null;
+  }
+
+  public getSequelizeClient(): Sequelize | null {
+    return this.sequelizeClient || null;
+  }
+
+  // Event-driven database operations
+  public on(event: string, listener: (...args: any[]) => void): void {
+    this.eventEmitter.on(event, listener);
+  }
+
+  public emit(event: string, ...args: any[]): void {
+    this.eventEmitter.emit(event, ...args);
   }
 }

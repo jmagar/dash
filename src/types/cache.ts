@@ -3,9 +3,7 @@ import type { Container, Stack } from './models-shared';
 import type { 
   FileSystemState, 
   ProcessState, 
-  NetworkState, 
-  UserState, 
-  AppState, 
+  NetworkState,
   SystemState 
 } from './chatbot';
 import type { User } from './auth';
@@ -46,11 +44,6 @@ export interface Cache {
     error?: string;
   }>;
 
-  // Host management
-  getHostStatus(id: string): Promise<unknown>;
-  cacheHostStatus(id: string, data: unknown): Promise<void>;
-  invalidateHostCache(id: string): Promise<void>;
-
   // Docker management
   getDockerContainers(hostId: string): Promise<Container[]>;
   cacheDockerContainers(hostId: string, data: Container[]): Promise<void>;
@@ -68,10 +61,6 @@ export interface Cache {
   setProcessState(state: ProcessState): Promise<void>;
   getNetworkState(): Promise<Partial<NetworkState>>;
   setNetworkState(state: NetworkState): Promise<void>;
-  getUserState(): Promise<Partial<UserState>>;
-  setUserState(state: UserState): Promise<void>;
-  getAppState(): Promise<Partial<AppState>>;
-  setAppState(state: AppState): Promise<void>;
   getSystemState(): Promise<Partial<SystemState>>;
   setSystemState(state: SystemState): Promise<void>;
 }
@@ -84,7 +73,6 @@ export interface CacheCommand {
 
 export interface CacheKeys {
   SESSION: string;
-  HOST: string;
   COMMAND: string;
   DOCKER: {
     CONTAINERS: string;
@@ -94,7 +82,6 @@ export interface CacheKeys {
 
 export interface CacheTTL {
   SESSION: number;
-  HOST: number;
   COMMAND: number;
   DOCKER: {
     CONTAINERS: number;

@@ -1,14 +1,20 @@
-import { Server as WebSocketServer, Socket } from 'socket.io';
-import { Server } from 'http';
-import { z } from 'zod';
-import { MetricsManager } from '../metrics/MetricsManager';
-import { ConfigManager } from '../config/ConfigManager';
-import { StateManager } from '../state/StateManager';
-import { LoggingManager } from '../logging/LoggingManager';
-import { BaseService } from '../services/base.service';
-import { SecurityManager } from './SecurityManager';
+// Node.js built-in modules
+import { Server as HttpServer } from 'http';
 
-// Enhanced Zod Schemas
+// External libraries
+import { Server as WebSocketServer, Socket } from 'socket.io';
+import { z } from 'zod';
+
+// Local imports
+import { BaseService } from './base/BaseService';
+import { ConfigManager } from './ConfigManager';
+import { LoggingManager } from './LoggingManager';
+import { MetricsManager } from './MetricsManager';
+import { SecurityManager } from './SecurityManager';
+import { StateManager } from './StateManager';
+import { ServiceHealth, ServiceStatus } from './base/types';
+
+// Configuration Schema
 const WebSocketConfigSchema = z.object({
   cors: z.object({
     origins: z.array(z.string()).default(['*']),
@@ -18,63 +24,67 @@ const WebSocketConfigSchema = z.object({
   maxConnections: z.number().min(1).max(1000).default(100)
 });
 
-const MessageSchema = z.object({
-  type: z.string().min(1, "Message type must be non-empty"),
-  payload: z.any().optional(),
-  timestamp: z.number().optional()
-});
+// Type Definitions
+type WebSocketConfig = z.infer<typeof WebSocketConfigSchema>;
 
-// WebSocket Manager Dependencies Interface
-interface WebSocketManagerDependencies {
-  metricsManager?: MetricsManager;
+export interface WebSocketManagerDependencies {
   configManager?: ConfigManager;
-  stateManager?: StateManager;
+  metricsManager?: MetricsManager;
   loggingManager?: LoggingManager;
   securityManager?: SecurityManager;
+  stateManager?: StateManager;
+}
+
+export interface WebSocketMessageHandler {
+  (data: unknown): Promise<void>;
 }
 
 export class WebSocketManager extends BaseService {
   private static instance: WebSocketManager;
+  
   private io: WebSocketServer | null = null;
-  private metricsManager: MetricsManager;
+  private config: WebSocketConfig;
+  
   private configManager: ConfigManager;
-  private stateManager: StateManager;
-  private securityManager: SecurityManager;
+  private metricsManager: MetricsManager;
   private loggingManager: LoggingManager;
-  private connections: Map<string, Socket>;
-  private messageHandlers: Map<string, Set<(data: any) => Promise<void>>>;
-  private config: z.infer<typeof WebSocketConfigSchema>;
+  private securityManager: SecurityManager;
+  private stateManager: StateManager;
 
-  private constructor(dependencies?: WebSocketManagerDependencies) {
+  private connections: Map<string, Socket> = new Map();
+  private messageHandlers: Map<string, Set<WebSocketMessageHandler>> = new Map();
+
+  private connectionMetric: ReturnType<typeof MetricsManager.prototype.createGauge>;
+  private messageMetric: ReturnType<typeof MetricsManager.prototype.createCounter>;
+  private errorMetric: ReturnType<typeof MetricsManager.prototype.createCounter>;
+  private connectionDurationMetric: ReturnType<typeof MetricsManager.prototype.createHistogram>;
+
+  private constructor(private dependencies?: WebSocketManagerDependencies) {
     super({
-      name: 'websocket-manager',
-      version: '1.1.0'
+      name: 'WebSocketManager',
+      version: '1.1.0',
+      dependencies: [
+        'ConfigManager', 
+        'MetricsManager', 
+        'LoggingManager', 
+        'SecurityManager', 
+        'StateManager'
+      ]
     });
 
     // Dependency Injection with Fallback
-    this.metricsManager = dependencies?.metricsManager ?? MetricsManager.getInstance();
     this.configManager = dependencies?.configManager ?? ConfigManager.getInstance();
-    this.stateManager = dependencies?.stateManager ?? StateManager.getInstance();
-    this.securityManager = dependencies?.securityManager ?? SecurityManager.getInstance();
+    this.metricsManager = dependencies?.metricsManager ?? MetricsManager.getInstance();
     this.loggingManager = dependencies?.loggingManager ?? LoggingManager.getInstance();
-
-    this.connections = new Map();
-    this.messageHandlers = new Map();
+    this.securityManager = dependencies?.securityManager ?? SecurityManager.getInstance();
+    this.stateManager = dependencies?.stateManager ?? StateManager.getInstance();
 
     // Validate and set configuration
     this.config = WebSocketConfigSchema.parse(
       this.configManager.get('websocket', {})
     );
 
-    // Enhanced Metrics Tracking
     this.initializeMetrics();
-  }
-
-  private initializeMetrics(): void {
-    this.metricsManager.createGauge('websocket_connections_total', 'Total WebSocket connections');
-    this.metricsManager.createCounter('websocket_messages_total', 'Total WebSocket messages');
-    this.metricsManager.createCounter('websocket_errors_total', 'Total WebSocket errors');
-    this.metricsManager.createHistogram('websocket_connection_duration', 'WebSocket connection duration');
   }
 
   public static getInstance(dependencies?: WebSocketManagerDependencies): WebSocketManager {
@@ -84,7 +94,32 @@ export class WebSocketManager extends BaseService {
     return WebSocketManager.instance;
   }
 
-  public async init(): Promise<void> {
+  private initializeMetrics(): void {
+    this.connectionMetric = this.metricsManager.createGauge({
+      name: 'websocket_connections_total',
+      help: 'Total WebSocket connections'
+    });
+
+    this.messageMetric = this.metricsManager.createCounter({
+      name: 'websocket_messages_total',
+      help: 'Total WebSocket messages',
+      labelNames: ['type']
+    });
+
+    this.errorMetric = this.metricsManager.createCounter({
+      name: 'websocket_errors_total',
+      help: 'Total WebSocket errors',
+      labelNames: ['type']
+    });
+
+    this.connectionDurationMetric = this.metricsManager.createHistogram({
+      name: 'websocket_connection_duration_seconds',
+      help: 'WebSocket connection duration',
+      buckets: [1, 5, 10, 30, 60, 120]
+    });
+  }
+
+  async init(): Promise<void> {
     try {
       if (this.io) {
         this.loggingManager.warn('WebSocket server already initialized');
@@ -109,41 +144,25 @@ export class WebSocketManager extends BaseService {
         maxConnections: this.config.maxConnections
       });
     } catch (error) {
-      this.loggingManager.error('Failed to initialize WebSocket manager', { error });
+      this.loggingManager.error('Failed to initialize WebSocket manager', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
       throw error;
     }
   }
 
-  public async cleanup(): Promise<void> {
-    try {
-      // Graceful disconnection
-      for (const socket of this.connections.values()) {
-        socket.disconnect(true);
-      }
-      this.connections.clear();
-      this.messageHandlers.clear();
-
-      if (this.io) {
-        this.io.close();
-        this.io = null;
-      }
-
-      this.loggingManager.info('WebSocket manager cleaned up successfully');
-    } catch (error) {
-      this.loggingManager.error('Error during WebSocket manager cleanup', { error });
-      throw error;
-    }
-  }
-
-  public async getHealth(): Promise<{ status: 'healthy' | 'unhealthy' | 'degraded'; details?: Record<string, unknown>; }> {
+  async getHealth(): Promise<ServiceHealth> {
     try {
       const connectedClients = this.connections.size;
       const status = connectedClients < this.config.maxConnections 
-        ? 'healthy' 
-        : (connectedClients > this.config.maxConnections * 0.9 ? 'degraded' : 'unhealthy');
+        ? ServiceStatus.HEALTHY 
+        : (connectedClients > this.config.maxConnections * 0.9 
+          ? ServiceStatus.DEGRADED 
+          : ServiceStatus.UNHEALTHY);
 
       return {
         status,
+        version: this.version,
         details: {
           serverStatus: this.io ? 'running' : 'stopped',
           connectedClients,
@@ -152,9 +171,12 @@ export class WebSocketManager extends BaseService {
         }
       };
     } catch (error) {
-      this.loggingManager.error('WebSocket manager health check failed', { error });
+      this.loggingManager.error('WebSocket manager health check failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
       return {
-        status: 'unhealthy',
+        status: ServiceStatus.UNHEALTHY,
+        version: this.version,
         details: {
           error: error instanceof Error ? error.message : 'Unknown error'
         }
@@ -162,7 +184,7 @@ export class WebSocketManager extends BaseService {
     }
   }
 
-  private async authenticate(socket: Socket, next: (err?: Error) => void) {
+  private async authenticate(socket: Socket, next: (err?: Error) => void): Promise<void> {
     try {
       const token = socket.handshake.auth.token;
       if (!token) {
@@ -187,7 +209,7 @@ export class WebSocketManager extends BaseService {
     }
   }
 
-  private handleConnection(socket: Socket) {
+  private handleConnection(socket: Socket): void {
     const startTime = Date.now();
     const userId = socket.data.user.id;
 
@@ -201,22 +223,22 @@ export class WebSocketManager extends BaseService {
     }
 
     this.connections.set(userId, socket);
-    this.metricsManager.setGauge('websocket_connections_total', this.connections.size);
+    this.connectionMetric.set(this.connections.size);
 
     socket.on('disconnect', () => {
-      const connectionDuration = Date.now() - startTime;
-      this.metricsManager.recordHistogram('websocket_connection_duration', connectionDuration);
+      const connectionDuration = (Date.now() - startTime) / 1000; // Convert to seconds
+      this.connectionDurationMetric.observe(connectionDuration);
       
       this.connections.delete(userId);
-      this.metricsManager.setGauge('websocket_connections_total', this.connections.size);
+      this.connectionMetric.set(this.connections.size);
     });
 
-    socket.on('message', async (data: any) => {
+    socket.on('message', async (data: unknown) => {
       try {
-        this.metricsManager.incrementCounter('websocket_messages_total', { userId });
+        this.messageMetric.inc({ type: 'received' });
         await this.handleMessage(userId, data);
       } catch (error) {
-        this.metricsManager.incrementCounter('websocket_errors_total', { userId });
+        this.errorMetric.inc({ type: 'message_handling' });
         this.loggingManager.error('WebSocket message handling failed', { 
           error: error instanceof Error ? error.message : 'Unknown error',
           userId 
@@ -226,22 +248,30 @@ export class WebSocketManager extends BaseService {
     });
   }
 
-  private async handleMessage(userId: string, data: any) {
+  private async handleMessage(userId: string, data: unknown): Promise<void> {
     try {
-      const validatedData = MessageSchema.parse(data);
-      const handlers = this.messageHandlers.get(validatedData.type);
+      // Validate message structure if needed
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid message format');
+      }
 
+      const messageType = (data as { type?: string }).type;
+      if (!messageType) {
+        throw new Error('Message type is required');
+      }
+
+      const handlers = this.messageHandlers.get(messageType);
       if (handlers) {
         for (const handler of handlers) {
-          await handler(validatedData.payload);
+          await handler(data);
         }
       }
 
       // Update state with enhanced tracking
       await this.stateManager.set(`lastMessage:${userId}`, {
         timestamp: Date.now(),
-        type: validatedData.type,
-        payload: validatedData.payload
+        type: messageType,
+        payload: data
       });
     } catch (error) {
       this.loggingManager.warn('Invalid WebSocket message', { 
@@ -252,24 +282,25 @@ export class WebSocketManager extends BaseService {
     }
   }
 
-  public on(event: string, handler: (data: any) => Promise<void>) {
+  public on(event: string, handler: WebSocketMessageHandler): void {
     if (!this.messageHandlers.has(event)) {
       this.messageHandlers.set(event, new Set());
     }
     this.messageHandlers.get(event)!.add(handler);
   }
 
-  public off(event: string, handler: (data: any) => Promise<void>) {
+  public off(event: string, handler: WebSocketMessageHandler): void {
     const handlers = this.messageHandlers.get(event);
     if (handlers) {
       handlers.delete(handler);
     }
   }
 
-  public emit(userId: string, event: string, data: any) {
+  public emit(userId: string, event: string, data: unknown): void {
     const socket = this.connections.get(userId);
     if (socket) {
       socket.emit(event, data);
+      this.messageMetric.inc({ type: 'sent' });
     } else {
       this.loggingManager.warn('Attempted to emit to non-existent connection', { 
         userId, 
@@ -278,15 +309,16 @@ export class WebSocketManager extends BaseService {
     }
   }
 
-  public broadcast(event: string, data: any, excludeUserId?: string) {
+  public broadcast(event: string, data: unknown, excludeUserId?: string): void {
     for (const [userId, socket] of this.connections) {
       if (userId !== excludeUserId) {
         socket.emit(event, data);
+        this.messageMetric.inc({ type: 'broadcast' });
       }
     }
   }
 
-  public attachToServer(server: Server) {
+  public attachToServer(server: HttpServer): void {
     if (this.io) {
       this.loggingManager.warn('WebSocket server already attached to HTTP server');
       return;
@@ -303,6 +335,29 @@ export class WebSocketManager extends BaseService {
     this.io.on('connection', this.handleConnection.bind(this));
 
     this.loggingManager.info('WebSocket server attached to HTTP server');
+  }
+
+  async cleanup(): Promise<void> {
+    try {
+      // Graceful disconnection
+      for (const socket of this.connections.values()) {
+        socket.disconnect(true);
+      }
+      this.connections.clear();
+      this.messageHandlers.clear();
+
+      if (this.io) {
+        this.io.close();
+        this.io = null;
+      }
+
+      this.loggingManager.info('WebSocket manager cleaned up successfully');
+    } catch (error) {
+      this.loggingManager.error('Error during WebSocket manager cleanup', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw error;
+    }
   }
 }
 

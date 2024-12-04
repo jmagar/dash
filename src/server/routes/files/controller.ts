@@ -1,11 +1,25 @@
 import { Request, Response } from 'express';
 import path from 'path';
-import { ApiError } from '../../utils/error';
-import { ApiResponse } from '../../types/express';
-import { logger } from '../../utils/logger';
+import { createApiError } from '../../utils/error';
 import { query } from '../../db';
 import { FileParams } from './dto/files.dto';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+
+interface FileRow {
+  name: string;
+  path: string;
+  type: string;
+  size: string;
+  modified: Date;
+}
+
+interface FileResponse {
+  name: string;
+  path: string;
+  type: string;
+  size: number;
+  modified: Date;
+}
 
 // Normalize file path to prevent directory traversal
 function normalizePath(filePath?: string): string {
@@ -27,10 +41,11 @@ export const listFiles = async (
     path: requestPath,
   };
 
-  loggerLoggingManager.getInstance().();
+  const logger = LoggingManager.getInstance();
+  logger.info('Listing files', logMeta);
 
   try {
-    const result = await query(
+    const result = await query<FileRow>(
       `
       SELECT
         name,
@@ -50,22 +65,26 @@ export const listFiles = async (
       [hostId, requestPath]
     );
 
-    const files = result.rows.map(row => ({
+    const files: FileResponse[] = result.rows.map(row => ({
       name: row.name,
       path: row.path,
       type: row.type,
-      size: parseInt(row.size),
+      size: parseInt(row.size, 10),
       modified: row.modified,
     }));
 
-    res.json(new ApiResponse({
-      path: requestPath,
-      files,
-    }));
+    res.json({ 
+      success: true, 
+      data: {
+        path: requestPath,
+        files,
+      }
+    });
   } catch (error) {
-    loggerLoggingManager.getInstance().();
-    throw new ApiError(500, 'Failed to list files');
+    logger.error('Failed to list files', {
+      ...logMeta,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw createApiError('Failed to list files', 500, logMeta);
   }
 };
-
-

@@ -1,10 +1,15 @@
+// Node.js built-in modules
+import { EventEmitter } from 'events';
+
+// External libraries
 import { z } from 'zod';
+import Redis from 'ioredis';
+
+// Local imports
 import { BaseService } from '../services/base.service';
 import { ConfigManager } from './ConfigManager';
 import { LoggingManager } from './LoggingManager';
 import { MetricsManager } from './MetricsManager';
-import Redis from 'ioredis';
-import { EventEmitter } from 'events';
 
 // Zod Schemas for Configuration and Validation
 const StateOptionsSchema = z.object({
@@ -14,7 +19,7 @@ const StateOptionsSchema = z.object({
 }).strict();
 
 const StateEntrySchema = z.object({
-  value: z.any(),
+  value: z.unknown(),
   timestamp: z.number(),
   ttl: z.number().optional(),
   persistent: z.boolean(),
@@ -78,14 +83,14 @@ export class StateManager extends BaseService {
   }
 
   private setupErrorHandling(): void {
-    process.on('unhandledRejection', (reason, promise) => {
+    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
       this.logger.error('Unhandled Rejection in StateManager', { 
         reason, 
         promise 
       });
     });
 
-    process.on('uncaughtException', (error) => {
+    process.on('uncaughtException', (error: Error) => {
       this.logger.error('Uncaught Exception in StateManager', { error });
       this.metrics.incrementCounter('state_uncaught_exceptions_total');
     });
@@ -162,7 +167,7 @@ export class StateManager extends BaseService {
   }
 
   private setupRedisSubscriptions(): void {
-    this.redis.on('error', (error) => {
+    this.redis.on('error', (error: Error) => {
       this.logger.error('Redis error', { error });
       this.metrics.incrementCounter('state_redis_errors_total');
     });
@@ -207,7 +212,7 @@ export class StateManager extends BaseService {
     this.metrics.setGauge('state_memory_usage_bytes', process.memoryUsage().heapUsed);
   }
 
-  public async get<T>(key: string, namespace: string = 'default'): Promise<T | null> {
+  public async get<T = unknown>(key: string, namespace: string = 'default'): Promise<T | null> {
     try {
       const fullKey = `${namespace}:${key}`;
       
@@ -219,7 +224,7 @@ export class StateManager extends BaseService {
           store: 'memory',
           namespace 
         });
-        return memoryEntry.value;
+        return memoryEntry.value as T;
       }
 
       // Redis lookup for persistent data
@@ -230,7 +235,7 @@ export class StateManager extends BaseService {
           store: 'redis',
           namespace 
         });
-        return JSON.parse(redisValue);
+        return JSON.parse(redisValue) as T;
       }
 
       return null;
@@ -240,7 +245,7 @@ export class StateManager extends BaseService {
     }
   }
 
-  public async set<T>(
+  public async set<T = unknown>(
     key: string, 
     value: T, 
     options: z.infer<typeof StateOptionsSchema> = {}
@@ -293,11 +298,13 @@ export class StateManager extends BaseService {
   }
 
   // Event subscription methods
-  public on(event: string, listener: (...args: any[]) => void): void {
+  public on(event: string, listener: (...args: unknown[]) => void): void {
     this.eventEmitter.on(event, listener);
   }
 
-  public off(event: string, listener: (...args: any[]) => void): void {
+  public off(event: string, listener: (...args: unknown[]) => void): void {
     this.eventEmitter.off(event, listener);
   }
 }
+
+export default StateManager.getInstance();

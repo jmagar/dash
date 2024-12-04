@@ -1,5 +1,4 @@
 ﻿import type { Logger, LogLevel, LogMetadata } from '../../types/logging';
-import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -65,40 +64,36 @@ export class FrontendLogger implements Logger {
 
   debug(message: string, data?: unknown): void {
     if (this.shouldLog('debug')) {
-      consoleLoggingManager.getInstance().());
+      console.debug(this.formatMessage('debug', message, data));
     }
   }
 
   info(message: string, data?: unknown): void {
     if (this.shouldLog('info')) {
-      consoleLoggingManager.getInstance().());
+      console.info(this.formatMessage('info', message, data));
     }
   }
 
   warn(message: string, data?: unknown): void {
     if (this.shouldLog('warn')) {
-      consoleLoggingManager.getInstance().());
+      console.warn(this.formatMessage('warn', message, data));
     }
   }
 
   error(message: string, data?: unknown): void {
     if (this.shouldLog('error')) {
-      consoleLoggingManager.getInstance().());
+      console.error(this.formatMessage('error', message, data));
     }
   }
 
   critical(message: string, data?: unknown): void {
     if (this.shouldLog('critical')) {
-      consoleLoggingManager.getInstance().());
+      console.error(this.formatMessage('critical', message, data));
     }
   }
 }
 
 // Create and export the default logger instance
-export const frontendLogger = new FrontendLogger(
+export const logger = new FrontendLogger(
   (process.env.REACT_APP_LOG_LEVEL as LogLevel) || 'info'
 );
-
-// Also export the instance as 'logger' for backward compatibility
-export 
-

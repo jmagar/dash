@@ -1,8 +1,5 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import type { Cache } from 'cache-manager';
 import { Request as ExpressRequest } from 'express';
 import sanitizeFilename from 'sanitize-filename';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
@@ -12,8 +9,8 @@ import * as bcrypt from 'bcrypt';
 
 import { FileShare } from '../entities/file-share.entity';
 import { ShareAccessLog } from '../entities/share-access-log.entity';
+import { LoggingManager } from '../../../managers/LoggingManager';
 import { 
-import { LoggingManager } from '../../../managers/utils/LoggingManager';
     ShareInfoDto, 
     ShareAccessLogEntryDto, 
     ShareStatus, 
@@ -51,6 +48,12 @@ type TypedRequest = ExpressRequest & {
     ip: string;
 };
 
+interface CacheManager {
+    get<T>(key: string): Promise<T | undefined>;
+    set<T>(key: string, value: T, ttl: number): Promise<void>;
+    del(key: string): Promise<void>;
+}
+
 function isShareSecurity(obj: unknown): obj is ShareSecurity {
     if (!obj || typeof obj !== 'object') return false;
     const security = obj as ShareSecurity;
@@ -71,22 +74,20 @@ function isShareSecurity(obj: unknown): obj is ShareSecurity {
     return true;
 }
 
-@Injectable()
 export class SharingService {
     private readonly rateLimiters: Map<string, RateLimiterMemory>;
-    private readonly cache: Cache;
+    private readonly cache: CacheManager;
+    private readonly logger: LoggingManager;
 
     constructor(
-        @InjectRepository(FileShare)
         private readonly shareRepository: Repository<FileShare>,
-        @InjectRepository(ShareAccessLog)
         private readonly accessLogRepository: Repository<ShareAccessLog>,
-        @Inject('CACHE_MANAGER')
-        private readonly cacheManager: Cache,
+        private readonly cacheManager: CacheManager,
         private readonly configService: ConfigService
     ) {
         this.rateLimiters = new Map<string, RateLimiterMemory>();
         this.cache = this.cacheManager;
+        this.logger = LoggingManager.getInstance();
     }
 
     private async validateSecurity(
@@ -183,9 +184,13 @@ export class SharingService {
     private async getCachedShareInfo(shareId: string): Promise<ShareInfoDto | null> {
         const key = `${SHARE_INFO_PREFIX}${shareId}`;
         try {
-            return await this.cache.get<ShareInfoDto>(key) ?? null;
+            const result = await this.cache.get<ShareInfoDto>(key);
+            return result ?? null;
         } catch (error) {
-            consoleLoggingManager.getInstance().();
+            this.logger.error('Failed to get cached share info', {
+                shareId,
+                error: error instanceof Error ? error.message : String(error)
+            });
             return null;
         }
     }
@@ -193,18 +198,25 @@ export class SharingService {
     private async setCachedShareInfo(shareId: string, info: ShareInfoDto): Promise<void> {
         const key = `${SHARE_INFO_PREFIX}${shareId}`;
         try {
-            await this.cache.set(key, info, CACHE_TTL);
+            await this.cache.set<ShareInfoDto>(key, info, CACHE_TTL);
         } catch (error) {
-            consoleLoggingManager.getInstance().();
+            this.logger.error('Failed to set cached share info', {
+                shareId,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
     private async getCachedCsrfToken(shareId: string): Promise<string | null> {
         const key = `${CSRF_TOKEN_PREFIX}${shareId}`;
         try {
-            return await this.cache.get<string>(key) ?? null;
+            const result = await this.cache.get<string>(key);
+            return result ?? null;
         } catch (error) {
-            consoleLoggingManager.getInstance().();
+            this.logger.error('Failed to get cached CSRF token', {
+                shareId,
+                error: error instanceof Error ? error.message : String(error)
+            });
             return null;
         }
     }
@@ -212,9 +224,12 @@ export class SharingService {
     private async setCachedCsrfToken(shareId: string, token: string): Promise<void> {
         const key = `${CSRF_TOKEN_PREFIX}${shareId}`;
         try {
-            await this.cache.set(key, token, CACHE_TTL);
+            await this.cache.set<string>(key, token, CACHE_TTL);
         } catch (error) {
-            consoleLoggingManager.getInstance().();
+            this.logger.error('Failed to set cached CSRF token', {
+                shareId,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
@@ -223,7 +238,10 @@ export class SharingService {
         try {
             await this.cache.del(key);
         } catch (error) {
-            consoleLoggingManager.getInstance().();
+            this.logger.error('Failed to invalidate share cache', {
+                shareId,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
@@ -270,7 +288,7 @@ export class SharingService {
     async modifyShare(req: ModifyShareRequestDto): Promise<ShareInfoDto> {
         const share = await this.shareRepository.findOne({ where: { id: req.shareId } });
         if (!share) {
-            throw new NotFoundException('Share not found');
+            throw new Error('Share not found');
         }
 
         share.allowZipDownload = req.allowZipDownload ?? share.allowZipDownload;
@@ -346,13 +364,10 @@ export class SharingService {
     }
 
     private handleError(error: Error): Error {
-        consoleLoggingManager.getInstance().();
-        
-        if (error instanceof NotFoundException || 
-            error instanceof BadRequestException || 
-            error instanceof UnauthorizedException) {
-            return error;
-        }
+        this.logger.error('Sharing service error', {
+            error: error.message,
+            stack: error.stack
+        });
         
         return new Error('Internal server error');
     }
@@ -389,5 +404,3 @@ export class SharingService {
         return bcrypt.hash(password, SALT_ROUNDS);
     }
 }
-
-

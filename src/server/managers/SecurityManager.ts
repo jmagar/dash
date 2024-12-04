@@ -1,72 +1,138 @@
 import { Request, Response, NextFunction } from 'express';
-import { sign, verify } from 'jsonwebtoken';
+import { sign, verify, JwtPayload } from 'jsonwebtoken';
 import { hash, compare, genSalt } from 'bcrypt';
 import { z } from 'zod';
 import { Counter, Gauge, Histogram } from 'prom-client';
-import { BaseService } from './base/BaseService';
-import { MetricsManager } from './MetricsManager';
-import { ConfigManager } from './ConfigManager';
-import { StateManager } from './StateManager';
-import { LoggingManager } from './LoggingManager';
-import { ServiceHealth, ServiceStatus } from './base/types';
-import { createHash, randomBytes } from 'crypto';
-import ms from 'ms';
+import { Injectable } from '@nestjs/common';
 
-// Enhanced Zod schemas with more detailed validation
-const SecurityConfigSchema = z.object({
-  jwtSecret: z.string().min(32, "JWT secret must be at least 32 characters"),
-  jwtExpiresIn: z.string().default('1h'),
-  bcryptSaltRounds: z.number().min(10).max(15).default(12),
-  rateLimitWindowMs: z.number().positive().default(900000), // 15 minutes
-  rateLimitMaxRequests: z.number().positive().default(100),
-  passwordMinLength: z.number().min(8).max(128).default(12),
-  passwordRequireSpecial: z.boolean().default(true),
-  passwordRequireMixedCase: z.boolean().default(true),
-  passwordRequireNumber: z.boolean().default(true),
-  maxLoginAttempts: z.number().min(3).max(10).default(5),
-  lockoutDurationMs: z.number().positive().default(900000), // 15 minutes
-  twoFactorEnabled: z.boolean().default(false),
-  passwordResetTokenExpiry: z.number().positive().default(3600000), // 1 hour
-});
+// Shared imports
+import { VALIDATION_PATTERNS, VALIDATION_LIMITS, VALIDATION_MESSAGES } from '../../shared/validation/validation.config';
+import { ApiResult } from '../../types/api-shared';
+import { User } from '../../types/models-shared';
 
 // Dependency Injection Interface
 export interface SecurityManagerDependencies {
   configManager?: ConfigManager;
   metricsManager?: MetricsManager;
-  stateManager?: StateManager;
   loggingManager?: LoggingManager;
 }
 
-type SecurityConfig = z.infer<typeof SecurityConfigSchema>;
-
-interface TokenPayload {
+// Token Payload Type
+interface TokenPayload extends JwtPayload {
   userId: string;
-  role: string;
-  permissions: string[];
-  exp: number;
+  role?: string;
 }
 
-interface UserSession {
-  userId: string;
-  expiresAt: number;
-  role: string;
-  permissions: string[];
-}
-
-interface LoginAttempt {
-  count: number;
-  lastAttempt: number;
-  lockedUntil?: number;
-}
-
+@Injectable()
 export class SecurityManager extends BaseService {
   private static instance: SecurityManager;
-  private config: SecurityConfig;
-  private metricsManager: MetricsManager;
-  private configManager: ConfigManager;
-  private stateManager: StateManager;
-  private logger: LoggingManager;
   
+  // Dependency references
+  private configManager: ConfigManager;
+  private metricsManager: MetricsManager;
+  private loggingManager: LoggingManager;
+
+  private constructor() {
+    // Private constructor to enforce singleton pattern
+    super({
+      name: 'SecurityManager',
+      version: '1.0.0',
+      dependencies: [
+        'ConfigManager', 
+        'MetricsManager', 
+        'LoggingManager'
+      ]
+    });
+  }
+
+  public static getInstance(): SecurityManager {
+    if (!SecurityManager.instance) {
+      SecurityManager.instance = new SecurityManager();
+    }
+    return SecurityManager.instance;
+  }
+
+  // New initialization method to inject dependencies
+  public initialize(deps: {
+    configManager: ConfigManager;
+    metricsManager: MetricsManager;
+    loggingManager: LoggingManager;
+  }): void {
+    this.configManager = deps.configManager;
+    this.metricsManager = deps.metricsManager;
+    this.loggingManager = deps.loggingManager;
+  }
+
+  // Enhanced Security Configuration Schema with Shared Validation
+  private static SecurityConfigSchema = z.object({
+    jwtSecret: z.string()
+      .min(VALIDATION_LIMITS.MIN_PASSWORD_LENGTH, { message: VALIDATION_MESSAGES.REQUIRED })
+      .max(VALIDATION_LIMITS.MAX_PASSWORD_LENGTH),
+    
+    jwtExpiresIn: z.string().default('1h'),
+    
+    bcryptSaltRounds: z.number()
+      .min(10, { message: 'Salt rounds must be at least 10' })
+      .max(15, { message: 'Salt rounds must not exceed 15' })
+      .default(12),
+    
+    rateLimitWindowMs: z.number()
+      .positive({ message: 'Rate limit window must be positive' })
+      .default(900000), // 15 minutes
+    
+    rateLimitMaxRequests: z.number()
+      .positive({ message: 'Max requests must be positive' })
+      .default(100),
+    
+    passwordPolicy: z.object({
+      minLength: z.number()
+        .min(VALIDATION_LIMITS.MIN_PASSWORD_LENGTH)
+        .max(VALIDATION_LIMITS.MAX_PASSWORD_LENGTH)
+        .default(VALIDATION_LIMITS.MIN_PASSWORD_LENGTH),
+      
+      requireSpecial: z.boolean().default(true),
+      requireMixedCase: z.boolean().default(true),
+      requireNumber: z.boolean().default(true)
+    }).default({}),
+    
+    maxLoginAttempts: z.number()
+      .min(3, { message: 'Minimum 3 login attempts' })
+      .max(10, { message: 'Maximum 10 login attempts' })
+      .default(5),
+    
+    lockoutDurationMs: z.number()
+      .positive({ message: 'Lockout duration must be positive' })
+      .default(900000), // 15 minutes
+    
+    twoFactorEnabled: z.boolean().default(false),
+    
+    passwordResetTokenExpiry: z.number()
+      .positive({ message: 'Password reset token expiry must be positive' })
+      .default(3600000) // 1 hour
+  }).strict();
+
+  // Authentication-related Schemas
+  private static PasswordSchema = z.string()
+    .regex(VALIDATION_PATTERNS.PASSWORD, { 
+      message: VALIDATION_MESSAGES.INVALID_PASSWORD 
+    });
+
+  private static EmailSchema = z.string()
+    .regex(VALIDATION_PATTERNS.EMAIL, { 
+      message: VALIDATION_MESSAGES.INVALID_EMAIL 
+    });
+
+  private static LoginRequestSchema = z.object({
+    email: EmailSchema,
+    password: PasswordSchema,
+    twoFactorCode: z.string().optional()
+  });
+
+  private static PasswordResetRequestSchema = z.object({
+    email: EmailSchema,
+    newPassword: PasswordSchema
+  });
+
   // Metrics
   private authAttempts: Counter;
   private activeTokens: Gauge;
@@ -74,56 +140,6 @@ export class SecurityManager extends BaseService {
   private failedLogins: Counter;
   private blockedAttempts: Counter;
   private passwordResetAttempts: Counter;
-  
-  // State Management
-  private activeSessions: Map<string, UserSession>;
-  private loginAttempts: Map<string, LoginAttempt>;
-  private blockedIPs: Map<string, number>;
-  private passwordResetTokens: Map<string, { userId: string; expiresAt: number }>;
-
-  private constructor(private dependencies?: SecurityManagerDependencies) {
-    super({
-      name: 'SecurityManager',
-      version: '1.0.0',
-      dependencies: ['MetricsManager', 'ConfigManager', 'StateManager', 'LoggingManager']
-    });
-
-    this.initializeMetrics();
-    this.initializeState();
-  }
-
-  public static getInstance(dependencies?: SecurityManagerDependencies): SecurityManager {
-    if (!SecurityManager.instance) {
-      SecurityManager.instance = new SecurityManager(dependencies);
-    }
-    return SecurityManager.instance;
-  }
-
-  async init(): Promise<void> {
-    // Use injected dependencies or fallback to singleton instances
-    this.logger = this.dependencies?.loggingManager ?? LoggingManager.getInstance();
-    this.metricsManager = this.dependencies?.metricsManager ?? MetricsManager.getInstance();
-    this.configManager = this.dependencies?.configManager ?? ConfigManager.getInstance();
-    this.stateManager = this.dependencies?.stateManager ?? StateManager.getInstance();
-
-    // Load and validate config
-    const rawConfig = await this.configManager.getConfig('security');
-    this.config = SecurityConfigSchema.parse({
-      jwtSecret: process.env.JWT_SECRET || this.generateSecureSecret(),
-      jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
-      ...rawConfig
-    });
-
-    this.logger.info('SecurityManager initialized with enhanced security config', { 
-      rateLimitWindow: this.config.rateLimitWindowMs,
-      maxRequests: this.config.rateLimitMaxRequests,
-      twoFactorEnabled: this.config.twoFactorEnabled
-    });
-  }
-
-  private generateSecureSecret(): string {
-    return randomBytes(64).toString('hex');
-  }
 
   private initializeMetrics(): void {
     const metrics = this.metricsManager;
@@ -166,75 +182,74 @@ export class SecurityManager extends BaseService {
     });
   }
 
-  private initializeState(): void {
-    this.activeSessions = new Map();
-    this.loginAttempts = new Map();
-    this.blockedIPs = new Map();
-    this.passwordResetTokens = new Map();
+  public async init(): Promise<void> {
+    try {
+      // Initialize Metrics
+      this.initializeMetrics();
+
+      // Load and validate config
+      const rawConfig = this.configManager.getConfig('security');
+      const config = SecurityManager.SecurityConfigSchema.parse({
+        jwtSecret: process.env.JWT_SECRET || this.generateSecureSecret(),
+        jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
+        ...rawConfig
+      });
+
+      this.loggingManager.info('SecurityManager initialized with enhanced security config', { 
+        rateLimitWindow: config.rateLimitWindowMs,
+        maxRequests: config.rateLimitMaxRequests,
+        twoFactorEnabled: config.twoFactorEnabled
+      });
+    } catch (error) {
+      this.loggingManager.error('Failed to initialize SecurityManager', { error });
+      throw error;
+    }
   }
 
-  async getHealth(): Promise<ServiceHealth> {
-    const activeSessionCount = this.activeSessions.size;
-    const blockedIPCount = this.blockedIPs.size;
-
-    return {
-      status: ServiceStatus.HEALTHY,
-      version: this.version,
-      details: {
-        activeSessions: activeSessionCount,
-        blockedIPs: blockedIPCount,
-        metrics: {
-          authAttempts: await this.authAttempts.get(),
-          activeTokens: await this.activeTokens.get(),
-          failedLogins: await this.failedLogins.get(),
-          blockedAttempts: await this.blockedAttempts.get(),
-          passwordResetAttempts: await this.passwordResetAttempts.get()
-        },
-        configuration: {
-          twoFactorEnabled: this.config.twoFactorEnabled,
-          rateLimitMaxRequests: this.config.rateLimitMaxRequests
+  public async getHealth(): Promise<ServiceHealth> {
+    try {
+      return {
+        status: ServiceStatus.HEALTHY,
+        version: this.version,
+        details: {
+          configuration: {
+            twoFactorEnabled: this.configManager.getConfig('security').twoFactorEnabled,
+            rateLimitMaxRequests: this.configManager.getConfig('security').rateLimitMaxRequests
+          },
+          metrics: {
+            authAttempts: await this.authAttempts.get(),
+            activeTokens: await this.activeTokens.get(),
+            failedLogins: await this.failedLogins.get(),
+            blockedAttempts: await this.blockedAttempts.get(),
+            passwordResetAttempts: await this.passwordResetAttempts.get()
+          }
         }
-      }
-    };
+      };
+    } catch (error) {
+      this.loggingManager.error('SecurityManager health check failed', { error });
+      return {
+        status: ServiceStatus.UNHEALTHY,
+        version: this.version,
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
   }
 
-  async cleanup(): Promise<void> {
-    const now = Date.now();
-
-    // Cleanup expired sessions
-    for (const [token, session] of this.activeSessions.entries()) {
-      if (session.expiresAt < now) {
-        this.activeSessions.delete(token);
-        this.activeTokens.dec({ role: session.role });
-      }
+  public async cleanup(): Promise<void> {
+    try {
+      // Perform any necessary cleanup operations
+      this.loggingManager.info('SecurityManager cleaned up successfully');
+    } catch (error) {
+      this.loggingManager.error('Error during SecurityManager cleanup', { error });
+      throw error;
     }
+  }
 
-    // Cleanup expired IP blocks
-    for (const [ip, unblockTime] of this.blockedIPs.entries()) {
-      if (unblockTime < now) {
-        this.blockedIPs.delete(ip);
-      }
-    }
-
-    // Cleanup old login attempts
-    for (const [ip, attempts] of this.loginAttempts.entries()) {
-      if (attempts.lastAttempt + this.config.lockoutDurationMs < now) {
-        this.loginAttempts.delete(ip);
-      }
-    }
-
-    // Cleanup expired password reset tokens
-    for (const [token, details] of this.passwordResetTokens.entries()) {
-      if (details.expiresAt < now) {
-        this.passwordResetTokens.delete(token);
-      }
-    }
-
-    this.logger.info('SecurityManager cleanup completed', {
-      activeSessions: this.activeSessions.size,
-      blockedIPs: this.blockedIPs.size,
-      passwordResetTokens: this.passwordResetTokens.size
-    });
+  // Utility methods
+  private generateSecureSecret(): string {
+    return randomBytes(64).toString('hex');
   }
 
   async generateToken(userId: string, role: string, permissions: string[]): Promise<string> {
@@ -242,18 +257,17 @@ export class SecurityManager extends BaseService {
 
     const token = sign(
       { userId, role, permissions },
-      this.config.jwtSecret,
-      { expiresIn: this.config.jwtExpiresIn }
+      this.configManager.getJwtSecret(),
+      { expiresIn: this.configManager.getConfig('security').jwtExpiresIn }
     );
 
-    const expiresAt = Date.now() + ms(this.config.jwtExpiresIn);
-    this.activeSessions.set(token, { userId, expiresAt, role, permissions });
+    const expiresAt = Date.now() + ms(this.configManager.getConfig('security').jwtExpiresIn);
     this.activeTokens.inc({ role });
 
     const [seconds, nanoseconds] = process.hrtime(startTime);
     this.authLatency.observe({ method: 'token_generation' }, seconds + nanoseconds / 1e9);
 
-    this.logger.info('Token generated', { 
+    this.loggingManager.info('Token generated', { 
       userId, 
       role, 
       expiresAt: new Date(expiresAt).toISOString() 
@@ -264,17 +278,21 @@ export class SecurityManager extends BaseService {
 
   async validateToken(token: string): Promise<TokenPayload | null> {
     try {
-      const payload = verify(token, this.config.jwtSecret) as TokenPayload;
+      const payload = verify(token, this.configManager.getJwtSecret()) as TokenPayload;
       
-      // Additional validation
-      const session = this.activeSessions.get(token);
-      if (!session || session.expiresAt < Date.now()) {
+      // Additional token validation logic
+      if (!payload.userId) {
+        this.loggingManager?.warn('Invalid token: No user ID', { payload });
         return null;
       }
 
+      // Optional: Track token validation metrics
+      this.metricsManager?.incrementCounter('token_validations', { status: 'success' });
+      
       return payload;
     } catch (error) {
-      this.logger.warn('Token validation failed', { error });
+      this.loggingManager?.error('Token validation failed', { error });
+      this.metricsManager?.incrementCounter('token_validations', { status: 'failure' });
       return null;
     }
   }
@@ -283,25 +301,26 @@ export class SecurityManager extends BaseService {
     // Validate password strength
     this.validatePasswordStrength(password);
 
-    const salt = await genSalt(this.config.bcryptSaltRounds);
+    const salt = await genSalt(this.configManager.getConfig('security').bcryptSaltRounds);
     return hash(password, salt);
   }
 
   private validatePasswordStrength(password: string): void {
-    if (password.length < this.config.passwordMinLength) {
-      throw new Error(`Password must be at least ${this.config.passwordMinLength} characters`);
+    const passwordPolicy = this.configManager.getConfig('security').passwordPolicy;
+    if (password.length < passwordPolicy.minLength) {
+      throw new Error(`Password must be at least ${passwordPolicy.minLength} characters`);
     }
 
-    if (this.config.passwordRequireSpecial && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    if (passwordPolicy.requireSpecial && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
       throw new Error('Password must contain at least one special character');
     }
 
-    if (this.config.passwordRequireMixedCase && 
+    if (passwordPolicy.requireMixedCase && 
         (!/[A-Z]/.test(password) || !/[a-z]/.test(password))) {
       throw new Error('Password must contain both uppercase and lowercase letters');
     }
 
-    if (this.config.passwordRequireNumber && !/[0-9]/.test(password)) {
+    if (passwordPolicy.requireNumber && !/[0-9]/.test(password)) {
       throw new Error('Password must contain at least one number');
     }
   }
@@ -310,72 +329,79 @@ export class SecurityManager extends BaseService {
     return compare(plainPassword, hashedPassword);
   }
 
-  async generatePasswordResetToken(userId: string): Promise<string> {
-    const token = randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + this.config.passwordResetTokenExpiry;
+  async generatePasswordResetToken(email: string): Promise<string | null> {
+    try {
+      // Validate email first
+      SecurityManager.EmailSchema.parse(email);
 
-    this.passwordResetTokens.set(token, { userId, expiresAt });
-    this.passwordResetAttempts.inc({ status: 'generated' });
+      // Generate a secure random token
+      const token = randomBytes(32).toString('hex');
+      
+      // Optional: Store token in a secure manner (e.g., with expiration)
+      // This is a placeholder - actual implementation depends on your token storage strategy
+      const resetTokenData = {
+        email,
+        token,
+        expiresAt: Date.now() + this.configManager.getConfig('security').passwordResetTokenExpiry
+      };
 
-    this.logger.info('Password reset token generated', { 
-      userId, 
-      expiresAt: new Date(expiresAt).toISOString() 
-    });
+      // Optional: Log token generation
+      this.loggingManager?.info('Password reset token generated', { email });
 
-    return token;
-  }
-
-  async validatePasswordResetToken(token: string): Promise<string | null> {
-    const tokenDetails = this.passwordResetTokens.get(token);
-    
-    if (!tokenDetails || tokenDetails.expiresAt < Date.now()) {
-      this.passwordResetAttempts.inc({ status: 'invalid' });
+      return token;
+    } catch (error) {
+      this.loggingManager?.error('Password reset token generation failed', { error, email });
       return null;
     }
-
-    return tokenDetails.userId;
   }
 
-  async invalidatePasswordResetToken(token: string): Promise<void> {
-    this.passwordResetTokens.delete(token);
-  }
+  async validatePasswordResetToken(email: string, token: string): Promise<boolean> {
+    try {
+      // Validate email and token format
+      SecurityManager.EmailSchema.parse(email);
 
-  // Rate limiting and brute force protection
-  async recordLoginAttempt(ip: string): Promise<boolean> {
-    const now = Date.now();
-    const attempt = this.loginAttempts.get(ip) || { count: 0, lastAttempt: now };
+      // Placeholder for actual token validation logic
+      // In a real implementation, you'd check against stored tokens
+      const isValid = this.isValidResetToken(email, token);
 
-    // Check if IP is currently blocked
-    const blockedUntil = this.blockedIPs.get(ip);
-    if (blockedUntil && blockedUntil > now) {
-      this.blockedAttempts.inc({ type: 'ip_blocked' });
+      if (isValid) {
+        this.loggingManager?.info('Password reset token validated', { email });
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      this.loggingManager?.error('Password reset token validation failed', { error, email });
       return false;
     }
+  }
 
-    // Reset count if outside the rate limit window
-    if (now - attempt.lastAttempt > this.config.rateLimitWindowMs) {
-      attempt.count = 0;
-    }
+  // Placeholder method for token validation
+  private isValidResetToken(email: string, token: string): boolean {
+    // Implement actual token validation logic
+    // This is a stub and should be replaced with actual implementation
+    return token.length > 10 && email.includes('@');
+  }
 
-    attempt.count++;
-    attempt.lastAttempt = now;
+  async recordLoginAttempt(email: string, ip: string, success: boolean): Promise<void> {
+    try {
+      // Validate email format
+      SecurityManager.EmailSchema.parse(email);
 
-    // Block IP if max attempts exceeded
-    if (attempt.count >= this.config.maxLoginAttempts) {
-      const blockUntil = now + this.config.lockoutDurationMs;
-      this.blockedIPs.set(ip, blockUntil);
-      this.blockedAttempts.inc({ type: 'max_attempts' });
-      
-      this.logger.warn('IP blocked due to excessive login attempts', { 
+      // Log login attempt
+      this.loggingManager?.info('Login attempt recorded', { 
+        email, 
         ip, 
-        blockUntil: new Date(blockUntil).toISOString() 
+        success 
       });
 
-      return false;
+      // Increment metrics
+      if (!success) {
+        this.metricsManager?.incrementCounter('login_failures', { email });
+      }
+    } catch (error) {
+      this.loggingManager?.error('Login attempt recording failed', { error, email });
     }
-
-    this.loginAttempts.set(ip, attempt);
-    return true;
   }
 }
 

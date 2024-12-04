@@ -1,16 +1,16 @@
 import { Router } from 'express';
-import { createAuthHandler, type ApiResponse, type RequestQuery, type Response } from '../../../types/express';
-import type { CommandRequest, Command, CommandResult } from '../../../types/models-shared';
-import type { ProcessInfo } from '../../../types/process';
+import type { Request, Response, NextFunction } from 'express';
+import type { CommandRequest, CommandResult, ProcessInfo } from '../../../types/models-shared';
+import type { ApiResponse } from '../../../types/express';
 import { ApiError } from '../../../types/error';
 import { logger } from '../../utils/logger';
 import { executionService } from '../../services/execution.service';
 import { ProcessService, createProcessService } from '../../services/process';
 import { hostService } from '../../services/host.service';
-import { io } from '../../server';
-import { ProcessMonitorFactory } from '../../services/process/process-monitor-factory';
-import { ProcessCacheImpl } from '../../services/process/process-cache';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { Server } from 'socket.io';
+import type { DefaultEventsMap } from 'socket.io/dist/typed-events';
+
+const router = Router();
 
 interface HostParams {
   hostId: string;
@@ -28,7 +28,11 @@ interface StreamCommandBody {
   command: string;
 }
 
-const router = Router();
+let io: Server<DefaultEventsMap>;
+
+export function setSocketIO(socketIO: Server<DefaultEventsMap>) {
+  io = socketIO;
+}
 
 // Initialize process service
 const processService = createProcessService(io, {
@@ -71,185 +75,163 @@ function createCommand(hostId: string, request: CommandRequest): Command {
  * Execute command on host
  * POST /hosts/:hostId/execute
  */
-router.post('/:hostId/execute', createAuthHandler<
-  HostParams,
-  ApiResponse<CommandResult>,
-  CommandRequest,
-  RequestQuery
->((req, res, next) => {
-  const { hostId } = req.params;
+router.post('/:hostId/execute', (async (req: Request<HostParams, ApiResponse<CommandResult>, CommandRequest>, res: Response, next: NextFunction) => {
+  try {
+    const { hostId } = req.params;
 
-  return hostService.getHost(hostId)
-    .then(host => {
-      if (!host) {
-        throw new ApiError('Host not found', undefined, 404);
-      }
+    const host = await hostService.getHost(hostId);
 
-      const command = createCommand(hostId, req.body);
-      return executionService.executeCommand(host, command);
-    })
-    .then(result => {
-      res.json({
-        success: true,
-        data: result
-      });
-    })
-    .catch(error => {
-      loggerLoggingManager.getInstance().();
-      next(error);
+    if (!host) {
+      throw new ApiError('Host not found', undefined, 404);
+    }
+
+    const command = createCommand(hostId, req.body);
+    const result = await executionService.executeCommand(host, command);
+
+    res.json({
+      success: true,
+      data: result
     });
-}));
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to execute command on host', { error: error.message });
+    }
+    next(error);
+  }
+}) as express.RequestHandler);
 
 /**
  * Stream command output
  * POST /hosts/:hostId/stream
  */
-router.post('/:hostId/stream', createAuthHandler<
-  HostParams,
-  ApiResponse<void>,
-  StreamCommandBody,
-  RequestQuery
->((req, res, next) => {
-  const { hostId } = req.params;
-  const { command } = req.body;
+router.post('/:hostId/stream', (async (req: Request<HostParams, ApiResponse<void>, StreamCommandBody>, res: Response, next: NextFunction) => {
+  try {
+    const { hostId } = req.params;
+    const { command } = req.body;
 
-  return hostService.getHost(hostId)
-    .then(host => {
-      if (!host) {
-        throw new ApiError('Host not found', undefined, 404);
-      }
+    const host = await hostService.getHost(hostId);
 
-      const commandObj = createCommand(hostId, {
-        command,
-        shell: true // Use shell for PTY-like behavior
-      });
+    if (!host) {
+      throw new ApiError('Host not found', undefined, 404);
+    }
 
-      return executionService.executeCommand(host, commandObj);
-    })
-    .then(() => {
-      res.json({
-        success: true,
-        message: 'Stream started'
-      });
-    })
-    .catch(error => {
-      loggerLoggingManager.getInstance().();
-      next(error);
+    const commandObj = createCommand(hostId, {
+      command,
+      shell: true // Use shell for PTY-like behavior
     });
-}));
+
+    await executionService.executeCommand(host, commandObj);
+
+    res.json({
+      success: true,
+      message: 'Stream started'
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to stream command output', { error: error.message });
+    }
+    next(error);
+  }
+}) as express.RequestHandler);
 
 /**
  * Get process status
  * GET /hosts/:hostId/processes/:pid
  */
-router.get('/:hostId/processes/:pid', createAuthHandler<
-  ProcessParams,
-  ApiResponse<ProcessInfo>,
-  void,
-  RequestQuery
->((req, res, next) => {
-  const { hostId, pid } = req.params;
+router.get('/:hostId/processes/:pid', (async (req: Request<ProcessParams, ApiResponse<ProcessInfo>, void>, res: Response, next: NextFunction) => {
+  try {
+    const { hostId, pid } = req.params;
 
-  return hostService.getHost(hostId)
-    .then(host => {
-      if (!host) {
-        throw new ApiError('Host not found', undefined, 404);
-      }
+    const host = await hostService.getHost(hostId);
 
-      if (!processService.isMonitored(hostId)) {
-        return processService.monitor(hostId).then(() => host);
-      }
-      return host;
-    })
-    .then(() => processService.getProcessById(hostId, parseInt(pid, 10)))
-    .then(process => {
-      if (!process) {
-        throw new ApiError('Process not found', undefined, 404);
-      }
+    if (!host) {
+      throw new ApiError('Host not found', undefined, 404);
+    }
 
-      res.json({
-        success: true,
-        data: process
-      });
-    })
-    .catch(error => {
-      loggerLoggingManager.getInstance().();
-      next(error);
+    if (!processService.isMonitored(hostId)) {
+      await processService.monitor(hostId);
+    }
+
+    const process = await processService.getProcessById(hostId, parseInt(pid, 10));
+
+    if (!process) {
+      throw new ApiError('Process not found', undefined, 404);
+    }
+
+    res.json({
+      success: true,
+      data: process
     });
-}));
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to get process status', { error: error.message });
+    }
+    next(error);
+  }
+}) as express.RequestHandler);
 
 /**
  * List processes
  * GET /hosts/:hostId/processes
  */
-router.get('/:hostId/processes', createAuthHandler<
-  HostParams,
-  ApiResponse<ProcessInfo[]>,
-  void,
-  RequestQuery
->((req, res, next) => {
-  const { hostId } = req.params;
+router.get('/:hostId/processes', (async (req: Request<HostParams, ApiResponse<ProcessInfo[]>, void>, res: Response, next: NextFunction) => {
+  try {
+    const { hostId } = req.params;
 
-  return hostService.getHost(hostId)
-    .then(host => {
-      if (!host) {
-        throw new ApiError('Host not found', undefined, 404);
-      }
+    const host = await hostService.getHost(hostId);
 
-      if (!processService.isMonitored(hostId)) {
-        return processService.monitor(hostId).then(() => host);
-      }
-      return host;
-    })
-    .then(() => processService.getProcesses(hostId))
-    .then(processes => {
-      res.json({
-        success: true,
-        data: processes
-      });
-    })
-    .catch(error => {
-      loggerLoggingManager.getInstance().();
-      next(error);
+    if (!host) {
+      throw new ApiError('Host not found', undefined, 404);
+    }
+
+    if (!processService.isMonitored(hostId)) {
+      await processService.monitor(hostId);
+    }
+
+    const processes = await processService.getProcesses(hostId);
+
+    res.json({
+      success: true,
+      data: processes
     });
-}));
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to list processes', { error: error.message });
+    }
+    next(error);
+  }
+}) as express.RequestHandler);
 
 /**
  * Kill process
  * POST /hosts/:hostId/processes/:pid/kill
  */
-router.post('/:hostId/processes/:pid/kill', createAuthHandler<
-  ProcessParams,
-  ApiResponse<void>,
-  KillProcessBody,
-  RequestQuery
->((req, res, next) => {
-  const { hostId, pid } = req.params;
-  const { signal } = req.body;
+router.post('/:hostId/processes/:pid/kill', (async (req: Request<ProcessParams, ApiResponse<void>, KillProcessBody>, res: Response, next: NextFunction) => {
+  try {
+    const { hostId, pid } = req.params;
+    const { signal } = req.body;
 
-  return hostService.getHost(hostId)
-    .then(host => {
-      if (!host) {
-        throw new ApiError('Host not found', undefined, 404);
-      }
+    const host = await hostService.getHost(hostId);
 
-      if (!processService.isMonitored(hostId)) {
-        return processService.monitor(hostId).then(() => host);
-      }
-      return host;
-    })
-    .then(() => processService.killProcess(hostId, parseInt(pid, 10), signal))
-    .then(() => {
-      res.json({
-        success: true
-      });
-    })
-    .catch(error => {
-      loggerLoggingManager.getInstance().();
-      next(error);
+    if (!host) {
+      throw new ApiError('Host not found', undefined, 404);
+    }
+
+    if (!processService.isMonitored(hostId)) {
+      await processService.monitor(hostId);
+    }
+
+    await processService.killProcess(hostId, parseInt(pid, 10), signal);
+
+    res.json({
+      success: true
     });
-}));
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to kill process', { error: error.message });
+    }
+    next(error);
+  }
+}) as express.RequestHandler);
 
 export default router;
-
-

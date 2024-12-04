@@ -5,26 +5,32 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { rateLimitConfig } from '../utils/security';
-import { logger } from '../../logger';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
+import type { LogMetadata } from '../../types/logger';
 
 interface RateLimitInfo {
   count: number;
   firstRequest: number;
 }
 
+interface RateLimitLogMetadata extends LogMetadata {
+  ip: string;
+  count: number;
+  limit: number;
+  ttl: number;
+  timeRemaining?: number;
+}
+
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private readonly requestMap = new Map<string, RateLimitInfo>();
+  private readonly logger = LoggingManager.getInstance();
 
-  canActivate(
-    context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    const ip = request.ip;
+    const ip = request.ip || request.connection.remoteAddress || 'unknown';
     const now = Date.now();
 
     // Clean up old entries
@@ -50,7 +56,19 @@ export class RateLimitGuard implements CanActivate {
 
     // Check if the limit has been exceeded
     if (rateLimitInfo.count > rateLimitConfig.limit) {
-      loggerLoggingManager.getInstance().();
+      const timeRemaining = Math.ceil(
+        (rateLimitInfo.firstRequest + rateLimitConfig.ttl * 1000 - now) / 1000
+      );
+
+      const logMeta: RateLimitLogMetadata = {
+        ip,
+        count: rateLimitInfo.count,
+        limit: rateLimitConfig.limit,
+        ttl: rateLimitConfig.ttl,
+        timeRemaining
+      };
+
+      this.logger.warn('Rate limit exceeded', logMeta);
 
       throw new HttpException(
         {
@@ -58,11 +76,9 @@ export class RateLimitGuard implements CanActivate {
           error: 'Too Many Requests',
           message: `Rate limit of ${rateLimitConfig.limit} requests per ${
             rateLimitConfig.ttl
-          } seconds exceeded. Please try again in ${Math.ceil(
-            (rateLimitInfo.firstRequest + rateLimitConfig.ttl * 1000 - now) / 1000,
-          )} seconds.`,
+          } seconds exceeded. Please try again in ${timeRemaining} seconds.`,
         },
-        HttpStatus.TOO_MANY_REQUESTS,
+        HttpStatus.TOO_MANY_REQUESTS
       );
     }
 
@@ -70,12 +86,23 @@ export class RateLimitGuard implements CanActivate {
   }
 
   private cleanup(now: number): void {
+    const expiredIps: string[] = [];
+
+    // First collect expired IPs
     for (const [ip, info] of this.requestMap.entries()) {
       if (now - info.firstRequest > rateLimitConfig.ttl * 1000) {
-        this.requestMap.delete(ip);
+        expiredIps.push(ip);
       }
+    }
+
+    // Then delete them and log
+    if (expiredIps.length > 0) {
+      expiredIps.forEach(ip => this.requestMap.delete(ip));
+      
+      this.logger.debug('Cleaned up expired rate limits', {
+        expiredCount: expiredIps.length,
+        remainingCount: this.requestMap.size
+      });
     }
   }
 }
-
-

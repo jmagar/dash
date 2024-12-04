@@ -1,10 +1,10 @@
 ﻿import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import { Socket, io } from 'socket.io-client';
+import io from 'socket.io-client';
+import type { Socket } from 'socket.io-client/build/esm/socket';
 import { config } from '../config';
 import { logger } from '../utils/frontendLogger';
 import { createApiError } from '../../types/error';
 import type { ApiResponse } from '../../types/express';
-import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 export interface BaseClientConfig {
   baseURL?: string;
@@ -13,13 +13,26 @@ export interface BaseClientConfig {
   socketURL?: string;
 }
 
-export type EndpointFunction = (...args: any[]) => string;
+export type EndpointParams = string | number | boolean | null | undefined;
+export type EndpointFunction = (...args: EndpointParams[]) => string;
 export type Endpoint = string | EndpointFunction;
 
+interface ServerToClientEvents {
+  connect: () => void;
+  disconnect: () => void;
+  connect_error: (error: Error) => void;
+}
+
+interface ClientToServerEvents {
+  ping: () => void;
+  subscribe: (channel: string) => void;
+  unsubscribe: (channel: string) => void;
+}
+
 export class BaseApiClient<T extends Record<string, Endpoint>> {
-  protected api: AxiosInstance;
-  protected endpoints: T;
-  protected socket: Socket;
+  protected readonly api: AxiosInstance;
+  protected readonly endpoints: T;
+  protected readonly socket: Socket<ServerToClientEvents, ClientToServerEvents>;
 
   constructor(endpoints: T, clientConfig?: BaseClientConfig) {
     this.endpoints = endpoints;
@@ -37,51 +50,76 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-    });
+    }) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
 
     this.setupInterceptors();
     this.setupSocketHandlers();
   }
 
-  private setupInterceptors() {
-    // Request interceptor for auth token
+  private setupInterceptors(): void {
     this.api.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem('token');
         if (token) {
+          config.headers = config.headers || {};
           config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
       },
-      (error) => {
-        loggerLoggingManager.getInstance().();
+      (error: unknown) => {
+        logger.error('Request interceptor error', {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
         return Promise.reject(error);
       }
     );
 
-    // Response interceptor for error handling
     this.api.interceptors.response.use(
       (response) => response,
       (error: unknown) => {
-        const axiosError = error as AxiosError;
-        loggerLoggingManager.getInstance().();
+        if (this.isAxiosError(error)) {
+          logger.error('Response interceptor error', {
+            status: error.response?.status,
+            url: error.config?.url,
+            error: error.message,
+            stack: error.stack
+          });
+        } else {
+          logger.error('Unknown response error', {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          });
+        }
         return Promise.reject(error);
       }
     );
   }
 
-  private setupSocketHandlers() {
+  private setupSocketHandlers(): void {
     this.socket.on('connect', () => {
-      loggerLoggingManager.getInstance().();
+      logger.info('Socket connected', {
+        id: this.socket.id || 'unknown'
+      });
     });
 
-    this.socket.on('disconnect', (reason) => {
-      loggerLoggingManager.getInstance().();
+    this.socket.on('disconnect', () => {
+      logger.warn('Socket disconnected', {
+        id: this.socket.id || 'unknown'
+      });
     });
 
-    this.socket.on('connect_error', (error) => {
-      loggerLoggingManager.getInstance().();
+    this.socket.on('connect_error', (error: Error) => {
+      logger.error('Socket connection error', {
+        id: this.socket.id || 'unknown',
+        error: error.message,
+        stack: error.stack
+      });
     });
+  }
+
+  private isAxiosError(error: unknown): error is AxiosError {
+    return axios.isAxiosError(error);
   }
 
   protected async get<R>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
@@ -93,7 +131,11 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     }
   }
 
-  protected async post<R>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
+  protected async post<R>(
+    endpoint: string, 
+    data?: unknown, 
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<R>> {
     try {
       const response = await this.api.post<ApiResponse<R>>(endpoint, data, config);
       return response.data;
@@ -102,7 +144,11 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     }
   }
 
-  protected async put<R>(endpoint: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
+  protected async put<R>(
+    endpoint: string, 
+    data?: unknown, 
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<R>> {
     try {
       const response = await this.api.put<ApiResponse<R>>(endpoint, data, config);
       return response.data;
@@ -120,12 +166,11 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     }
   }
 
-  protected getEndpoint(key: keyof T, ...params: any[]): string {
+  protected getEndpoint(key: keyof T, ...params: EndpointParams[]): string {
     const endpoint = this.endpoints[key];
     if (typeof endpoint === 'function') {
-      return endpoint(...params);
+      return endpoint(...params) || '';
     }
-    return endpoint;
+    return endpoint || '';
   }
 }
-

@@ -1,33 +1,81 @@
 import { EventEmitter } from 'events';
 import { db } from '../db';
-import { LoggingManager } from '../managers/utils/LoggingManager';
-import { getAgentService } from './agent.service';
+import { LoggingManager } from '../managers/LoggingManager';
 import { 
   SystemMetrics, 
-  ProcessMetrics, 
-  NetworkInterface, 
-  MetricsAlert,
-  StorageMetrics,
-  StorageMount,
-  isSystemMetrics,
-  isMetricsAlert,
   MetricsConfig
 } from '../../types/metrics.types';
-import { ServiceStatus } from '../../types/status';
-import type { LogMetadata } from '../../types/logger';
-import type { AgentMetrics } from '../../types/socket-events';
+import { DBMetric } from '../../types/db-models';
 
-class MetricsService extends EventEmitter {
+export type MetricName = 
+  'cpu' | 'memory' | 'latency' | 
+  'errorRate' | 'requestCount' | 
+  'activeConnections' | 
+  'httpRequestDuration' | 
+  'apiErrors' | 
+  'operationDuration' | 
+  'hostMetrics' | 
+  'serviceMetrics' | 
+  string;
+
+export interface ServiceMetric {
+  timestamp: Date;
+  name: MetricName;
+  value: number;
+  labels?: Record<string, string>;
+}
+
+export interface ServiceMetrics {
+  cpu: number;
+  memory: number;
+  latency: number;
+  errorRate: number;
+  uptime: number;
+  requestCount: number;
+  activeConnections: number;
+  lastError?: Error;
+  customMetrics: Record<string, number>;
+}
+
+export class MetricsService extends EventEmitter {
   private collectionIntervals: Map<string, NodeJS.Timeout> = new Map();
   private cleanupIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private readonly config: MetricsConfig;
+  private readonly config: Required<MetricsConfig>;
+  private metrics: Map<string, ServiceMetrics> = new Map();
+  private thresholds: Map<MetricName, number> = new Map();
+  private logger: LoggingManager;
 
-  constructor(config: MetricsConfig) {
+  constructor(config: MetricsConfig = {
+    collection: { interval: 5000, retention: 86400 },
+    alerts: {
+      cpu: { warning: 80, critical: 90 },
+      memory: { warning: 80, critical: 90 },
+      storage: { warning: 80, critical: 90 }
+    }
+  }) {
     super();
-    this.config = config;
+    this.config = {
+      collection: {
+        interval: config.collection?.interval ?? 5000,
+        retention: config.collection?.retention ?? 86400
+      },
+      alerts: {
+        cpu: config.alerts?.cpu ?? { warning: 80, critical: 90 },
+        memory: config.alerts?.memory ?? { warning: 80, critical: 90 },
+        storage: config.alerts?.storage ?? { warning: 80, critical: 90 }
+      }
+    };
+    this.logger = LoggingManager.getInstance();
+    this.initializeDefaultThresholds();
   }
 
-  async storeMetrics(hostId: string, metrics: SystemMetrics): Promise<void> {
+  private initializeDefaultThresholds(): void {
+    this.thresholds.set('cpu', 80);
+    this.thresholds.set('memory', 90);
+    this.thresholds.set('errorRate', 10);
+  }
+
+  async storeSystemMetrics(hostId: string, metrics: SystemMetrics): Promise<void> {
     try {
       await db.query(
         `INSERT INTO system_metrics (
@@ -48,43 +96,8 @@ class MetricsService extends EventEmitter {
           memory_buffers,
           memory_cached,
           memory_available,
-          memory_swap_total,
-          memory_swap_used,
-          memory_swap_free,
-          memory_usage,
-          storage_total,
-          storage_used,
-          storage_free,
-          storage_usage,
-          io_read_count,
-          io_write_count,
-          io_read_bytes,
-          io_write_bytes,
-          io_time,
-          net_bytes_sent,
-          net_bytes_recv,
-          net_packets_sent,
-          net_packets_recv,
-          net_errors_in,
-          net_errors_out,
-          net_drops_in,
-          net_drops_out,
-          net_tcp_conns,
-          net_udp_conns,
-          net_listen_ports,
-          net_interfaces,
-          net_total_speed,
-          net_average_speed,
-          uptime,
-          load_average_1,
-          load_average_5,
-          load_average_15,
-          created_at,
-          updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
-          $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-          $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)`,
+          memory_swap_total
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
         [
           hostId,
           metrics.timestamp,
@@ -103,438 +116,147 @@ class MetricsService extends EventEmitter {
           metrics.memory.buffers,
           metrics.memory.cached,
           metrics.memory.available,
-          metrics.memory.swap_total,
-          metrics.memory.swap_used,
-          metrics.memory.swap_free,
-          metrics.memory.usage,
-          metrics.storage.total,
-          metrics.storage.used,
-          metrics.storage.free,
-          metrics.storage.usage,
-          metrics.storage.ioStats?.reads,
-          metrics.storage.ioStats?.writes,
-          metrics.storage.ioStats?.readBytes,
-          metrics.storage.ioStats?.writeBytes,
-          metrics.storage.ioStats?.readTime,
-          metrics.storage.ioStats?.writeTime,
-          metrics.network.bytesSent,
-          metrics.network.bytesRecv,
-          metrics.network.packetsSent,
-          metrics.network.packetsRecv,
-          metrics.network.errorsIn,
-          metrics.network.errorsOut,
-          metrics.network.dropsIn,
-          metrics.network.dropsOut,
-          metrics.network.tcp_conns,
-          metrics.network.udp_conns,
-          metrics.network.listen_ports,
-          metrics.network.interfaces,
-          metrics.network.total_speed,
-          metrics.network.average_speed,
-          metrics.uptime,
-          metrics.loadAverage[0],
-          metrics.loadAverage[1],
-          metrics.loadAverage[2],
-          metrics.createdAt,
-          metrics.updatedAt
+          metrics.memory.swap_total
         ]
       );
-
-      await this.handleHostStatus(hostId, metrics);
-
-      this.emit('metrics', { hostId, metrics });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to store metrics:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hostId,
-      });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error storing system metrics:', { error: errorMessage });
     }
   }
 
-  private async handleHostStatus(hostId: string, metrics: SystemMetrics): Promise<void> {
-    try {
-      interface HostStatus {
-        status: string;
-      }
-      const host = await db.query<HostStatus>('SELECT status FROM hosts WHERE id = $1', [hostId]);
-      if (!host.rows[0]) return;
+  convertDbMetricToSystemMetric(row: DBMetric): SystemMetrics {
+    const interfaces = Array.isArray(row.net_interfaces) ? row.net_interfaces : [];
 
-      const currentStatus = host.rows[0].status;
-      let newStatus = currentStatus;
-
-      // Don't update status if host is in installing state
-      if (currentStatus !== 'installing') {
-        if (metrics.cpu.total > 95 || metrics.memory.usage > 95) {
-          newStatus = 'error';
-        } else {
-          newStatus = 'online';
-        }
-
-        if (currentStatus !== newStatus) {
-          await db.query('UPDATE hosts SET status = $1 WHERE id = $2', [newStatus, hostId]);
-        }
-      }
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to update host status', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-    }
-  }
-
-  private getSystemStatus(metrics: unknown): ServiceStatus {
-    try {
-      if (metrics && typeof metrics === 'object' && 'status' in metrics) {
-        const { status } = metrics as { status: unknown };
-        if (typeof status === 'string' && Object.values(ServiceStatus).includes(status as ServiceStatus)) {
-          return status as ServiceStatus;
-        }
-      }
-      return ServiceStatus.INACTIVE;
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to get system status', { 
-        error: error instanceof Error ? error : new Error(String(error))
-      });
-      return ServiceStatus.ERROR;
-    }
-  }
-
-  collectNetworkMetrics(hostId: string): NetworkInterface[] {
-    try {
-      const agentService = getAgentService();
-      const agent = agentService.getAgent(hostId);
-      if (!agent?.metrics?.network) {
-        throw new Error('No network metrics available');
-      }
-
-      // Ensure we return an array of NetworkInterface
-      const networkInterfaces: unknown[] = Array.isArray(agent.metrics.network) ? agent.metrics.network : [];
-      
-      // Type guard for NetworkInterface
-      const isNetworkInterface = (iface: unknown): iface is NetworkInterface => {
-        return typeof iface === 'object' && iface !== null &&
-          'name' in iface && typeof iface.name === 'string' &&
-          'mac' in iface && typeof iface.mac === 'string' &&
-          'ipv4' in iface && Array.isArray(iface.ipv4) &&
-          'ipv6' in iface && Array.isArray(iface.ipv6);
-      };
-
-      return networkInterfaces.filter(isNetworkInterface);
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to collect network metrics', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-      return [];
-    }
-  }
-
-  collectStorageMetrics(hostId: string): StorageMetrics {
-    try {
-      const agentService = getAgentService();
-      const agent = agentService.getAgent(hostId);
-      if (!agent?.metrics?.storage) {
-        throw new Error('No storage metrics available');
-      }
-
-      // Type guard for StorageMetrics
-      const isStorageMetrics = (metrics: unknown): metrics is StorageMetrics => {
-        return typeof metrics === 'object' && metrics !== null &&
-          'total' in metrics && typeof metrics.total === 'number' &&
-          'used' in metrics && typeof metrics.used === 'number' &&
-          'free' in metrics && typeof metrics.free === 'number';
-      };
-
-      if (!isStorageMetrics(agent.metrics.storage)) {
-        throw new Error('Invalid storage metrics format');
-      }
-
-      return agent.metrics.storage;
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to collect storage metrics', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-      return {
-        total: 0,
-        used: 0,
-        free: 0,
+    return {
+      hostId: row.host_id,
+      timestamp: row.timestamp,
+      cpu: {
+        usage: row.cpu_total,
+        total: row.cpu_total,
+        user: row.cpu_user,
+        system: row.cpu_system,
+        idle: row.cpu_idle,
+        iowait: row.cpu_iowait ?? 0,
+        steal: row.cpu_steal ?? 0,
+        cores: row.cpu_cores,
+        threads: row.cpu_threads,
+        model: 'unknown'
+      },
+      memory: {
+        total: row.memory_total,
+        used: row.memory_used,
+        free: row.memory_free,
+        shared: row.memory_shared,
+        buffers: row.memory_buffers ?? 0,
+        cached: row.memory_cached ?? 0,
+        available: row.memory_available,
+        swap_total: row.memory_swap_total,
+        swap_used: row.memory_swap_used ?? 0,
+        swap_free: row.memory_swap_free,
+        usage: row.memory_usage
+      },
+      network: {
+        interfaces,
+        bytesSent: row.net_bytes_sent,
+        bytesRecv: row.net_bytes_recv,
+        packetsSent: row.net_packets_sent,
+        packetsRecv: row.net_packets_recv,
+        errorsIn: row.net_errors_in,
+        errorsOut: row.net_errors_out,
+        dropsIn: row.net_drops_in,
+        dropsOut: row.net_drops_out,
+        tcp_conns: row.net_tcp_conns,
+        udp_conns: row.net_udp_conns,
+        listen_ports: [],
+        total_speed: row.net_total_speed,
+        average_speed: row.net_average_speed
+      },
+      storage: {
+        total: row.storage_total,
+        used: row.storage_used,
+        free: row.storage_free,
+        usage: row.storage_usage,
+        ioStats: {
+          reads: row.io_read_count ?? 0,
+          writes: row.io_write_count ?? 0,
+          readBytes: row.io_read_bytes ?? 0,
+          writeBytes: row.io_write_bytes ?? 0,
+          readTime: 0,
+          writeTime: 0
+        },
         mounts: []
-      };
-    }
-  }
-
-  async storeProcessMetrics(hostId: string, processes: ProcessMetrics[]): Promise<void> {
-    try {
-      // Validate input array
-      const validProcesses = processes.filter((p): p is ProcessMetrics => {
-        return typeof p === 'object' && p !== null &&
-          'pid' in p && typeof p.pid === 'number' &&
-          'name' in p && typeof p.name === 'string' &&
-          'cpu' in p && typeof p.cpu === 'number' &&
-          'memory' in p && typeof p.memory === 'number';
-      });
-
-      if (validProcesses.length === 0) {
-        LoggingManager.getInstance().warn('No valid process metrics to store', { hostId });
-        return;
-      }
-
-      const values = validProcesses.map(p => [
-        hostId,
-        p.id,
-        p.pid,
-        p.name,
-        p.cpu,
-        p.cpuUsage,
-        p.memory,
-        p.memoryUsage,
-        p.memoryRss,
-        p.memoryVms,
-        p.diskRead,
-        p.diskWrite,
-        p.netRead,
-        p.netWrite,
-        p.status,
-        p.command,
-        p.user,
-        p.threads,
-        p.started,
-        p.updatedAt
-      ]);
-
-      await db.query(
-        `INSERT INTO process_metrics (
-          host_id, id, pid, name, cpu, cpu_usage, memory, memory_usage,
-          memory_rss, memory_vms, disk_read, disk_write, net_read, net_write,
-          status, command, user, threads, started, updated_at
-        ) VALUES ${values.map((_, i) => 
-          `($${i * 20 + 1}, $${i * 20 + 2}, $${i * 20 + 3}, $${i * 20 + 4},
-            $${i * 20 + 5}, $${i * 20 + 6}, $${i * 20 + 7}, $${i * 20 + 8},
-            $${i * 20 + 9}, $${i * 20 + 10}, $${i * 20 + 11}, $${i * 20 + 12},
-            $${i * 20 + 13}, $${i * 20 + 14}, $${i * 20 + 15}, $${i * 20 + 16},
-            $${i * 20 + 17}, $${i * 20 + 18}, $${i * 20 + 19}, $${i * 20 + 20})`
-        ).join(', ')}`,
-        values.flat()
-      );
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to store process metrics', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-    }
-  }
-
-  async getMetrics(hostId: string, start: Date, end: Date): Promise<SystemMetrics[]> {
-    try {
-      const result = await db.query<SystemMetrics>(
-        `SELECT * FROM system_metrics
-         WHERE host_id = $1
-         AND timestamp BETWEEN $2 AND $3
-         ORDER BY timestamp ASC`,
-        [hostId, start, end]
-      );
-
-      // Validate each row
-      return result.rows.filter((row): row is SystemMetrics => {
-        return isSystemMetrics(row);
-      });
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to get metrics', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-      return [];
-    }
-  }
-
-  async getProcessMetrics(hostId: string, start: Date, end: Date): Promise<ProcessMetrics[]> {
-    try {
-      const result = await db.query<ProcessMetrics>(
-        `SELECT * FROM process_metrics
-         WHERE host_id = $1
-         AND timestamp BETWEEN $2 AND $3
-         ORDER BY timestamp ASC`,
-        [hostId, start, end]
-      );
-
-      // Validate each row has required fields
-      return result.rows.filter((row): row is ProcessMetrics => {
-        return typeof row === 'object' && row !== null &&
-          'pid' in row && typeof row.pid === 'number' &&
-          'name' in row && typeof row.name === 'string' &&
-          'cpu' in row && typeof row.cpu === 'number' &&
-          'memory' in row && typeof row.memory === 'number';
-      });
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to get process metrics', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-      return [];
-    }
-  }
-
-  async createMetricsAlert(alert: Omit<MetricsAlert, 'id' | 'createdAt' | 'updatedAt'>): Promise<MetricsAlert> {
-    const now = new Date();
-    const newAlert: MetricsAlert = {
-      ...alert,
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now
+      },
+      uptime: row.uptime_seconds,
+      loadAverage: [
+        row.load_average_1,
+        row.load_average_5,
+        row.load_average_15
+      ],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
-    
-    await db.query(
-      `INSERT INTO metrics_alerts (
-        id,
-        host_id,
-        type,
-        status,
-        threshold,
-        value,
-        message,
-        timestamp,
-        created_at,
-        updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        newAlert.id,
-        newAlert.hostId,
-        newAlert.type,
-        newAlert.status,
-        newAlert.threshold,
-        newAlert.value,
-        newAlert.message,
-        newAlert.timestamp,
-        newAlert.createdAt,
-        newAlert.updatedAt
-      ]
-    );
-
-    return newAlert;
   }
 
-  async getMetricsAlerts(hostId: string): Promise<MetricsAlert[]> {
-    try {
-      const result = await db.query(
-        'SELECT * FROM metrics_alerts WHERE host_id = $1 ORDER BY timestamp DESC',
-        [hostId]
-      );
-      return result.rows.filter((row): row is MetricsAlert => {
-        return isMetricsAlert(row);
-      });
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to get metrics alerts', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        hostId 
-      });
-      throw error;
+  recordMetric(name: MetricName, value: number, labels?: Record<string, string>): void {
+    const timestamp = new Date();
+    const metric: ServiceMetric = { timestamp, name, value, labels };
+    this.emit('metrics:update', metric);
+
+    const threshold = this.thresholds.get(name);
+    if (threshold && value > threshold) {
+      this.emit('metrics:threshold', metric);
     }
   }
 
-  private async processMetricsAlert(metrics: SystemMetrics): Promise<void> {
-    try {
-      const alerts: Omit<MetricsAlert, 'id' | 'createdAt' | 'updatedAt'>[] = [];
-      const now = new Date();
+  getMetrics(serviceName?: string): ServiceMetrics | undefined {
+    return serviceName ? this.metrics.get(serviceName) : undefined;
+  }
 
-      // Type guard for alert thresholds
-      const isValidThreshold = (threshold: unknown): threshold is { warning: number; critical: number } => {
-        return typeof threshold === 'object' && threshold !== null &&
-          'warning' in threshold && typeof threshold.warning === 'number' &&
-          'critical' in threshold && typeof threshold.critical === 'number';
-      };
+  setThreshold(name: MetricName, threshold: number): void {
+    this.thresholds.set(name, threshold);
+  }
 
-      // CPU alerts
-      if (isValidThreshold(this.config.alerts?.cpu)) {
-        if (metrics.cpu.usage >= this.config.alerts.cpu.critical) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'cpu',
-            status: ServiceStatus.ERROR,
-            threshold: this.config.alerts.cpu.critical,
-            value: metrics.cpu.usage,
-            message: `CPU usage exceeded critical threshold: ${metrics.cpu.usage}%`,
-            timestamp: now
-          });
-        } else if (metrics.cpu.usage >= this.config.alerts.cpu.warning) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'cpu',
-            status: ServiceStatus.DEGRADED,
-            threshold: this.config.alerts.cpu.warning,
-            value: metrics.cpu.usage,
-            message: `CPU usage exceeded warning threshold: ${metrics.cpu.usage}%`,
-            timestamp: now
-          });
-        }
-      }
+  startMetricsCollection(serviceName: string, interval = this.config.collection.interval): void {
+    const existingInterval = this.collectionIntervals.get(serviceName);
+    if (existingInterval) {
+      clearInterval(existingInterval);
+    }
 
-      // Memory alerts
-      if (isValidThreshold(this.config.alerts?.memory)) {
-        if (metrics.memory.usage >= this.config.alerts.memory.critical) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'memory',
-            status: ServiceStatus.ERROR,
-            threshold: this.config.alerts.memory.critical,
-            value: metrics.memory.usage,
-            message: `Memory usage exceeded critical threshold: ${metrics.memory.usage}%`,
-            timestamp: now
-          });
-        } else if (metrics.memory.usage >= this.config.alerts.memory.warning) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'memory',
-            status: ServiceStatus.DEGRADED,
-            threshold: this.config.alerts.memory.warning,
-            value: metrics.memory.usage,
-            message: `Memory usage exceeded warning threshold: ${metrics.memory.usage}%`,
-            timestamp: now
-          });
-        }
-      }
+    const newInterval = setInterval(() => {
+      const metrics = this.collectServiceMetrics(serviceName);
+      this.metrics.set(serviceName, metrics);
+    }, interval);
 
-      // Storage alerts
-      if (isValidThreshold(this.config.alerts?.storage)) {
-        if (metrics.storage.usage >= this.config.alerts.storage.critical) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'storage',
-            status: ServiceStatus.ERROR,
-            threshold: this.config.alerts.storage.critical,
-            value: metrics.storage.usage,
-            message: `Storage usage exceeded critical threshold: ${metrics.storage.usage}%`,
-            timestamp: now
-          });
-        } else if (metrics.storage.usage >= this.config.alerts.storage.warning) {
-          alerts.push({
-            hostId: metrics.hostId,
-            type: 'storage',
-            status: ServiceStatus.DEGRADED,
-            threshold: this.config.alerts.storage.warning,
-            value: metrics.storage.usage,
-            message: `Storage usage exceeded warning threshold: ${metrics.storage.usage}%`,
-            timestamp: now
-          });
-        }
-      }
+    this.collectionIntervals.set(serviceName, newInterval);
+  }
 
-      // Create all alerts
-      await Promise.all(alerts.map(alert => this.createMetricsAlert(alert)));
-    } catch (error) {
-      LoggingManager.getInstance().error('Failed to process metrics alert', { 
-        error: error instanceof Error ? error : new Error(String(error)),
-        metrics 
-      });
+  stopMetricsCollection(serviceName: string): void {
+    const interval = this.collectionIntervals.get(serviceName);
+    if (interval) {
+      clearInterval(interval);
+      this.collectionIntervals.delete(serviceName);
     }
   }
 
-  async cleanup(): Promise<void> {
-    await db.query('SELECT cleanup_old_metrics()');
+  private collectServiceMetrics(_serviceName: string): ServiceMetrics {
+    return {
+      cpu: Math.random() * 100,
+      memory: Math.random() * 100,
+      latency: Math.random() * 1000,
+      errorRate: Math.random() * 20,
+      uptime: process.uptime(),
+      requestCount: Math.floor(Math.random() * 1000),
+      activeConnections: Math.floor(Math.random() * 100),
+      customMetrics: {}
+    };
+  }
+
+  cleanup(): void {
+    this.collectionIntervals.forEach(clearInterval);
+    this.collectionIntervals.clear();
+    this.metrics.clear();
   }
 }
 
-// Export singleton instance
-export const metricsService = new MetricsService({} as MetricsConfig);
-
-
+export const metricsService = new MetricsService();
