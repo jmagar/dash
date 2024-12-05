@@ -1,136 +1,272 @@
-import { WebSocket } from 'ws';
+import { WebSocket, RawData } from 'ws';
 import { Socket } from 'socket.io';
-import { logger } from '../../utils/logger';
-import type { AgentCommandResult, AgentInfo, AgentMetrics } from './agent.types';
-import { MessageData } from './types/message.types';
+import type { 
+  AgentMessage, 
+  AgentInfo, 
+  AgentMetrics, 
+  AgentCommandResult,
+  AgentOperationResult,
+  ConnectionId,
+  Brand,
+  AgentConnection
+} from './agent.types';
 import { MessageParser } from './utils/message.parser';
 import { MessageHandler } from './services/message.handler';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { MetricsService } from './services/metrics.service';
+import { ConnectionService } from './services/connection.service';
+import { ERROR_CODES } from './utils/constants';
+import { BaseService } from '../base.service';
+import type { LogMetadata } from '../../../types/logger';
+import { LoggingManager } from '../../managers/LoggingManager';
 
-export class ProtocolHandler {
+// Create branded type for connection IDs
+function createConnectionId(id: string): ConnectionId {
+  return id as Brand<string, 'ConnectionId'>;
+}
+
+export class ProtocolHandler extends BaseService {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  private static readonly logger = LoggingManager.getInstance();
   private readonly messageHandler: MessageHandler;
 
   constructor(
-    private readonly onRegister: (info: AgentInfo) => Promise<void>,
-    private readonly onHeartbeat: (metrics: AgentMetrics) => Promise<void>,
-    private readonly onDisconnect: (connection: WebSocket | Socket) => void,
-    private readonly onCommandResponse: (result: AgentCommandResult) => void
+    metricsService: MetricsService,
+    connectionService: ConnectionService
   ) {
+    super({
+      metricsEnabled: true,
+      loggingEnabled: true
+    });
+    
     this.messageHandler = new MessageHandler(
-      onRegister,
-      onHeartbeat,
-      onDisconnect,
-      onCommandResponse
+      metricsService,
+      connectionService
     );
   }
 
-  async handleWebSocketMessage(ws: WebSocket, data: WebSocket.RawData): Promise<void> {
+  async handleWebSocketMessage(ws: WebSocket, data: RawData): Promise<void> {
+    const connectionId = createConnectionId(ws.url || crypto.randomUUID());
+    
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const message = MessageParser.parse(data);
       if (!message) return;
 
-      await this.messageHandler.handleMessage(message, ws);
+      await this.messageHandler.handleWebSocketMessage(ws, connectionId, message);
     } catch (error) {
-      loggerLoggingManager.getInstance().(),
-        data: data.toString()
-      });
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        data: data.toString(),
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.error('Failed to handle WebSocket message', metadata);
     }
   }
 
-  async handleSocketIOMessage(socket: Socket, message: MessageData): Promise<void> {
+  async handleSocketIOMessage(socket: Socket, message: AgentMessage): Promise<void> {
+    const connectionId = createConnectionId(socket.id);
+    
     try {
-      await this.messageHandler.handleMessage(message, socket);
+      await this.messageHandler.handleSocketIOMessage(socket, connectionId, message);
     } catch (error) {
-      loggerLoggingManager.getInstance().(),
-        socketId: socket.id
-      });
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        socketId: socket.id,
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.error('Failed to handle Socket.IO message', metadata);
     }
   }
 
-  handleWebSocketConnection(ws: WebSocket): void {
-    ws.on('message', (data: WebSocket.RawData) => {
-      void this.handleWebSocketMessage(ws, data);
+  handleWebSocketConnection(ws: WebSocket): AgentOperationResult<AgentInfo> {
+    const connectionId = createConnectionId(ws.url || crypto.randomUUID());
+    
+    ProtocolHandler.logger.info('New WebSocket connection', { 
+      connectionId: connectionId.toString() 
     });
 
-    ws.on('error', (error: Error) => {
-      loggerLoggingManager.getInstance().();
-      this.onDisconnect(ws);
+    ws.on('message', (data: RawData) => {
+      void this.handleWebSocketMessage(ws, data).catch((error: unknown) => {
+        const metadata: LogMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          connectionId: connectionId.toString()
+        };
+        ProtocolHandler.logger.error('WebSocket message handler failed', metadata);
+      });
+    });
+
+    ws.on('error', () => {
+      const metadata: LogMetadata = {
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.error('WebSocket error', metadata);
     });
 
     ws.on('close', (code: number, reason: Buffer) => {
-      loggerLoggingManager.getInstance().() 
-      });
-      this.onDisconnect(ws);
+      const metadata: LogMetadata = {
+        code,
+        reason: reason.toString(),
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.info('WebSocket connection closed', metadata);
     });
+
+    return {
+      success: true,
+      timestamp: new Date().toISOString() as Brand<string, 'Timestamp'>
+    };
   }
 
-  handleSocketIOConnection(socket: Socket): void {
-    loggerLoggingManager.getInstance().();
+  handleSocketIOConnection(socket: Socket): AgentOperationResult<AgentInfo> {
+    const connectionId = createConnectionId(socket.id);
+    
+    ProtocolHandler.logger.info('New Socket.IO connection', {
+      socketId: socket.id,
+      connectionId: connectionId.toString()
+    });
 
     socket.on('agent:register', (data: { info: AgentInfo }) => {
       void this.handleSocketIOMessage(socket, {
         type: 'register',
-        id: socket.id,
-        timestamp: new Date().toISOString(),
-        payload: data
+        payload: data.info
+      }).catch((error: unknown) => {
+        const metadata: LogMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          socketId: socket.id,
+          connectionId: connectionId.toString()
+        };
+        ProtocolHandler.logger.error('Socket.IO register handler failed', metadata);
       });
     });
 
     socket.on('agent:heartbeat', (metrics: AgentMetrics) => {
       void this.handleSocketIOMessage(socket, {
         type: 'heartbeat',
-        id: socket.id,
-        timestamp: new Date().toISOString(),
-        payload: { metrics }
+        payload: metrics
+      }).catch((error: unknown) => {
+        const metadata: LogMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          socketId: socket.id,
+          connectionId: connectionId.toString()
+        };
+        ProtocolHandler.logger.error('Socket.IO heartbeat handler failed', metadata);
       });
     });
 
     socket.on('agent:command_response', (result: AgentCommandResult) => {
       void this.handleSocketIOMessage(socket, {
         type: 'command_response',
-        id: socket.id,
-        timestamp: new Date().toISOString(),
-        payload: { result }
+        payload: result
+      }).catch((error: unknown) => {
+        const metadata: LogMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          socketId: socket.id,
+          connectionId: connectionId.toString()
+        };
+        ProtocolHandler.logger.error('Socket.IO command response handler failed', metadata);
       });
     });
 
     socket.on('disconnect', (reason: string) => {
-      loggerLoggingManager.getInstance().();
-      this.onDisconnect(socket);
+      const metadata: LogMetadata = {
+        socketId: socket.id,
+        reason,
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.info('Socket.IO connection disconnected', metadata);
     });
 
     socket.on('error', (error: Error) => {
-      loggerLoggingManager.getInstance().();
-      void this.handleSocketIOMessage(socket, {
-        type: 'error',
-        id: socket.id,
-        timestamp: new Date().toISOString(),
-        payload: { error: error.message }
-      });
+      const metadata: LogMetadata = {
+        error: error.message,
+        socketId: socket.id,
+        connectionId: connectionId.toString()
+      };
+      ProtocolHandler.logger.error('Socket.IO error', metadata);
     });
+
+    return {
+      success: true,
+      timestamp: new Date().toISOString() as Brand<string, 'Timestamp'>
+    };
   }
 
-  public async sendCommand(agentId: string, command: string): Promise<void> {
-    const message: MessageData = {
+  public async sendCommand(
+    agentId: Brand<string, 'AgentId'>, 
+    command: string, 
+    args: readonly string[] = []
+  ): Promise<AgentOperationResult<AgentCommandResult>> {
+    const message: AgentMessage = {
       type: 'command',
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
       payload: {
         command,
-        agentId
+        args
       }
     };
 
     try {
-      await this.messageHandler.handleMessage(message, null as unknown as WebSocket | Socket);
+      // Create a mock connection that implements both WebSocket and Socket interfaces
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const mockConnection: AgentConnection = {
+        send: () => Promise.resolve(),
+        emit: () => false,
+        on: () => mockConnection,
+        once: () => mockConnection,
+        off: () => mockConnection,
+        removeListener: () => mockConnection,
+        removeAllListeners: () => mockConnection,
+        listeners: () => [],
+        rawListeners: () => [],
+        eventNames: () => [],
+        listenerCount: () => 0,
+        prependListener: () => mockConnection,
+        prependOnceListener: () => mockConnection,
+        setMaxListeners: () => mockConnection,
+        getMaxListeners: () => 0,
+        url: '',
+        protocol: '',
+        readyState: 0,
+        bufferedAmount: 0,
+        extensions: '',
+        binaryType: 'nodebuffer',
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        close: (_code?: number, _data?: string | Buffer) => { /* noop */ },
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ping: (_data?: Buffer | string | number, _mask?: boolean) => { /* noop */ },
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        pong: (_data?: Buffer | string | number, _mask?: boolean) => { /* noop */ },
+        terminate: () => { /* noop */ },
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        addEventListener: (_event: string, _listener: (event: Event) => void) => { /* noop */ },
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        removeEventListener: (_event: string, _listener: (event: Event) => void) => { /* noop */ },
+        dispatchEvent: () => true
+      } as unknown as AgentConnection;
+
+      const connectionId = createConnectionId(crypto.randomUUID());
+      await this.messageHandler.handleWebSocketMessage(mockConnection as WebSocket, connectionId, message);
+      
+      return {
+        success: true,
+        timestamp: new Date().toISOString() as Brand<string, 'Timestamp'>
+      };
     } catch (error) {
-      loggerLoggingManager.getInstance().(),
-        agentId,
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        agentId: agentId.toString(),
         command
-      });
-      throw error;
+      };
+      ProtocolHandler.logger.error('Failed to send command', metadata);
+
+      return {
+        success: false,
+        error: {
+          code: ERROR_CODES.INTERNAL_ERROR,
+          message: 'Failed to send command',
+          details: error instanceof Error ? error.message : String(error)
+        },
+        timestamp: new Date().toISOString() as Brand<string, 'Timestamp'>
+      };
     }
   }
 }
-
-

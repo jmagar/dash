@@ -49,16 +49,17 @@ export class AgentService extends BaseService {
     });
 
     const prisma = new PrismaClient();
-
+    
+    // Initialize services first
+    this.metricsService = new MetricsService(prisma);
+    this.connectionService = new ConnectionService(wsServer, io);
+    
+    // Create protocol handler with required services
     this.protocolHandler = new ProtocolHandler(
-      this.handleAgentRegistration.bind(this),
-      this.handleAgentHeartbeat.bind(this),
-      this.handleAgentDisconnect.bind(this),
-      this.handleCommandResponse.bind(this)
+      this.metricsService,
+      this.connectionService
     );
 
-    this.connectionService = new ConnectionService(this.protocolHandler, wsServer, io);
-    this.metricsService = new MetricsService(prisma);
     this.stateService = new StateService(prisma, cache);
 
     // Start periodic cleanup of stale agents

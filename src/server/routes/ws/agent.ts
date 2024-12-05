@@ -2,8 +2,14 @@ import WebSocket from 'ws';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { z } from 'zod';
-import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+
+// Initialize logger
+const logger = new LoggerAdapter(LoggingManager.getInstance(), {
+  component: 'AgentConnection',
+  service: 'WebSocket'
+});
 
 // Message type validation
 export const MessageType = z.enum([
@@ -49,7 +55,6 @@ export const HeartbeatInfo = z.object({
   is_healthy: z.boolean(),
   active_jobs: z.number(),
   error_count: z.number(),
-  uptime_seconds: z.number(),
 });
 
 export class AgentConnection extends EventEmitter {
@@ -67,10 +72,11 @@ export class AgentConnection extends EventEmitter {
   }
 
   private setupWebSocket() {
-    this.ws.on('message', this.handleMessage.bind(this));
-    this.ws.on('close', this.handleClose.bind(this));
-    this.ws.on('error', this.handleError.bind(this));
-    this.ws.on('pong', this.heartbeat.bind(this));
+    // Use wrapper functions for async handlers to avoid promise misuse
+    this.ws.on('message', (data: WebSocket.Data) => void this.handleMessage(data));
+    this.ws.on('close', () => this.handleClose());
+    this.ws.on('error', (error: Error) => this.handleError(error));
+    this.ws.on('pong', () => this.heartbeat());
 
     // Start ping interval
     this.heartbeat();
@@ -91,7 +97,10 @@ export class AgentConnection extends EventEmitter {
     // Set heartbeat timeout
     this.heartbeatTimeout = setTimeout(() => {
       if (!this.isAlive) {
-        loggerLoggingManager.getInstance().();
+        logger.warn('Agent heartbeat timeout', {
+          agentId: this.agentId,
+          lastHeartbeat: this.lastHeartbeat?.timestamp
+        });
         this.terminate();
         return;
       }
@@ -101,45 +110,59 @@ export class AgentConnection extends EventEmitter {
 
   private async handleMessage(data: WebSocket.Data) {
     try {
-      const raw = JSON.parse(data.toString());
+      const raw = JSON.parse(data.toString()) as unknown;
       const message = Message.parse(raw);
-      let errorMessage: string;
 
       switch (message.type) {
-        case 'register':
+        case 'register': {
           await this.handleRegistration(message);
           break;
-
-        case 'heartbeat':
-          await this.handleHeartbeat(message);
+        }
+        case 'heartbeat': {
+          this.handleHeartbeat(message);
           break;
-
-        case 'command_response':
+        }
+        case 'command_response': {
           this.emit('command_response', message);
           break;
-
-        case 'pong':
+        }
+        case 'pong': {
           this.heartbeat();
           break;
-
-        case 'error':
-          errorMessage = 'Unknown error';
-          if (message.payload && typeof message.payload === 'object') {
-            if ('error' in message.payload && typeof message.payload.error === 'string') {
-              errorMessage = message.payload.error;
-            }
-          }
-
-          loggerLoggingManager.getInstance().();
+        }
+        case 'error': {
+          const errorMessage = this.extractErrorMessage(message);
+          logger.error('Received error from agent', {
+            agentId: this.agentId,
+            error: errorMessage,
+            messageId: message.id
+          });
           break;
-
-        default:
-          loggerLoggingManager.getInstance().();
+        }
+        default: {
+          logger.warn('Received unknown message type', {
+            agentId: this.agentId,
+            messageType: message.type,
+            messageId: message.id
+          });
+        }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to handle message', {
+        agentId: this.agentId,
+        error: error instanceof Error ? error.message : String(error),
+        data: typeof data === 'string' ? data : data.toString()
+      });
     }
+  }
+
+  private extractErrorMessage(message: z.infer<typeof Message>): string {
+    if (message.payload && typeof message.payload === 'object') {
+      if ('error' in message.payload && typeof message.payload.error === 'string') {
+        return message.payload.error;
+      }
+    }
+    return 'Unknown error';
   }
 
   private async handleRegistration(message: z.infer<typeof Message>) {
@@ -161,33 +184,49 @@ export class AgentConnection extends EventEmitter {
         },
       });
 
-      loggerLoggingManager.getInstance().();
+      logger.info('Agent registered', {
+        agentId: this.agentId,
+        agentInfo: agentInfo
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid registration message';
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to handle registration', {
+        agentId: this.agentId,
+        error: errorMessage,
+        data: message
+      });
       this.terminate();
     }
   }
 
-  private async handleHeartbeat(message: z.infer<typeof Message>) {
+  private handleHeartbeat(message: z.infer<typeof Message>): void {
     try {
       const heartbeat = HeartbeatInfo.parse(message.payload);
       this.lastHeartbeat = heartbeat;
       this.emit('heartbeat', heartbeat);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invalid heartbeat message';
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to handle heartbeat', {
+        agentId: this.agentId,
+        error: errorMessage,
+        data: message
+      });
     }
   }
 
   private handleClose() {
     this.cleanup();
     this.emit('disconnected', this.agentId);
-    loggerLoggingManager.getInstance().();
+    logger.info('Agent disconnected', {
+      agentId: this.agentId
+    });
   }
 
   private handleError(error: Error) {
-    loggerLoggingManager.getInstance().();
+    logger.error('Agent error', {
+      agentId: this.agentId,
+      error: error.message
+    });
     this.cleanup();
   }
 
@@ -203,7 +242,10 @@ export class AgentConnection extends EventEmitter {
       timestamp: new Date().toISOString(),
     }).catch((error) => {
       const errorMessage = error instanceof Error ? error.message : 'Error sending ping';
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to send ping', {
+        agentId: this.agentId,
+        error: errorMessage
+      });
     });
   }
 
@@ -248,5 +290,3 @@ export class AgentConnection extends EventEmitter {
 
 // Export types for use in other files
 export type { z };
-
-

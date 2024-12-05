@@ -2,15 +2,17 @@ import { SFTPWrapper, Client as SSHClient } from 'ssh2';
 import { BaseService } from '../base.service';
 import { Host } from '../../../types/host.types';
 import { FileItem } from '../../../types/models-shared';
-import { logger } from '../../utils/logger';
 import { ApiError } from '../../../types/error';
-import type { LogMetadata } from '../../../types/logger';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+import type { Logger } from '../../../types/logger';
 
+/** SSH client with SFTP capability */
 interface SSHClientWithSFTP extends SSHClient {
   sftp(callback: (err: Error | null, sftp: SFTPWrapper) => void): void;
 }
 
+/** File attributes from SFTP */
 interface FileAttributes {
   mode: number;
   uid: number;
@@ -20,21 +22,39 @@ interface FileAttributes {
   mtime: number;
 }
 
+/** SFTP file entry with metadata */
 interface SFTPFileEntry {
   filename: string;
   longname: string;
   attrs: FileAttributes;
 }
 
+/** File statistics from SFTP */
 type SFTPStats = FileAttributes;
 
+/**
+ * Service for interacting with remote servers via SFTP.
+ * Provides file operations like list, read, write, delete, etc.
+ */
 export class SFTPService extends BaseService {
   private sshClient: SSHClientWithSFTP | null = null;
+  protected readonly logger: Logger;
 
   constructor(private readonly host: Host) {
     super();
+    this.logger = new LoggerAdapter(LoggingManager.getInstance(), {
+      component: 'SFTPService',
+      service: 'FileSystem',
+      host: this.host.hostname
+    });
   }
 
+  /**
+   * Executes an SFTP operation with proper connection handling and cleanup.
+   * @param operation - The SFTP operation to execute
+   * @returns Promise resolving to the operation result
+   * @throws ApiError if operation fails
+   */
   private async withSFTP<T>(operation: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
     if (!this.sshClient) {
       throw new ApiError('SSH client not initialized');
@@ -43,12 +63,10 @@ export class SFTPService extends BaseService {
     return new Promise<T>((resolve, reject) => {
       this.sshClient?.sftp((err: Error | null, sftp: SFTPWrapper) => {
         if (err) {
-          const metadata: LogMetadata = {
-            error: err,
-            host: this.host,
-            operation: 'SFTP initialization'
-          };
-          loggerLoggingManager.getInstance().();
+          this.logger.error('Failed to initialize SFTP client', {
+            error: err.message,
+            host: this.host.hostname
+          });
           reject(new ApiError('Failed to initialize SFTP client', { cause: err }));
           return;
         }
@@ -56,78 +74,68 @@ export class SFTPService extends BaseService {
         operation(sftp)
           .then(resolve)
           .catch((error: unknown) => {
-            let err: Error;
-            if (error instanceof Error) {
-              err = error;
-            } else if (typeof error === 'string') {
-              err = new Error(error);
-            } else {
-              err = new Error('Unknown error');
-            }
-            const metadata: LogMetadata = {
-              error: err,
-              host: this.host,
-              operation: 'SFTP operation'
-            };
-            loggerLoggingManager.getInstance().();
-            reject(new ApiError('SFTP operation failed', { cause: err }));
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.logger.error('SFTP operation failed', {
+              error: err.message,
+              host: this.host.hostname,
+              operation: operation.name
+            });
+            this.handleError(err, {
+              operation: operation.name,
+              host: this.host.hostname
+            });
           })
           .finally(() => {
-            try {
-              if (this.sshClient) {
-                this.sshClient.end();
-                this.sshClient = null;
-              }
-            } catch (err: unknown) {
-              let error: Error;
-              if (err instanceof Error) {
-                error = err;
-              } else if (typeof err === 'string') {
-                error = new Error(err);
-              } else {
-                error = new Error('Unknown error during SSH client cleanup');
-              }
-              loggerLoggingManager.getInstance().();
-            }
+            void this.cleanup();
           });
       });
     });
   }
 
+  /**
+   * Lists files and directories in the specified path.
+   * @param path - Directory path to list
+   * @returns Promise resolving to array of FileItems
+   * @throws ApiError if listing fails
+   */
   async listFiles(path: string): Promise<FileItem[]> {
     return this.withSFTP(async (sftp) => {
       return new Promise<FileItem[]>((resolve, reject) => {
         sftp.readdir(path, (err: Error | null, list: SFTPFileEntry[]) => {
           if (err) {
-            reject(err);
+            this.logger.error('Failed to list directory', {
+              error: err.message,
+              path,
+              host: this.host.hostname
+            });
+            reject(new ApiError('Failed to list directory', { cause: err }));
             return;
           }
 
-          const files = list.map((entry: SFTPFileEntry) => {
-            const isDirectory = Boolean(entry.attrs.mode & 0o40000);
-            return {
-              name: entry.filename,
-              path: path + (path.endsWith('/') ? '' : '/') + entry.filename,
-              type: isDirectory ? 'directory' as const : 'file' as const,
-              isDirectory,
-              size: entry.attrs.size,
-              modifiedTime: new Date(entry.attrs.mtime * 1000),
-              permissions: (entry.attrs.mode & 0o777).toString(8)
-            };
-          });
-
+          const files = list.map((entry: SFTPFileEntry) => this.mapToFileItem(entry, path));
           resolve(files);
         });
       });
     });
   }
 
+  /**
+   * Reads a file from the remote server.
+   * @param path - Path to the file to read
+   * @returns Promise resolving to file contents as Buffer
+   * @throws ApiError if read fails
+   */
   async readFile(path: string): Promise<Buffer> {
     return this.withSFTP(async (sftp) => {
       return new Promise<Buffer>((resolve, reject) => {
         sftp.readFile(path, (err: Error | null, data: Buffer) => {
           if (err) {
-            reject(err);
+            this.logger.error('Failed to read file', {
+              error: err.message,
+              path,
+              host: this.host.hostname
+            });
+            reject(new ApiError('Failed to read file', { cause: err }));
             return;
           }
           resolve(data);
@@ -136,31 +144,52 @@ export class SFTPService extends BaseService {
     });
   }
 
+  /**
+   * Writes data to a file on the remote server.
+   * @param path - Path where to write the file
+   * @param data - Data to write
+   * @throws ApiError if write fails
+   */
   async writeFile(path: string, data: Buffer): Promise<void> {
     return this.withSFTP(async (sftp) => {
       return new Promise<void>((resolve, reject) => {
         sftp.writeFile(path, data, (err: Error | null) => {
           if (err) {
-            reject(err);
+            this.logger.error('Failed to write file', {
+              error: err.message,
+              path,
+              host: this.host.hostname,
+              size: data.length
+            });
+            reject(new ApiError('Failed to write file', { cause: err }));
             return;
           }
+          this.logger.info('Successfully wrote file', {
+            path,
+            host: this.host.hostname,
+            size: data.length
+          });
           resolve();
         });
       });
     });
   }
 
+  /**
+   * Deletes a file or directory on the remote server.
+   * @param path - Path to the file or directory to delete
+   * @throws ApiError if deletion fails
+   */
   async delete(path: string): Promise<void> {
     return this.withSFTP(async (sftp) => {
       return new Promise<void>((resolve, reject) => {
         sftp.stat(path, (err: Error | null, stats: SFTPStats) => {
           if (err) {
-            const metadata: LogMetadata = {
-              error: err,
-              host: this.host,
-              operation: 'SFTP stat'
-            };
-            loggerLoggingManager.getInstance().();
+            this.logger.error('Failed to get file stats', {
+              error: err.message,
+              path,
+              host: this.host.hostname
+            });
             reject(new ApiError('Failed to get file stats', { cause: err }));
             return;
           }
@@ -172,15 +201,18 @@ export class SFTPService extends BaseService {
 
           deleteOperation(path, (err: Error | null) => {
             if (err) {
-              const metadata: LogMetadata = {
-                error: err,
-                host: this.host,
-                operation: isDir ? 'SFTP rmdir' : 'SFTP unlink'
-              };
-              loggerLoggingManager.getInstance().();
+              this.logger.error('Failed to delete file', {
+                error: err.message,
+                path,
+                host: this.host.hostname
+              });
               reject(new ApiError('Failed to delete file', { cause: err }));
               return;
             }
+            this.logger.info('Successfully deleted file', {
+              path,
+              host: this.host.hostname
+            });
             resolve();
           });
         });
@@ -188,60 +220,124 @@ export class SFTPService extends BaseService {
     });
   }
 
+  /**
+   * Renames a file or directory on the remote server.
+   * @param oldPath - Current path of the file or directory
+   * @param newPath - New path for the file or directory
+   * @throws ApiError if rename fails
+   */
   async rename(oldPath: string, newPath: string): Promise<void> {
     return this.withSFTP(async (sftp) => {
       return new Promise<void>((resolve, reject) => {
         sftp.rename(oldPath, newPath, (err: Error | null) => {
           if (err) {
-            const metadata: LogMetadata = {
-              error: err,
-              host: this.host,
-              operation: 'SFTP rename'
-            };
-            loggerLoggingManager.getInstance().();
+            this.logger.error('Failed to rename file', {
+              error: err.message,
+              oldPath,
+              newPath,
+              host: this.host.hostname
+            });
             reject(new ApiError('Failed to rename file', { cause: err }));
             return;
           }
+          this.logger.info('Successfully renamed file', {
+            oldPath,
+            newPath,
+            host: this.host.hostname
+          });
           resolve();
         });
       });
     });
   }
 
+  /**
+   * Creates a new directory on the remote server.
+   * @param path - Path where to create the directory
+   * @throws ApiError if creation fails
+   */
   async mkdir(path: string): Promise<void> {
     return this.withSFTP(async (sftp) => {
       return new Promise<void>((resolve, reject) => {
         sftp.mkdir(path, (err: Error | null) => {
           if (err) {
-            const metadata: LogMetadata = {
-              error: err,
-              host: this.host,
-              operation: 'SFTP mkdir'
-            };
-            loggerLoggingManager.getInstance().();
+            this.logger.error('Failed to create directory', {
+              error: err.message,
+              path,
+              host: this.host.hostname
+            });
             reject(new ApiError('Failed to create directory', { cause: err }));
             return;
           }
+          this.logger.info('Successfully created directory', {
+            path,
+            host: this.host.hostname
+          });
           resolve();
         });
       });
     });
   }
 
+  /**
+   * Retrieves file statistics for the specified path.
+   * @param path - Path to retrieve statistics for
+   * @returns Promise resolving to file statistics
+   * @throws ApiError if retrieval fails
+   */
   async stat(path: string): Promise<SFTPStats> {
     return this.withSFTP(async (sftp) => {
       return new Promise<SFTPStats>((resolve, reject) => {
-        sftp.stat(path, (err, stats) => {
+        sftp.stat(path, (err: Error | null, stats: SFTPStats) => {
           if (err) {
-            reject(err);
+            this.logger.error('Failed to get file stats', {
+              error: err.message,
+              path,
+              host: this.host.hostname
+            });
+            reject(new ApiError('Failed to get file stats', { cause: err }));
             return;
           }
-
-          resolve(stats as SFTPStats);
+          resolve(stats);
         });
       });
     });
   }
+
+  /**
+   * Maps an SFTP file entry to our FileItem interface.
+   * @private
+   */
+  private mapToFileItem(entry: SFTPFileEntry, basePath: string): FileItem {
+    const isDirectory = Boolean(entry.attrs.mode & 0o40000);
+    return {
+      name: entry.filename,
+      path: basePath + (basePath.endsWith('/') ? '' : '/') + entry.filename,
+      type: isDirectory ? 'directory' as const : 'file' as const,
+      size: entry.attrs.size,
+      modifiedTime: new Date(entry.attrs.mtime * 1000),
+      permissions: (entry.attrs.mode & 0o777).toString(8)
+    };
+  }
+
+  /**
+   * Cleans up SSH client connection.
+   */
+  public async cleanup(): Promise<void> {
+    if (this.sshClient) {
+      try {
+        // Wrap the end() call in a promise to make it awaitable
+        await new Promise<void>((resolve) => {
+          this.sshClient?.end();
+          resolve();
+        });
+        this.sshClient = null;
+      } catch (error: unknown) {
+        this.handleError(error, {
+          operation: 'cleanup',
+          host: this.host.hostname
+        });
+      }
+    }
+  }
 }
-
-

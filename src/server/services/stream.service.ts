@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { ChatRole } from '../routes/chat/dto/chat.dto';
 import { LoggingManager } from '../managers/utils/LoggingManager';
-import { MessageSanitizer } from '../utils/messageSanitizer';
+import { MessageSanitizer } from '../utils/sanitizer/messageSanitizer';
 
 export class StreamService {
   private static readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -69,5 +69,3 @@ export class StreamService {
     res.end();
   }
 }
-
-

@@ -1,7 +1,7 @@
 import { BaseService, type ServiceMetrics } from './base.service';
 import { getAgentService } from './agent.service';
 import { ApiError } from '../../types/error';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import type { LogMetadata } from '../../types/logger';
 
 interface DockerMetrics {
   containers: number;
@@ -39,6 +39,29 @@ interface DockerCommandResult {
   exitCode: number;
 }
 
+interface DockerInfoJson {
+  Containers: number;
+  ContainersRunning: number;
+  ContainersPaused: number;
+  ContainersStopped: number;
+  Images: number;
+  MemTotal: number;
+  NumCPU: number;
+  ServerVersion: string;
+}
+
+interface DockerContainerJson {
+  ID: string;
+  Names: string;
+  Image: string;
+  Ports: string;
+  Env: string;
+  Command: string | string[];
+  Status: string;
+  Created: string;
+  State: string;
+}
+
 export class DockerService extends BaseService {
   constructor() {
     super({
@@ -61,73 +84,91 @@ export class DockerService extends BaseService {
   }
 
   async getDockerMetrics(hostId: string): Promise<DockerMetrics> {
-    try {
-      const info = await this.executeCommand(hostId, 'docker info --format "{{json .}}"');
-      if (!info.stdout) {
-        throw new ApiError('Empty docker info result', 500);
-      }
-      
-      let infoJson: Record<string, unknown>;
-      try {
-        infoJson = JSON.parse(info.stdout) as Record<string, unknown>;
-      } catch (error) {
-        this.handleError(new ApiError('Failed to parse Docker info JSON', error instanceof Error ? error : new Error(String(error)), 500));
-      }
-
-      return {
-        containers: Number(infoJson.Containers) || 0,
-        containersRunning: Number(infoJson.ContainersRunning) || 0,
-        containersPaused: Number(infoJson.ContainersPaused) || 0,
-        containersStopped: Number(infoJson.ContainersStopped) || 0,
-        images: Number(infoJson.Images) || 0,
-        memTotal: Number(infoJson.MemTotal) || 0,
-        numCPU: Number(infoJson.NumCPU) || 0, // Docker API field for CPU count
-        serverVersion: String(infoJson.ServerVersion) || ''
+    const info = await this.executeCommand(hostId, 'docker info --format "{{json .}}"');
+    if (!info.stdout) {
+      const metadata: LogMetadata = {
+        error: 'Empty docker info result',
+        component: 'DockerService',
+        operation: 'getDockerMetrics',
+        hostId
       };
-    } catch (error) {
-      this.handleError(new ApiError('Failed to get Docker metrics', error instanceof Error ? error : new Error(String(error)), 500));
+      this.handleError(new Error('Empty docker info result'), metadata);
     }
+    
+    let infoJson: DockerInfoJson;
+    try {
+      infoJson = JSON.parse(info.stdout) as DockerInfoJson;
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        component: 'DockerService',
+        operation: 'getDockerMetrics',
+        hostId
+      };
+      this.handleError(new ApiError('Failed to parse Docker info JSON', error instanceof Error ? error : new Error(String(error)), 500), metadata);
+    }
+
+    return {
+      containers: infoJson.Containers || 0,
+      containersRunning: infoJson.ContainersRunning || 0,
+      containersPaused: infoJson.ContainersPaused || 0,
+      containersStopped: infoJson.ContainersStopped || 0,
+      images: infoJson.Images || 0,
+      memTotal: infoJson.MemTotal || 0,
+      numCPU: infoJson.NumCPU || 0,
+      serverVersion: infoJson.ServerVersion || ''
+    };
   }
 
   async getContainers(hostId: string): Promise<DockerContainerMetrics[]> {
-    try {
-      const psResult = await this.executeCommand(hostId, 'docker ps -a --format "{{json .}}"');
-      if (!psResult.stdout) {
-        return [];
-      }
+    const psResult = await this.executeCommand(hostId, 'docker ps -a --format "{{json .}}"');
+    if (!psResult.stdout) {
+      return [];
+    }
 
+    try {
       return psResult.stdout
         .split('\n')
         .filter(line => line.trim())
         .map(line => {
           try {
-            const container = JSON.parse(line.trim()) as Record<string, unknown>;
+            const container = JSON.parse(line.trim()) as DockerContainerJson;
             return {
-              id: String(container.ID || ''),
-              name: String(container.Names || ''),
-              image: this.parseImageName(String(container.Image || '')),
-              ports: this.parsePorts(String(container.Ports || '')),
-              env: this.parseEnv(String(container.Env || '')),
+              id: container.ID || '',
+              name: container.Names || '',
+              image: this.parseImageName(container.Image || ''),
+              ports: this.parsePorts(container.Ports || ''),
+              env: this.parseEnv(container.Env || ''),
               command: this.parseCommand(container.Command),
-              status: String(container.Status || ''),
-              created: String(container.Created || ''),
-              state: String(container.State || '')
+              status: container.Status || '',
+              created: container.Created || '',
+              state: container.State || ''
             };
           } catch (error) {
-            this.loggerLoggingManager.getInstance().()),
-              line 
-            });
-            return null;
+            const metadata: LogMetadata = {
+              error: error instanceof Error ? error.message : String(error),
+              component: 'DockerService',
+              operation: 'getContainers',
+              containerId: line,
+              hostId
+            };
+            this.handleError(new ApiError('Failed to parse container data', error instanceof Error ? error : new Error(String(error)), 500), metadata);
           }
         })
         .filter((container): container is DockerContainerMetrics => container !== null);
     } catch (error) {
-      this.handleError(new ApiError('Failed to get Docker containers', error instanceof Error ? error : new Error(String(error)), 500));
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        component: 'DockerService',
+        operation: 'getContainers',
+        hostId
+      };
+      this.handleError(new ApiError('Failed to get Docker containers', error instanceof Error ? error : new Error(String(error)), 500), metadata);
     }
   }
 
   private parseImageName(image: string): string {
-    return image.split(':')[0];
+    return image.split(':')[0] || '';
   }
 
   private parsePorts(portsStr: string): Array<{ hostPort: number; containerPort: number; protocol: string }> {
@@ -169,7 +210,13 @@ export class DockerService extends BaseService {
     const result = await agentService.executeCommand(hostId, command);
     
     if (!this.isCommandResult(result)) {
-      throw new ApiError('Invalid command result', 500);
+      const metadata: LogMetadata = {
+        error: 'Invalid command result',
+        component: 'DockerService',
+        operation: 'executeCommand',
+        hostId
+      };
+      this.handleError(new ApiError('Invalid command result', 500), metadata);
     }
     
     return result;
@@ -186,5 +233,3 @@ export class DockerService extends BaseService {
            typeof value.exitCode === 'number';
   }
 }
-
-

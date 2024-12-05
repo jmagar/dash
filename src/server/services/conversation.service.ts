@@ -9,7 +9,7 @@ import { ChatbotContext } from '../../types/chatbot';
 import { conversationCache } from './conversation.cache';
 import { Response } from 'express';
 import { StreamService } from './stream.service';
-import { MessageSanitizer } from '../utils/messageSanitizer';
+import { MessageSanitizer } from '../utils/sanitizer/messageSanitizer';
 
 interface ConversationMessage {
   role: ChatRole;

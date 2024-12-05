@@ -1,52 +1,61 @@
-﻿import type { Server } from 'http';
-
-import { logger } from './logger';
-import cache from '../cache';
-import { db } from '../db';
+import type { Server } from 'http';
 import { LoggingManager } from './logging/LoggingManager';
+import db from '../db';
+import { CacheManager } from '../managers/CacheManager';
 
-export function configureGracefulShutdown(server: Server) {
+const logger = LoggingManager.getInstance();
+const cache = CacheManager.getInstance();
+
+export function configureGracefulShutdown(server: Server): void {
   // Handle process termination signals
   const signals = ['SIGTERM', 'SIGINT'] as const;
 
   signals.forEach((signal) => {
-    process.on(signal, async () => {
-      loggerLoggingManager.getInstance().();
+    // Using a void function wrapper to handle the async operation
+    process.on(signal, () => {
+      void (async () => {
+        try {
+          logger.info(`Received ${signal} signal, starting graceful shutdown...`);
 
-      // Close HTTP server
-      server.close(() => {
-        loggerLoggingManager.getInstance().();
-      });
+          // Close HTTP server first
+          await new Promise<void>((resolve) => {
+            server.close(() => {
+              logger.info('HTTP server closed');
+              resolve();
+            });
+          });
 
-      try {
-        // Close database connections
-        await db.end();
-        loggerLoggingManager.getInstance().();
+          // Close database connections
+          await db.end();
+          logger.info('Database connections closed');
 
-        // Close cache connections
-        await cache.disconnect();
-        loggerLoggingManager.getInstance().();
+          // Close cache connections
+          await cache.cleanup();
+          logger.info('Cache connections closed');
 
-        // Exit process
-        process.exit(0);
-      } catch (error) {
-        loggerLoggingManager.getInstance().();
-        process.exit(1);
-      }
+          // Exit process
+          process.exit(0);
+        } catch (error) {
+          logger.error('Error during graceful shutdown', { 
+            error: error instanceof Error ? error : new Error(String(error))
+          });
+          process.exit(1);
+        }
+      })();
     });
   });
 
   // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    loggerLoggingManager.getInstance().();
+  process.on('uncaughtException', (error: Error) => {
+    logger.error('Uncaught exception', { error });
     process.exit(1);
   });
 
   // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason) => {
-    loggerLoggingManager.getInstance().(),
+  process.on('unhandledRejection', (reason: unknown) => {
+    logger.error('Unhandled promise rejection', {
+      error: reason instanceof Error ? reason : new Error(String(reason))
     });
     process.exit(1);
   });
 }
-

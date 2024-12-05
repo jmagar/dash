@@ -5,15 +5,17 @@ import { Injectable } from '@nestjs/common';
 import { FileSystemConfigService } from './filesystem-config.service';
 import { FileSystemMetricsService } from './filesystem-metrics.service';
 import { PathValidationService } from './path-validator.service';
-import { Logger } from '../../utils/logger';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+import type { Logger, LogMetadata } from '../../../types/logger';
 
-export interface BackupOptions {
+interface BackupOptions {
   maxVersions?: number;
   backupPath?: string;
   includeMetadata?: boolean;
 }
 
-export interface FileVersion {
+interface FileVersion {
   path: string;
   timestamp: number;
   hash: string;
@@ -21,30 +23,42 @@ export interface FileVersion {
   metadata?: Record<string, unknown>;
 }
 
+interface BackupFile {
+  file: string;
+  timestamp: number;
+}
+
 @Injectable()
 export class FileBackupService {
   private readonly DEFAULT_MAX_VERSIONS = 5;
   private readonly BACKUP_SUFFIX = '.backup';
+  private readonly logger: Logger;
 
   constructor(
     private readonly configService: FileSystemConfigService,
     private readonly metricsService: FileSystemMetricsService,
     private readonly pathValidator: PathValidationService,
-    private readonly logger: Logger
-  ) {}
+    logManager?: LoggingManager
+  ) {
+    const baseLogger = logManager || LoggingManager.getInstance();
+    this.logger = new LoggerAdapter(baseLogger, { 
+      component: 'FileBackupService',
+      service: 'FileSystem'
+    });
+  }
 
   /**
    * Create a backup of a file
    */
   public async createBackup(
-    filePath: string, 
+    filePath: string,
     options: BackupOptions = {}
   ): Promise<FileVersion> {
     try {
       // Validate source file path
       const sanitizedSourcePath = await this.pathValidator.validatePathAccess(
-        'system', 
-        'local', 
+        'system',
+        'local',
         filePath
       );
 
@@ -63,7 +77,7 @@ export class FileBackupService {
 
       // Get file stats and hash
       const stats = await fs.stat(sanitizedSourcePath);
-      const hash = await this.calculateFileHash(fileContent);
+      const hash = this.calculateFileHash(fileContent);
 
       // Create version metadata
       const version: FileVersion = {
@@ -86,13 +100,15 @@ export class FileBackupService {
         size: stats.size
       });
 
-      this.logger.info('File backup created', { 
-        sourcePath: filePath, 
-        backupPath 
-      });
+      const metadata: LogMetadata = {
+        sourcePath: filePath,
+        backupPath,
+        operation: 'createBackup'
+      };
+      this.logger.info('Backup created successfully', metadata);
 
       return version;
-    } catch (error) {
+    } catch (error: unknown) {
       this.handleBackupError('create', error);
       throw error;
     }
@@ -106,6 +122,12 @@ export class FileBackupService {
     targetPath?: string
   ): Promise<void> {
     try {
+      if (!this.isValidBackupPath(backupPath)) {
+        throw new Error('Invalid backup path format');
+      }
+
+      await this.validateBackupFile(backupPath);
+      
       // Validate backup file path
       const sanitizedBackupPath = await this.pathValidator.validatePathAccess(
         'system', 
@@ -136,11 +158,13 @@ export class FileBackupService {
         size: backupContent.length
       });
 
-      this.logger.info('File restored from backup', { 
-        backupPath, 
-        restorePath 
-      });
-    } catch (error) {
+      const metadata: LogMetadata = {
+        backupPath,
+        restorePath,
+        operation: 'restoreFromBackup'
+      };
+      this.logger.info('File restored from backup', metadata);
+    } catch (error: unknown) {
       this.handleBackupError('restore', error);
       throw error;
     }
@@ -179,7 +203,7 @@ export class FileBackupService {
           return {
             path: fullPath,
             timestamp: stats.mtime.getTime(),
-            hash: await this.calculateFileHash(content),
+            hash: this.calculateFileHash(content),
             size: stats.size
           };
         })
@@ -187,7 +211,7 @@ export class FileBackupService {
 
       // Sort versions by timestamp (newest first)
       return versions.sort((a, b) => b.timestamp - a.timestamp);
-    } catch (error) {
+    } catch (error: unknown) {
       this.handleBackupError('list_versions', error);
       throw error;
     }
@@ -217,7 +241,7 @@ export class FileBackupService {
         backupFiles.map(async (file) => {
           const fullPath = path.join(backupDir, file);
           const stats = await fs.stat(fullPath);
-          return { file, timestamp: stats.mtime.getTime() };
+          return { file, timestamp: stats.mtime.getTime() } as BackupFile;
         })
       ).then(files => files.sort((a, b) => a.timestamp - b.timestamp));
 
@@ -229,10 +253,13 @@ export class FileBackupService {
           fs.unlink(path.join(backupDir, backup.file))
         )
       );
-    } catch (error) {
-      this.logger.warn('Failed to manage backup versions', { 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      });
+    } catch (error: unknown) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'manageVersionHistory',
+        filePath
+      };
+      this.logger.warn('Failed to manage backup versions', metadata);
     }
   }
 
@@ -249,11 +276,13 @@ export class FileBackupService {
       // Ensure backup directory exists
       await fs.mkdir(backupPath, { recursive: true });
       return backupPath;
-    } catch (error) {
-      this.logger.error('Failed to create backup directory', { 
+    } catch (error: unknown) {
+      const metadata: LogMetadata = {
         path: backupPath,
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      });
+        error: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'getBackupDirectory'
+      };
+      this.logger.error('Failed to create backup directory', metadata);
       throw error;
     }
   }
@@ -283,6 +312,9 @@ export class FileBackupService {
   private getOriginalPathFromBackup(backupPath: string): string {
     const filename = path.basename(backupPath);
     const parts = filename.split('-');
+    if (!parts[0]) {
+      throw new Error('Invalid backup filename format');
+    }
     const originalName = parts[0].replace(/_/g, path.sep);
     return originalName.replace(this.BACKUP_SUFFIX, '');
   }
@@ -290,9 +322,7 @@ export class FileBackupService {
   /**
    * Calculate file hash
    */
-  private async calculateFileHash(
-    content: Buffer
-  ): Promise<string> {
+  private calculateFileHash(content: Buffer): string {
     const hash = crypto.createHash('sha256');
     hash.update(content);
     return hash.digest('hex');
@@ -321,14 +351,37 @@ export class FileBackupService {
    * Handle and log backup errors
    */
   private handleBackupError(operation: string, error: unknown): void {
-    this.logger.error(`Backup ${operation} failed`, { 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorType = error instanceof Error ? error.name : 'UnknownError';
+    
+    const metadata: LogMetadata = {
+      error: errorMessage,
+      operation: `backup_${operation}`
+    };
+    this.logger.error(`Backup ${operation} failed`, metadata);
 
     this.metricsService.recordError(
       `backup_${operation}`, 
-      error instanceof Error ? 'system' : 'unknown', 
-      error instanceof Error ? error : undefined
+      errorType,
+      error instanceof Error ? error : new Error(errorMessage)
     );
+  }
+
+  private async validateBackupFile(backupPath: string): Promise<void> {
+    try {
+      const stats = await fs.stat(backupPath);
+      if (!stats.isFile()) {
+        throw new Error('Backup path does not point to a file');
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Invalid backup file: ${error.message}`);
+      }
+      throw new Error('Invalid backup file: Unknown error');
+    }
+  }
+
+  private isValidBackupPath(backupPath: string): boolean {
+    return backupPath.endsWith(this.BACKUP_SUFFIX) && path.isAbsolute(backupPath);
   }
 }
