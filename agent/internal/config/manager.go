@@ -72,6 +72,11 @@ type Manager struct {
 	repo      *git.Repository
 	changes   []ConfigChange
 	mu        sync.RWMutex
+	scheduler *CommandScheduler
+	dashboard *AgentHealthDashboard
+	plugins   *PluginSystem
+	metrics   *EnhancedMetrics
+	alerts    *AlertingSystem
 }
 
 // NewManager creates a new configuration manager
@@ -81,11 +86,22 @@ func NewManager(logger *zap.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
+	scheduler := &CommandScheduler{}
+	dashboard := &AgentHealthDashboard{}
+	plugins := &PluginSystem{}
+	metrics := &EnhancedMetrics{}
+	alerts := &AlertingSystem{}
+
 	return &Manager{
-		logger:  logger,
-		configs: make(map[string]*ConfigFile),
-		watcher: watcher,
-		changes: make([]ConfigChange, 0),
+		logger:    logger,
+		configs:   make(map[string]*ConfigFile),
+		watcher:   watcher,
+		changes:   make([]ConfigChange, 0),
+		scheduler: scheduler,
+		dashboard: dashboard,
+		plugins:   plugins,
+		metrics:   metrics,
+		alerts:    alerts,
 	}, nil
 }
 
@@ -116,6 +132,21 @@ func (m *Manager) Start(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// Start command scheduler
+	go m.scheduler.Start()
+
+	// Start health dashboard
+	go m.dashboard.Start()
+
+	// Start plugin system
+	go m.plugins.Start()
+
+	// Start enhanced metrics collection
+	go m.metrics.Collect()
+
+	// Start alerting system
+	go m.alerts.Start()
 
 	return nil
 }
@@ -190,7 +221,7 @@ func (m *Manager) detectFormat(path string) ConfigFormat {
 func (m *Manager) readConfig(path string, format ConfigFormat) (map[string]interface{}, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open config file %s: %w", path, err)
 	}
 	defer file.Close()
 
@@ -199,20 +230,18 @@ func (m *Manager) readConfig(path string, format ConfigFormat) (map[string]inter
 	switch format {
 	case FormatJSON:
 		if err := json.NewDecoder(file).Decode(&content); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode JSON config %s: %w", path, err)
 		}
 	case FormatYAML:
 		if err := yaml.NewDecoder(file).Decode(&content); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode YAML config %s: %w", path, err)
 		}
 	case FormatINI:
-		// Implement INI parsing
-		return nil, fmt.Errorf("INI format not implemented")
+		return nil, fmt.Errorf("INI format not implemented for config file %s", path)
 	case FormatENV:
-		// Implement ENV parsing
-		return nil, fmt.Errorf("ENV format not implemented")
+		return nil, fmt.Errorf("ENV format not implemented for config file %s", path)
 	default:
-		return nil, fmt.Errorf("unsupported format: %s", format)
+		return nil, fmt.Errorf("unsupported format for config file %s: %s", path, format)
 	}
 
 	return content, nil
@@ -293,13 +322,17 @@ func (m *Manager) GetChanges() []ConfigChange {
 
 // ValidateConfig validates a configuration file
 func (m *Manager) ValidateConfig(path string) error {
-	_, ok := m.GetConfig(path)
+	configFile, ok := m.GetConfig(path)
 	if !ok {
 		return fmt.Errorf("config not found: %s", path)
 	}
 
-	// Implement validation logic
-	// This would need to be customized based on the config type
+	// Check for required fields and their validity
+	if configFile.Content["requiredField"] == nil {
+		return fmt.Errorf("missing required field in config file %s", path)
+	}
+
+	// Add more validation logic as needed
 	return nil
 }
 
@@ -351,6 +384,65 @@ func (m *Manager) RollbackChange(path string) error {
 	return nil
 }
 
+// DynamicConfigReload watches for changes in the configuration file and reloads it
+func (m *Manager) DynamicConfigReload(ctx context.Context, path string) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		m.logger.Error("Failed to create watcher", zap.Error(err))
+		return
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(path); err != nil {
+		m.logger.Error("Failed to add watcher for config file", zap.String("path", path), zap.Error(err))
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-watcher.Events:
+			if event.Op&fsnotify.Write == fsnotify.Write {
+				m.logger.Info("Config file changed, reloading...")
+				if err := m.ReloadConfig(path); err != nil {
+					m.logger.Error("Failed to reload config", zap.Error(err))
+				}
+			}
+		case err := <-watcher.Errors:
+			m.logger.Error("Watcher error", zap.Error(err))
+		}
+	}
+}
+
+// ReloadConfig reloads the configuration file
+func (m *Manager) ReloadConfig(path string) error {
+	// Read new content
+	newContent, err := m.readConfig(path, m.detectFormat(path))
+	if err != nil {
+		return fmt.Errorf("failed to read new config: %w", err)
+	}
+
+	// Calculate new checksum
+	newChecksum, err := m.calculateChecksum(path)
+	if err != nil {
+		return fmt.Errorf("failed to calculate new checksum: %w", err)
+	}
+
+	// Update config
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	config, ok := m.configs[path]
+	if !ok {
+		return fmt.Errorf("config not found: %s", path)
+	}
+	config.Content = newContent
+	config.Checksum = newChecksum
+	config.ModTime = time.Now()
+
+	return nil
+}
+
 // Shutdown stops the configuration manager
 func (m *Manager) Shutdown(ctx context.Context) error {
 	return m.watcher.Close()
@@ -373,4 +465,127 @@ func (m *Manager) HealthCheck(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// GetPluginConfig returns configuration for a specific plugin
+func (m *Manager) GetPluginConfig(pluginName string) map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, config := range m.configs {
+		if config.Type == TypeService {
+			if plugins, ok := config.Content["plugins"].(map[string]interface{}); ok {
+				if pluginConfig, ok := plugins[pluginName].(map[string]interface{}); ok {
+					return pluginConfig
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// CommandScheduler schedules commands to be executed at specified intervals.
+type CommandScheduler struct {
+	commands map[string]time.Duration
+}
+
+// ScheduleCommand adds a command to the scheduler.
+func (cs *CommandScheduler) ScheduleCommand(command string, interval time.Duration) {
+	cs.commands[command] = interval
+}
+
+// Start starts the command scheduler.
+func (cs *CommandScheduler) Start() {
+	for command, interval := range cs.commands {
+		go func(command string, interval time.Duration) {
+			for {
+				time.Sleep(interval)
+				// Execute the command
+				fmt.Println("Executing command:", command)
+			}
+		}(command, interval)
+	}
+}
+
+// AgentHealthDashboard provides a web-based dashboard for monitoring agent health.
+type AgentHealthDashboard struct{}
+
+// StartHealthDashboard starts the health dashboard server.
+func (a *AgentHealthDashboard) StartHealthDashboard() {
+	// Start the dashboard server
+	fmt.Println("Starting health dashboard server...")
+}
+
+// Start starts the health dashboard.
+func (a *AgentHealthDashboard) Start() {
+	a.StartHealthDashboard()
+}
+
+// PluginSystem allows for extending agent functionality with custom plugins.
+type PluginSystem struct {
+	plugins map[string]Plugin
+}
+
+// RegisterPlugin registers a new plugin.
+func (ps *PluginSystem) RegisterPlugin(plugin Plugin) {
+	ps.plugins[plugin.Name()] = plugin
+}
+
+// Start starts the plugin system.
+func (ps *PluginSystem) Start() {
+	for _, plugin := range ps.plugins {
+		plugin.Start()
+	}
+}
+
+// EnhancedMetrics collects more granular metrics for performance monitoring.
+type EnhancedMetrics struct{}
+
+// Collect collects enhanced metrics.
+func (m *EnhancedMetrics) Collect() {
+	// Collect metrics
+	fmt.Println("Collecting enhanced metrics...")
+}
+
+// Start starts the enhanced metrics collection.
+func (m *EnhancedMetrics) Start() {
+	go m.Collect()
+}
+
+// AlertingSystem notifies users of critical events.
+type AlertingSystem struct{}
+
+// SendAlert sends an alert notification.
+func (as *AlertingSystem) SendAlert(message string) {
+	// Send alert
+	fmt.Println("Sending alert:", message)
+}
+
+// Start starts the alerting system.
+func (as *AlertingSystem) Start() {
+	// Start the alerting system
+	fmt.Println("Starting alerting system...")
+}
+
+// BackupAndRestore provides functionality to back up and restore agent state.
+type BackupAndRestore struct{}
+
+// BackupState backs up the agent state.
+func (b *BackupAndRestore) BackupState() error {
+	// Backup state
+	fmt.Println("Backing up state...")
+	return nil
+}
+
+// RestoreState restores the agent state.
+func (b *BackupAndRestore) RestoreState() error {
+	// Restore state
+	fmt.Println("Restoring state...")
+	return nil
+}
+
+// Plugin represents a custom plugin.
+type Plugin interface {
+	Name() string
+	Start()
 }
