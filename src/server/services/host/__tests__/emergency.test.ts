@@ -1,8 +1,10 @@
-import { EmergencyService } from '../emergency';
+import { EmergencyService } from '../emergency/emergency.service';
 import { Client as SSHClient } from 'ssh2';
 import { BaseService } from '../../base.service';
 import { db } from '../../../db';
 import type { Host } from '../../../../types/host';
+import { HostState } from '../host.types';
+import { ServiceStatus } from '../../../../types/status';
 
 // Mock dependencies
 jest.mock('../../../db');
@@ -23,12 +25,16 @@ describe('EmergencyService', () => {
       id: 'test-host',
       hostname: 'test.example.com',
       username: 'testuser',
-      state: 'active'
-    } as Host;
+      port: 22,
+      name: 'Test Host',
+      status: ServiceStatus.ACTIVE,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
     // Setup mock SSH client
     mockSSH = {
-      exec: jest.fn(),
+      exec: jest.fn()
     } as unknown as jest.Mocked<SSHClient>;
 
     // Setup mock db
@@ -48,18 +54,22 @@ describe('EmergencyService', () => {
       mockSSH.exec.mockImplementation((cmd, cb) => {
         if (cmd.includes('systemctl restart')) {
           cb(null, {
-            on: (event: string, handler: Function) => {
+            on: (event: 'data' | 'close' | 'error', handler: (data?: Buffer | number) => void) => {
               if (event === 'close') handler(0);
+              return {} as SSHClient.ClientChannel;
+            },
+            stderr: {
+              on: jest.fn()
             }
-          } as any);
+          } as unknown as SSHClient.ClientChannel);
         }
-        return {} as any;
+        return {} as SSHClient.ClientChannel;
       });
 
       const result = await service.restart('test-host');
 
       expect(result.success).toBe(true);
-      expect(result.state).toBe('maintenance');
+      expect(result.state).toBe(HostState.MAINTENANCE);
       expect(mockSSH.exec).toHaveBeenCalledWith(
         'sudo systemctl restart shh-agent',
         expect.any(Function)
@@ -74,19 +84,25 @@ describe('EmergencyService', () => {
           cb(new Error('systemctl failed'), null);
         } else {
           cb(null, {
-            on: (event: string, handler: Function) => {
-              if (event === 'close') handler(0);
-              commandCount++;
+            on: (event: 'data' | 'close' | 'error', handler: (data?: Buffer | number) => void) => {
+              if (event === 'close') {
+                handler(0);
+                commandCount++;
+              }
+              return {} as SSHClient.ClientChannel;
+            },
+            stderr: {
+              on: jest.fn()
             }
-          } as any);
+          } as unknown as SSHClient.ClientChannel);
         }
-        return {} as any;
+        return {} as SSHClient.ClientChannel;
       });
 
       const result = await service.restart('test-host');
 
       expect(result.success).toBe(true);
-      expect(result.state).toBe('maintenance');
+      expect(result.state).toBe(HostState.MAINTENANCE);
       expect(mockSSH.exec).toHaveBeenCalledWith(
         'pkill -f shh-agent',
         expect.any(Function)
@@ -99,17 +115,21 @@ describe('EmergencyService', () => {
     it('should kill process with given pid', async () => {
       mockSSH.exec.mockImplementation((cmd, cb) => {
         cb(null, {
-          on: (event: string, handler: Function) => {
+          on: (event: 'data' | 'close' | 'error', handler: (data?: Buffer | number) => void) => {
             if (event === 'close') handler(0);
+            return {} as SSHClient.ClientChannel;
+          },
+          stderr: {
+            on: jest.fn()
           }
-        } as any);
-        return {} as any;
+        } as unknown as SSHClient.ClientChannel);
+        return {} as SSHClient.ClientChannel;
       });
 
       const result = await service.killProcess('test-host', 1234);
 
       expect(result.success).toBe(true);
-      expect(result.state).toBe('active');
+      expect(result.state).toBe(HostState.ACTIVE);
       expect(mockSSH.exec).toHaveBeenCalledWith(
         'sudo kill -9 1234',
         expect.any(Function)
@@ -122,8 +142,8 @@ describe('EmergencyService', () => {
       // Setup successful health checks
       mockSSH.exec.mockImplementation((cmd, cb) => {
         cb(null, {
-          on: (event: string, handler: Function) => {
-            if (event === 'data') {
+          on: (event: 'data' | 'close' | 'error', handler: (data?: Buffer | number) => void) => {
+            if (event === 'data' && typeof handler === 'function') {
               if (cmd.includes('df')) {
                 handler(Buffer.from('Filesystem Size Used Avail Use%\n/ 100G 50G 50G 50%'));
               } else if (cmd.includes('free')) {
@@ -131,37 +151,45 @@ describe('EmergencyService', () => {
               }
             }
             if (event === 'close') handler(0);
+            return {} as SSHClient.ClientChannel;
+          },
+          stderr: {
+            on: jest.fn()
           }
-        } as any);
-        return {} as any;
+        } as unknown as SSHClient.ClientChannel);
+        return {} as SSHClient.ClientChannel;
       });
 
       const result = await service.checkConnectivity('test-host');
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(true);
-      expect(result.state).toBe('active');
+      expect(result.state).toBe(HostState.ACTIVE);
       expect(mockSSH.exec).toHaveBeenCalledTimes(4); // df, free, ping, curl
     });
 
     it('should fail if disk usage is critical', async () => {
       mockSSH.exec.mockImplementation((cmd, cb) => {
         cb(null, {
-          on: (event: string, handler: Function) => {
-            if (event === 'data' && cmd.includes('df')) {
+          on: (event: 'data' | 'close' | 'error', handler: (data?: Buffer | number) => void) => {
+            if (event === 'data' && typeof handler === 'function' && cmd.includes('df')) {
               handler(Buffer.from('Filesystem Size Used Avail Use%\n/ 100G 95G 5G 95%'));
             }
             if (event === 'close') handler(0);
+            return {} as SSHClient.ClientChannel;
+          },
+          stderr: {
+            on: jest.fn()
           }
-        } as any);
-        return {} as any;
+        } as unknown as SSHClient.ClientChannel);
+        return {} as SSHClient.ClientChannel;
       });
 
       const result = await service.checkConnectivity('test-host');
 
       expect(result.success).toBe(false);
       expect(result.data).toBe(false);
-      expect(result.state).toBe('unreachable');
+      expect(result.state).toBe(HostState.UNREACHABLE);
     });
   });
 });

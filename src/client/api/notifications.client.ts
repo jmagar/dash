@@ -8,10 +8,9 @@ import type {
   NotificationFilter,
   NotificationDelivery,
 } from '../../types/notifications';
-import { BaseApiClient } from './base.client';
+import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
 import { logger } from '../utils/frontendLogger';
 import { ServiceOperationError } from '../../types/errors';
-import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
 interface GetNotificationsParams {
   userId: string;
@@ -24,17 +23,27 @@ interface GetNotificationsParams {
   filter?: NotificationFilter;
 }
 
-const NOTIFICATION_ENDPOINTS = {
+type NotificationEndpoints = Record<string, Endpoint> & {
+  LIST: '/notifications';
+  COUNT: '/notifications/count';
+  READ: Endpoint;
+  READ_ALL: '/notifications/read-all';
+  DELETE: '/notifications';
+  PREFERENCES: '/notifications/preferences';
+  DELIVERY: '/notifications/delivery';
+};
+
+const NOTIFICATION_ENDPOINTS: NotificationEndpoints = {
   LIST: '/notifications',
   COUNT: '/notifications/count',
-  READ: (id: string) => `/notifications/${id}/read`,
+  READ: (...args: EndpointParams[]) => `/notifications/${args[0]}/read`,
   READ_ALL: '/notifications/read-all',
   DELETE: '/notifications',
   PREFERENCES: '/notifications/preferences',
   DELIVERY: '/notifications/delivery',
-} as const;
+};
 
-class NotificationsClient extends BaseApiClient {
+class NotificationsClient extends BaseApiClient<NotificationEndpoints> {
   constructor() {
     super(NOTIFICATION_ENDPOINTS);
   }
@@ -54,9 +63,15 @@ class NotificationsClient extends BaseApiClient {
         ...(params.offset && { offset: String(params.offset) }),
       });
 
-      return this.get<NotificationEntity[]>(`${this.getEndpoint('LIST')}?${queryParams.toString()}`);
+      return this.get<NotificationEntity[]>(
+        this.getEndpoint('LIST'),
+        { params: Object.fromEntries(queryParams) }
+      );
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to get notifications', {
+        error: error instanceof Error ? error.message : String(error),
+        params
+      });
       throw new ServiceOperationError(
         'Failed to get notifications',
         'getNotifications',
@@ -70,9 +85,15 @@ class NotificationsClient extends BaseApiClient {
    */
   async getNotificationCount(userId: string): Promise<ApiResult<NotificationCount>> {
     try {
-      return this.get<NotificationCount>(`${this.getEndpoint('COUNT')}?userId=${userId}`);
+      return this.get<NotificationCount>(
+        this.getEndpoint('COUNT'),
+        { params: { userId } }
+      );
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to get notification count', {
+        error: error instanceof Error ? error.message : String(error),
+        userId
+      });
       throw new ServiceOperationError(
         'Failed to get notification count',
         'getNotificationCount',
@@ -88,7 +109,10 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.post<void>(this.getEndpoint('READ', notificationId));
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to mark notification as read', {
+        error: error instanceof Error ? error.message : String(error),
+        notificationId
+      });
       throw new ServiceOperationError(
         'Failed to mark notification as read',
         'markAsRead',
@@ -104,7 +128,10 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.post<void>(this.getEndpoint('READ_ALL'), { notificationIds });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to mark notifications as read', {
+        error: error instanceof Error ? error.message : String(error),
+        notificationIds
+      });
       throw new ServiceOperationError(
         'Failed to mark notifications as read',
         'markAllAsRead',
@@ -120,7 +147,10 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.delete<void>(this.getEndpoint('DELETE'), { data: { notificationIds } });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to delete notifications', {
+        error: error instanceof Error ? error.message : String(error),
+        notificationIds
+      });
       throw new ServiceOperationError(
         'Failed to delete notifications',
         'deleteNotifications',
@@ -136,7 +166,9 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.get<NotificationPreferences>(this.getEndpoint('PREFERENCES'));
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to get notification preferences', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw new ServiceOperationError(
         'Failed to get notification preferences',
         'getPreferences'
@@ -151,7 +183,10 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.put<void>(this.getEndpoint('PREFERENCES'), preferences);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to update notification preferences', {
+        error: error instanceof Error ? error.message : String(error),
+        preferences
+      });
       throw new ServiceOperationError(
         'Failed to update notification preferences',
         'updatePreferences',
@@ -167,7 +202,10 @@ class NotificationsClient extends BaseApiClient {
     try {
       return this.get<NotificationDelivery[]>(`${this.getEndpoint('DELIVERY')}/${notificationId}`);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to get notification delivery status', {
+        error: error instanceof Error ? error.message : String(error),
+        notificationId
+      });
       throw new ServiceOperationError(
         'Failed to get notification delivery status',
         'getDeliveryStatus',
@@ -178,4 +216,3 @@ class NotificationsClient extends BaseApiClient {
 }
 
 export const notificationsClient = new NotificationsClient();
-

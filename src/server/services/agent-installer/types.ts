@@ -1,6 +1,10 @@
-import { ExtendedHost, InstallOptions } from '../../../types/agent';
+import type { Host } from '../../../types/host';
+import type { InstallOptions } from '../../../types/agent';
 
 export interface IAgentHandler {
-  installAgent(host: ExtendedHost, options: InstallOptions): Promise<void>;
-  uninstallAgent(host: ExtendedHost): Promise<void>;
+  installAgent(host: Host, options: InstallOptions): Promise<void>;
+  uninstallAgent(host: Host): Promise<void>;
+  startAgent(host: Host): Promise<void>;
+  stopAgent(host: Host): Promise<void>;
+  getInstallScript(): string;
 }

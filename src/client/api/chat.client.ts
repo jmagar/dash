@@ -1,50 +1,73 @@
-import { BaseApiClient } from './base.client';
+import { BaseApiClient, type Endpoint } from './base.client';
 
+// Basic types until we create proper shared DTOs
 interface ChatMessage {
-  role: 'user' | 'assistant';
+  id: string;
   content: string;
+  sender: string;
+  timestamp: Date;
+  metadata?: Record<string, unknown>;
 }
 
 interface ChatResponse {
+  message: ChatMessage;
   success: boolean;
-  data?: string;
   error?: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
 }
 
 interface ChatOptions {
-  useMem0?: boolean;
-  systemPrompt?: string;
+  context?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  model?: string;
+  temperature?: number;
 }
 
-const CHAT_ENDPOINTS = {
-  SEND: '/api/chat',
-} as const;
+type ChatEndpoints = Record<string, Endpoint> & {
+  SEND: '/api/chat';
+};
 
-class ChatClient extends BaseApiClient {
+const CHAT_ENDPOINTS: ChatEndpoints = {
+  SEND: '/api/chat',
+};
+
+/**
+ * Chat client for sending and receiving chat messages.
+ */
+class ChatClient extends BaseApiClient<ChatEndpoints> {
+  /**
+   * Creates a new instance of the chat client.
+   */
   constructor() {
     super(CHAT_ENDPOINTS);
   }
 
+  /**
+   * Sends a chat message to the server.
+   * 
+   * @param message The message to send.
+   * @param options Optional chat options.
+   * @returns The server's response to the chat message.
+   * @throws {Error} If the server's response is null.
+   */
   async sendChatMessage(message: string, options: ChatOptions = {}): Promise<ChatResponse> {
-    const metadata = {
-      messageLength: message.length,
-      useMem0: options.useMem0,
-      hasSystemPrompt: !!options.systemPrompt,
-    };
+    const response = await this.post<ChatResponse>(
+      this.getEndpoint('SEND'),
+      { message, ...options }
+    );
 
-    const response = await this.post<ChatResponse>(this.getEndpoint('SEND'), {
-      message,
-      ...options,
-    });
+    if (!response.data) {
+      throw new Error('Failed to send chat message');
+    }
 
     return response.data;
   }
 }
 
-export const chatClient = new ChatClient();
+// Create a single instance
+const chatClient = new ChatClient();
+
+// Export bound methods
 export const { sendChatMessage } = chatClient;
+
+// Export types for external use
+export type { ChatMessage, ChatResponse, ChatOptions };

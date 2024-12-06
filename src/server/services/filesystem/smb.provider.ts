@@ -1,191 +1,205 @@
 import SMB2 from '@marsaud/smb2';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
-import { FileItem } from '../../../types/models-shared';
-import logger from '../../../logger';
-import { promises as fs } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+import type { Logger } from '../../../types/logger';
+import { createApiError } from '../../utils/error';
 
 export class SMBProvider implements FileSystemProvider {
   readonly type = 'smb' as FileSystemType;
   private client: SMB2 | null = null;
+  private readonly logger: Logger;
+  private credentials?: FileSystemCredentials;
 
-  async connect(credentials: FileSystemCredentials): Promise<void> {
-    if (!credentials.host || !credentials.username) {
-      throw new Error('Missing required SMB credentials');
+  constructor() {
+    this.logger = new LoggerAdapter(LoggingManager.getInstance(), {
+      component: 'SMBProvider',
+      service: 'FileSystem'
+    });
+  }
+
+  async connect(): Promise<void> {
+    if (!this.credentials?.host || !this.credentials?.username) {
+      throw createApiError('Missing required SMB credentials', undefined, 400);
     }
 
     try {
       this.client = new SMB2({
-        share: `\\\\${credentials.host}\\${credentials.share || ''}`,
-        domain: credentials.domain || '',
-        username: credentials.username,
-        password: credentials.password,
+        share: `\\\\${this.credentials.host}\\${this.credentials.share || ''}`,
+        domain: this.credentials.domain || '',
+        username: this.credentials.username,
+        password: this.credentials.password || '',
       });
 
       // Test connection
       await this.client.readdir('/');
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.client = null;
-      throw error;
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        host: this.credentials.host,
+        share: this.credentials.share
+      };
+      this.logger.error('Failed to connect to SMB share', metadata);
+      throw createApiError('Failed to connect to SMB share', error, 500, metadata);
     }
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): Promise<void> {
     if (this.client) {
-      await this.client.disconnect();
+      this.logger.info('Disconnecting from SMB share');
       this.client = null;
     }
+    return Promise.resolve();
   }
 
-  async listFiles(path: string): Promise<FileItem[]> {
-    if (!this.client) throw new Error('Not connected');
+  async list(path: string): Promise<string[]> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
 
     try {
-      const files = await this.client.readdir(path);
-      const fileStats = await Promise.all(
-        files.map(async (name) => {
-          const filePath = `${path}/${name}`.replace(/\/+/g, '/');
-          const stats = await this.client!.stat(filePath);
-          return {
-            name,
-            path: filePath,
-            size: stats.size,
-            modifiedTime: new Date(stats.mtime),
-            isDirectory: stats.isDirectory(),
-            type: stats.isDirectory() ? 'directory' : 'file',
-            metadata: {
-              mode: stats.mode,
-              uid: stats.uid,
-              gid: stats.gid
-            }
-          };
-        })
-      );
-      return fileStats;
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
+      return await this.client.readdir(path);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to list directory', metadata);
+      throw createApiError('Failed to list directory', error, 500, metadata);
     }
   }
 
   async readFile(path: string): Promise<Buffer> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      const tempPath = join(tmpdir(), Math.random().toString(36).substring(7));
-      await this.client.readFile(path, { encoding: null });
-      const content = await fs.readFile(tempPath);
-      await fs.unlink(tempPath);
-      return content;
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
     }
-  }
-
-  async writeFile(path: string, content: Buffer): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
 
     try {
-      const tempPath = join(tmpdir(), Math.random().toString(36).substring(7));
-      await fs.writeFile(tempPath, content);
-      await this.client.writeFile(path, tempPath);
-      await fs.unlink(tempPath);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async delete(path: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      await this.client.unlink(path);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async rename(oldPath: string, newPath: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      await this.client.rename(oldPath, newPath);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async mkdir(path: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      await this.client.mkdir(path);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async stat(path: string): Promise<FileSystemStats> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      const stat = await this.client.stat(path);
-      const modTime = new Date(stat.lastModified).getTime();
-
-      return {
-        size: stat.size,
-        mtime: Math.floor(modTime / 1000),
-        mode: 0o644, // SMB doesn't provide Unix permissions
-        modTime: modTime,
-        owner: '', // SMB doesn't provide ownership info in a Unix-compatible way
-        group: '', // SMB doesn't provide group info in a Unix-compatible way
-        isDirectory: stat.isDirectory(),
-        isFile: !stat.isDirectory(),
-        permissions: '644' // Default permissions since SMB doesn't provide Unix-style permissions
+      const data = await this.client.readFile(path);
+      return Buffer.from(data);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
       };
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
+      this.logger.error('Failed to read file', metadata);
+      throw createApiError('Failed to read file', error, 500, metadata);
     }
   }
 
-  async copyFile(sourcePath: string, targetPath: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      const content = await this.readFile(sourcePath);
-      await this.writeFile(targetPath, content);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
+  async writeFile(path: string, data: Buffer): Promise<void> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
     }
-  }
-
-  async moveFile(sourcePath: string, targetPath: string): Promise<void> {
-    await this.rename(sourcePath, targetPath);
-  }
-
-  async rmdir(path: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
 
     try {
-      await this.client.rmdir(path);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
+      await this.client.writeFile(path, data);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to write file', metadata);
+      throw createApiError('Failed to write file', error, 500, metadata);
     }
   }
 
   async unlink(path: string): Promise<void> {
-    return this.delete(path);
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
+
+    try {
+      await this.client.unlink(path);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to delete file', metadata);
+      throw createApiError('Failed to delete file', error, 500, metadata);
+    }
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
+
+    try {
+      await this.client.rename(oldPath, newPath);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        oldPath,
+        newPath
+      };
+      this.logger.error('Failed to rename file', metadata);
+      throw createApiError('Failed to rename file', error, 500, metadata);
+    }
+  }
+
+  async mkdir(path: string): Promise<void> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
+
+    try {
+      await this.client.mkdir(path);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to create directory', metadata);
+      throw createApiError('Failed to create directory', error, 500, metadata);
+    }
+  }
+
+  async rmdir(path: string): Promise<void> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
+
+    try {
+      await this.client.rmdir(path);
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to remove directory', metadata);
+      throw createApiError('Failed to remove directory', error, 500, metadata);
+    }
+  }
+
+  async stat(path: string): Promise<FileSystemStats> {
+    if (!this.client) {
+      throw createApiError('Not connected to SMB share', undefined, 400);
+    }
+
+    try {
+      const stat = await this.client.stat(path);
+      const isDirectory = stat.isDirectory();
+      
+      return {
+        size: stat.size,
+        isDirectory,
+        isFile: !isDirectory,
+        isSymbolicLink: false,
+        mtime: stat.mtime ? new Date(stat.mtime) : undefined,
+        atime: stat.atime ? new Date(stat.atime) : undefined,
+        ctime: stat.ctime ? new Date(stat.ctime) : undefined,
+        birthtime: undefined // SMB doesn't support birthtime
+      };
+    } catch (error: unknown) {
+      const metadata = {
+        error: error instanceof Error ? error.message : String(error),
+        path
+      };
+      this.logger.error('Failed to get file stats', metadata);
+      throw createApiError('Failed to get file stats', error, 500, metadata);
+    }
   }
 
   async exists(path: string): Promise<boolean> {
@@ -197,14 +211,7 @@ export class SMBProvider implements FileSystemProvider {
     }
   }
 
-  async test(): Promise<boolean> {
-    try {
-      await this.stat('/');
-      return true;
-    } catch {
-      return false;
-    }
+  setCredentials(credentials: FileSystemCredentials): void {
+    this.credentials = credentials;
   }
 }
-
-

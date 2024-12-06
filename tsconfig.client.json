@@ -18,9 +18,9 @@
       "react-dom"
     ],
     "paths": {
-      "@/*": ["src/*"],
       "@client/*": ["src/client/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@server/*": ["src/server/*"]
     }
   },
   "include": [
@@ -29,13 +29,14 @@
     "src/shared/**/*.ts",
     "src/types/**/*.ts",
     "src/types/**/*.d.ts",
-    "src/**/*.stories.tsx"
+    "src/**/*.stories.tsx",
+    "src/server/routes/auth/dto/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/server",
-    "**/*.test.ts",
-    "**/*.test.tsx"
+    "src/server/**/*.test.ts",
+    "src/server/**/*.spec.ts",
+    "src/server/**/*.e2e-spec.ts"
   ]
 }

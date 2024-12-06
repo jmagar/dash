@@ -1,157 +1,187 @@
-import { BaseApiClient } from './base.client';
-import type { DockerContainer, DockerStats, DockerNetwork, DockerVolume, DockerComposeConfig } from '../../types/docker';
+import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
 import type { ApiResponse } from '../../types/express';
 
-// Define the actual endpoint types for internal use
-type DockerEndpointFn = (...args: string[]) => string;
-type DockerEndpoints = Record<string, string | DockerEndpointFn>;
+// Basic types until we create proper shared DTOs
+interface Container {
+  id: string;
+  name: string;
+  status: string;
+}
 
-const DOCKER_ENDPOINTS: DockerEndpoints = {
-  CONTAINERS: (hostId: string) => `/docker/${hostId}/containers`,
-  CONTAINER: (hostId: string, id: string) => `/docker/${hostId}/containers/${id}`,
-  STATS: (hostId: string, id: string) => `/docker/${hostId}/containers/${id}/stats`,
-  LOGS: (hostId: string, id: string) => `/docker/${hostId}/containers/${id}/logs`,
-  NETWORKS: (hostId: string) => `/docker/${hostId}/networks`,
-  VOLUMES: (hostId: string) => `/docker/${hostId}/volumes`,
-  STACKS: (hostId: string) => `/docker/${hostId}/stacks`,
-  STACK: (hostId: string, name: string) => `/docker/${hostId}/stacks/${name}`,
+interface ContainerStats {
+  cpu: number;
+  memory: number;
+}
+
+interface ContainerLogs {
+  stdout: string;
+  stderr: string;
+}
+
+interface ContainerInspect {
+  id: string;
+  name: string;
+  config: Record<string, unknown>;
+}
+
+interface ContainerCreateOptions {
+  image: string;
+  name?: string;
+}
+
+interface ContainerStartOptions {
+  detach?: boolean;
+}
+
+interface ContainerStopOptions {
+  timeout?: number;
+}
+
+type DockerEndpoints = Record<string, Endpoint> & {
+  LIST: '/api/docker/containers';
+  CREATE: '/api/docker/containers/create';
+  START: Endpoint;
+  STOP: Endpoint;
+  RESTART: Endpoint;
+  REMOVE: Endpoint;
+  INSPECT: Endpoint;
+  STATS: Endpoint;
+  LOGS: Endpoint;
 };
 
-class DockerClient extends BaseApiClient {
+const DOCKER_ENDPOINTS: DockerEndpoints = {
+  LIST: '/api/docker/containers',
+  CREATE: '/api/docker/containers/create',
+  START: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/start`,
+  STOP: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/stop`,
+  RESTART: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/restart`,
+  REMOVE: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/remove`,
+  INSPECT: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/inspect`,
+  STATS: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/stats`,
+  LOGS: (...args: EndpointParams[]) => `/api/docker/containers/${args[0]}/logs`,
+};
+
+class DockerClient extends BaseApiClient<DockerEndpoints> {
   constructor() {
-    // Cast to match BaseApiClient's expected type while preserving functionality
     super(DOCKER_ENDPOINTS);
   }
 
-  listContainers = async (hostId: string): Promise<DockerContainer[]> => {
-    const response = await this.get<DockerContainer[]>(this.getEndpoint('CONTAINERS', hostId));
-    if (!response.data) {
-      return [];
-    }
-    return response.data.map((container) => ({
-      ...container,
-      created: container.created,
-      name: container.name || '',
-      id: container.id,
-      hostId: container.hostId,
-      image: container.image,
-      command: container.command,
-      state: container.state,
-      status: container.status,
-      ports: container.ports,
-      mounts: container.mounts,
-      networks: container.networks,
-      labels: container.labels,
-      createdAt: container.createdAt,
-      updatedAt: container.updatedAt
-    }));
-  };
+  async listContainers(): Promise<Container[]> {
+    const response = await this.get<Container[]>(
+      this.getEndpoint('LIST')
+    );
 
-  getContainerStats = async (hostId: string, containerId: string): Promise<DockerStats> => {
-    const response = await this.get<DockerStats>(this.getEndpoint('STATS', hostId, containerId));
+    if (!response.data) {
+      throw new Error('Failed to list containers');
+    }
+
+    return response.data;
+  }
+
+  async createContainer(options: ContainerCreateOptions): Promise<Container> {
+    const response = await this.post<Container>(
+      this.getEndpoint('CREATE'),
+      options
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to create container');
+    }
+
+    return response.data;
+  }
+
+  async startContainer(id: string, options?: ContainerStartOptions): Promise<void> {
+    const response = await this.post<void>(
+      this.getEndpoint('START', id),
+      options
+    );
+
+    if (!response.success) {
+      throw new Error('Failed to start container');
+    }
+  }
+
+  async stopContainer(id: string, options?: ContainerStopOptions): Promise<void> {
+    const response = await this.post<void>(
+      this.getEndpoint('STOP', id),
+      options
+    );
+
+    if (!response.success) {
+      throw new Error('Failed to stop container');
+    }
+  }
+
+  async restartContainer(id: string): Promise<void> {
+    const response = await this.post<void>(
+      this.getEndpoint('RESTART', id)
+    );
+
+    if (!response.success) {
+      throw new Error('Failed to restart container');
+    }
+  }
+
+  async removeContainer(id: string): Promise<void> {
+    const response = await this.delete<void>(
+      this.getEndpoint('REMOVE', id)
+    );
+
+    if (!response.success) {
+      throw new Error('Failed to remove container');
+    }
+  }
+
+  async inspectContainer(id: string): Promise<ContainerInspect> {
+    const response = await this.get<ContainerInspect>(
+      this.getEndpoint('INSPECT', id)
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to inspect container');
+    }
+
+    return response.data;
+  }
+
+  async getContainerStats(id: string): Promise<ContainerStats> {
+    const response = await this.get<ContainerStats>(
+      this.getEndpoint('STATS', id)
+    );
+
     if (!response.data) {
       throw new Error('Failed to get container stats');
     }
+
     return response.data;
-  };
+  }
 
-  startContainer = async (hostId: string, containerId: string): Promise<void> => {
-    await this.post<void>(`${this.getEndpoint('CONTAINER', hostId, containerId)}/start`);
-  };
+  async getContainerLogs(id: string): Promise<ContainerLogs> {
+    const response = await this.get<ContainerLogs>(
+      this.getEndpoint('LOGS', id)
+    );
 
-  stopContainer = async (hostId: string, containerId: string): Promise<void> => {
-    await this.post<void>(`${this.getEndpoint('CONTAINER', hostId, containerId)}/stop`);
-  };
-
-  restartContainer = async (hostId: string, containerId: string): Promise<void> => {
-    await this.post<void>(`${this.getEndpoint('CONTAINER', hostId, containerId)}/restart`);
-  };
-
-  removeContainer = async (hostId: string, containerId: string): Promise<void> => {
-    await this.delete<void>(this.getEndpoint('CONTAINER', hostId, containerId));
-  };
-
-  listNetworks = async (hostId: string): Promise<DockerNetwork[]> => {
-    const response = await this.get<DockerNetwork[]>(this.getEndpoint('NETWORKS', hostId));
     if (!response.data) {
-      return [];
+      throw new Error('Failed to get container logs');
     }
+
     return response.data;
-  };
-
-  listVolumes = async (hostId: string): Promise<DockerVolume[]> => {
-    const response = await this.get<DockerVolume[]>(this.getEndpoint('VOLUMES', hostId));
-    if (!response.data) {
-      return [];
-    }
-    return response.data;
-  };
-
-  getContainerLogs = async (hostId: string, containerId: string): Promise<string> => {
-    const response = await this.get<string>(this.getEndpoint('LOGS', hostId, containerId));
-    if (!response.data) {
-      return '';
-    }
-    return response.data;
-  };
-
-  getStacks = async (hostId: string): Promise<DockerComposeConfig[]> => {
-    const response = await this.get<DockerComposeConfig[]>(this.getEndpoint('STACKS', hostId));
-    if (!response.data) {
-      return [];
-    }
-    return response.data;
-  };
-
-  createStack = async (hostId: string, name: string, composeFile: string): Promise<void> => {
-    await this.post<void>(this.getEndpoint('STACKS', hostId), { name, composeFile });
-  };
-
-  deleteStack = async (hostId: string, stackName: string): Promise<void> => {
-    await this.delete<void>(this.getEndpoint('STACK', hostId, stackName));
-  };
-
-  startStack = async (hostId: string, stackName: string): Promise<void> => {
-    await this.post<void>(`${this.getEndpoint('STACK', hostId, stackName)}/start`);
-  };
-
-  stopStack = async (hostId: string, stackName: string): Promise<void> => {
-    await this.post<void>(`${this.getEndpoint('STACK', hostId, stackName)}/stop`);
-  };
-
-  getStackComposeFile = async (hostId: string, stackName: string): Promise<string> => {
-    const response = await this.get<string>(`${this.getEndpoint('STACK', hostId, stackName)}/compose`);
-    if (!response.data) {
-      return '';
-    }
-    return response.data;
-  };
-
-  updateStackComposeFile = async (hostId: string, stackName: string, composeFile: string): Promise<void> => {
-    await this.put<void>(`${this.getEndpoint('STACK', hostId, stackName)}/compose`, { composeFile });
-  };
+  }
 }
 
 // Create a single instance
 const dockerClient = new DockerClient();
 
 // Export bound methods
-export const listContainers = dockerClient.listContainers;
-export const getContainerStats = dockerClient.getContainerStats;
-export const startContainer = dockerClient.startContainer;
-export const stopContainer = dockerClient.stopContainer;
-export const restartContainer = dockerClient.restartContainer;
-export const removeContainer = dockerClient.removeContainer;
-export const listNetworks = dockerClient.listNetworks;
-export const listVolumes = dockerClient.listVolumes;
-export const getContainerLogs = dockerClient.getContainerLogs;
-export const getStacks = dockerClient.getStacks;
-export const createStack = dockerClient.createStack;
-export const deleteStack = dockerClient.deleteStack;
-export const startStack = dockerClient.startStack;
-export const stopStack = dockerClient.stopStack;
-export const getStackComposeFile = dockerClient.getStackComposeFile;
-export const updateStackComposeFile = dockerClient.updateStackComposeFile;
-
-// Export client instance
-export { dockerClient };
+export const {
+  listContainers,
+  createContainer,
+  startContainer,
+  stopContainer,
+  restartContainer,
+  removeContainer,
+  inspectContainer,
+  getContainerStats,
+  getContainerLogs,
+} = dockerClient;

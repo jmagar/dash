@@ -1,82 +1,153 @@
-import { BaseApiClient } from './base.client';
+import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
 import type { Host, SystemStats, CreateHostRequest } from '../../types/models-shared';
 
-const HOST_ENDPOINTS = {
-  LIST: '/hosts',
-  GET: (id: string) => `/hosts/${id}`,
-  CREATE: '/hosts',
-  UPDATE: (id: string) => `/hosts/${id}`,
-  DELETE: (id: string) => `/hosts/${id}`,
-  TEST: '/hosts/test',
-  STATS: (id: string) => `/hosts/${id}/stats`,
-  CONNECT: (id: string) => `/hosts/${id}/connect`,
-  DISCONNECT: (id: string) => `/hosts/${id}/disconnect`,
-  STATUS: (id: string) => `/hosts/${id}/status`,
-} as const;
+type HostEndpoints = Record<string, Endpoint> & {
+  LIST: '/hosts';
+  GET: Endpoint;
+  CREATE: '/hosts';
+  UPDATE: Endpoint;
+  DELETE: Endpoint;
+  TEST: '/hosts/test';
+  STATS: Endpoint;
+  CONNECT: Endpoint;
+  DISCONNECT: Endpoint;
+  STATUS: Endpoint;
+};
 
-class HostsClient extends BaseApiClient {
-  constructor() {
+const HOST_ENDPOINTS: HostEndpoints = {
+  LIST: '/hosts',
+  GET: (...args: EndpointParams[]) => `/hosts/${args[0]}`,
+  CREATE: '/hosts',
+  UPDATE: (...args: EndpointParams[]) => `/hosts/${args[0]}`,
+  DELETE: (...args: EndpointParams[]) => `/hosts/${args[0]}`,
+  TEST: '/hosts/test',
+  STATS: (...args: EndpointParams[]) => `/hosts/${args[0]}/stats`,
+  CONNECT: (...args: EndpointParams[]) => `/hosts/${args[0]}/connect`,
+  DISCONNECT: (...args: EndpointParams[]) => `/hosts/${args[0]}/disconnect`,
+  STATUS: (...args: EndpointParams[]) => `/hosts/${args[0]}/status`,
+};
+
+class HostsClient extends BaseApiClient<HostEndpoints> {
+  private static instance: HostsClient;
+
+  private constructor() {
     super(HOST_ENDPOINTS);
+  }
+
+  public static getInstance(): HostsClient {
+    if (!HostsClient.instance) {
+      HostsClient.instance = new HostsClient();
+    }
+    return HostsClient.instance;
   }
 
   async listHosts(): Promise<Host[]> {
     const response = await this.get<Host[]>(this.getEndpoint('LIST'));
+    
+    if (!response.data) {
+      throw new Error('Failed to list hosts');
+    }
+
     return response.data;
   }
 
   async getHost(hostId: string): Promise<Host> {
     const response = await this.get<Host>(this.getEndpoint('GET', hostId));
+    
+    if (!response.data) {
+      throw new Error(`Failed to get host with ID: ${hostId}`);
+    }
+
     return response.data;
   }
 
   async createHost(host: CreateHostRequest): Promise<Host> {
     const response = await this.post<Host>(this.getEndpoint('CREATE'), host);
+    
+    if (!response.data) {
+      throw new Error('Failed to create host');
+    }
+
     return response.data;
   }
 
   async updateHost(hostId: string, host: Partial<Host>): Promise<Host> {
     const response = await this.put<Host>(this.getEndpoint('UPDATE', hostId), host);
+    
+    if (!response.data) {
+      throw new Error(`Failed to update host with ID: ${hostId}`);
+    }
+
     return response.data;
   }
 
   async deleteHost(hostId: string): Promise<void> {
-    await this.delete<void>(this.getEndpoint('DELETE', hostId));
+    const response = await this.delete<void>(this.getEndpoint('DELETE', hostId));
+    
+    if (!response.success) {
+      throw new Error(`Failed to delete host with ID: ${hostId}`);
+    }
   }
 
   async testHost(host: CreateHostRequest): Promise<boolean> {
     const response = await this.post<{ success: boolean }>(this.getEndpoint('TEST'), host);
+    
+    if (!response.data) {
+      throw new Error('Failed to test host connection');
+    }
+
     return response.data.success;
   }
 
   async getHostStats(hostId: string): Promise<SystemStats> {
     const response = await this.get<SystemStats>(this.getEndpoint('STATS', hostId));
+    
+    if (!response.data) {
+      throw new Error(`Failed to get stats for host with ID: ${hostId}`);
+    }
+
     return response.data;
   }
 
   async connectHost(hostId: string): Promise<void> {
-    await this.post<void>(this.getEndpoint('CONNECT', hostId));
+    const response = await this.post<void>(this.getEndpoint('CONNECT', hostId));
+    
+    if (!response.success) {
+      throw new Error(`Failed to connect to host with ID: ${hostId}`);
+    }
   }
 
   async disconnectHost(hostId: string): Promise<void> {
-    await this.post<void>(this.getEndpoint('DISCONNECT', hostId));
+    const response = await this.post<void>(this.getEndpoint('DISCONNECT', hostId));
+    
+    if (!response.success) {
+      throw new Error(`Failed to disconnect from host with ID: ${hostId}`);
+    }
   }
 
   async getHostStatus(hostId: string): Promise<Host> {
     const response = await this.get<Host>(this.getEndpoint('STATUS', hostId));
+    
+    if (!response.data) {
+      throw new Error(`Failed to get status for host with ID: ${hostId}`);
+    }
+
     return response.data;
   }
 }
 
-export const hostsClient = new HostsClient();
+export const hostsClient = HostsClient.getInstance();
 
-// Bind methods to avoid unbound method issues
-export const listHosts = hostsClient.listHosts.bind(hostsClient);
-export const getHost = hostsClient.getHost.bind(hostsClient);
-export const createHost = hostsClient.createHost.bind(hostsClient);
-export const updateHost = hostsClient.updateHost.bind(hostsClient);
-export const deleteHost = hostsClient.deleteHost.bind(hostsClient);
-export const testHost = hostsClient.testHost.bind(hostsClient);
-export const getHostStats = hostsClient.getHostStats.bind(hostsClient);
-export const connectHost = hostsClient.connectHost.bind(hostsClient);
-export const disconnectHost = hostsClient.disconnectHost.bind(hostsClient);
-export const getHostStatus = hostsClient.getHostStatus.bind(hostsClient);
+// Export methods directly from the singleton instance
+export const {
+  listHosts,
+  getHost,
+  createHost,
+  updateHost,
+  deleteHost,
+  testHost,
+  getHostStats,
+  connectHost,
+  disconnectHost,
+  getHostStatus,
+} = hostsClient;

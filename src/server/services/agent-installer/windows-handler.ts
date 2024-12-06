@@ -1,92 +1,105 @@
-import path from 'path';
-import { logger } from '../../utils/logger';
-import type { LogMetadata } from '../../../types/logger';
-import type { ExtendedHost, InstallOptions } from '../../../types/agent-config';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
 import { ApiError } from '../../../types/error';
+import type { Host } from '../../../types/host';
+import type { InstallOptions } from '../../../types/agent';
+import type { Logger, LogMetadata } from '../../../types/logger';
+import type { IAgentHandler } from './types';
 import { windowsInstallScript } from './install-scripts';
-import { IAgentHandler } from './types';
-import type { SSHService } from '../ssh.service';
-import config from '../../config';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
 
 export class WindowsHandler implements IAgentHandler {
-  private executeCommand: (host: ExtendedHost, command: string) => Promise<void>;
-  private copyFile: (host: ExtendedHost, localPath: string, remotePath: string) => Promise<void>;
-  private getBinaryPath: () => string;
+  private executeCommand: (host: Host, command: string, options?: { sudo?: boolean }) => Promise<void>;
+  private copyFile: (host: Host, sourcePath: string, targetPath: string) => Promise<void>;
+  private readonly logger: Logger;
 
-  constructor(sshService: SSHService) {
-    this.executeCommand = async (host: ExtendedHost, command: string) => {
-      await sshService.executeCommand(host.hostname, command);
-    };
-    
-    this.copyFile = async (host: ExtendedHost, localPath: string, remotePath: string) => {
-      await sshService.transferFile(host.hostname, localPath, remotePath);
-    };
-
-    this.getBinaryPath = () => {
-      return config.paths.binaries;
-    };
+  constructor(
+    executeCommand: (host: Host, command: string, options?: { sudo?: boolean }) => Promise<void>,
+    copyFile: (host: Host, sourcePath: string, targetPath: string) => Promise<void>
+  ) {
+    this.executeCommand = executeCommand;
+    this.copyFile = copyFile;
+    const baseLogger = LoggingManager.getInstance();
+    this.logger = new LoggerAdapter(baseLogger, { component: 'WindowsAgentInstaller' });
   }
 
-  async installAgent(host: ExtendedHost, _options: InstallOptions): Promise<void> {
+  async installAgent(host: Host, options: InstallOptions): Promise<void> {
+    const logger = this.logger.withContext({ 
+      hostId: host.id,
+      operation: 'installAgent'
+    });
+    
     try {
-      const configPath = './config.json';
-      await this.copyFile(host, configPath, './config.json');
-      await this.copyFile(
-        host, 
-        path.join(this.getBinaryPath(), 'shh-agent.exe'),
-        'C:\\Program Files\\shh-agent\\shh-agent.exe'
-      );
-      await this.executeCommand(host, 'powershell -ExecutionPolicy Bypass -File install.ps1');
-    } catch (error) {
+      logger.info('Starting Windows agent installation', { options });
+      
+      const configPath = '.\\config.json';
+      await this.copyFile(host, configPath, '.\\config.json');
+      logger.debug('Config file copied', { path: configPath });
+
+      await this.executeCommand(host, windowsInstallScript);
+      logger.info('Windows agent installation completed successfully');
+    } catch (error: unknown) {
       const metadata: LogMetadata = {
         error: error instanceof Error ? error.message : String(error),
-        hostId: host.id,
-        osType: host.os_type
+        options
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to install Windows agent', metadata);
       throw new ApiError('Failed to install Windows agent', 500);
     }
   }
 
-  async uninstallAgent(host: ExtendedHost): Promise<void> {
+  async uninstallAgent(host: Host): Promise<void> {
+    const logger = this.logger.withContext({ 
+      hostId: host.id,
+      operation: 'uninstallAgent'
+    });
+
     try {
-      await this.executeCommand(host, 'sc.exe stop SHHAgent');
-      await this.executeCommand(host, 'sc.exe delete SHHAgent');
-      await this.executeCommand(host, 'rmdir /s /q "C:\\Program Files\\shh-agent"');
-      await this.executeCommand(host, 'rmdir /s /q "C:\\ProgramData\\shh-agent"');
-    } catch (error) {
+      logger.info('Starting agent uninstallation');
+      await this.executeCommand(host, 'net stop AgentService && sc delete AgentService');
+      logger.info('Agent uninstallation completed');
+    } catch (error: unknown) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        hostId: host.id
+        error: error instanceof Error ? error.message : String(error)
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to uninstall Windows agent', metadata);
       throw new ApiError('Failed to uninstall Windows agent', 500);
     }
   }
 
-  private async start(host: ExtendedHost): Promise<void> {
+  async startAgent(host: Host): Promise<void> {
+    const logger = this.logger.withContext({ 
+      hostId: host.id,
+      operation: 'startAgent'
+    });
+
     try {
-      await this.executeCommand(host, 'sc.exe start SHHAgent');
-    } catch (error) {
+      logger.info('Starting agent service');
+      await this.executeCommand(host, 'net start AgentService');
+      logger.info('Agent service started successfully');
+    } catch (error: unknown) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        hostId: host.id
+        error: error instanceof Error ? error.message : String(error)
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to start Windows agent', metadata);
       throw new ApiError('Failed to start Windows agent', 500);
     }
   }
 
-  private async stop(host: ExtendedHost): Promise<void> {
+  async stopAgent(host: Host): Promise<void> {
+    const logger = this.logger.withContext({ 
+      hostId: host.id,
+      operation: 'stopAgent'
+    });
+
     try {
-      await this.executeCommand(host, 'sc.exe stop SHHAgent');
-    } catch (error) {
+      logger.info('Stopping agent service');
+      await this.executeCommand(host, 'net stop AgentService');
+      logger.info('Agent service stopped successfully');
+    } catch (error: unknown) {
       const metadata: LogMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        hostId: host.id
+        error: error instanceof Error ? error.message : String(error)
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to stop Windows agent', metadata);
       throw new ApiError('Failed to stop Windows agent', 500);
     }
   }
@@ -95,5 +108,3 @@ export class WindowsHandler implements IAgentHandler {
     return windowsInstallScript;
   }
 }
-
-

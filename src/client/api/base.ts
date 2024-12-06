@@ -1,41 +1,38 @@
-﻿import { ApiError, ApiResult, createApiError } from '../../types/error';
-import { logger } from '../../server/utils/logger';
+import { ApiError, ApiResult, createApiError } from '../../types/error';
+import { logger } from '../utils/frontendLogger';
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
-export type Endpoints = Record<string, string>;
+export type EndpointParams = string | number;
+export type Endpoint = string | ((...args: EndpointParams[]) => string);
 
-export abstract class BaseApi {
-  protected readonly endpoints: Endpoints;
+export abstract class BaseApi<T extends Record<string, Endpoint>> {
+  protected readonly endpoints: T;
 
-  constructor(endpoints: Endpoints) {
+  constructor(endpoints: T) {
     this.endpoints = endpoints;
   }
 
-  protected getEndpoint(key: keyof typeof this.endpoints, id?: string, params?: URLSearchParams): string {
-    let endpoint = this.endpoints[key];
+  protected getEndpoint(key: keyof T, ...args: EndpointParams[]): string {
+    const endpoint = this.endpoints[key];
     if (!endpoint) {
       throw createApiError(`Endpoint ${String(key)} not found`, undefined, 404);
     }
 
-    if (id) {
-      endpoint = endpoint.replace(':id', id);
-    }
-
-    if (params) {
-      endpoint += `?${params.toString()}`;
+    if (typeof endpoint === 'function') {
+      return endpoint(...args);
     }
 
     return endpoint;
   }
 
-  protected async get<T>(endpoint: string): Promise<ApiResult<T>> {
+  protected async get<R>(endpoint: string, params?: URLSearchParams): Promise<ApiResult<R>> {
     try {
-      const response = await fetch(endpoint);
+      const url = params ? `${endpoint}?${params.toString()}` : endpoint;
+      const response = await fetch(url);
       const data = await response.json();
       return {
         success: response.ok,
-        data: data.data as T,
+        data: data.data as R,
         error: data.error,
         status: response.status,
       };
@@ -45,7 +42,7 @@ export abstract class BaseApi {
         method: 'GET',
         path: endpoint,
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('API GET request failed', metadata);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -54,7 +51,7 @@ export abstract class BaseApi {
     }
   }
 
-  protected async post<T>(endpoint: string, body?: unknown): Promise<ApiResult<T>> {
+  protected async post<R>(endpoint: string, body?: unknown): Promise<ApiResult<R>> {
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -66,7 +63,7 @@ export abstract class BaseApi {
       const data = await response.json();
       return {
         success: response.ok,
-        data: data.data as T,
+        data: data.data as R,
         error: data.error,
         status: response.status,
       };
@@ -76,7 +73,7 @@ export abstract class BaseApi {
         method: 'POST',
         path: endpoint,
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('API POST request failed', metadata);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -85,7 +82,7 @@ export abstract class BaseApi {
     }
   }
 
-  protected async put<T>(endpoint: string, body?: unknown): Promise<ApiResult<T>> {
+  protected async put<R>(endpoint: string, body?: unknown): Promise<ApiResult<R>> {
     try {
       const response = await fetch(endpoint, {
         method: 'PUT',
@@ -97,7 +94,7 @@ export abstract class BaseApi {
       const data = await response.json();
       return {
         success: response.ok,
-        data: data.data as T,
+        data: data.data as R,
         error: data.error,
         status: response.status,
       };
@@ -107,7 +104,7 @@ export abstract class BaseApi {
         method: 'PUT',
         path: endpoint,
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('API PUT request failed', metadata);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -116,7 +113,7 @@ export abstract class BaseApi {
     }
   }
 
-  protected async delete<T>(endpoint: string, body?: unknown): Promise<ApiResult<T>> {
+  protected async delete<R>(endpoint: string, body?: unknown): Promise<ApiResult<R>> {
     try {
       const response = await fetch(endpoint, {
         method: 'DELETE',
@@ -128,7 +125,7 @@ export abstract class BaseApi {
       const data = await response.json();
       return {
         success: response.ok,
-        data: data.data as T,
+        data: data.data as R,
         error: data.error,
         status: response.status,
       };
@@ -138,7 +135,7 @@ export abstract class BaseApi {
         method: 'DELETE',
         path: endpoint,
       };
-      loggerLoggingManager.getInstance().();
+      logger.error('API DELETE request failed', metadata);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -147,4 +144,3 @@ export abstract class BaseApi {
     }
   }
 }
-

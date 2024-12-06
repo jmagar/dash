@@ -1,13 +1,17 @@
 import { Server } from 'socket.io';
-import { logger } from '../../utils/logger';
 import type { Host } from '../../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../../types/socket-events';
-import type { ProcessInfo } from '../../../types/metrics';
 import type { ProcessCache } from './types';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+import type { Logger, LogMetadata } from '../../../types/logger';
+import type { HostId, ProcessEventPayload, BaseErrorPayload } from '../../../types/socket.io';
+import type { ProcessInfo, ProcessId } from './types';
+import { createProcessId } from './types';
 
 export class ProcessMonitor {
-  private monitoredHosts: Set<string> = new Set();
+  private readonly logger: Logger;
+  private monitoredHosts: Set<HostId> = new Set();
   private updateInterval = 5000; // 5 seconds
   private intervalId?: NodeJS.Timeout;
 
@@ -15,33 +19,88 @@ export class ProcessMonitor {
     private io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents>,
     private processCache: ProcessCache,
     private listProcesses: (host: Host) => Promise<ProcessInfo[]>,
-    private getHost: (hostId: string) => Promise<Host | null>
-  ) {}
+    private getHost: (hostId: HostId) => Promise<Host | null>,
+    logManager?: LoggingManager
+  ) {
+    const baseLogger = logManager ?? LoggingManager.getInstance();
+    this.logger = new LoggerAdapter(baseLogger, {
+      component: 'ProcessMonitor',
+      service: 'MonitoringService'
+    });
+
+    this.logger.info('ProcessMonitor initialized', {
+      updateInterval: this.updateInterval
+    });
+  }
 
   /**
    * Start monitoring a host's processes
    */
   async startMonitoringHost(host: Host): Promise<void> {
-    this.monitoredHosts.add(host.id);
-    await this.updateProcessList(host);
+    const methodLogger = this.logger.withContext({
+      operation: 'startMonitoringHost',
+      hostId: host.id,
+      hostname: host.hostname
+    });
 
-    // Start monitoring if not already started
-    if (!this.intervalId) {
-      this.startMonitoring();
+    try {
+      methodLogger.info('Starting process monitoring for host');
+      
+      const hostId = host.id as HostId;
+      this.monitoredHosts.add(hostId);
+      await this.updateProcessList(host);
+
+      // Start monitoring if not already started
+      if (!this.intervalId) {
+        this.startMonitoring();
+      }
+
+      methodLogger.info('Process monitoring started for host', {
+        monitoredHostsCount: this.monitoredHosts.size
+      });
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        hostId: host.id,
+        hostname: host.hostname
+      };
+      methodLogger.error('Failed to start monitoring host', metadata);
+      throw error;
     }
   }
 
   /**
    * Stop monitoring a host's processes
    */
-  stopMonitoringHost(hostId: string): void {
-    this.monitoredHosts.delete(hostId);
-    this.processCache.delete(hostId);
+  stopMonitoringHost(hostId: HostId): void {
+    const methodLogger = this.logger.withContext({
+      operation: 'stopMonitoringHost',
+      hostId
+    });
 
-    // Stop monitoring if no hosts are being monitored
-    if (this.monitoredHosts.size === 0 && this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
+    try {
+      methodLogger.info('Stopping process monitoring for host');
+
+      this.monitoredHosts.delete(hostId);
+      this.processCache.delete(hostId);
+
+      // Stop monitoring if no hosts are being monitored
+      if (this.monitoredHosts.size === 0 && this.intervalId) {
+        clearInterval(this.intervalId);
+        this.intervalId = undefined;
+        methodLogger.info('Process monitoring stopped - no hosts monitored');
+      } else {
+        methodLogger.info('Process monitoring stopped for host', {
+          remainingHostsCount: this.monitoredHosts.size
+        });
+      }
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        hostId
+      };
+      methodLogger.error('Failed to stop monitoring host', metadata);
+      throw error;
     }
   }
 
@@ -49,45 +108,97 @@ export class ProcessMonitor {
    * Start monitoring loop
    */
   private startMonitoring(): void {
-    this.intervalId = setInterval(async () => {
-      for (const hostId of this.monitoredHosts) {
-        try {
-          const host = await this.getHost(hostId);
-          if (host) {
-            await this.updateProcessList(host);
-          } else {
-            this.stopMonitoringHost(hostId);
-          }
-        } catch (error) {
-          loggerLoggingManager.getInstance().();
-          this.io.to(`host:${hostId}`).emit('process:error', {
-            hostId,
-            error: 'Failed to update process list',
-          });
-        }
-      }
+    const methodLogger = this.logger.withContext({
+      operation: 'startMonitoring',
+      component: 'ProcessMonitor'
+    });
+
+    methodLogger.info('Starting process monitoring loop', {
+      updateInterval: this.updateInterval,
+      monitoredHostsCount: this.monitoredHosts.size
+    });
+
+    this.intervalId = setInterval(() => {
+      void this.monitoringLoop();
     }, this.updateInterval);
+  }
+
+  /**
+   * Monitoring loop implementation
+   */
+  private async monitoringLoop(): Promise<void> {
+    const methodLogger = this.logger.withContext({
+      operation: 'monitoringLoop',
+      component: 'ProcessMonitor'
+    });
+
+    for (const hostId of this.monitoredHosts) {
+      try {
+        const host = await this.getHost(hostId);
+        if (host) {
+          await this.updateProcessList(host);
+        } else {
+          methodLogger.warn('Host not found, stopping monitoring', { hostId });
+          this.stopMonitoringHost(hostId);
+        }
+      } catch (error) {
+        const metadata: LogMetadata = {
+          error: error instanceof Error ? error : new Error(String(error)),
+          hostId
+        };
+        methodLogger.error('Failed to update process list', metadata);
+
+        const errorPayload: ProcessEventPayload & BaseErrorPayload = {
+          hostId,
+          processId: createProcessId(0),
+          error: 'Failed to update process list',
+          timestamp: new Date().toISOString()
+        };
+        this.io.to(`host:${hostId}`).emit('process:error', errorPayload);
+      }
+    }
   }
 
   /**
    * Update process list for a host
    */
   private async updateProcessList(host: Host): Promise<void> {
+    const startTime = Date.now();
+    const hostId = host.id as HostId;
+    const methodLogger = this.logger.withContext({
+      operation: 'updateProcessList',
+      hostId: host.id,
+      hostname: host.hostname
+    });
+
     try {
+      methodLogger.debug('Updating process list');
+
       const processes = await this.listProcesses(host);
-      const processMap = new Map();
+      const processMap = new Map<ProcessId, ProcessInfo>();
 
       for (const process of processes) {
         processMap.set(process.pid, process);
       }
 
-      const oldProcesses = this.processCache.get(host.id) || new Map();
-      this.processCache.set(host.id, processMap);
+      const oldProcesses = this.processCache.get(hostId) || new Map<ProcessId, ProcessInfo>();
+      this.processCache.set(hostId, processMap);
+
+      // Track process changes
+      const changes = {
+        new: 0,
+        ended: 0,
+        statusChanged: 0,
+        updated: 0
+      };
+
+      const timestamp = new Date().toISOString();
 
       // Emit process list update
-      this.io.to(`host:${host.id}`).emit('process:list', {
-        hostId: host.id,
+      this.io.to(`host:${hostId}`).emit('process:list', {
+        hostId,
         processes,
+        timestamp
       });
 
       // Emit events for process changes
@@ -95,22 +206,28 @@ export class ProcessMonitor {
         const oldProcess = oldProcesses.get(pid);
         if (!oldProcess) {
           // New process started
-          this.io.to(`host:${host.id}`).emit('process:started', {
-            hostId: host.id,
+          changes.new++;
+          this.io.to(`host:${hostId}`).emit('process:started', {
+            hostId,
             process,
+            timestamp
           });
         } else if (oldProcess.status !== process.status) {
           // Process status changed
-          this.io.to(`host:${host.id}`).emit('process:changed', {
-            hostId: host.id,
+          changes.statusChanged++;
+          this.io.to(`host:${hostId}`).emit('process:changed', {
+            hostId,
             process,
             oldStatus: oldProcess.status,
+            timestamp
           });
         } else {
           // Process updated (metrics changed)
-          this.io.to(`host:${host.id}`).emit('process:update', {
-            hostId: host.id,
+          changes.updated++;
+          this.io.to(`host:${hostId}`).emit('process:update', {
+            hostId,
             process,
+            timestamp
           });
         }
       }
@@ -118,49 +235,47 @@ export class ProcessMonitor {
       // Emit events for ended processes
       for (const [pid, oldProcess] of oldProcesses) {
         if (!processMap.has(pid)) {
-          this.io.to(`host:${host.id}`).emit('process:ended', {
-            hostId: host.id,
+          changes.ended++;
+          this.io.to(`host:${hostId}`).emit('process:ended', {
+            hostId,
             process: oldProcess,
+            timestamp
           });
         }
       }
 
-      // Get current timestamp
-      const now = new Date();
-
       // Emit process metrics
-      this.io.to(`host:${host.id}`).emit('process:metrics', {
-        hostId: host.id,
-        processes: processes.map(p => ({
-          pid: p.pid,
-          ppid: p.ppid,
-          name: p.name,
-          command: p.command,
-          args: p.args,
-          status: p.status,
-          user: p.user,
-          username: p.username,
-          cpu: p.cpu,
-          cpuUsage: p.cpuUsage,
-          memory: p.memory,
-          memoryUsage: p.memoryUsage,
-          memoryRss: p.memoryRss,
-          memoryVms: p.memoryVms,
-          threads: p.threads,
-          fds: p.fds,
-          startTime: p.startTime,
-          children: p.children,
-          ioStats: p.ioStats,
-          createdAt: now,
-          updatedAt: now
-        })),
+      this.io.to(`host:${hostId}`).emit('process:metrics', {
+        hostId,
+        processes,
+        timestamp
+      });
+
+      const duration = Date.now() - startTime;
+      methodLogger.info('Process list updated', {
+        timing: { total: duration },
+        stats: {
+          total: processes.length,
+          changes
+        }
       });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.io.to(`host:${host.id}`).emit('process:error', {
+      const duration = Date.now() - startTime;
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
         hostId: host.id,
+        hostname: host.hostname,
+        timing: { total: duration }
+      };
+      methodLogger.error('Failed to update process list', metadata);
+
+      const errorPayload: ProcessEventPayload & BaseErrorPayload = {
+        hostId,
+        processId: createProcessId(0),
         error: 'Failed to update process list',
-      });
+        timestamp: new Date().toISOString()
+      };
+      this.io.to(`host:${hostId}`).emit('process:error', errorPayload);
     }
   }
 
@@ -168,12 +283,29 @@ export class ProcessMonitor {
    * Stop monitoring all hosts
    */
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
+    const methodLogger = this.logger.withContext({
+      operation: 'stop',
+      component: 'ProcessMonitor'
+    });
+
+    try {
+      methodLogger.info('Stopping all process monitoring', {
+        monitoredHostsCount: this.monitoredHosts.size
+      });
+
+      if (this.intervalId) {
+        clearInterval(this.intervalId);
+        this.intervalId = undefined;
+      }
+      this.monitoredHosts.clear();
+
+      methodLogger.info('All process monitoring stopped');
+    } catch (error) {
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error))
+      };
+      methodLogger.error('Failed to stop process monitoring', metadata);
+      throw error;
     }
-    this.monitoredHosts.clear();
   }
 }
-
-

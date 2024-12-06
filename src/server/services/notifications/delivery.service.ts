@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { logger } from '../../utils/logger';
 import { Server as SocketIOServer } from 'socket.io';
 import config from '../../config';
 import { ApiError } from '../../../types/error';
@@ -15,9 +14,12 @@ import {
   NotificationEvent
 } from '../../../types/notifications';
 import { NotificationDeliveryOptions } from './types';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../../utils/logging/logger.adapter';
+import type { Logger, LogMetadata } from '../../../types/logger';
 
 export class NotificationDeliveryService {
+  private readonly logger: Logger;
   private readonly GOTIFY_PRIORITIES: Record<NotificationType, number> = {
     [NotificationType.Error]: 8,
     [NotificationType.Alert]: 7,
@@ -30,120 +32,197 @@ export class NotificationDeliveryService {
   private readonly gotifyToken: string | undefined;
   private readonly io: SocketIOServer;
 
-  constructor(io: SocketIOServer) {
+  constructor(io: SocketIOServer, logManager?: LoggingManager) {
+    const baseLogger = logManager ?? LoggingManager.getInstance();
+    this.logger = new LoggerAdapter(baseLogger, {
+      component: 'NotificationDeliveryService',
+      service: 'NotificationService'
+    });
+
     this.gotifyUrl = config.gotify?.url;
     this.gotifyToken = config.gotify?.token;
     this.io = io;
+
+    this.logger.info('NotificationDeliveryService initialized', {
+      hasGotify: Boolean(this.gotifyUrl && this.gotifyToken)
+    });
   }
 
   public async deliverNotification({ userId, notification, preferences }: NotificationDeliveryOptions): Promise<void> {
+    const startTime = Date.now();
+    const methodLogger = this.logger.withContext({
+      operation: 'deliverNotification',
+      userId,
+      notificationId: notification.id,
+      notificationType: notification.type
+    });
+
     try {
+      const enabledChannels = Object.values(NotificationChannel).filter(channel => 
+        this.shouldDeliverNotification(notification, preferences, channel)
+      );
+
+      methodLogger.info('Starting notification delivery', {
+        channels: enabledChannels
+      });
+
       // Send web notification
-      if (this.shouldDeliverNotification(notification, preferences, NotificationChannel.Web)) {
-        await this.sendWebNotification(notification, preferences);
+      if (enabledChannels.includes(NotificationChannel.Web)) {
+        this.sendWebNotification(notification);
       }
 
       // Send desktop notification
-      if (this.shouldDeliverNotification(notification, preferences, NotificationChannel.Desktop)) {
-        await this.sendDesktopNotification(notification, preferences);
+      if (enabledChannels.includes(NotificationChannel.Desktop)) {
+        this.sendDesktopNotification(notification, preferences);
       }
 
       // Send Gotify notification
-      if (this.shouldDeliverNotification(notification, preferences, NotificationChannel.Gotify)) {
+      if (enabledChannels.includes(NotificationChannel.Gotify)) {
         await this.sendGotifyNotification(notification, preferences);
       }
 
-      loggerLoggingManager.getInstance().();
+      const duration = Date.now() - startTime;
+      methodLogger.info('Notification delivery completed', {
+        timing: { total: duration },
+        channelsDelivered: enabledChannels
+      });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const duration = Date.now() - startTime;
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        timing: { total: duration }
+      };
+      methodLogger.error('Failed to deliver notification', metadata);
       throw new ApiError('Failed to deliver notification', 500);
     }
   }
 
-  private sendWebNotification(
-    notification: NotificationEntity,
-    preferences: NotificationPreferences
-  ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        const event: NotificationEvent = {
-          type: 'notification:created',
-          payload: { 
-            notification: {
-              ...notification,
-              status: ServiceStatus.SENT,
-              channel: NotificationChannel.Web
-            }
-          },
-          id: `event-${Date.now()}`,
-          timestamp: new Date(),
-          serviceName: 'notifications'
-        };
-
-        this.io.to(`user:${notification.userId}`).emit('notification', event);
-
-        loggerLoggingManager.getInstance().();
-        resolve();
-      } catch (error) {
-        loggerLoggingManager.getInstance().();
-        reject(new ApiError('Failed to send web notification', 500));
-      }
+  private sendWebNotification(notification: NotificationEntity): void {
+    const startTime = Date.now();
+    const methodLogger = this.logger.withContext({
+      operation: 'sendWebNotification',
+      userId: notification.userId,
+      notificationId: notification.id
     });
+
+    try {
+      methodLogger.debug('Sending web notification');
+
+      const event: NotificationEvent = {
+        type: 'notification:created',
+        payload: { 
+          notification: {
+            ...notification,
+            status: ServiceStatus.SENT,
+            channel: NotificationChannel.Web
+          }
+        },
+        id: `event-${Date.now()}`,
+        timestamp: new Date(),
+        serviceName: 'notifications'
+      };
+
+      this.io.to(`user:${notification.userId}`).emit('notification', event);
+
+      const duration = Date.now() - startTime;
+      methodLogger.info('Web notification sent', {
+        timing: { total: duration }
+      });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        timing: { total: duration }
+      };
+      methodLogger.error('Failed to send web notification', metadata);
+      throw new ApiError('Failed to send web notification', 500);
+    }
   }
 
   private sendDesktopNotification(
     notification: NotificationEntity,
     preferences: NotificationPreferences
-  ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        const config = preferences.channels[NotificationChannel.Desktop]?.config as DesktopChannelConfig;
-        const event: NotificationEvent = {
-          type: 'notification:created',
-          payload: { 
-            notification: {
-              ...notification,
-              status: ServiceStatus.SENT,
-              channel: NotificationChannel.Desktop
-            }
-          },
-          id: `event-${Date.now()}`,
-          timestamp: new Date(),
-          serviceName: 'notifications'
-        };
-
-        this.io.to(`user:${notification.userId}`).emit('notification:desktop', {
-          id: notification.id,
-          type: notification.type,
-          title: notification.title,
-          message: notification.message,
-          duration: config?.duration ?? 5000,
-          sound: config?.sound ?? true,
-          position: config?.position ?? 'top-right',
-          link: notification.link,
-          timestamp: notification.timestamp
-        });
-
-        this.io.to(`user:${notification.userId}`).emit('notification', event);
-
-        loggerLoggingManager.getInstance().();
-        resolve();
-      } catch (error) {
-        loggerLoggingManager.getInstance().();
-        reject(new ApiError('Failed to send desktop notification', 500));
-      }
+  ): void {
+    const startTime = Date.now();
+    const methodLogger = this.logger.withContext({
+      operation: 'sendDesktopNotification',
+      userId: notification.userId,
+      notificationId: notification.id
     });
+
+    try {
+      methodLogger.debug('Sending desktop notification');
+
+      const config = preferences.channels[NotificationChannel.Desktop]?.config as DesktopChannelConfig;
+      const event: NotificationEvent = {
+        type: 'notification:created',
+        payload: { 
+          notification: {
+            ...notification,
+            status: ServiceStatus.SENT,
+            channel: NotificationChannel.Desktop
+          }
+        },
+        id: `event-${Date.now()}`,
+        timestamp: new Date(),
+        serviceName: 'notifications'
+      };
+
+      this.io.to(`user:${notification.userId}`).emit('notification:desktop', {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        duration: config?.duration ?? 5000,
+        sound: config?.sound ?? true,
+        position: config?.position ?? 'top-right',
+        link: notification.link,
+        timestamp: notification.timestamp
+      });
+
+      this.io.to(`user:${notification.userId}`).emit('notification', event);
+
+      const duration = Date.now() - startTime;
+      methodLogger.info('Desktop notification sent', {
+        timing: { total: duration },
+        config: {
+          duration: config?.duration,
+          sound: config?.sound,
+          position: config?.position
+        }
+      });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        timing: { total: duration }
+      };
+      methodLogger.error('Failed to send desktop notification', metadata);
+      throw new ApiError('Failed to send desktop notification', 500);
+    }
   }
 
   private async sendGotifyNotification(
     notification: NotificationEntity,
     preferences: NotificationPreferences
   ): Promise<void> {
+    const startTime = Date.now();
+    const methodLogger = this.logger.withContext({
+      operation: 'sendGotifyNotification',
+      userId: notification.userId,
+      notificationId: notification.id
+    });
+
     try {
       if (!this.gotifyUrl || !this.gotifyToken) {
-        loggerLoggingManager.getInstance().();
+        methodLogger.warn('Gotify not configured', {
+          hasUrl: Boolean(this.gotifyUrl),
+          hasToken: Boolean(this.gotifyToken)
+        });
         return;
       }
+
+      methodLogger.debug('Sending Gotify notification');
 
       const channelConfig = preferences.channels[NotificationChannel.Gotify]?.config as GotifyChannelConfig;
       
@@ -177,9 +256,18 @@ export class NotificationDeliveryService {
 
       this.io.to(`user:${notification.userId}`).emit('notification', event);
 
-      loggerLoggingManager.getInstance().();
+      const duration = Date.now() - startTime;
+      methodLogger.info('Gotify notification sent', {
+        timing: { total: duration },
+        priority: message.priority
+      });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      const duration = Date.now() - startTime;
+      const metadata: LogMetadata = {
+        error: error instanceof Error ? error : new Error(String(error)),
+        timing: { total: duration }
+      };
+      methodLogger.error('Failed to send Gotify notification', metadata);
       throw new ApiError('Failed to send Gotify notification', 500);
     }
   }
@@ -189,29 +277,49 @@ export class NotificationDeliveryService {
     preferences: NotificationPreferences,
     channel: NotificationChannel
   ): boolean {
+    const methodLogger = this.logger.withContext({
+      operation: 'shouldDeliverNotification',
+      userId: notification.userId,
+      notificationId: notification.id,
+      channel
+    });
+
     // Check if notifications are muted globally
     if (preferences.muted) {
+      methodLogger.debug('Notifications muted globally');
       return false;
     }
 
     // Check if muted temporarily
     if (preferences.mutedUntil && new Date() < preferences.mutedUntil) {
+      methodLogger.debug('Notifications temporarily muted', {
+        mutedUntil: preferences.mutedUntil
+      });
       return false;
     }
 
     // Check channel preferences
     const channelPrefs = preferences.channels[channel];
     if (!channelPrefs?.enabled) {
+      methodLogger.debug('Channel disabled', { channel });
       return false;
     }
 
     // Check if notification type is enabled for this channel
     if (channelPrefs.types.length > 0 && !channelPrefs.types.includes(notification.type)) {
+      methodLogger.debug('Notification type not enabled for channel', {
+        type: notification.type,
+        channel,
+        enabledTypes: channelPrefs.types
+      });
       return false;
     }
 
     // Check alert type preferences
     if (!preferences.alertTypes[notification.type]) {
+      methodLogger.debug('Alert type disabled', {
+        type: notification.type
+      });
       return false;
     }
 
@@ -228,20 +336,25 @@ export class NotificationDeliveryService {
         const endTime = parseInt(quietHours.end?.replace(':', '') || '0000');
         
         if (startTime <= currentTime && currentTime <= endTime) {
+          methodLogger.debug('In quiet hours', {
+            currentTime: `${now.getHours()}:${now.getMinutes()}`,
+            quietHours: {
+              start: quietHours.start,
+              end: quietHours.end,
+              days: quietHours.days
+            }
+          });
           return false;
         }
       }
     }
 
+    methodLogger.debug('Notification delivery allowed', { channel });
     return true;
   }
 }
 
-// We'll create the delivery service instance when we have access to the socket.io server
-export let deliveryService: NotificationDeliveryService;
-
-export function initializeDeliveryService(io: SocketIOServer) {
-  deliveryService = new NotificationDeliveryService(io);
-}
-
-
+// Export a factory function instead of instance
+export const createDeliveryService = (io: SocketIOServer, logManager?: LoggingManager): NotificationDeliveryService => {
+  return new NotificationDeliveryService(io, logManager);
+};

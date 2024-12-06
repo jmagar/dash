@@ -1,7 +1,14 @@
 import type { NotificationEntity, NotificationType, NotificationPreferences } from '../../../types/notifications';
 
+// Minimum required fields for a notification input
+export interface NotificationInput extends Partial<NotificationEntity> {
+  id: string;
+  userId: string;
+  type: NotificationType;
+}
+
 export interface BatchQueue {
-  notifications: Partial<NotificationEntity>[];
+  notifications: NotificationInput[];
   timer: NodeJS.Timeout | null;
   lastProcessed: Date;
 }

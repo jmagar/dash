@@ -1,57 +1,102 @@
-import type { ApiResult } from '../../types/api-shared';
-import type { LogMetadata } from '../../types/logger';
+import type { LogMetadata, LogContext } from '../../types/logger';
+import { LoggingManager } from '../managers/LoggingManager';
+import { LoggerAdapter } from './logging/logger.adapter';
+import { extractErrorMessage, createApiError, ApiError } from '../../types/error';
 
-export interface ApiError extends Error {
-  status: number;
-  metadata?: LogMetadata;
-}
+// Re-export error types and functions
+export { createApiError, ApiError };
 
-/**
- * Create an API error with status code and metadata
- */
-export function createApiError(
-  message: string,
-  status = 500,
-  metadata?: LogMetadata,
-): ApiError {
-  const error = new Error(message) as ApiError;
-  error.status = status;
-  error.metadata = metadata;
-  return error;
-}
+// Create a singleton logger for error handling
+const errorLogger = new LoggerAdapter(LoggingManager.getInstance(), {
+  component: 'ErrorHandler',
+  service: 'ErrorService'
+});
 
 /**
- * Convert any error to a standardized API response
+ * Log an error with proper context and metadata
  */
-export function handleApiError<T>(error: unknown, defaultStatus = 500): ApiResult<T> {
-  if (error instanceof Error) {
-    const apiError = error as ApiError;
-    return {
-      success: false,
-      error: apiError.message,
-      status: apiError.status || defaultStatus,
-      metadata: apiError.metadata,
-    };
-  }
+export function logError(error: unknown, context: string): void {
+  const methodLogger = errorLogger.withContext({
+    operation: 'logError',
+    context
+  });
 
-  if (typeof error === 'string') {
-    return {
-      success: false,
-      error,
-      status: defaultStatus,
-    };
-  }
-
-  return {
-    success: false,
-    error: 'An unexpected error occurred',
-    status: defaultStatus,
+  const metadata: LogMetadata = {
+    error: error instanceof Error ? error : new Error(String(error)),
+    context
   };
+
+  if (error instanceof Error) {
+    if ('status' in error) {
+      metadata.status = (error as { status: number }).status;
+    }
+    if ('cause' in error) {
+      metadata.cause = (error as { cause: unknown }).cause;
+    }
+    if ('metadata' in error) {
+      Object.assign(metadata, (error as { metadata: LogMetadata }).metadata);
+    }
+  }
+
+  methodLogger.error('Error occurred', metadata);
 }
 
 /**
- * Check if an error is an API error
+ * Log an error with additional context and return a formatted error message
  */
-export function isApiError(error: unknown): error is ApiError {
-  return error instanceof Error && 'status' in error;
+export function handleError(error: unknown, context: string): string {
+  logError(error, context);
+  return extractErrorMessage(error);
+}
+
+/**
+ * Log an error with timing information
+ */
+export function logErrorWithTiming(error: unknown, context: string, startTime: number): void {
+  const duration = Date.now() - startTime;
+  const methodLogger = errorLogger.withContext({
+    operation: 'logErrorWithTiming',
+    context
+  });
+
+  const metadata: LogMetadata = {
+    error: error instanceof Error ? error : new Error(String(error)),
+    context,
+    timing: { total: duration }
+  };
+
+  if (error instanceof Error) {
+    if ('status' in error) {
+      metadata.status = (error as { status: number }).status;
+    }
+    if ('cause' in error) {
+      metadata.cause = (error as { cause: unknown }).cause;
+    }
+    if ('metadata' in error) {
+      Object.assign(metadata, (error as { metadata: LogMetadata }).metadata);
+    }
+  }
+
+  methodLogger.error('Operation failed', metadata);
+}
+
+/**
+ * Create a logger context with error information
+ */
+export function createErrorContext(error: unknown, baseContext: LogContext = {}): LogContext {
+  const context: LogContext = { ...baseContext };
+
+  if (error instanceof Error) {
+    context.error = error.message;
+    if ('status' in error) {
+      context.status = (error as { status: number }).status;
+    }
+    if ('code' in error) {
+      context.code = (error as { code: string }).code;
+    }
+  } else {
+    context.error = String(error);
+  }
+
+  return context;
 }

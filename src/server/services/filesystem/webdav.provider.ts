@@ -1,56 +1,57 @@
-import { createClient, WebDAVClient, FileStat } from 'webdav';
+import { createClient, WebDAVClient } from 'webdav';
 import { FileSystemProvider, FileSystemCredentials, FileSystemType, FileSystemStats } from './types';
-import { FileItem } from '../../../types/models-shared';
-import { logger } from '../../utils/logger';
-import { LoggingManager } from '../../managers/utils/LoggingManager';
+import { LoggingService } from '../../services/logging/logging.service';
+
+const logger = new LoggingService({ component: 'WebDAVProvider' });
 
 export class WebDAVProvider implements FileSystemProvider {
   readonly type = 'webdav' as FileSystemType;
   private client: WebDAVClient | null = null;
+  private baseUrl: string | null = null;
+  private credentials: FileSystemCredentials | null = null;
 
-  async connect(credentials: FileSystemCredentials & { baseUrl: string }): Promise<void> {
-    if (!credentials.baseUrl) {
-      throw new Error('Missing required WebDAV credentials');
+  async connect(): Promise<void> {
+    if (!this.credentials?.url) {
+      throw new Error('WebDAV credentials not configured');
     }
 
     try {
-      this.client = createClient(credentials.baseUrl, {
-        username: credentials.username,
-        password: credentials.password,
+      this.baseUrl = this.credentials.url;
+      this.client = createClient(this.baseUrl, {
+        username: this.credentials.username,
+        password: this.credentials.password
       });
 
       // Test connection
       await this.client.getDirectoryContents('/');
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to connect to WebDAV server', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        baseUrl: this.baseUrl
+      });
       this.client = null;
       throw error;
     }
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): Promise<void> {
     this.client = null;
+    this.baseUrl = null;
+    this.credentials = null;
+    return Promise.resolve();
   }
 
-  async listFiles(path: string): Promise<FileItem[]> {
+  async list(path: string): Promise<string[]> {
     if (!this.client) throw new Error('Not connected');
 
     try {
-      const contents = await this.client.getDirectoryContents(path) as FileStat[];
-      return contents.map(item => ({
-        name: item.basename,
-        path: `${path}/${item.basename}`.replace(/\/+/g, '/'),
-        size: item.size,
-        modifiedTime: new Date(item.lastmod),
-        isDirectory: item.type === 'directory',
-        type: item.type === 'directory' ? 'directory' : 'file',
-        metadata: {
-          etag: item.etag,
-          mimeType: item.type === 'directory' ? 'directory' : item.mime || 'application/octet-stream'
-        }
-      }));
+      const contents = await this.client.getDirectoryContents(path);
+      return contents.map(item => item.basename);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to list files', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -63,9 +64,15 @@ export class WebDAVProvider implements FileSystemProvider {
       if (response instanceof ArrayBuffer) {
         return Buffer.from(response);
       }
-      return Buffer.from(response as Buffer);
+      if (Buffer.isBuffer(response)) {
+        return response;
+      }
+      return Buffer.from(response);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to read file', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -76,7 +83,10 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.putFileContents(path, content);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to write file', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -87,7 +97,10 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.deleteFile(path);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to delete file', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -98,7 +111,11 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.moveFile(oldPath, newPath);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to rename file', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        oldPath,
+        newPath
+      });
       throw error;
     }
   }
@@ -109,7 +126,10 @@ export class WebDAVProvider implements FileSystemProvider {
     try {
       await this.client.createDirectory(path);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to create directory', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -118,44 +138,22 @@ export class WebDAVProvider implements FileSystemProvider {
     if (!this.client) throw new Error('Not connected');
 
     try {
-      const stat = await this.client.stat(path) as FileStat;
-      const modTime = new Date(stat.lastmod).getTime();
-
+      const stat = await this.client.stat(path);
       return {
         size: stat.size || 0,
-        mtime: Math.floor(modTime / 1000),  // Convert to seconds
-        mode: 0o644, // WebDAV doesn't provide Unix permissions
-        modTime: modTime,
-        owner: '', // WebDAV doesn't provide ownership info
-        group: '', // WebDAV doesn't provide group info
         isDirectory: stat.type === 'directory',
         isFile: stat.type === 'file',
-        permissions: '644' // Default permissions since WebDAV doesn't provide this
+        isSymbolicLink: false, // WebDAV doesn't support symlinks
+        mtime: new Date(stat.lastmod),
+        atime: new Date(stat.lastmod), // WebDAV only provides lastmod
+        ctime: new Date(stat.lastmod), // WebDAV only provides lastmod
+        birthtime: new Date(stat.lastmod) // WebDAV only provides lastmod
       };
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async copyFile(sourcePath: string, targetPath: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      await this.client.copyFile(sourcePath, targetPath);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
-      throw error;
-    }
-  }
-
-  async moveFile(sourcePath: string, targetPath: string): Promise<void> {
-    if (!this.client) throw new Error('Not connected');
-
-    try {
-      await this.client.moveFile(sourcePath, targetPath);
-    } catch (error) {
-      loggerLoggingManager.getInstance().();
+      logger.error('Failed to get file stats', {
+        error: error instanceof Error ? error : new Error(String(error)),
+        path
+      });
       throw error;
     }
   }
@@ -177,14 +175,7 @@ export class WebDAVProvider implements FileSystemProvider {
     }
   }
 
-  async test(): Promise<boolean> {
-    try {
-      await this.stat('/');
-      return true;
-    } catch {
-      return false;
-    }
+  setCredentials(credentials: FileSystemCredentials): void {
+    this.credentials = credentials;
   }
 }
-
-

@@ -7,19 +7,14 @@ export * from './fileExplorer.client';
 // Docker API
 export {
   listContainers,
-  getContainerLogs,
+  createContainer,
   startContainer,
   stopContainer,
   restartContainer,
   removeContainer,
+  inspectContainer,
   getContainerStats,
-  getStacks,
-  createStack,
-  deleteStack,
-  startStack,
-  stopStack,
-  getStackComposeFile,
-  updateStackComposeFile,
+  getContainerLogs,
 } from './docker.client';
 
 // Hosts API
@@ -40,6 +35,12 @@ export * from './packageManager.client';
 
 // Remote Execution API
 export * from './remoteExecution.client';
+
+// Chat API
+export * from './chat.client';
+
+// Preferences API
+export * from './preferences.client';
 
 // Export the API client
 export { api } from './api';

@@ -2,17 +2,19 @@ import { Client as SSHClient } from 'ssh2';
 import type { QueryResult } from 'pg';
 import type { Host as BaseHost } from '../../../types/host';
 import type { AgentState } from '../agent/agent.types';
+import type { EmergencyOperations, OperationResult as EmergencyOperationResult } from './emergency/types';
+import { ServiceStatus } from '../../../types/status';
 
 /**
  * Host states throughout its lifecycle
  */
 export enum HostState {
-  UNINITIALIZED = 'offline',    // Initial state, no agent
-  INSTALLING = 'installing',    // Agent being installed
-  ACTIVE = 'online',           // Agent running and connected
-  UNREACHABLE = 'offline',     // Can't connect via SSH or agent
-  MAINTENANCE = 'offline',      // Under maintenance
-  ERROR = 'error'             // Error state
+  UNINITIALIZED = ServiceStatus.INACTIVE,    // Initial state, no agent
+  INSTALLING = ServiceStatus.STARTING,       // Agent being installed
+  ACTIVE = ServiceStatus.ACTIVE,            // Agent running and connected
+  UNREACHABLE = ServiceStatus.INACTIVE,     // Can't connect via SSH or agent
+  MAINTENANCE = ServiceStatus.INACTIVE,      // Under maintenance
+  ERROR = ServiceStatus.ERROR              // Error state
 }
 
 /**
@@ -115,15 +117,6 @@ export interface OperationResult<T = void> {
 }
 
 /**
- * Emergency operations when agent is unavailable
- */
-export interface EmergencyOperations {
-  restart(): Promise<void>;
-  killProcess(pid: number): Promise<void>;
-  checkConnectivity(): Promise<boolean>;
-}
-
-/**
  * Agent installation options
  */
 export interface InstallOptions {
@@ -152,29 +145,29 @@ export interface HostServiceEvents {
 /**
  * Map host state to status
  */
-export function mapStateToStatus(state: HostState): BaseHost['status'] {
+export function mapStateToStatus(state: HostState): ServiceStatus {
   switch (state) {
     case HostState.ACTIVE:
-      return 'online';
+      return ServiceStatus.ACTIVE;
     case HostState.ERROR:
-      return 'error';
+      return ServiceStatus.ERROR;
     case HostState.INSTALLING:
-      return 'installing';
+      return ServiceStatus.STARTING;
     default:
-      return 'offline';
+      return ServiceStatus.INACTIVE;
   }
 }
 
 /**
  * Map status to host state
  */
-export function mapStatusToState(status: BaseHost['status']): HostState {
+export function mapStatusToState(status: ServiceStatus): HostState {
   switch (status) {
-    case 'online':
+    case ServiceStatus.ACTIVE:
       return HostState.ACTIVE;
-    case 'error':
+    case ServiceStatus.ERROR:
       return HostState.ERROR;
-    case 'installing':
+    case ServiceStatus.STARTING:
       return HostState.INSTALLING;
     default:
       return HostState.UNREACHABLE;

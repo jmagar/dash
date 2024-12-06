@@ -1,7 +1,11 @@
-﻿import { logger } from '../logger';
 import type { LogMetadata } from '../../../types/logger';
 import { ApiError } from '../../../types/error';
-import { LoggingManager } from '../logging/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggerAdapter } from '../logging/logger.adapter';
+
+const logger = new LoggerAdapter(LoggingManager.getInstance(), {
+  component: 'ErrorHandler'
+});
 
 export interface ErrorContext {
   code?: string;
@@ -24,10 +28,13 @@ export function handleError(
   };
 
   if (error instanceof ApiError) {
-    metadata.details = error.details;
+    metadata.cause = error.cause;
+    if (error.metadata) {
+      Object.assign(metadata, error.metadata);
+    }
   }
 
-  loggerLoggingManager.getInstance().();
+  logger.error('Error occurred', metadata);
 }
 
 /**
@@ -66,4 +73,3 @@ export function createValidationError(
     details
   });
 }
-

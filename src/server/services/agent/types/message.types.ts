@@ -1,17 +1,24 @@
 import { z } from 'zod';
-import type { AgentStatus } from '../../../../types/agent-config';
 import { ERROR_CODES } from '../utils/constants';
+import { LoggingManager } from '../../../managers/LoggingManager';
+import { LoggerAdapter } from '../../../utils/logging/logger.adapter';
+import type { Logger, LogMetadata, LogContext } from '../../../../types/logger';
 import { 
-import { LoggingManager } from '../../../managers/utils/LoggingManager';
-  agentInfoSchema, 
-  agentMetricsSchema, 
-  agentCommandResultSchema 
+  AgentInfoSchema, 
+  AgentMetricsSchema, 
+  AgentCommandResultSchema 
 } from '../utils/validation';
+
+// Create logger instance with proper context
+const baseLogger = LoggingManager.getInstance();
+const logger = new LoggerAdapter(baseLogger, {
+  component: 'MessageTypes',
+  service: 'AgentService'
+}) as Logger;
 
 // Branded types for type safety
 const UUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const messageIdSchema = z.string().uuid().brand<'MessageId'>();
-type MessageId = z.infer<typeof messageIdSchema>;
 
 // Base message schema with strict validation
 const baseMessageSchema = z.object({
@@ -20,38 +27,38 @@ const baseMessageSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
   correlationId: z.string().uuid().optional(),
   retryCount: z.number().int().min(0).optional()
-}).strict().readonly();
+}).strict();
 
 type BaseMessage = z.infer<typeof baseMessageSchema>;
 
 // Message payload schemas with strict validation
 const registerPayloadSchema = z.object({
-  info: agentInfoSchema,
-  capabilities: z.array(z.string()).min(1).readonly(),
+  info: AgentInfoSchema,
+  capabilities: z.array(z.string()).min(1),
   metadata: z.record(z.string(), z.unknown()).optional()
-}).strict().readonly();
+}).strict();
 
 const metricsPayloadSchema = z.object({
-  metrics: agentMetricsSchema,
+  metrics: AgentMetricsSchema,
   interval: z.number().int().positive(),
-  tags: z.array(z.string()).readonly().optional()
-}).strict().readonly();
+  tags: z.array(z.string()).optional()
+}).strict();
 
 const commandPayloadSchema = z.object({
   command: z.string().min(1),
-  args: z.array(z.string()).readonly().optional(),
+  args: z.array(z.string()).optional(),
   timeout: z.number().positive().optional(),
   cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
   shell: z.boolean().optional()
-}).strict().readonly();
+}).strict();
 
 const commandResultPayloadSchema = z.object({
-  result: agentCommandResultSchema,
+  result: AgentCommandResultSchema,
   duration: z.number().positive(),
   exitCode: z.number().int(),
   signal: z.string().optional()
-}).strict().readonly();
+}).strict();
 
 const errorPayloadSchema = z.object({
   code: z.nativeEnum(ERROR_CODES),
@@ -60,7 +67,7 @@ const errorPayloadSchema = z.object({
   stack: z.string().optional(),
   source: z.string().optional(),
   severity: z.enum(['low', 'medium', 'high', 'critical']).optional()
-}).strict().readonly();
+}).strict();
 
 // Message type literals for discriminated union
 const MESSAGE_TYPES = {
@@ -73,47 +80,61 @@ const MESSAGE_TYPES = {
 
 type MessageType = typeof MESSAGE_TYPES[keyof typeof MESSAGE_TYPES];
 
-// Message schemas with proper composition
-const messageSchemas = {
-  [MESSAGE_TYPES.register]: z.object({
-    type: z.literal(MESSAGE_TYPES.register),
-    payload: registerPayloadSchema
-  }).strict().readonly(),
-  [MESSAGE_TYPES.metrics]: z.object({
-    type: z.literal(MESSAGE_TYPES.metrics),
-    payload: metricsPayloadSchema
-  }).strict().readonly(),
-  [MESSAGE_TYPES.command]: z.object({
-    type: z.literal(MESSAGE_TYPES.command),
-    payload: commandPayloadSchema
-  }).strict().readonly(),
-  [MESSAGE_TYPES.command_result]: z.object({
-    type: z.literal(MESSAGE_TYPES.command_result),
-    payload: commandResultPayloadSchema
-  }).strict().readonly(),
-  [MESSAGE_TYPES.error]: z.object({
-    type: z.literal(MESSAGE_TYPES.error),
-    payload: errorPayloadSchema
-  }).strict().readonly()
-} as const;
-
-type MessageSchemas = typeof messageSchemas;
-type MessagePayloadSchemas = {
-  [K in MessageType]: z.infer<MessageSchemas[K]['shape']['payload']>
-};
-
-const messagePayloadSchema = z.discriminatedUnion('type', Object.values(messageSchemas));
-export const messageSchema = baseMessageSchema.merge(messagePayloadSchema).readonly();
+// Create full message schema
+export const messageSchema = z.object({
+  ...baseMessageSchema.shape,
+  type: z.enum([
+    MESSAGE_TYPES.register,
+    MESSAGE_TYPES.metrics,
+    MESSAGE_TYPES.command,
+    MESSAGE_TYPES.command_result,
+    MESSAGE_TYPES.error
+  ]),
+  payload: z.union([
+    registerPayloadSchema,
+    metricsPayloadSchema,
+    commandPayloadSchema,
+    commandResultPayloadSchema,
+    errorPayloadSchema
+  ])
+}).strict();
 
 // Export inferred types with proper type safety
 export type Message = z.infer<typeof messageSchema>;
-export type MessagePayload<T extends MessageType> = MessagePayloadSchemas[T];
+export type MessagePayload<T extends MessageType> = T extends typeof MESSAGE_TYPES.register
+  ? z.infer<typeof registerPayloadSchema>
+  : T extends typeof MESSAGE_TYPES.metrics
+  ? z.infer<typeof metricsPayloadSchema>
+  : T extends typeof MESSAGE_TYPES.command
+  ? z.infer<typeof commandPayloadSchema>
+  : T extends typeof MESSAGE_TYPES.command_result
+  ? z.infer<typeof commandResultPayloadSchema>
+  : T extends typeof MESSAGE_TYPES.error
+  ? z.infer<typeof errorPayloadSchema>
+  : never;
 
 // Type guards with proper error handling
 export function isMessage(data: unknown): data is Message {
+  const context: LogContext = {
+    operation: 'isMessage',
+    component: 'MessageTypes'
+  };
+  const methodLogger = logger.withContext(context);
+
   const result = messageSchema.safeParse(data);
   if (!result.success) {
-    consoleLoggingManager.getInstance().());
+    const metadata: LogMetadata = {
+      error: new Error(result.error.message),
+      component: 'MessageTypes',
+      operation: 'isMessage',
+      validationErrors: result.error.errors
+    };
+    methodLogger.error('Message validation failed', metadata);
+  } else {
+    methodLogger.debug('Message validation successful', {
+      component: 'MessageTypes',
+      operation: 'isMessage'
+    });
   }
   return result.success;
 }
@@ -127,57 +148,150 @@ export function isMessageType<T extends MessageType>(
 
 // Validation functions with proper error handling
 export function validateMessage(data: unknown): z.SafeParseReturnType<unknown, Message> {
-  return messageSchema.safeParse(data);
+  const context: LogContext = {
+    operation: 'validateMessage',
+    component: 'MessageTypes'
+  };
+  const methodLogger = logger.withContext(context);
+
+  const result = messageSchema.safeParse(data);
+  if (!result.success) {
+    const metadata: LogMetadata = {
+      error: new Error(result.error.message),
+      component: 'MessageTypes',
+      operation: 'validateMessage',
+      validationErrors: result.error.errors
+    };
+    methodLogger.warn('Message validation failed', metadata);
+  }
+  return result;
 }
 
 export function validateMessagePayload<T extends MessageType>(
-  message: Message,
-  type: T
+  type: T,
+  payload: unknown
 ): z.SafeParseReturnType<unknown, MessagePayload<T>> {
-  if (!isMessageType(message, type)) {
-    return {
-      success: false,
-      error: new z.ZodError([{
-        code: z.ZodIssueCode.invalid_type,
-        expected: type,
-        received: message.type,
-        path: ['type'],
-        message: `Expected message type '${type}' but received '${message.type}'`
-      }])
-    };
-  }
+  const context: LogContext = {
+    operation: 'validateMessagePayload',
+    component: 'MessageTypes',
+    messageType: type
+  };
+  const methodLogger = logger.withContext(context);
 
-  return messageSchemas[type].shape.payload.safeParse(message.payload);
+  const getSchema = (t: T) => {
+    switch (t) {
+      case MESSAGE_TYPES.register:
+        return registerPayloadSchema;
+      case MESSAGE_TYPES.metrics:
+        return metricsPayloadSchema;
+      case MESSAGE_TYPES.command:
+        return commandPayloadSchema;
+      case MESSAGE_TYPES.command_result:
+        return commandResultPayloadSchema;
+      case MESSAGE_TYPES.error:
+        return errorPayloadSchema;
+      default:
+        throw new Error(`Invalid message type: ${t}`);
+    }
+  };
+
+  try {
+    const schema = getSchema(type);
+    const result = schema.safeParse(payload);
+    if (!result.success) {
+      const metadata: LogMetadata = {
+        error: new Error(result.error.message),
+        component: 'MessageTypes',
+        operation: 'validateMessagePayload',
+        messageType: type,
+        validationErrors: result.error.errors
+      };
+      methodLogger.warn('Payload validation failed', metadata);
+    }
+    return result as z.SafeParseReturnType<unknown, MessagePayload<T>>;
+  } catch (error) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : new Error(String(error)),
+      component: 'MessageTypes',
+      operation: 'validateMessagePayload',
+      messageType: type
+    };
+    methodLogger.error('Schema lookup failed', metadata);
+    throw error;
+  }
 }
 
-// Message creation with proper type inference
+// Message creation with proper error handling and logging
 export function createMessage<T extends MessageType>(
   type: T,
   payload: MessagePayload<T>,
   options: Partial<Omit<BaseMessage, 'id' | 'timestamp'>> = {}
 ): Message & { type: T; payload: MessagePayload<T> } {
-  const id = crypto.randomUUID();
-  if (!UUIDRegex.test(id)) {
-    throw new Error('Failed to generate valid UUID');
-  }
-
-  const message = {
-    id: messageIdSchema.parse(id),
-    timestamp: new Date().toISOString(),
-    type,
-    payload,
-    ...options
+  const context: LogContext = {
+    operation: 'createMessage',
+    component: 'MessageTypes',
+    messageType: type
   };
-  
-  const result = messageSchema.safeParse(message);
-  if (!result.success) {
-    throw new Error(`Invalid message: ${result.error.message}`);
+  const methodLogger = logger.withContext(context);
+
+  try {
+    const startTime = Date.now();
+    const id = crypto.randomUUID();
+    if (!UUIDRegex.test(id)) {
+      const error = new Error('Failed to generate valid UUID');
+      methodLogger.error('UUID generation failed', {
+        error,
+        component: 'MessageTypes',
+        operation: 'createMessage',
+        generatedId: id
+      });
+      throw error;
+    }
+
+    const message = {
+      id: messageIdSchema.parse(id),
+      timestamp: new Date().toISOString(),
+      type,
+      payload,
+      ...options
+    };
+    
+    const result = messageSchema.safeParse(message);
+    if (!result.success) {
+      const metadata: LogMetadata = {
+        error: new Error(result.error.message),
+        component: 'MessageTypes',
+        operation: 'createMessage',
+        messageType: type,
+        validationErrors: result.error.errors
+      };
+      methodLogger.error('Message creation failed', metadata);
+      throw new Error(`Invalid message: ${result.error.message}`);
+    }
+    
+    const duration = Date.now() - startTime;
+    methodLogger.info('Message created successfully', {
+      component: 'MessageTypes',
+      operation: 'createMessage',
+      messageId: message.id,
+      correlationId: options.correlationId,
+      timing: { total: duration }
+    });
+
+    return result.data as Message & { type: T; payload: MessagePayload<T> };
+  } catch (error: unknown) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : new Error(String(error)),
+      component: 'MessageTypes',
+      operation: 'createMessage',
+      messageType: type
+    };
+    methodLogger.error('Message creation failed', metadata);
+    throw error;
   }
-  
-  return result.data as Message & { type: T; payload: MessagePayload<T> };
 }
 
-// Error message creation with proper type inference
+// Error message creation with proper logging
 export function createErrorMessage(
   code: keyof typeof ERROR_CODES,
   message: string,
@@ -189,26 +303,43 @@ export function createErrorMessage(
     correlationId?: string;
   } = {}
 ): Message & { type: 'error'; payload: MessagePayload<'error'> } {
-  const { correlationId, ...errorOptions } = options;
-  const errorPayload = errorPayloadSchema.parse({
-    code,
-    message,
-    ...errorOptions
-  });
-  
-  return createMessage('error', errorPayload, { correlationId });
+  const context: LogContext = {
+    operation: 'createErrorMessage',
+    component: 'MessageTypes',
+    errorCode: code
+  };
+  const methodLogger = logger.withContext(context);
+
+  try {
+    const startTime = Date.now();
+    const { correlationId, ...errorOptions } = options;
+    const errorPayload = {
+      code: ERROR_CODES[code],
+      message,
+      ...errorOptions
+    };
+    
+    const result = createMessage('error', errorPayload, { correlationId });
+    
+    const duration = Date.now() - startTime;
+    methodLogger.info('Error message created', {
+      component: 'MessageTypes',
+      operation: 'createErrorMessage',
+      messageId: result.id,
+      errorCode: code,
+      correlationId,
+      timing: { total: duration }
+    });
+
+    return result;
+  } catch (error: unknown) {
+    const metadata: LogMetadata = {
+      error: error instanceof Error ? error : new Error(String(error)),
+      component: 'MessageTypes',
+      operation: 'createErrorMessage',
+      errorCode: code
+    };
+    methodLogger.error('Error message creation failed', metadata);
+    throw error;
+  }
 }
-
-// Export schemas for reuse
-export {
-  messageIdSchema,
-  baseMessageSchema,
-  registerPayloadSchema,
-  metricsPayloadSchema,
-  commandPayloadSchema,
-  commandResultPayloadSchema,
-  errorPayloadSchema,
-  MESSAGE_TYPES
-};
-
-

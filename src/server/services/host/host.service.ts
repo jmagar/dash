@@ -5,15 +5,13 @@ import { LinuxInstaller } from './installers/linux';
 import { WindowsInstaller } from './installers/windows';
 import { DarwinInstaller } from './installers/darwin';
 import type { Host } from '../../../types/host';
-import type { AgentState } from '../agent/agent.types';
+import type { AgentInfo, AgentOperationResult } from '../agent/agent.types';
 import {
   HostState,
   HostServiceConfig,
   InstallOptions,
   OperationResult,
-  EmergencyOperations,
   CreateHostRequest,
-  UpdateHostRequest,
   SystemInfo,
   AgentInstaller,
   Database,
@@ -22,8 +20,14 @@ import {
   mapStateToStatus,
   mapStatusToState
 } from './host.types';
+import { EmergencyService } from './emergency/emergency.service';
+import type { EmergencyOperations } from './emergency/types';
 
 type InstallerMap = { [K in HostOS]: AgentInstaller };
+
+interface SSHOptions {
+  timeout?: number;
+}
 
 /**
  * Create a timeout promise
@@ -38,17 +42,31 @@ function createTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 export class HostService extends BaseService {
-  private readonly config: HostServiceConfig;
+  private readonly hostConfig: HostServiceConfig;
   private readonly agentService: AgentService;
   private readonly installers: InstallerMap;
-  private readonly db: Database;
+  private readonly hostDb: Database;
   private readonly currentUserId: string;
 
-  constructor(config: HostServiceConfig, agentService: AgentService, db: Database, userId: string) {
-    super();
-    this.config = config;
+  constructor(hostConfig: HostServiceConfig, agentService: AgentService, hostDb: Database, userId: string) {
+    super({
+      retryOptions: {
+        maxAttempts: 3,
+        initialDelay: 1000,
+        maxDelay: 10000,
+        factor: 2
+      },
+      sshOptions: {
+        timeout: hostConfig.ssh.timeout,
+        keepaliveInterval: hostConfig.ssh.keepaliveInterval
+      },
+      metricsEnabled: true,
+      loggingEnabled: true,
+      validation: { strict: true }
+    });
+    this.hostConfig = hostConfig;
     this.agentService = agentService;
-    this.db = db;
+    this.hostDb = hostDb;
     this.currentUserId = userId;
     this.installers = {
       linux: new LinuxInstaller(),
@@ -72,7 +90,7 @@ export class HostService extends BaseService {
    * Get a host by ID
    */
   async getHost(hostId: string): Promise<ExtendedHost | null> {
-    const result = await this.db.query<Host & { os: HostOS }>(
+    const result = await this.hostDb.query<Host & { os: HostOS }>(
       'SELECT h.*, hi.os FROM hosts h LEFT JOIN host_info hi ON h.id = hi.host_id WHERE h.id = $1 AND h.user_id = $2',
       [hostId, this.currentUserId]
     );
@@ -87,7 +105,7 @@ export class HostService extends BaseService {
   async createHost(data: CreateHostRequest): Promise<OperationResult<ExtendedHost>> {
     try {
       // Create host record
-      const result = await this.db.query<Host>(
+      const result = await this.hostDb.query<Host>(
         `INSERT INTO hosts (
           user_id, name, hostname, port, username, password,
           status, created_at, updated_at
@@ -104,8 +122,12 @@ export class HostService extends BaseService {
         ]
       );
 
+      if (!result.rows[0]) {
+        throw new Error('Failed to create host record');
+      }
+
       // Store OS information
-      await this.db.query(
+      await this.hostDb.query(
         'INSERT INTO host_info (host_id, os) VALUES ($1, $2)',
         [result.rows[0].id, data.os]
       );
@@ -144,38 +166,37 @@ export class HostService extends BaseService {
       await this.updateHostState(hostId, HostState.INSTALLING);
       this.emit('agent:installing', hostId);
 
-      // Connect via SSH
-      await this.withSSH(
-        host,
-        async (client) => {
-          // Get system info
-          const systemInfo = await this.getSystemInfo(client);
+      // Connect via SSH and install
+      await this.executeWithSSH(host, async (client: SSHClient) => {
+        // Get system info
+        const systemInfo = await this.getSystemInfo(client);
 
-          // Get installer for OS
-          const installer = this.installers[systemInfo.os];
-          if (!installer) {
-            throw new Error(`No installer available for OS: ${systemInfo.os}`);
+        // Get installer for OS
+        const installer = this.installers[systemInfo.os];
+        if (!installer) {
+          throw new Error(`No installer available for OS: ${systemInfo.os}`);
+        }
+
+        // Install agent
+        await installer.install(host, client, {
+          version: options?.version || 'latest',
+          config: {
+            serverUrl: this.hostConfig.agent.serverUrl,
+            features: options?.config?.features || this.hostConfig.agent.defaultFeatures,
+            labels: options?.config?.labels,
           }
-
-          // Install agent
-          await installer.install(host, client, {
-            version: options?.version || 'latest',
-            config: {
-              serverUrl: this.config.agent.serverUrl,
-              features: options?.config?.features || this.config.agent.defaultFeatures,
-              labels: options?.config?.labels,
-            }
-          });
-        },
-        { timeout: options?.timeout }
-      );
+        });
+      }, { timeout: options?.timeout });
 
       // Wait for agent to connect
-      const agent = await this.waitForAgent(hostId, options?.timeout || this.config.agent.connectTimeout);
+      const agentResult = await this.waitForAgent(hostId, options?.timeout || this.hostConfig.agent.connectTimeout);
+      if (!agentResult.success || !agentResult.data) {
+        throw new Error('Agent failed to connect after installation');
+      }
 
       // Update host state
       await this.updateHostState(hostId, HostState.ACTIVE);
-      this.emit('agent:installed', hostId, agent);
+      this.emit('agent:installed', hostId, agentResult.data);
 
       return {
         success: true,
@@ -234,48 +255,12 @@ export class HostService extends BaseService {
    * Get emergency operations when agent is down
    */
   getEmergencyOperations(hostId: string): EmergencyOperations {
+    const emergencyService = new EmergencyService(this);
     return {
-      restart: async () => {
-        const host = await this.getHost(hostId);
-        if (!host) throw new Error('Host not found');
-
-        await this.withSSH(
-          host,
-          async (ssh) => {
-            if (host.os === 'windows') {
-              await this.executeCommand(ssh, 'shutdown /r /t 0');
-            } else {
-              await this.executeCommand(ssh, 'sudo shutdown -r now');
-            }
-          },
-          { timeout: this.config.ssh.timeout }
-        );
-      },
-
-      killProcess: async (pid: number) => {
-        const host = await this.getHost(hostId);
-        if (!host) throw new Error('Host not found');
-
-        await this.withSSH(
-          host,
-          async (ssh) => {
-            await this.executeCommand(ssh, `kill -9 ${pid}`);
-          },
-          { timeout: this.config.ssh.timeout }
-        );
-      },
-
-      checkConnectivity: async () => {
-        try {
-          const host = await this.getHost(hostId);
-          if (!host) return false;
-
-          await this.verifyConnection(host);
-          return true;
-        } catch {
-          return false;
-        }
-      }
+      restart: () => emergencyService.restart(hostId),
+      killProcess: (hostId: string, pid: number) => emergencyService.killProcess(hostId, pid),
+      checkConnectivity: () => emergencyService.checkConnectivity(hostId),
+      cleanup: () => emergencyService.cleanup()
     };
   }
 
@@ -283,12 +268,12 @@ export class HostService extends BaseService {
    * Verify SSH connection
    */
   private async verifyConnection(host: ExtendedHost): Promise<void> {
-    await this.withSSH(
+    await this.executeWithSSH(
       host,
-      async (ssh) => {
+      async (ssh: SSHClient) => {
         await this.executeCommand(ssh, 'echo "Connection test"');
       },
-      { timeout: this.config.ssh.timeout }
+      { timeout: this.hostConfig.ssh.timeout }
     );
   }
 
@@ -326,10 +311,21 @@ export class HostService extends BaseService {
   }
 
   /**
+   * Execute function with SSH connection
+   */
+  private async executeWithSSH<T>(
+    host: ExtendedHost,
+    fn: (client: SSHClient) => Promise<T>,
+    options?: SSHOptions
+  ): Promise<T> {
+    return this.sshService.withSSH(host.hostname, fn);
+  }
+
+  /**
    * Update host state
    */
   private async updateHostState(hostId: string, state: HostState): Promise<void> {
-    await this.db.query(
+    await this.hostDb.query(
       'UPDATE hosts SET status = $1, updated_at = NOW() WHERE id = $2',
       [mapStateToStatus(state), hostId]
     );
@@ -338,18 +334,18 @@ export class HostService extends BaseService {
   /**
    * Wait for agent to connect with polling
    */
-  private async waitForAgent(hostId: string, timeout: number): Promise<AgentState> {
+  private async waitForAgent(hostId: string, timeout: number): Promise<AgentOperationResult<AgentInfo>> {
     const pollInterval = 1000; // 1 second
-    const pollPromise = new Promise<AgentState>((resolve, reject) => {
+    const pollPromise = new Promise<AgentOperationResult<AgentInfo>>((resolve) => {
       const poll = async () => {
         try {
           const agent = await this.agentService.getAgent(hostId);
-          if (agent) {
+          if (agent.success && agent.data) {
             resolve(agent);
           } else {
             setTimeout(() => void poll(), pollInterval);
           }
-        } catch (error) {
+        } catch {
           setTimeout(() => void poll(), pollInterval);
         }
       };

@@ -227,7 +227,8 @@
     "postinstall": "npm run prisma:generate",
     "fix-types": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts",
     "fix-types:dry": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts --dry-run",
-    "fix-types:test": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts src/shared/dtos/base/__tests__"
+    "fix-types:test": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts src/shared/dtos/base/__tests__",
+    "check": "tsc -b && eslint . --ext .ts,.tsx --max-warnings 0"
   },
   "browserslist": {
     "production": [

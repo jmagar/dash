@@ -1,73 +1,96 @@
-import { BaseApiClient } from './base.client';
-import type { Bookmark } from '@prisma/client';
-import type { ApiResponse } from '../../types/express';
+import { BaseApiClient, type Endpoint } from './base.client';
+import type { Bookmark, BookmarkCreateDto, BookmarkUpdateDto } from '@server/routes/bookmarks/dto';
 
-interface BookmarkEndpoints {
-  LIST: string;
-  CREATE: string;
-  UPDATE: (hostId: string, path: string) => string;
-  DELETE: (hostId: string, path: string) => string;
-  ACCESS: (hostId: string, path: string) => string;
+interface BookmarksEndpoints extends Record<string, Endpoint> {
+  LIST: '/api/bookmarks';
+  CREATE: '/api/bookmarks';
+  GET: (id: string) => string;
+  UPDATE: (id: string) => string;
+  DELETE: (id: string) => string;
 }
 
-const BOOKMARK_ENDPOINTS: BookmarkEndpoints = {
+const BOOKMARKS_ENDPOINTS: BookmarksEndpoints = {
   LIST: '/api/bookmarks',
   CREATE: '/api/bookmarks',
-  UPDATE: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}`,
-  DELETE: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}`,
-  ACCESS: (hostId: string, path: string) => `/api/bookmarks/${hostId}/${encodeURIComponent(path)}/access`,
+  GET: (id: string) => `/api/bookmarks/${id}`,
+  UPDATE: (id: string) => `/api/bookmarks/${id}`,
+  DELETE: (id: string) => `/api/bookmarks/${id}`,
 };
 
-interface CreateBookmarkParams {
-  hostId: string;
-  path: string;
-  name: string;
-  isDirectory: boolean;
-  notes?: string;
-}
-
-interface UpdateBookmarkParams {
-  notes: string;
-}
-
-class BookmarkClient extends BaseApiClient<BookmarkEndpoints> {
+class BookmarksClient extends BaseApiClient<BookmarksEndpoints> {
   constructor() {
-    super(BOOKMARK_ENDPOINTS);
+    super(BOOKMARKS_ENDPOINTS);
   }
 
   async listBookmarks(): Promise<Bookmark[]> {
-    const response = await this.get<Bookmark[]>(this.getEndpoint('LIST'));
+    const response = await this.get<Bookmark[]>(
+      this.getEndpoint('LIST')
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to list bookmarks');
+    }
+
     return response.data;
   }
 
-  async createBookmark(params: CreateBookmarkParams): Promise<Bookmark> {
-    const response = await this.post<Bookmark>(this.getEndpoint('CREATE'), params);
+  async createBookmark(bookmark: BookmarkCreateDto): Promise<Bookmark> {
+    const response = await this.post<Bookmark>(
+      this.getEndpoint('CREATE'),
+      bookmark
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to create bookmark');
+    }
+
     return response.data;
   }
 
-  async updateBookmark(
-    hostId: string,
-    path: string,
-    params: UpdateBookmarkParams
-  ): Promise<Bookmark> {
-    const response = await this.put<Bookmark>(this.getEndpoint('UPDATE', hostId, path), params);
+  async getBookmark(id: string): Promise<Bookmark> {
+    const response = await this.get<Bookmark>(
+      this.getEndpoint('GET', id)
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to get bookmark');
+    }
+
     return response.data;
   }
 
-  async deleteBookmark(hostId: string, path: string): Promise<void> {
-    await this.delete<void>(this.getEndpoint('DELETE', hostId, path));
+  async updateBookmark(id: string, bookmark: BookmarkUpdateDto): Promise<Bookmark> {
+    const response = await this.put<Bookmark>(
+      this.getEndpoint('UPDATE', id),
+      bookmark
+    );
+
+    if (!response.data) {
+      throw new Error('Failed to update bookmark');
+    }
+
+    return response.data;
   }
 
-  async updateLastAccessed(hostId: string, path: string): Promise<void> {
-    await this.post<void>(this.getEndpoint('ACCESS', hostId, path));
+  async deleteBookmark(id: string): Promise<void> {
+    const response = await this.delete<void>(
+      this.getEndpoint('DELETE', id)
+    );
+
+    if (!response.success) {
+      throw new Error('Failed to delete bookmark');
+    }
   }
 }
 
-export const bookmarkClient = new BookmarkClient();
+// Create a single instance
+const bookmarksClient = new BookmarksClient();
+
+// Export bound methods
 export const {
   listBookmarks,
   createBookmark,
+  getBookmark,
   updateBookmark,
   deleteBookmark,
-  updateLastAccessed,
-} = bookmarkClient;
+} = bookmarksClient;

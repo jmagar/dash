@@ -21,7 +21,13 @@ export interface User {
   updatedAt: Date;
 }
 
-export { TokenPayloadDto, AccessTokenPayloadDto, RefreshTokenPayloadDto };
+export { 
+  TokenPayloadDto, 
+  AccessTokenPayloadDto, 
+  RefreshTokenPayloadDto,
+  AuthenticatedUserDto,
+  UserRole
+};
 
 export interface AuthContextType {
   user: AuthenticatedUserDto | null;
