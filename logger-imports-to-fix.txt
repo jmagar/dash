@@ -18,10 +18,10 @@ Services:
 - [✓] src/server/services/execution.service.ts
 - [✓] src/server/services/conversation.cache.ts
 - [✓] src/server/services/compression.service.ts
-- src/server/services/llm.ts
-- src/server/services/log.service.ts
-- src/server/services/metrics-storage.service.ts
-- src/server/services/settings.service.ts
+- [✓] src/server/services/llm.ts
+- [✓] src/server/services/log.service.ts (fixed: '../managers/LoggingManager')
+- [✓] src/server/services/metrics-storage.service.ts
+- [✓] src/server/services/settings.service.ts
 - src/server/services/ssh.service.ts
 - src/server/services/stream.service.ts
 - src/server/services/service-registry.ts

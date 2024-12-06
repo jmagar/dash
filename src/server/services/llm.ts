@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 import type { LogMetadata } from '../../types/logger';
 import config from '../config';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 
 // Initialize OpenAI client
 export const openai = new OpenAI({
@@ -23,11 +23,12 @@ interface OpenRouterResponse {
   choices: OpenRouterChoice[];
 }
 
-interface ErrorMetadata extends LogMetadata {
+type ErrorMetadata = LogMetadata & {
   error: string;
   provider?: string;
   model?: string;
-}
+  [key: string]: unknown;
+};
 
 interface OpenRouterRequestBody {
   model: string;
@@ -43,6 +44,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       input: text,
     });
 
+    if (!response.data[0]?.embedding) {
+      throw new Error('No embedding returned from OpenAI');
+    }
+
     return response.data[0].embedding;
   } catch (error) {
     const metadata: ErrorMetadata = {
@@ -55,9 +60,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   }
 }
 
-export async function generateCompletion(prompt: string, useOpenRouter = false): Promise<string> {
+export async function generateCompletion(prompt: string): Promise<string> {
   try {
-    if (useOpenRouter && config.openrouter.apiKey) {
+    if (config.openrouter.apiKey) {
       const body: OpenRouterRequestBody = {
         model: config.openrouter.model,
         messages: [{ role: 'user', content: prompt }],
@@ -78,8 +83,12 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
         throw new Error(`OpenRouter API error: ${response.statusText}`);
       }
 
-      const data: OpenRouterResponse = await response.json();
-      return data.choices[0]?.message?.content || '';
+      const data = (await response.json()) as OpenRouterResponse;
+      const content = data.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No content returned from OpenRouter');
+      }
+      return content;
 
     } else if (config.openai.apiKey) {
       const response = await openai.chat.completions.create({
@@ -89,7 +98,11 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
         temperature: config.openai.temperature,
       });
 
-      return response.choices[0]?.message?.content || '';
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No content returned from OpenAI');
+      }
+      return content;
 
     } else {
       throw new Error('No API key configured for OpenAI or OpenRouter');
@@ -98,17 +111,10 @@ export async function generateCompletion(prompt: string, useOpenRouter = false):
   } catch (error) {
     const metadata: ErrorMetadata = {
       error: error instanceof Error ? error.message : 'Unknown error',
-      provider: useOpenRouter ? 'OpenRouter' : 'OpenAI',
-      model: useOpenRouter ? config.openrouter.model : config.openai.model,
+      provider: config.openrouter.apiKey ? 'OpenRouter' : 'OpenAI',
+      model: config.openrouter.apiKey ? config.openrouter.model : config.openai.model,
     };
     LoggingManager.getInstance().error('Failed to generate completion', metadata);
     throw error;
   }
 }
-
-// Helper function to determine which service to use
-function shouldUseOpenRouter(): boolean {
-  return !!(config.openrouter.apiKey && !config.openai.apiKey);
-}
-
-

@@ -1,10 +1,21 @@
 import { Pool } from 'pg';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { BaseService } from './base.service';
 import type { Settings, SettingsPath, SettingsValue, SettingsResponse, SettingsError, UserPreferences, AdminSettings } from '../../types/settings';
 import { db } from '../db';
 import { redis } from '../redis';
 import { NotFoundError, ValidationError } from '../errors';
+
+interface SettingsRow {
+  category: string;
+  subcategory: string;
+  settings: Record<string, unknown>;
+}
+
+interface AdminSettingsRow {
+  category: string;
+  settings: Record<string, unknown>;
+}
 
 export class SettingsService extends BaseService {
   private pool: Pool;
@@ -32,10 +43,10 @@ export class SettingsService extends BaseService {
     return `settings:${userId}:${category}:${subcategory}`;
   }
 
-  private async getFromCache(cacheKey: string): Promise<any | null> {
+  private async getFromCache<T>(cacheKey: string): Promise<T | null> {
     try {
       const cached = await redis.get(cacheKey);
-      return cached ? JSON.parse(cached) : null;
+      return cached ? JSON.parse(cached) as T : null;
     } catch (error) {
       LoggingManager.getInstance().warn('Failed to get settings from cache', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -46,7 +57,7 @@ export class SettingsService extends BaseService {
     }
   }
 
-  private async setInCache(cacheKey: string, value: any, ttl = 3600): Promise<void> {
+  private async setInCache<T>(cacheKey: string, value: T, ttl = 3600): Promise<void> {
     try {
       await redis.setex(cacheKey, ttl, JSON.stringify(value));
     } catch (error) {
@@ -72,7 +83,7 @@ export class SettingsService extends BaseService {
         WHERE user_id = $1
       `;
 
-      const { rows } = await this.pool.query(query, [userId]);
+      const { rows } = await this.pool.query<SettingsRow>(query, [userId]);
       
       // Transform rows into settings object
       const settings: Settings['user'] = {
@@ -84,8 +95,8 @@ export class SettingsService extends BaseService {
 
       rows.forEach(row => {
         if (row.category in settings) {
-          settings[row.category] = {
-            ...settings[row.category],
+          settings[row.category as keyof Settings['user']] = {
+            ...settings[row.category as keyof Settings['user']],
             [row.subcategory]: row.settings
           };
         }
@@ -136,7 +147,7 @@ export class SettingsService extends BaseService {
         settingsValue = { [rest[i]]: settingsValue };
       }
 
-      const { rows } = await this.pool.query(query, [
+      const { rows } = await this.pool.query<SettingsRow>(query, [
         userId,
         category,
         subcategory,
@@ -176,7 +187,7 @@ export class SettingsService extends BaseService {
         FROM admin_settings
       `;
 
-      const { rows } = await this.pool.query(query);
+      const { rows } = await this.pool.query<AdminSettingsRow>(query);
       
       // Transform rows into settings object
       const settings: Settings['admin'] = {
@@ -188,7 +199,7 @@ export class SettingsService extends BaseService {
 
       rows.forEach(row => {
         if (row.category in settings) {
-          settings[row.category] = row.settings;
+          settings[row.category as keyof Settings['admin']] = row.settings;
         }
       });
 
@@ -234,7 +245,7 @@ export class SettingsService extends BaseService {
         settingsValue = { [rest[i]]: settingsValue };
       }
 
-      const { rows } = await this.pool.query(query, [category, settingsValue]);
+      const { rows } = await this.pool.query<AdminSettingsRow>(query, [category, settingsValue]);
 
       // Invalidate cache
       const cacheKey = `admin:settings:${category}`;
@@ -303,5 +314,3 @@ export class SettingsService extends BaseService {
 }
 
 export const settingsService = SettingsService.getInstance();
-
-
