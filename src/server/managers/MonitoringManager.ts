@@ -258,9 +258,9 @@ export class MonitoringManager extends BaseService {
   public registerHealthCheck(
     name: string,
     check: () => Promise<boolean>,
-    interval: number = 60000,
+    interval = 60000,
     timeout: number = this.config.globalHealthCheckTimeout,
-    failureThreshold: number = 3
+    failureThreshold = 3
   ): string {
     const healthCheck: HealthCheck = {
       id: uuidv4(),

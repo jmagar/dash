@@ -31,7 +31,7 @@ export class BasePermissionDto {
   @ApiProperty({ description: 'Resource identifier' })
   @IsString()
   @IsNotEmpty()
-  resourceId: string = '*';
+  resourceId = '*';
 
   @ApiProperty({ description: 'Permission granted timestamp' })
   @IsDate()

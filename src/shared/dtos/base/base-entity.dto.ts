@@ -10,14 +10,14 @@ export class AuditInfo {
     createdAt: Date = new Date();
     @ApiProperty({ description: 'Who created the entity' })
     @IsString()
-    createdBy: string = 'system';
+    createdBy = 'system';
     @ApiProperty({ description: 'When the entity was last updated' })
     @Type(() => Date)
     @IsDate()
     updatedAt: Date = new Date();
     @ApiProperty({ description: 'Who last updated the entity' })
     @IsString()
-    updatedBy: string = 'system';
+    updatedBy = 'system';
     @ApiProperty({ description: 'When the entity was deleted (if applicable)' })
     @Type(() => Date)
     @IsDate()
@@ -71,7 +71,7 @@ export class BaseEntityDto {
     id: string = crypto.randomUUID();
     @ApiProperty({ description: 'Tenant identifier for multi-tenancy support' })
     @IsString()
-    tenantId: string = 'default';
+    tenantId = 'default';
     @ApiProperty({ description: 'Audit information for the entity' })
     @ValidateNested()
     @Type(() => AuditInfo)

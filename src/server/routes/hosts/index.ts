@@ -60,7 +60,7 @@ const listHosts = async (
       agentConnected: agentService.isConnected(host.id),
       agentMetrics: agentService.getAgentMetrics(host.id)
     }
-  } as ExtendedHost));
+  } ));
 
   res.json({
     success: true,

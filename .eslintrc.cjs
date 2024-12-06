@@ -1,5 +1,6 @@
 module.exports = {
   root: true,
+  extends: ['eslint:recommended'],
   overrides: [
     {
       files: ['src/types/**/*.ts'],
@@ -12,7 +13,11 @@ module.exports = {
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended'
       ],
-      plugins: ['@typescript-eslint']
+      plugins: ['@typescript-eslint'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+      }
     },
     {
       files: ['src/server/**/*.ts'],
@@ -26,7 +31,16 @@ module.exports = {
         'plugin:@typescript-eslint/recommended',
         'plugin:@typescript-eslint/recommended-requiring-type-checking'
       ],
-      plugins: ['@typescript-eslint']
+      plugins: ['@typescript-eslint'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+        '@typescript-eslint/no-unsafe-assignment': 'warn',
+        '@typescript-eslint/no-unsafe-member-access': 'warn',
+        '@typescript-eslint/no-unsafe-call': 'warn',
+        '@typescript-eslint/no-unsafe-return': 'warn',
+        '@typescript-eslint/no-unsafe-argument': 'warn'
+      }
     },
     {
       files: ['src/client/**/*.ts', 'src/client/**/*.tsx'],
@@ -44,7 +58,11 @@ module.exports = {
         'plugin:react/recommended',
         'plugin:react-hooks/recommended'
       ],
-      plugins: ['@typescript-eslint', 'react', 'react-hooks']
+      plugins: ['@typescript-eslint', 'react', 'react-hooks'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+      }
     },
     {
       files: ['src/shared/**/*.ts'],
@@ -57,7 +75,11 @@ module.exports = {
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended'
       ],
-      plugins: ['@typescript-eslint']
+      plugins: ['@typescript-eslint'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+      }
     }
   ],
   settings: {

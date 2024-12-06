@@ -48,7 +48,7 @@ export function validate<T extends object>(
           throw ApiError.badRequest('Validation failed', details);
         }
 
-        validatedData = dtoObj as T;
+        validatedData = dtoObj ;
       }
       // Zod
       else {

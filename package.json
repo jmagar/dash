@@ -192,6 +192,7 @@
     "jest-environment-jsdom": "^29.7.0",
     "jest-watch-typeahead": "2.2.2",
     "node-loader": "^2.0.0",
+    "nodemon": "3.1.7",
     "postcss": "^8.4.35",
     "prettier": "3.2.4",
     "prisma": "5.9.1",
@@ -219,16 +220,21 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts,.tsx --cache",
     "lint:fix": "eslint src --ext .ts,.tsx --fix --cache",
+    "lint:fix:dry": "eslint src --ext .ts,.tsx --fix-dry-run --cache",
+    "lint:watch": "nodemon --watch src --ext .ts,.tsx --exec \"npm run lint\"",
     "type:check": "tsc --noEmit -p tsconfig.json && npm run type:check:client && npm run type:check:server",
     "type:check:client": "tsc --noEmit -p tsconfig.client.json",
     "type:check:server": "tsc --noEmit -p tsconfig.server.json",
-    "type:watch": "tsc --noEmit --watch -p tsconfig.json",
+    "type:watch": "tsc -b --watch",
     "prisma:generate": "prisma generate",
     "postinstall": "npm run prisma:generate",
     "fix-types": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts",
     "fix-types:dry": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts --dry-run",
     "fix-types:test": "ts-node --project tsconfig.server.json scripts/safe-type-fixes.ts src/shared/dtos/base/__tests__",
-    "check": "tsc -b && eslint . --ext .ts,.tsx --max-warnings 0"
+    "check": "tsc -b && eslint . --ext .ts,.tsx --max-warnings 0",
+    "check:client": "npm run type:check:client && eslint src/client --ext .ts,.tsx --max-warnings 0",
+    "check:server": "npm run type:check:server && eslint src/server --ext .ts,.tsx --max-warnings 0",
+    "check:shared": "tsc --noEmit --project tsconfig.shared.json && eslint src/types src/shared --ext .ts,.tsx --max-warnings 0"
   },
   "browserslist": {
     "production": [

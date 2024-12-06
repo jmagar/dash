@@ -46,7 +46,7 @@ export class SettingsService extends BaseService {
     }
   }
 
-  private async setInCache(cacheKey: string, value: any, ttl: number = 3600): Promise<void> {
+  private async setInCache(cacheKey: string, value: any, ttl = 3600): Promise<void> {
     try {
       await redis.setex(cacheKey, ttl, JSON.stringify(value));
     } catch (error) {

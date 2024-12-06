@@ -36,7 +36,7 @@ export const listFiles = async (
   const requestPath = normalizePath(req.params.path);
   
   const logMeta = {
-    userId: req.user!.id,
+    userId: req.user.id,
     hostId,
     path: requestPath,
   };

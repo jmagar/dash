@@ -21,7 +21,7 @@ export async function generateToken(
       expiresIn,
     });
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    loggerLoggingManager.getInstance().error('Failed to generate token', { error });
     throw error;
   }
 }
@@ -41,7 +41,7 @@ export async function verifyToken(token: string): Promise<TokenPayload> {
     });
     return decoded as TokenPayload;
   } catch (error) {
-    loggerLoggingManager.getInstance().();
+    loggerLoggingManager.getInstance().error('Failed to verify token', { error });
     throw error;
   }
 }
@@ -53,4 +53,3 @@ export function getTokenExpiry(type: 'access' | 'refresh'): string {
 export function getTokenExpiryMs(type: 'access' | 'refresh'): number {
   return ms(getTokenExpiry(type));
 }
-

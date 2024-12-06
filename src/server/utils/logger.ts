@@ -95,7 +95,7 @@ class ServerLogger implements Logger {
     // Handle uncaught promise rejections
     process.on('unhandledRejection', (reason: Error | unknown) => {
       const error = reason instanceof Error ? reason : new Error(String(reason));
-      thisLoggingManager.getInstance().();
+      this.logger.error('Unhandled Promise Rejection', { error });
     });
   }
 
@@ -110,23 +110,23 @@ class ServerLogger implements Logger {
   }
 
   debug(message: string, meta?: LogMetadata): void {
-    this.loggerLoggingManager.getInstance().());
+    this.logger.debug(this.formatMessage('debug', message, meta));
   }
 
   info(message: string, meta?: LogMetadata): void {
-    this.loggerLoggingManager.getInstance().());
+    this.logger.info(this.formatMessage('info', message, meta));
   }
 
   warn(message: string, meta?: LogMetadata): void {
-    this.loggerLoggingManager.getInstance().());
+    this.logger.warn(this.formatMessage('warn', message, meta));
   }
 
   error(message: string, meta?: LogMetadata): void {
-    this.loggerLoggingManager.getInstance().());
+    this.logger.error(this.formatMessage('error', message, meta));
   }
 
   critical(message: string, meta?: LogMetadata): void {
-    this.loggerLoggingManager.getInstance().());
+    this.logger.error(this.formatMessage('critical', message, meta));
   }
 
   withContext(context: Record<string, unknown>): Logger {
@@ -140,5 +140,4 @@ class ServerLogger implements Logger {
   }
 }
 
-export 
-
+export default ServerLogger;

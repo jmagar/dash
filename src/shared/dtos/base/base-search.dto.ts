@@ -31,13 +31,13 @@ export class BaseSearchDto {
   @IsNumber()
   @Min(1)
   @IsOptional()
-  page: number = 1;
+  page = 1;
 
   @ApiProperty({ description: 'Number of items per page', minimum: 1, default: 10 })
   @IsNumber()
   @Min(1)
   @IsOptional()
-  limit: number = 10;
+  limit = 10;
 
   @ApiProperty({ description: 'Sort fields', type: [SortField], required: false })
   @ValidateNested({ each: true })

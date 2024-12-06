@@ -3,32 +3,27 @@
   "compilerOptions": {
     "composite": true,
     "declaration": true,
-    "tsBuildInfoFile": "./tsconfig.root.tsbuildinfo",
+    "tsBuildInfoFile": "./tsconfig.shared.tsbuildinfo",
     "baseUrl": ".",
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
     "paths": {
       "@/*": ["src/*"],
-      "@server/*": ["src/server/*"],
       "@shared/*": ["src/shared/*"],
       "@types/*": ["src/types/*"]
     }
   },
-  "references": [
-    { "path": "./tsconfig.server.json" },
-    { "path": "./tsconfig.client.json" }
-  ],
   "include": [
     "src/types/**/*",
-    "src/shared/**/*",
-    "src/server/**/*",
-    "src/client/**/*"
+    "src/shared/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "scripts",
     "**/*.spec.ts",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "src/client/**/*",
+    "src/server/**/*"
   ]
 }

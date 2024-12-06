@@ -2,7 +2,7 @@ import { registerDecorator, ValidationOptions, ValidationArguments } from 'class
 import { VALIDATION_PATTERNS } from './validation.config';
 
 export function IsUUID(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isUUID',
       target: object.constructor,
@@ -21,7 +21,7 @@ export function IsUUID(validationOptions?: ValidationOptions) {
 }
 
 export function IsHostname(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isHostname',
       target: object.constructor,
@@ -40,7 +40,7 @@ export function IsHostname(validationOptions?: ValidationOptions) {
 }
 
 export function IsIpAddress(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isIpAddress',
       target: object.constructor,
@@ -59,7 +59,7 @@ export function IsIpAddress(validationOptions?: ValidationOptions) {
 }
 
 export function IsStrongPassword(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isStrongPassword',
       target: object.constructor,
@@ -78,7 +78,7 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidUsername(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidUsername',
       target: object.constructor,

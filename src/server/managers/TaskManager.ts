@@ -217,7 +217,7 @@ export class TaskManager extends BaseService {
     this.metrics.createGauge('task_queue_age_seconds', 'Age of tasks in queue', ['priority']);
   }
 
-  private startTaskProcessing(interval: number = 100): void {
+  private startTaskProcessing(interval = 100): void {
     this.workerInterval = setInterval(async () => {
       if (this.isProcessing) return;
 
@@ -235,7 +235,7 @@ export class TaskManager extends BaseService {
     }, interval);
   }
 
-  private startCleanupInterval(interval: number = 3600000): void {
+  private startCleanupInterval(interval = 3600000): void {
     this.cleanupInterval = setInterval(async () => {
       try {
         await this.cleanupOldTasks();
@@ -425,7 +425,7 @@ export class TaskManager extends BaseService {
     type: string,
     data: any,
     priority: TaskPriority = TaskPriority.MEDIUM,
-    maxRetries: number = 3
+    maxRetries = 3
   ): Promise<Task> {
     if (!this.handlers.has(type)) {
       throw new Error(`No handler registered for task type: ${type}`);

@@ -37,7 +37,7 @@ export function authenticateToken(
       if (payload.type !== 'access') {
         throw ApiError.unauthorized('Invalid token type');
       }
-      (req as AuthenticatedRequest).user = payload as AccessTokenPayloadDto | RefreshTokenPayloadDto;
+      (req as AuthenticatedRequest).user = payload ;
       next();
     })
     .catch(error => {

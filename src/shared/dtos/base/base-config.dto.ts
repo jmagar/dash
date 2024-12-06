@@ -11,11 +11,11 @@ export class ConfigValue<T = any> {
   @ApiProperty({ description: 'Configuration value type' })
   @IsString()
   @IsNotEmpty()
-  type: string = '';
+  type = '';
 
   @ApiProperty({ description: 'Is the configuration value encrypted' })
   @IsBoolean()
-  isEncrypted: boolean = false;
+  isEncrypted = false;
 
   @ApiProperty({ description: 'Last updated timestamp' })
   @IsDate()
@@ -25,7 +25,7 @@ export class ConfigValue<T = any> {
   @ApiProperty({ description: 'Environment for this configuration' })
   @IsString()
   @IsNotEmpty()
-  environment: string = '';
+  environment = '';
 
   constructor(partial?: Partial<ConfigValue<T>>) {
     const defaults = {

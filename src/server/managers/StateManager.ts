@@ -212,7 +212,7 @@ export class StateManager extends BaseService {
     this.metrics.setGauge('state_memory_usage_bytes', process.memoryUsage().heapUsed);
   }
 
-  public async get<T = unknown>(key: string, namespace: string = 'default'): Promise<T | null> {
+  public async get<T = unknown>(key: string, namespace = 'default'): Promise<T | null> {
     try {
       const fullKey = `${namespace}:${key}`;
       

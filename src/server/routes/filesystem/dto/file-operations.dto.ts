@@ -9,7 +9,7 @@ export class ListFilesDto {
   @ApiPropertyOptional({ description: 'Path to list files from', default: '' })
   @IsString()
   @IsOptional()
-  path: string = '';
+  path = '';
 
   @ApiPropertyOptional({ description: 'Whether to show hidden files', default: false })
   @IsOptional()
@@ -24,7 +24,7 @@ export class UploadFilesDto {
   @ApiPropertyOptional({ description: 'Target path for uploaded files', default: '' })
   @IsString()
   @IsOptional()
-  path: string = '';
+  path = '';
 
   // Files will be handled by multer
 }

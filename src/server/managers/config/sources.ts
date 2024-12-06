@@ -21,7 +21,7 @@ export class ConfigSourceLoader {
         if (!(part in current)) {
           current[part] = {};
         }
-        current = current[part] as JsonObject;
+        current = current[part] ;
       }
       
       const lastPart = pathParts[pathParts.length - 1];

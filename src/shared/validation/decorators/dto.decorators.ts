@@ -2,7 +2,7 @@ import { registerDecorator, ValidationOptions, ValidationArguments } from 'class
 import { VALIDATION_PATTERNS, VALIDATION_MESSAGES, VALIDATION_LIMITS } from '../validation.config';
 
 export function IsValidTenantId(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidTenantId',
       target: object.constructor,
@@ -21,7 +21,7 @@ export function IsValidTenantId(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidMetadata(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidMetadata',
       target: object.constructor,
@@ -46,7 +46,7 @@ export function IsValidMetadata(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidTags(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidTags',
       target: object.constructor,
@@ -67,7 +67,7 @@ export function IsValidTags(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidVersion(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidVersion',
       target: object.constructor,
@@ -87,7 +87,7 @@ export function IsValidVersion(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidPriority(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidPriority',
       target: object.constructor,
@@ -106,7 +106,7 @@ export function IsValidPriority(validationOptions?: ValidationOptions) {
 }
 
 export function IsValidTimeoutMs(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidTimeoutMs',
       target: object.constructor,
