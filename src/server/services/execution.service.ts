@@ -1,12 +1,16 @@
 import { EventEmitter } from 'events';
 import { Server } from 'socket.io';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { getAgentService } from './agent.service';
 import { sshService } from './ssh.service';
 import { db } from '../db';
-import type { Host } from '../../types/host-config';
-import type { Command, CommandResult } from '../../types/models-shared';
+import type { Host, Command, CommandResult } from '../../types/models-shared';
 import type { ServerToClientEvents, ClientToServerEvents, InterServerEvents } from '../../types/socket-events';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents>;
+}
 
 export enum ExecutionMode {
   AGENT = 'agent'
@@ -20,8 +24,11 @@ interface ExecutionOptions {
 }
 
 class ExecutionService extends EventEmitter {
+  private readonly logger: LoggingManager;
+
   constructor(private readonly io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents>) {
     super();
+    this.logger = LoggingManager.getInstance();
   }
 
   /**
@@ -57,7 +64,7 @@ class ExecutionService extends EventEmitter {
 
       return await this.executeViaAgent(host.id, command, options);
     } catch (error) {
-      LoggingManager.getInstance().error('Command execution failed:', {
+      this.logger.error('Command execution failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         hostId: host.id,
         command: request.command,
@@ -214,5 +221,3 @@ class ExecutionService extends EventEmitter {
 
 // Export singleton instance with global.io from socket setup
 export const executionService = new ExecutionService(global.io);
-
-

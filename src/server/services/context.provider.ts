@@ -1,97 +1,151 @@
 import { RedisClientType } from 'redis';
-import { ChatbotContext, SystemState, FileSystemState, ProcessState, NetworkState, UserState, AppState } from '../../types/chatbot';
-import { ContextCache } from '../cache/context.cache';
+import { 
+  ChatbotContext, 
+  SystemState, 
+  FileSystemState, 
+  ProcessState, 
+  NetworkState,
+  DockerState,
+  LogState,
+  CacheStatus,
+  DatabaseStatus,
+  SystemMetrics
+} from '../../types/chatbot';
 import { EventEmitter } from 'events';
-import { cache } from '../cache';
 import { db } from '../db';
 import { metrics } from '../metrics';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 
 export class ContextProvider extends EventEmitter {
   private static instance: ContextProvider;
-  private contextCache: ContextCache;
   private context: ChatbotContext;
+  private logger: LoggingManager;
 
   private constructor(private readonly redis: RedisClientType) {
     super();
-    this.contextCache = new ContextCache(redis);
     this.context = this.initializeContext();
+    this.logger = LoggingManager.getInstance();
   }
 
   public static getInstance(): ContextProvider {
     if (!ContextProvider.instance) {
-      ContextProvider.instance = new ContextProvider(cache.getClient());
+      // Redis client should be passed in from the caller
+      ContextProvider.instance = new ContextProvider(null as any);
     }
     return ContextProvider.instance;
   }
 
   private initializeContext(): ChatbotContext {
-    return {
-      serviceContext: {} as any,
-      systemState: {
-        cacheStatus: {
-          connected: false,
-          state: 'disconnected',
-          memoryUsage: 0,
-          totalKeys: 0
+    const initialSystemState: SystemState = {
+      cacheStatus: {
+        connected: false,
+        state: 'disconnected',
+        memoryUsage: 0,
+        totalKeys: 0
+      },
+      dbStatus: {
+        connected: false,
+        poolSize: 0,
+        activeConnections: 0
+      },
+      activeHosts: [],
+      metrics: {
+        systemLoad: 0,
+        memoryUsage: 0,
+        activeUsers: 0
+      },
+      fileSystem: {
+        currentDirectory: '',
+        recentFiles: [],
+        watchedDirectories: [],
+        mountPoints: []
+      },
+      docker: {
+        containers: [],
+        images: [],
+        networks: [],
+        volumes: [],
+        stacks: []
+      },
+      logs: {
+        recentLogs: [],
+        errorCount: {
+          last1h: 0,
+          last24h: 0,
+          total: 0
         },
-        dbStatus: {
-          connected: false,
-          poolSize: 0,
-          activeConnections: 0
+        logFiles: []
+      },
+      processes: {
+        running: [],
+        systemLoad: {
+          '1m': 0,
+          '5m': 0,
+          '15m': 0
         },
-        activeHosts: [],
-        metrics: {
-          systemLoad: 0,
-          memoryUsage: 0,
-          activeUsers: 0
+        memory: {
+          total: 0,
+          used: 0,
+          free: 0,
+          cached: 0
         }
       },
+      network: {
+        connections: [],
+        interfaces: []
+      }
+    };
+
+    return {
+      serviceContext: {
+        id: '',
+        timestamp: new Date(),
+        metadata: {}
+      },
+      systemState: initialSystemState,
       metadata: {}
     };
   }
 
   public async getCurrentContext(): Promise<ChatbotContext> {
-    // Update system state before returning
     await this.updateSystemState();
     return this.context;
   }
 
   private async updateSystemState(): Promise<void> {
     try {
-      const [cacheHealth, dbStatus, systemMetrics] = await Promise.all([
-        cache.healthCheck(),
+      const [dbStatus, systemMetrics] = await Promise.all([
         this.getDbStatus(),
         this.getSystemMetrics()
       ]);
 
+      const activeHosts = await this.getActiveHosts();
+
       this.context.systemState = {
-        cacheStatus: {
-          connected: cacheHealth.connected,
-          state: cacheHealth.status as any,
-          memoryUsage: cacheHealth.metrics.memory.used,
-          totalKeys: cacheHealth.metrics.keys
-        },
+        ...this.context.systemState,
         dbStatus,
-        activeHosts: await this.getActiveHosts(),
-        metrics: systemMetrics
+        metrics: systemMetrics,
+        activeHosts
       };
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to update system state', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to update system state', { error: errorMessage });
     }
   }
 
-  private async getDbStatus() {
+  private async getDbStatus(): Promise<DatabaseStatus> {
     try {
       const pool = db as any;
+      const totalCount = await pool.totalCount();
+      const activeCount = await pool.activeCount();
       return {
-        connected: pool.totalCount > 0,
-        poolSize: pool.totalCount || 0,
-        activeConnections: pool.activeCount || 0
+        connected: totalCount > 0,
+        poolSize: totalCount || 0,
+        activeConnections: activeCount || 0
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to get database status', { error: errorMessage });
       return {
         connected: false,
         poolSize: 0,
@@ -100,12 +154,34 @@ export class ContextProvider extends EventEmitter {
     }
   }
 
-  private async getSystemMetrics() {
-    return {
-      systemLoad: metrics.getMetric('system.load') || 0,
-      memoryUsage: metrics.getMetric('system.memory.used') || 0,
-      activeUsers: metrics.getMetric('users.active') || 0
-    };
+  private async getSystemMetrics(): Promise<SystemMetrics> {
+    try {
+      // Record current metrics
+      const cpuUsage = process.cpuUsage().system / 1000000; // Convert to seconds
+      const memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024; // Convert to MB
+      const activeUsers = 0; // This should be updated with actual user count
+
+      // Update metrics
+      await Promise.all([
+        metrics.gauge('system.load', cpuUsage),
+        metrics.gauge('system.memory', memoryUsage),
+        metrics.gauge('system.users', activeUsers)
+      ]);
+
+      return {
+        systemLoad: cpuUsage,
+        memoryUsage: memoryUsage,
+        activeUsers: activeUsers
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to get system metrics', { error: errorMessage });
+      return {
+        systemLoad: 0,
+        memoryUsage: 0,
+        activeUsers: 0
+      };
+    }
   }
 
   private async getActiveHosts(): Promise<any[]> {
@@ -113,82 +189,43 @@ export class ContextProvider extends EventEmitter {
       const result = await db.query('SELECT * FROM hosts WHERE status = $1', ['active']);
       return result.rows;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to get active hosts', { error: errorMessage });
       return [];
     }
   }
 
-  public async getContext(): Promise<ChatbotContext> {
-    const [fileSystem, process, network, user, app, system] = await Promise.all([
-      this.contextCache.getFileSystemState(),
-      this.contextCache.getProcessState(),
-      this.contextCache.getNetworkState(),
-      this.contextCache.getUserState(),
-      this.contextCache.getAppState(),
-      this.contextCache.getSystemState()
-    ]);
+  public updateContext(context: Partial<ChatbotContext>): void {
+    if (context.systemState) {
+      this.context.systemState = {
+        ...this.context.systemState,
+        ...context.systemState
+      };
+    }
 
-    return {
-      fileSystem,
-      process,
-      network,
-      user,
-      app,
-      system
+    if (context.serviceContext) {
+      this.context.serviceContext = {
+        ...this.context.serviceContext,
+        ...context.serviceContext
+      };
+    }
+
+    if (context.metadata) {
+      this.context.metadata = {
+        ...this.context.metadata,
+        ...context.metadata
+      };
+    }
+
+    this.emit('context:updated', this.context);
+  }
+
+  public updateContextMetadata(metadata: Record<string, unknown>): void {
+    this.context.metadata = {
+      ...this.context.metadata,
+      ...metadata
     };
-  }
-
-  public async updateFileSystemState(state: FileSystemState): Promise<void> {
-    await this.contextCache.cacheFileSystemState(state);
-  }
-
-  public async updateProcessState(state: ProcessState): Promise<void> {
-    await this.contextCache.cacheProcessState(state);
-  }
-
-  public async updateNetworkState(state: NetworkState): Promise<void> {
-    await this.contextCache.cacheNetworkState(state);
-  }
-
-  public async updateUserState(state: UserState): Promise<void> {
-    await this.contextCache.cacheUserState(state);
-  }
-
-  public async updateAppState(state: AppState): Promise<void> {
-    await this.contextCache.cacheAppState(state);
-  }
-
-  public async updateSystemState(state: SystemState): Promise<void> {
-    await this.contextCache.cacheSystemState(state);
-  }
-
-  public async updateContext(context: Partial<ChatbotContext>): Promise<void> {
-    const updates: Promise<void>[] = [];
-
-    if (context.fileSystem) {
-      updates.push(this.updateFileSystemState(context.fileSystem));
-    }
-    if (context.process) {
-      updates.push(this.updateProcessState(context.process));
-    }
-    if (context.network) {
-      updates.push(this.updateNetworkState(context.network));
-    }
-    if (context.user) {
-      updates.push(this.updateUserState(context.user));
-    }
-    if (context.app) {
-      updates.push(this.updateAppState(context.app));
-    }
-    if (context.system) {
-      updates.push(this.updateSystemState(context.system));
-    }
-
-    await Promise.all(updates);
-  }
-
-  public updateContextMetadata(metadata: any): void {
-    this.context.metadata = metadata;
-    this.emit('context:metadata:updated', metadata);
+    this.emit('context:metadata:updated', this.context.metadata);
   }
 
   public clearContext(): void {
@@ -196,7 +233,7 @@ export class ContextProvider extends EventEmitter {
     this.emit('context:cleared');
   }
 
-  public setServiceContext(serviceContext: any): void {
+  public setServiceContext(serviceContext: ChatbotContext['serviceContext']): void {
     this.context.serviceContext = serviceContext;
     this.emit('context:service:updated', serviceContext);
   }
@@ -210,5 +247,3 @@ export class ContextProvider extends EventEmitter {
     this.emit('context:query:updated', this.context.lastQuery);
   }
 }
-
-

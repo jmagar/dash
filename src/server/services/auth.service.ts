@@ -1,13 +1,12 @@
-import { BaseService } from './base.service';
+import { BaseService, type ServiceOptions } from './base.service';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
-import { cacheService } from '../cache/cache.service';
-import { LoggingManager } from '../managers/utils/LoggingManager';
-import { ApiError } from '../types/api-error';
+import { LoggerAdapter } from '../utils/logging/logger.adapter';
+import { ApiError } from '../../types/error';
 import config from '../config';
-import { PrismaClient, User } from '@prisma/client';
+import { PrismaClient, type User } from '@prisma/client';
 import { z } from 'zod';
 import * as bcrypt from 'bcrypt';
-import { validate, validateSafe, validateBatch } from '../utils/validation/validator';
+import { validate } from '../utils/validation/validator';
 import { 
   UserRole, 
   AuthenticatedUserDto, 
@@ -19,7 +18,6 @@ import {
   AccessTokenPayloadDto,
   RefreshTokenPayloadDto,
   SessionDto,
-  BaseTokenDto,
   ValidationResponse
 } from '../routes/auth/dto/auth.dto';
 
@@ -27,7 +25,7 @@ import {
 const LoginSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  rememberMe: z.boolean().optional().default(false)
+  rememberMe: z.boolean().optional()
 });
 
 const TokenSchema = z.object({
@@ -40,12 +38,13 @@ const RefreshTokenSchema = z.object({
 
 export class AuthService extends BaseService {
   private prisma: PrismaClient;
-  private logger: LoggingManager;
 
-  constructor() {
-    super();
+  constructor(options: ServiceOptions = {}) {
+    super({
+      ...options,
+      name: 'AuthService'
+    });
     this.prisma = new PrismaClient();
-    this.logger = LoggingManager.getInstance();
   }
 
   // Centralized user validation method with Zod validation
@@ -71,7 +70,7 @@ export class AuthService extends BaseService {
 
     const isValidPassword = await this.comparePasswords(
       validatedData.password, 
-      user.password
+      user.passwordHash
     );
 
     if (!isValidPassword) {
@@ -115,46 +114,61 @@ export class AuthService extends BaseService {
       const user = await this.validateUserCredentials(validatedLoginData);
 
       // Create session and tokens
-      const tokenPayload: TokenPayloadDto = {
+      const tokenPayload: AccessTokenPayloadDto = {
         id: user.id,
         userId: user.id,
         username: user.username,
         role: user.role as UserRole,
-        is_active: user.is_active
+        is_active: user.isActive,
+        type: 'access'
+      };
+
+      const refreshTokenPayload: RefreshTokenPayloadDto = {
+        ...tokenPayload,
+        type: 'refresh'
       };
 
       const token = await generateToken(tokenPayload);
-      const refreshToken = await generateRefreshToken(tokenPayload);
-      const tokenExpiration = new Date(Date.now() + config.security.tokenExpiration);
+      const refreshToken = await generateRefreshToken(refreshTokenPayload);
+      const tokenExpiration = new Date(Date.now() + Number(config.server.security.tokenExpiration));
 
       const session: SessionDto = {
         id: user.id,
         userId: user.id,
         username: user.username,
         role: user.role as UserRole,
-        is_active: user.is_active,
+        is_active: user.isActive,
         refreshToken,
         createdAt: new Date(),
         lastActivity: new Date(),
         expiresAt: validatedLoginData.rememberMe ? undefined : tokenExpiration
       };
 
-      await cacheService.setSession(user.id, session);
+      await this.cache?.cacheSession(user.id, JSON.stringify(session));
 
       this.logger.info('User logged in successfully', { 
         username: user.username, 
         userId: user.id 
       });
 
-      return {
-        success: true,
-        data: {
-          token,
-          refreshToken,
-          tokenExpiration,
-          ...user
-        } as AuthenticatedUserDto
+      const authUser: AuthenticatedUserDto = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role as UserRole,
+        is_active: user.isActive,
+        token,
+        refreshToken,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       };
+
+      const response = new LoginResponseDto();
+      response.success = true;
+      response.data = authUser;
+      response.authenticated = true;
+
+      return response;
     } catch (error) {
       this.logger.error('Login failed', { 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -185,15 +199,24 @@ export class AuthService extends BaseService {
         throw new ApiError('User not found', 401);
       }
 
-      return {
-        success: true,
-        data: {
-          id: user.id,
-          username: user.username,
-          role: user.role as UserRole,
-          is_active: user.is_active
-        }
+      const authUser: AuthenticatedUserDto = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role as UserRole,
+        is_active: user.isActive,
+        token: validatedToken.token,
+        refreshToken: '',
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       };
+
+      const response = new ValidateResponseDto();
+      response.success = true;
+      response.data = authUser;
+      response.valid = true;
+
+      return response;
     } catch (error) {
       this.logger.warn('Token validation failed', { 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -212,10 +235,7 @@ export class AuthService extends BaseService {
       const validatedRefreshToken = validate(RefreshTokenSchema, refreshTokenInput);
 
       // Verify token
-      const payload = await verifyToken(
-        validatedRefreshToken.refreshToken, 
-        true
-      );
+      const payload = await verifyToken(validatedRefreshToken.refreshToken);
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.userId }
@@ -226,24 +246,37 @@ export class AuthService extends BaseService {
       }
 
       // Generate new access token
-      const newTokenPayload: TokenPayloadDto = {
+      const tokenPayload: AccessTokenPayloadDto = {
         id: user.id,
         userId: user.id,
         username: user.username,
         role: user.role as UserRole,
-        is_active: user.is_active
+        is_active: user.isActive,
+        type: 'access'
       };
 
-      const newAccessToken = await generateToken(newTokenPayload);
+      const newAccessToken = await generateToken(tokenPayload);
 
       this.logger.info('Token refreshed', { userId: user.id });
 
-      return {
-        success: true,
-        data: {
-          token: newAccessToken
-        }
+      const authUser: AuthenticatedUserDto = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role as UserRole,
+        is_active: user.isActive,
+        token: newAccessToken,
+        refreshToken: validatedRefreshToken.refreshToken,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       };
+
+      const response = new RefreshTokenResponseDto();
+      response.success = true;
+      response.data = authUser;
+      response.authenticated = true;
+
+      return response;
     } catch (error) {
       this.logger.error('Token refresh failed', { 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -256,13 +289,15 @@ export class AuthService extends BaseService {
   // Logout method
   async logout(userId: string): Promise<LogoutResponseDto> {
     try {
-      await cacheService.deleteSession(userId);
+      await this.cache?.deleteSession(userId);
 
       this.logger.info('User logged out', { userId });
 
-      return {
-        success: true
-      };
+      const response = new LogoutResponseDto();
+      response.success = true;
+      response.authenticated = false;
+
+      return response;
     } catch (error) {
       this.logger.error('Logout failed', { 
         userId, 

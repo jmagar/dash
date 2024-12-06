@@ -1,5 +1,5 @@
-import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
-import { VALIDATION_PATTERNS, VALIDATION_MESSAGES, VALIDATION_LIMITS } from '../validation.config';
+import { registerDecorator, type ValidationOptions, type ValidationArguments } from 'class-validator';
+import { VALIDATION_PATTERNS, VALIDATION_LIMITS } from '../validation.config';
 
 export function IsValidTenantId(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
@@ -9,7 +9,7 @@ export function IsValidTenantId(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.UUID.test(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -28,17 +28,17 @@ export function IsValidMetadata(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
           if (!value || typeof value !== 'object') return false;
           try {
-            JSON.stringify(value);
-            return true;
+            const str = JSON.stringify(value);
+            return str.length <= VALIDATION_LIMITS.MAX_STRING_LENGTH;
           } catch {
             return false;
           }
         },
         defaultMessage(args: ValidationArguments) {
-          return `${args.property} must be a valid JSON object`;
+          return `${args.property} must be a valid JSON object within size limits`;
         },
       },
     });
@@ -53,13 +53,13 @@ export function IsValidTags(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
           if (!Array.isArray(value)) return false;
           if (value.length > VALIDATION_LIMITS.MAX_ARRAY_LENGTH) return false;
           return value.every(tag => typeof tag === 'string' && tag.length <= VALIDATION_LIMITS.MAX_STRING_LENGTH);
         },
         defaultMessage(args: ValidationArguments) {
-          return `${args.property} must be an array of strings with max length ${VALIDATION_LIMITS.MAX_ARRAY_LENGTH}`;
+          return `${args.property} must be an array of strings within size limits`;
         },
       },
     });
@@ -74,7 +74,7 @@ export function IsValidVersion(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
           if (typeof value !== 'number') return false;
           return Number.isInteger(value) && value >= 0;
         },
@@ -94,7 +94,8 @@ export function IsValidPriority(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
+          if (typeof value !== 'string') return false;
           return ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -113,12 +114,12 @@ export function IsValidTimeoutMs(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: unknown): boolean {
           if (typeof value !== 'number') return false;
           return value >= 0 && value <= 300000; // Max 5 minutes
         },
         defaultMessage(args: ValidationArguments) {
-          return `${args.property} must be between 0 and 300000 milliseconds`;
+          return `${args.property} must be between 0 and 300000 milliseconds (5 minutes)`;
         },
       },
     });

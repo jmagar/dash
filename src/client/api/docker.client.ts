@@ -1,16 +1,57 @@
 import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
-import type { ApiResponse } from '../../types/express';
-
-// Basic types until we create proper shared DTOs
-interface Container {
-  id: string;
-  name: string;
-  status: string;
-}
+import { ApiError } from './api';
+import { logger } from '../utils/frontendLogger';
+import type { DockerContainer, ContainerState } from '../../types/docker';
 
 interface ContainerStats {
-  cpu: number;
-  memory: number;
+  cpu: {
+    usage: number;
+    system: number;
+    user: number;
+  };
+  memory: {
+    usage: number;
+    limit: number;
+    max: number;
+  };
+  network: {
+    rx_bytes: number;
+    tx_bytes: number;
+  };
+  timestamp: string;
+}
+
+interface ContainerInspect {
+  id: string;
+  name: string;
+  image: string;
+  created: string;
+  config: {
+    hostname: string;
+    domainname: string;
+    user: string;
+    env: string[];
+    cmd: string[];
+    workingDir: string;
+    labels: Record<string, string>;
+  };
+  networkSettings: {
+    ipAddress: string;
+    gateway: string;
+    ports: Record<string, Array<{ hostIp: string; hostPort: string }>>;
+  };
+  state: {
+    status: ContainerState;
+    running: boolean;
+    paused: boolean;
+    restarting: boolean;
+    pid: number;
+    exitCode: number;
+    error: string;
+    startedAt: string;
+    finishedAt: string;
+  };
+  hostId: string;
 }
 
 interface ContainerLogs {
@@ -18,15 +59,20 @@ interface ContainerLogs {
   stderr: string;
 }
 
-interface ContainerInspect {
-  id: string;
-  name: string;
-  config: Record<string, unknown>;
-}
-
 interface ContainerCreateOptions {
   image: string;
   name?: string;
+  env?: Array<string>;
+  cmd?: Array<string>;
+  ports?: Array<{
+    hostPort: number;
+    containerPort: number;
+    protocol?: string;
+  }>;
+  volumes?: Array<{
+    hostPath: string;
+    containerPath: string;
+  }>;
 }
 
 interface ContainerStartOptions {
@@ -66,107 +112,259 @@ class DockerClient extends BaseApiClient<DockerEndpoints> {
     super(DOCKER_ENDPOINTS);
   }
 
-  async listContainers(): Promise<Container[]> {
-    const response = await this.get<Container[]>(
-      this.getEndpoint('LIST')
-    );
+  async listContainers(): Promise<DockerContainer[]> {
+    try {
+      logger.info('Listing containers');
+      const response = await this.get<DockerContainer[]>(
+        this.getEndpoint('LIST')
+      );
 
-    if (!response.data) {
-      throw new Error('Failed to list containers');
+      if (!response.data) {
+        throw new ApiError({
+          message: 'Failed to list containers',
+          code: 'DOCKER_LIST_FAILED'
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to list containers', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to list containers',
+        code: 'DOCKER_LIST_FAILED'
+      });
     }
-
-    return response.data;
   }
 
-  async createContainer(options: ContainerCreateOptions): Promise<Container> {
-    const response = await this.post<Container>(
-      this.getEndpoint('CREATE'),
-      options
-    );
+  async createContainer(options: ContainerCreateOptions): Promise<DockerContainer> {
+    try {
+      logger.info('Creating container', options);
+      const response = await this.post<DockerContainer>(
+        this.getEndpoint('CREATE'),
+        options
+      );
 
-    if (!response.data) {
-      throw new Error('Failed to create container');
+      if (!response.data) {
+        throw new ApiError({
+          message: 'Failed to create container',
+          code: 'DOCKER_CREATE_FAILED',
+          data: options
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to create container', {
+        error: error instanceof Error ? error.message : String(error),
+        options
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to create container',
+        code: 'DOCKER_CREATE_FAILED',
+        data: options
+      });
     }
-
-    return response.data;
   }
 
   async startContainer(id: string, options?: ContainerStartOptions): Promise<void> {
-    const response = await this.post<void>(
-      this.getEndpoint('START', id),
-      options
-    );
+    try {
+      logger.info('Starting container', { id, options });
+      const response = await this.post<void>(
+        this.getEndpoint('START', id),
+        options
+      );
 
-    if (!response.success) {
-      throw new Error('Failed to start container');
+      if (!response.success) {
+        throw new ApiError({
+          message: 'Failed to start container',
+          code: 'DOCKER_START_FAILED',
+          data: { id, options }
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to start container', {
+        error: error instanceof Error ? error.message : String(error),
+        id,
+        options
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to start container',
+        code: 'DOCKER_START_FAILED',
+        data: { id, options }
+      });
     }
   }
 
   async stopContainer(id: string, options?: ContainerStopOptions): Promise<void> {
-    const response = await this.post<void>(
-      this.getEndpoint('STOP', id),
-      options
-    );
+    try {
+      logger.info('Stopping container', { id, options });
+      const response = await this.post<void>(
+        this.getEndpoint('STOP', id),
+        options
+      );
 
-    if (!response.success) {
-      throw new Error('Failed to stop container');
+      if (!response.success) {
+        throw new ApiError({
+          message: 'Failed to stop container',
+          code: 'DOCKER_STOP_FAILED',
+          data: { id, options }
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to stop container', {
+        error: error instanceof Error ? error.message : String(error),
+        id,
+        options
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to stop container',
+        code: 'DOCKER_STOP_FAILED',
+        data: { id, options }
+      });
     }
   }
 
   async restartContainer(id: string): Promise<void> {
-    const response = await this.post<void>(
-      this.getEndpoint('RESTART', id)
-    );
+    try {
+      logger.info('Restarting container', { id });
+      const response = await this.post<void>(
+        this.getEndpoint('RESTART', id)
+      );
 
-    if (!response.success) {
-      throw new Error('Failed to restart container');
+      if (!response.success) {
+        throw new ApiError({
+          message: 'Failed to restart container',
+          code: 'DOCKER_RESTART_FAILED',
+          data: { id }
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to restart container', {
+        error: error instanceof Error ? error.message : String(error),
+        id
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to restart container',
+        code: 'DOCKER_RESTART_FAILED',
+        data: { id }
+      });
     }
   }
 
   async removeContainer(id: string): Promise<void> {
-    const response = await this.delete<void>(
-      this.getEndpoint('REMOVE', id)
-    );
+    try {
+      logger.info('Removing container', { id });
+      const response = await this.delete<void>(
+        this.getEndpoint('REMOVE', id)
+      );
 
-    if (!response.success) {
-      throw new Error('Failed to remove container');
+      if (!response.success) {
+        throw new ApiError({
+          message: 'Failed to remove container',
+          code: 'DOCKER_REMOVE_FAILED',
+          data: { id }
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to remove container', {
+        error: error instanceof Error ? error.message : String(error),
+        id
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to remove container',
+        code: 'DOCKER_REMOVE_FAILED',
+        data: { id }
+      });
     }
   }
 
   async inspectContainer(id: string): Promise<ContainerInspect> {
-    const response = await this.get<ContainerInspect>(
-      this.getEndpoint('INSPECT', id)
-    );
+    try {
+      logger.info('Inspecting container', { id });
+      const response = await this.get<ContainerInspect>(
+        this.getEndpoint('INSPECT', id)
+      );
 
-    if (!response.data) {
-      throw new Error('Failed to inspect container');
+      if (!response.data) {
+        throw new ApiError({
+          message: 'Failed to inspect container',
+          code: 'DOCKER_INSPECT_FAILED',
+          data: { id }
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to inspect container', {
+        error: error instanceof Error ? error.message : String(error),
+        id
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to inspect container',
+        code: 'DOCKER_INSPECT_FAILED',
+        data: { id }
+      });
     }
-
-    return response.data;
   }
 
   async getContainerStats(id: string): Promise<ContainerStats> {
-    const response = await this.get<ContainerStats>(
-      this.getEndpoint('STATS', id)
-    );
+    try {
+      logger.info('Getting container stats', { id });
+      const response = await this.get<ContainerStats>(
+        this.getEndpoint('STATS', id)
+      );
 
-    if (!response.data) {
-      throw new Error('Failed to get container stats');
+      if (!response.data) {
+        throw new ApiError({
+          message: 'Failed to get container stats',
+          code: 'DOCKER_STATS_FAILED',
+          data: { id }
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to get container stats', {
+        error: error instanceof Error ? error.message : String(error),
+        id
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to get container stats',
+        code: 'DOCKER_STATS_FAILED',
+        data: { id }
+      });
     }
-
-    return response.data;
   }
 
   async getContainerLogs(id: string): Promise<ContainerLogs> {
-    const response = await this.get<ContainerLogs>(
-      this.getEndpoint('LOGS', id)
-    );
+    try {
+      logger.info('Getting container logs', { id });
+      const response = await this.get<ContainerLogs>(
+        this.getEndpoint('LOGS', id)
+      );
 
-    if (!response.data) {
-      throw new Error('Failed to get container logs');
+      if (!response.data) {
+        throw new ApiError({
+          message: 'Failed to get container logs',
+          code: 'DOCKER_LOGS_FAILED',
+          data: { id }
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to get container logs', {
+        error: error instanceof Error ? error.message : String(error),
+        id
+      });
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to get container logs',
+        code: 'DOCKER_LOGS_FAILED',
+        data: { id }
+      });
     }
-
-    return response.data;
   }
 }
 
@@ -185,3 +383,13 @@ export const {
   getContainerStats,
   getContainerLogs,
 } = dockerClient;
+
+// Export types
+export type {
+  ContainerCreateOptions,
+  ContainerStartOptions,
+  ContainerStopOptions,
+  ContainerStats,
+  ContainerInspect,
+  ContainerLogs
+};

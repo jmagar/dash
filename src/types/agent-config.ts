@@ -113,8 +113,5 @@ export interface AgentToServerEvents {
   logs: (logs: LogEntry[]) => void;
 }
 
-// Declare global io instance
-declare global {
-  // eslint-disable-next-line no-var
-  var io: SocketServer<AgentToServerEvents, ServerToAgentEvents>;
-}
+// Socket.IO server instance type
+export type SocketIOServer = SocketServer<AgentToServerEvents, ServerToAgentEvents>;

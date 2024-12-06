@@ -1,12 +1,19 @@
 ﻿import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-
 import { logger } from '../utils/frontendLogger';
-import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 
-interface ApiError {
-  status?: number;
-  data?: unknown;
-  message: string;
+export class ApiError extends Error {
+  constructor(
+    public readonly details: {
+      status?: number;
+      data?: unknown;
+      message: string;
+      code?: string;
+    }
+  ) {
+    super(details.message);
+    this.name = 'ApiError';
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
 }
 
 export const api = axios.create({
@@ -27,11 +34,12 @@ api.interceptors.request.use(
     return config;
   },
   (error: unknown) => {
-    const apiError: ApiError = {
-      message: error instanceof Error ? error.message : 'Unknown error',
-    };
-    logger.error('API request error:', error);
-    return Promise.reject(error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('API request error:', { error: errorMessage });
+    throw new ApiError({
+      message: errorMessage,
+      code: 'REQUEST_ERROR'
+    });
   }
 );
 
@@ -39,14 +47,29 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
-    const axiosError = error as AxiosError;
-    const apiError: ApiError = {
-      message: axiosError instanceof Error ? axiosError.message : 'Unknown error',
-      status: axiosError.response?.status,
-      data: axiosError.response?.data,
-    };
-    logger.error('API response error:', error);
-    return Promise.reject(error);
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      logger.error('API response error:', {
+        status: axiosError.response?.status,
+        data: axiosError.response?.data,
+        message: axiosError.message
+      });
+      throw new ApiError({
+        message: axiosError.message,
+        status: axiosError.response?.status,
+        data: axiosError.response?.data,
+        code: 'RESPONSE_ERROR'
+      });
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Unknown API error:', { error: errorMessage });
+    throw new ApiError({
+      message: errorMessage,
+      code: 'UNKNOWN_ERROR'
+    });
   }
 );
 
+// Export types
+export type { AxiosError };

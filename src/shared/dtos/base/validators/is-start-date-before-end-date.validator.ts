@@ -1,42 +1,42 @@
-import { registerDecorator, ValidationOptions, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
-import { BaseTimeRangeDto } from '../base-time-range.dto';
+import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+import { isIsoDateString } from '../../../utils/type-utils';
 
-@ValidatorConstraint({ name: 'isStartDateBeforeEndDate', async: false })
-export class IsStartDateBeforeEndDateConstraint implements ValidatorConstraintInterface {
-  validate(startDate: unknown, args: ValidationArguments): boolean {
-    // First check if startDate is valid
-    if (!startDate || !(startDate instanceof Date)) {
-      return true; // Let @IsDate handle this
-    }
-    
-    // Get the object and ensure it's a BaseTimeRangeDto
-    const object = args.object as BaseTimeRangeDto;
-    if (!(object instanceof BaseTimeRangeDto)) {
-      return false;
-    }
-
-    const endDate = object.endDate;
-    if (!endDate || !(endDate instanceof Date)) {
-      return true; // Let @IsDate handle this
-    }
-
-    return startDate.getTime() <= endDate.getTime();
-  }
-
-  defaultMessage(args: ValidationArguments): string {
-    return 'startDate must be before or equal to endDate';
-  }
-}
-
-export function IsStartDateBeforeEndDate(validationOptions?: ValidationOptions) {
-  return function (object: object, propertyName: string): void {
+/**
+ * Validator decorator to ensure start date is before end date
+ * @param endDateField - Name of the end date field to compare against
+ * @param validationOptions - Options for the validation
+ */
+export function IsStartDateBeforeEndDate(endDateField: string, validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isStartDateBeforeEndDate',
       target: object.constructor,
       propertyName: propertyName,
-      constraints: [],
+      constraints: [endDateField],
       options: validationOptions,
-      validator: IsStartDateBeforeEndDateConstraint,
+      validator: {
+        validate(startDate: unknown, args: ValidationArguments): boolean {
+          if (!isIsoDateString(startDate)) {
+            return false;
+          }
+
+          const [endDateField] = args.constraints;
+          const endDate = (args.object as Record<string, unknown>)[endDateField];
+
+          if (!isIsoDateString(endDate)) {
+            return false;
+          }
+
+          const startTimestamp = new Date(startDate).getTime();
+          const endTimestamp = new Date(endDate).getTime();
+
+          return startTimestamp < endTimestamp;
+        },
+        defaultMessage(args: ValidationArguments) {
+          const [endDateField] = args.constraints;
+          return `${args.property} must be before ${endDateField}`;
+        },
+      },
     });
   };
 }

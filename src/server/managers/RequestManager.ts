@@ -10,7 +10,7 @@ import { BaseService } from '../services/base.service';
 import { MetricsManager } from './MetricsManager';
 import { LoggingManager } from './LoggingManager';
 import { ConfigManager } from './ConfigManager';
-import { SecurityManager } from './SecurityManager';
+import { SecurityManager } from './security/SecurityManager';
 import { ApiError } from '../types/error';
 
 // Rate Limit Configuration Schema

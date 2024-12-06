@@ -1,16 +1,23 @@
-import { Bookmark } from '@prisma/client';
-import prisma from '../db';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { PrismaClient, type Bookmark } from '@prisma/client';
+import { LoggingManager } from '../managers/LoggingManager';
 
 export class BookmarkService {
+  private prisma: PrismaClient;
+  private logger: LoggingManager;
+
+  constructor() {
+    this.prisma = new PrismaClient();
+    this.logger = LoggingManager.getInstance();
+  }
+
   async getBookmarks(userId: string): Promise<Bookmark[]> {
     try {
-      return await prisma.bookmark.findMany({
+      return await this.prisma.bookmark.findMany({
         where: { userId },
         orderBy: { lastAccessed: 'desc' },
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to get bookmarks:', {
+      this.logger.error('Failed to get bookmarks:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
       });
@@ -20,11 +27,11 @@ export class BookmarkService {
 
   async getBookmark(userId: string, hostId: string, path: string): Promise<Bookmark | null> {
     try {
-      return await prisma.bookmark.findFirst({
+      return await this.prisma.bookmark.findFirst({
         where: { userId, hostId, path },
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to get bookmark:', {
+      this.logger.error('Failed to get bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -43,7 +50,7 @@ export class BookmarkService {
     notes?: string,
   ): Promise<Bookmark> {
     try {
-      return await prisma.bookmark.create({
+      return await this.prisma.bookmark.create({
         data: {
           userId,
           hostId,
@@ -54,7 +61,7 @@ export class BookmarkService {
         },
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to create bookmark:', {
+      this.logger.error('Failed to create bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -71,12 +78,12 @@ export class BookmarkService {
     updates: Partial<Pick<Bookmark, 'notes' | 'lastAccessed'>>,
   ): Promise<Bookmark> {
     try {
-      return await prisma.bookmark.update({
+      return await this.prisma.bookmark.update({
         where: { userId_hostId_path: { userId, hostId, path } },
         data: updates,
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to update bookmark:', {
+      this.logger.error('Failed to update bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -88,11 +95,11 @@ export class BookmarkService {
 
   async deleteBookmark(userId: string, hostId: string, path: string): Promise<void> {
     try {
-      await prisma.bookmark.delete({
+      await this.prisma.bookmark.delete({
         where: { userId_hostId_path: { userId, hostId, path } },
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to delete bookmark:', {
+      this.logger.error('Failed to delete bookmark:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -108,7 +115,7 @@ export class BookmarkService {
         lastAccessed: new Date(),
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to update bookmark last accessed:', {
+      this.logger.error('Failed to update bookmark last accessed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         userId,
         hostId,
@@ -120,5 +127,3 @@ export class BookmarkService {
 }
 
 export const bookmarkService = new BookmarkService();
-
-

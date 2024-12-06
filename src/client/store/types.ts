@@ -1,36 +1,17 @@
 /**
- * Common type definitions for Redux store
+ * Common type definitions for Redux store actions
  */
 
-import { NotificationType, NotificationEntity, ServiceStatus } from '../../types/notifications';
+import type { NotificationType } from '../../types/notifications';
+import type { ThemeMode } from './storeTypes';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
-
-// UI State
-export interface UIState {
-  loading: boolean;
-  sidebarOpen: boolean;
-  theme: ThemeMode;
-}
-
-// Notification State
-export interface NotificationState {
-  notifications: NotificationEntity[];
-  unreadCount: number;
-  loading: boolean;
-  error: string | null;
-}
-
-// Root State
-export interface RootState {
-  ui: UIState;
-  notification: NotificationState;
-}
+// Service Status type
+export type ServiceStatus = 'active' | 'inactive' | 'error' | 'warning' | 'info';
 
 // Action Types
-export interface BaseAction<T = any> {
+export interface BaseAction<TPayload = unknown> {
   type: string;
-  payload?: T;
+  payload?: TPayload;
 }
 
 // Action Payloads
@@ -49,7 +30,7 @@ export interface HideNotificationPayload {
 
 export interface UpdateNotificationPayload {
   id: string;
-  updates: Partial<NotificationEntity>;
+  updates: Partial<import('../../types/notifications').NotificationEntity>;
 }
 
 export interface MarkAsReadPayload {

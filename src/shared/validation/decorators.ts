@@ -9,7 +9,7 @@ export function IsUUID(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: string): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.UUID.test(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -28,7 +28,7 @@ export function IsHostname(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: string): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.HOSTNAME.test(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -47,7 +47,7 @@ export function IsIpAddress(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: string): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.IP_ADDRESS.test(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -66,7 +66,7 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: string): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.PASSWORD.test(value);
         },
         defaultMessage(args: ValidationArguments) {
@@ -85,11 +85,97 @@ export function IsValidUsername(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any) {
+        validate(value: string): boolean {
           return typeof value === 'string' && VALIDATION_PATTERNS.USERNAME.test(value);
         },
         defaultMessage(args: ValidationArguments) {
           return `${args.property} must be a valid username`;
+        },
+      },
+    });
+  };
+}
+
+export function IsValidId(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidId',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: string | number): boolean {
+          if (typeof value === 'string') {
+            return /^[a-zA-Z0-9_-]+$/.test(value);
+          }
+          if (typeof value === 'number') {
+            return Number.isInteger(value) && value > 0;
+          }
+          return false;
+        },
+      },
+    });
+  };
+}
+
+export function IsValidName(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidName',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: string): boolean {
+          return typeof value === 'string' && /^[a-zA-Z0-9_\- ]+$/.test(value);
+        },
+      },
+    });
+  };
+}
+
+export function IsValidPath(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidPath',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: string): boolean {
+          return typeof value === 'string' && /^[a-zA-Z0-9_\-/.]+$/.test(value);
+        },
+      },
+    });
+  };
+}
+
+export function IsValidEmail(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidEmail',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: string): boolean {
+          return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+        },
+      },
+    });
+  };
+}
+
+export function IsValidPassword(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isValidPassword',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: string): boolean {
+          return typeof value === 'string' && value.length >= 8;
         },
       },
     });

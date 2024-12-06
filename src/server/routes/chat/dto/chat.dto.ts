@@ -1,13 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsBoolean, IsNumber, IsObject, IsEnum, IsDate, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsBoolean, IsNumber, IsObject, IsEnum, Min, Max } from 'class-validator';
 import { ApiResult } from '../../../../types/error';
 import { LogMetadata } from '../../../../types/logger';
 
 /**
  * Base chat response with metadata
  */
-export type ChatResponse<T> = ApiResult<T> & {
+export interface ChatResponseBase<T> extends ApiResult<T> {
   metadata?: LogMetadata & {
     userId?: string;
     sessionId?: string;
@@ -17,7 +17,7 @@ export type ChatResponse<T> = ApiResult<T> & {
     totalTokens?: number;
     latency?: number;
   };
-};
+}
 
 /**
  * Chat model enum
@@ -69,9 +69,74 @@ export enum ChatRole {
 }
 
 /**
+ * Send message DTO
+ */
+export class SendMessageDto {
+  @ApiProperty({ description: 'Message content' })
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @ApiPropertyOptional({ description: 'Session ID' })
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
+
+  @ApiPropertyOptional({ description: 'System prompt' })
+  @IsOptional()
+  @IsString()
+  systemPrompt?: string;
+
+  @ApiPropertyOptional({ description: 'Model configuration' })
+  @IsOptional()
+  @IsObject()
+  modelConfig?: ChatModelConfig;
+
+  @ApiPropertyOptional({ description: 'Stream response' })
+  @IsOptional()
+  @IsBoolean()
+  stream?: boolean;
+}
+
+/**
+ * Chat settings DTO
+ */
+export class ChatSettingsDto {
+  @ApiProperty({ description: 'Default model', enum: ChatModel })
+  @IsEnum(ChatModel)
+  defaultModel: ChatModel;
+
+  @ApiProperty({ description: 'Default temperature' })
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  temperature: number;
+
+  @ApiPropertyOptional({ description: 'Default max tokens' })
+  @IsOptional()
+  @IsNumber()
+  maxTokens?: number;
+
+  @ApiPropertyOptional({ description: 'Default system prompt' })
+  @IsOptional()
+  @IsString()
+  systemPrompt?: string;
+
+  @ApiPropertyOptional({ description: 'Stream responses by default' })
+  @IsOptional()
+  @IsBoolean()
+  stream?: boolean;
+}
+
+/**
  * Chat message DTO
  */
 export class ChatMessageDto {
+  @ApiProperty({ description: 'Message ID' })
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
   @ApiProperty({ description: 'Message role', enum: ChatRole })
   @IsEnum(ChatRole)
   role: ChatRole;
@@ -81,29 +146,123 @@ export class ChatMessageDto {
   @IsNotEmpty()
   content: string;
 
-  @ApiPropertyOptional({ description: 'Name of the function if role is function' })
-  @IsOptional()
+  @ApiProperty({ description: 'Timestamp' })
   @IsString()
-  name?: string;
-
-  @ApiPropertyOptional({ description: 'Function arguments if role is function' })
-  @IsOptional()
-  @IsObject()
-  functionCall?: Record<string, unknown>;
-
-  @ApiPropertyOptional({ description: 'Message timestamp' })
-  @IsOptional()
-  @IsString()
-  timestamp?: string;
-
-  @ApiPropertyOptional({ description: 'Token count for this message' })
-  @IsOptional()
-  @IsNumber()
-  tokens?: number;
+  @IsNotEmpty()
+  timestamp: string;
 
   @ApiPropertyOptional({ description: 'Message metadata' })
   @IsOptional()
   @IsObject()
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Chat request DTO
+ */
+export class ChatRequestDto {
+  @ApiProperty({ description: 'User message' })
+  @IsString()
+  @IsNotEmpty()
+  message: string;
+
+  @ApiPropertyOptional({ description: 'Chat session ID' })
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
+
+  @ApiPropertyOptional({ description: 'System message' })
+  @IsOptional()
+  @IsString()
+  systemMessage?: string;
+
+  @ApiPropertyOptional({ description: 'Available functions' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChatFunctionDto)
+  functions?: ChatFunctionDto[];
+
+  @ApiPropertyOptional({ description: 'Model configuration' })
+  @IsOptional()
+  @IsObject()
+  config?: ChatModelConfig;
+
+  @ApiPropertyOptional({ description: 'Request metadata' })
+  @IsOptional()
+  @IsObject()
+  metadata?: ChatRequestMetadata;
+
+  @ApiPropertyOptional({ description: 'Stream response' })
+  @IsOptional()
+  @IsBoolean()
+  stream?: boolean;
+}
+
+/**
+ * Chat response data DTO
+ */
+export class ChatResponseDataDto {
+  @ApiProperty({ description: 'Response content' })
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @ApiPropertyOptional({ description: 'Response metadata' })
+  @IsOptional()
+  @IsObject()
+  metadata?: {
+    model?: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    latency?: number;
+  };
+}
+
+/**
+ * Chat session DTO
+ */
+export class ChatSessionDto {
+  @ApiProperty({ description: 'Session ID' })
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @ApiProperty({ description: 'Session title' })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiProperty({ description: 'Created timestamp' })
+  @IsString()
+  @IsNotEmpty()
+  createdAt: string;
+
+  @ApiProperty({ description: 'Updated timestamp' })
+  @IsString()
+  @IsNotEmpty()
+  updatedAt: string;
+
+  @ApiPropertyOptional({ description: 'Session metadata' })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Chat response type
+ */
+export interface ChatResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  status?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -207,48 +366,6 @@ export class ChatCodeSnippetDto {
 }
 
 /**
- * Chat request DTO
- */
-export class ChatRequestDto {
-  @ApiProperty({ description: 'User message' })
-  @IsString()
-  @IsNotEmpty()
-  message: string;
-
-  @ApiPropertyOptional({ description: 'Chat session ID' })
-  @IsOptional()
-  @IsString()
-  sessionId?: string;
-
-  @ApiPropertyOptional({ description: 'System message' })
-  @IsOptional()
-  @IsString()
-  systemMessage?: string;
-
-  @ApiPropertyOptional({ description: 'Available functions' })
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatFunctionDto)
-  functions?: ChatFunctionDto[];
-
-  @ApiPropertyOptional({ description: 'Model configuration' })
-  @IsOptional()
-  @IsObject()
-  config?: ChatModelConfig;
-
-  @ApiPropertyOptional({ description: 'Request metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: ChatRequestMetadata;
-
-  @ApiPropertyOptional({ description: 'Stream response' })
-  @IsOptional()
-  @IsBoolean()
-  stream?: boolean;
-}
-
-/**
  * Chat stream chunk DTO
  */
 export class ChatStreamChunkDto {
@@ -266,44 +383,6 @@ export class ChatStreamChunkDto {
   done: boolean;
 
   @ApiPropertyOptional({ description: 'Chunk metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Chat response data DTO
- */
-export class ChatResponseDataDto {
-  @ApiProperty({ description: 'Assistant response' })
-  @IsString()
-  @IsNotEmpty()
-  content: string;
-
-  @ApiPropertyOptional({ description: 'Code snippets' })
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatCodeSnippetDto)
-  codeSnippets?: ChatCodeSnippetDto[];
-
-  @ApiPropertyOptional({ description: 'Function calls' })
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ChatFunctionDto)
-  functionCalls?: ChatFunctionDto[];
-
-  @ApiPropertyOptional({ description: 'Token usage statistics' })
-  @IsOptional()
-  @IsObject()
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-
-  @ApiPropertyOptional({ description: 'Response metadata' })
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
@@ -375,53 +454,4 @@ export class ChatStateDto {
     reset: number;
     limit: number;
   };
-}
-
-/**
- * Chat session DTO
- */
-export class ChatSessionDto {
-  @ApiProperty({ description: 'Session ID' })
-  @IsString()
-  @IsNotEmpty()
-  id: string;
-
-  @ApiProperty({ description: 'User ID' })
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
-
-  @ApiProperty({ description: 'Chat state' })
-  @ValidateNested()
-  @Type(() => ChatStateDto)
-  state: ChatStateDto;
-
-  @ApiPropertyOptional({ description: 'Chat context' })
-  @IsOptional()
-  @IsObject()
-  context?: Record<string, unknown>;
-
-  @ApiPropertyOptional({ description: 'Chat settings' })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ChatPreferencesDto)
-  settings?: ChatPreferencesDto;
-
-  @ApiProperty({ description: 'Session creation timestamp' })
-  @IsString()
-  createdAt: string;
-
-  @ApiProperty({ description: 'Session last update timestamp' })
-  @IsString()
-  updatedAt: string;
-
-  @ApiPropertyOptional({ description: 'Session end timestamp' })
-  @IsOptional()
-  @IsString()
-  endedAt?: string;
-
-  @ApiPropertyOptional({ description: 'Session metadata' })
-  @IsOptional()
-  @IsObject()
-  metadata?: Record<string, unknown>;
 }

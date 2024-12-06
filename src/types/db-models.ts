@@ -1,5 +1,8 @@
 import type { SystemMetrics } from './process-metrics';
 
+/**
+ * Database metric record structure
+ */
 export interface DBMetric {
   id: string;
   host_id: string;
@@ -69,6 +72,103 @@ export interface DBMetric {
   updated_at: Date;
 }
 
+// Error types
+export class MetricValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly field: string,
+    public readonly value: unknown,
+    public readonly constraint?: string
+  ) {
+    super(message);
+    this.name = 'MetricValidationError';
+  }
+}
+
+// Constants
+export const METRIC_CONSTRAINTS = {
+  CPU: {
+    MIN: 0,
+    MAX: 100,
+    CORES_MIN: 1,
+    CORES_MAX: 1024,
+  },
+  MEMORY: {
+    MIN: 0,
+    USAGE_MAX: 100,
+  },
+  NETWORK: {
+    MIN: 0,
+    MAX_PORTS: 65535,
+  },
+  LOAD: {
+    MIN: 0,
+    WARNING: 10,
+    CRITICAL: 20,
+  },
+} as const;
+
+// Type guards
+export function isDBMetric(obj: unknown): obj is DBMetric {
+  if (!obj || typeof obj !== 'object') return false;
+  
+  const metric = obj as DBMetric;
+  return (
+    typeof metric.id === 'string' &&
+    typeof metric.host_id === 'string' &&
+    metric.timestamp instanceof Date &&
+    typeof metric.cpu_total === 'number' &&
+    typeof metric.memory_total === 'number' &&
+    typeof metric.storage_total === 'number' &&
+    typeof metric.net_bytes_sent === 'number' &&
+    typeof metric.uptime_seconds === 'number'
+  );
+}
+
+// Validation functions
+export function validateCPUMetrics(metric: DBMetric): void {
+  if (metric.cpu_total < METRIC_CONSTRAINTS.CPU.MIN || metric.cpu_total > METRIC_CONSTRAINTS.CPU.MAX) {
+    throw new MetricValidationError(
+      'Invalid CPU total usage',
+      'cpu_total',
+      metric.cpu_total,
+      `${METRIC_CONSTRAINTS.CPU.MIN}-${METRIC_CONSTRAINTS.CPU.MAX}`
+    );
+  }
+
+  if (metric.cpu_cores < METRIC_CONSTRAINTS.CPU.CORES_MIN || metric.cpu_cores > METRIC_CONSTRAINTS.CPU.CORES_MAX) {
+    throw new MetricValidationError(
+      'Invalid CPU cores count',
+      'cpu_cores',
+      metric.cpu_cores,
+      `${METRIC_CONSTRAINTS.CPU.CORES_MIN}-${METRIC_CONSTRAINTS.CPU.CORES_MAX}`
+    );
+  }
+}
+
+export function validateMemoryMetrics(metric: DBMetric): void {
+  if (metric.memory_usage < METRIC_CONSTRAINTS.MEMORY.MIN || metric.memory_usage > METRIC_CONSTRAINTS.MEMORY.USAGE_MAX) {
+    throw new MetricValidationError(
+      'Invalid memory usage percentage',
+      'memory_usage',
+      metric.memory_usage,
+      `${METRIC_CONSTRAINTS.MEMORY.MIN}-${METRIC_CONSTRAINTS.MEMORY.USAGE_MAX}`
+    );
+  }
+
+  if (metric.memory_total < METRIC_CONSTRAINTS.MEMORY.MIN) {
+    throw new MetricValidationError(
+      'Invalid total memory',
+      'memory_total',
+      metric.memory_total,
+      `>=${METRIC_CONSTRAINTS.MEMORY.MIN}`
+    );
+  }
+}
+
+/**
+ * Convert database metric to system metric format
+ */
 export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
   return {
     timestamp: dbMetric.timestamp,
@@ -138,7 +238,22 @@ export function dbMetricToSystemMetric(dbMetric: DBMetric): SystemMetrics {
   };
 }
 
+/**
+ * Convert system metric to database metric format
+ */
 export function systemMetricToDbMetric(metric: SystemMetrics, hostId: string): Omit<DBMetric, 'id' | 'created_at' | 'updated_at'> {
+  const ioStats = metric.storage.ioStats ?? {
+    readCount: 0,
+    writeCount: 0,
+    readBytes: 0,
+    writeBytes: 0,
+    ioTime: 0
+  };
+
+  // Safely extract load averages with defaults
+  const loadAverage = Array.isArray(metric.loadAverage) ? metric.loadAverage : [0, 0, 0];
+  const [load1 = 0, load5 = 0, load15 = 0] = loadAverage;
+
   return {
     host_id: hostId,
     timestamp: metric.timestamp,
@@ -146,16 +261,16 @@ export function systemMetricToDbMetric(metric: SystemMetrics, hostId: string): O
     cpu_user: metric.cpu.user,
     cpu_system: metric.cpu.system,
     cpu_idle: metric.cpu.idle,
-    cpu_iowait: metric.cpu.iowait,
-    cpu_steal: metric.cpu.steal,
+    cpu_iowait: metric.cpu.iowait ?? 0,
+    cpu_steal: metric.cpu.steal ?? 0,
     cpu_cores: metric.cpu.cores,
     cpu_threads: metric.cpu.threads,
     memory_total: metric.memory.total,
     memory_used: metric.memory.used,
     memory_free: metric.memory.free,
     memory_shared: metric.memory.shared,
-    memory_buffers: metric.memory.buffers,
-    memory_cached: metric.memory.cached,
+    memory_buffers: metric.memory.buffers ?? 0,
+    memory_cached: metric.memory.cached ?? 0,
     memory_available: metric.memory.available,
     memory_swap_total: metric.memory.swapTotal,
     memory_swap_used: metric.memory.swapUsed,
@@ -165,11 +280,11 @@ export function systemMetricToDbMetric(metric: SystemMetrics, hostId: string): O
     storage_used: metric.storage.used,
     storage_free: metric.storage.free,
     storage_usage: metric.storage.usage,
-    io_read_count: metric.storage.ioStats?.readCount,
-    io_write_count: metric.storage.ioStats?.writeCount,
-    io_read_bytes: metric.storage.ioStats?.readBytes,
-    io_write_bytes: metric.storage.ioStats?.writeBytes,
-    io_time: metric.storage.ioStats?.ioTime,
+    io_read_count: ioStats.readCount,
+    io_write_count: ioStats.writeCount,
+    io_read_bytes: ioStats.readBytes,
+    io_write_bytes: ioStats.writeBytes,
+    io_time: ioStats.ioTime,
     net_bytes_sent: metric.network.bytesSent,
     net_bytes_recv: metric.network.bytesRecv,
     net_packets_sent: metric.network.packetsSent,
@@ -186,8 +301,8 @@ export function systemMetricToDbMetric(metric: SystemMetrics, hostId: string): O
     net_total_speed: metric.network.totalSpeed,
     net_average_speed: metric.network.averageSpeed,
     uptime_seconds: metric.uptimeSeconds,
-    load_average_1: metric.loadAverage[0],
-    load_average_5: metric.loadAverage[1],
-    load_average_15: metric.loadAverage[2],
+    load_average_1: load1,
+    load_average_5: load5,
+    load_average_15: load15,
   };
 }

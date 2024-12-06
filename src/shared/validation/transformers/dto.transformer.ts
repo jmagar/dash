@@ -1,4 +1,4 @@
-import { ClassTransformOptions, Transform, TransformFnParams } from 'class-transformer';
+import { Transform, type ClassTransformOptions, type TransformFnParams } from 'class-transformer';
 
 export function TransformToDate() {
   return Transform(({ value }: TransformFnParams) => {

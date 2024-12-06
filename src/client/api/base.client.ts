@@ -1,9 +1,8 @@
-﻿import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import io from 'socket.io-client';
-import type { Socket } from 'socket.io-client/build/esm/socket';
+﻿import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import socketIOClient from 'socket.io-client';
 import { config } from '../config';
 import { logger } from '../utils/frontendLogger';
-import { createApiError } from '../../types/error';
+import { ApiError } from './api';
 import type { ApiResponse } from '../../types/express';
 
 export interface BaseClientConfig {
@@ -17,27 +16,16 @@ export type EndpointParams = string | number | boolean | null | undefined;
 export type EndpointFunction = (...args: EndpointParams[]) => string;
 export type Endpoint = string | EndpointFunction;
 
-interface ServerToClientEvents {
-  connect: () => void;
-  disconnect: () => void;
-  connect_error: (error: Error) => void;
-}
-
-interface ClientToServerEvents {
-  ping: () => void;
-  subscribe: (channel: string) => void;
-  unsubscribe: (channel: string) => void;
-}
-
 export class BaseApiClient<T extends Record<string, Endpoint>> {
   protected readonly api: AxiosInstance;
   protected readonly endpoints: T;
-  protected readonly socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  protected readonly socket: any;
 
   constructor(endpoints: T, clientConfig?: BaseClientConfig) {
     this.endpoints = endpoints;
     this.api = axios.create({
-      baseURL: clientConfig?.baseURL || config.apiUrl,
+      baseURL: clientConfig?.baseURL || config.apiUrl || 'http://localhost:3001',
       timeout: clientConfig?.timeout || 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -45,12 +33,13 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
       },
     });
 
-    this.socket = io(clientConfig?.socketURL || config.socketUrl, {
+    const socketUrl = clientConfig?.socketURL || config.socketUrl || 'http://localhost:3001';
+    this.socket = socketIOClient(socketUrl, {
       autoConnect: true,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-    }) as unknown as Socket<ServerToClientEvents, ClientToServerEvents>;
+    });
 
     this.setupInterceptors();
     this.setupSocketHandlers();
@@ -67,31 +56,45 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
         return config;
       },
       (error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Request interceptor error', {
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
           stack: error instanceof Error ? error.stack : undefined
         });
-        return Promise.reject(error);
+        throw new ApiError({
+          message: errorMessage,
+          code: 'REQUEST_ERROR'
+        });
       }
     );
 
     this.api.interceptors.response.use(
       (response) => response,
       (error: unknown) => {
-        if (this.isAxiosError(error)) {
+        if (axios.isAxiosError(error)) {
           logger.error('Response interceptor error', {
             status: error.response?.status,
             url: error.config?.url,
             error: error.message,
             stack: error.stack
           });
-        } else {
-          logger.error('Unknown response error', {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined
+          throw new ApiError({
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+            code: 'RESPONSE_ERROR'
           });
         }
-        return Promise.reject(error);
+
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Unknown response error', {
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        throw new ApiError({
+          message: errorMessage,
+          code: 'UNKNOWN_ERROR'
+        });
       }
     );
   }
@@ -118,17 +121,9 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     });
   }
 
-  private isAxiosError(error: unknown): error is AxiosError {
-    return axios.isAxiosError(error);
-  }
-
   protected async get<R>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
-    try {
-      const response = await this.api.get<ApiResponse<R>>(endpoint, config);
-      return response.data;
-    } catch (error) {
-      throw createApiError(`GET request failed: ${endpoint}`, error);
-    }
+    const response = await this.api.get<ApiResponse<R>>(endpoint, config);
+    return response.data;
   }
 
   protected async post<R>(
@@ -136,12 +131,8 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     data?: unknown, 
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<R>> {
-    try {
-      const response = await this.api.post<ApiResponse<R>>(endpoint, data, config);
-      return response.data;
-    } catch (error) {
-      throw createApiError(`POST request failed: ${endpoint}`, error);
-    }
+    const response = await this.api.post<ApiResponse<R>>(endpoint, data, config);
+    return response.data;
   }
 
   protected async put<R>(
@@ -149,28 +140,33 @@ export class BaseApiClient<T extends Record<string, Endpoint>> {
     data?: unknown, 
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<R>> {
-    try {
-      const response = await this.api.put<ApiResponse<R>>(endpoint, data, config);
-      return response.data;
-    } catch (error) {
-      throw createApiError(`PUT request failed: ${endpoint}`, error);
-    }
+    const response = await this.api.put<ApiResponse<R>>(endpoint, data, config);
+    return response.data;
   }
 
   protected async delete<R>(endpoint: string, config?: AxiosRequestConfig): Promise<ApiResponse<R>> {
-    try {
-      const response = await this.api.delete<ApiResponse<R>>(endpoint, config);
-      return response.data;
-    } catch (error) {
-      throw createApiError(`DELETE request failed: ${endpoint}`, error);
-    }
+    const response = await this.api.delete<ApiResponse<R>>(endpoint, config);
+    return response.data;
   }
 
   protected getEndpoint(key: keyof T, ...params: EndpointParams[]): string {
     const endpoint = this.endpoints[key];
     if (typeof endpoint === 'function') {
-      return endpoint(...params) || '';
+      const result = endpoint(...params);
+      if (!result) {
+        throw new ApiError({
+          message: `Invalid endpoint for key: ${String(key)}`,
+          code: 'INVALID_ENDPOINT'
+        });
+      }
+      return result;
     }
-    return endpoint || '';
+    if (!endpoint) {
+      throw new ApiError({
+        message: `Missing endpoint for key: ${String(key)}`,
+        code: 'MISSING_ENDPOINT'
+      });
+    }
+    return endpoint;
   }
 }

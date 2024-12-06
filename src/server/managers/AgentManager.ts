@@ -5,7 +5,7 @@ import { BaseManagerDependencies } from './ManagerContainer';
 import { BaseService, ServiceConfig } from '../services/base.service';
 import { LoggingManager } from './LoggingManager';
 import { MetricsManager } from './MetricsManager';
-import { SecurityManager } from './SecurityManager';
+import { SecurityManager } from './security/SecurityManager';
 
 // Manually define ServiceStatus enum since it's not in the imported types
 export enum ServiceStatus {

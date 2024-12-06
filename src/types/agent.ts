@@ -1,7 +1,5 @@
-import { ServiceConfig } from './service-config';
 import { BaseEntity } from './base';
 import { ServiceStatus } from './status';
-import { Host } from './models-shared';
 
 export interface AgentEntity extends BaseEntity {
   hostId: string;
@@ -19,16 +17,8 @@ export interface AgentMetadata extends BaseEntity {
   tags?: string[];
 }
 
-export interface ExtendedHost extends Host {
-  os_type: 'windows' | 'linux' | 'darwin';
-  labels?: Record<string, string>;
-  agent_installed?: boolean;
-  agent_status?: ServiceStatus;
-  environment?: string;
-  tags?: string[];
-}
-
-export interface AgentConfig extends ServiceConfig {
+// Not extending ServiceConfig to maintain compatibility with existing code
+export interface AgentConfig {
   server_url: string;
   agent_id: string;
   labels?: Record<string, string>;
@@ -50,10 +40,10 @@ export interface WindowsServiceConfig {
   StartupType: string;
 }
 
-// Type guard for AgentEntity
+// Type guards with more precise checks
 export function isAgentEntity(obj: unknown): obj is AgentEntity {
-  return obj !== null &&
-    typeof obj === 'object' &&
+  return typeof obj === 'object' &&
+    obj !== null &&
     'hostId' in obj &&
     'status' in obj &&
     'version' in obj &&
@@ -61,10 +51,8 @@ export function isAgentEntity(obj: unknown): obj is AgentEntity {
     'metadata' in obj;
 }
 
-// Type guard for AgentMetadata
 export function isAgentMetadata(obj: unknown): obj is AgentMetadata {
-  return obj !== null &&
-    typeof obj === 'object' &&
-    'id' in obj &&
+  return typeof obj === 'object' &&
+    obj !== null &&
     'os_type' in obj;
 }

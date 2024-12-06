@@ -2,7 +2,7 @@ import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import { ContextProvider } from './context.provider';
 import config from '../config';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto, ChatRole } from '../routes/chat/dto/chat.dto';
 import { plainToClass } from 'class-transformer';
 import { ChatbotContext } from '../../types/chatbot';
@@ -20,6 +20,7 @@ interface ConversationMessage {
 class ConversationService {
   private openai: ChatOpenAI;
   private contextProvider: ContextProvider;
+  private logger: LoggingManager;
   private readonly maxHistoryLength = 10; // Configurable max history length
   private readonly maxTokens = 4096; // Default token limit
   private readonly defaultSystemPrompt = `You are a helpful assistant with access to system information about servers, containers, and application state. You can answer questions about the system state and help users understand their infrastructure.`;
@@ -31,6 +32,7 @@ class ConversationService {
       temperature: config.openai.temperature,
     });
     this.contextProvider = ContextProvider.getInstance();
+    this.logger = LoggingManager.getInstance();
   }
 
   private async getHistory(sessionId: string): Promise<ConversationMessage[]> {
@@ -143,7 +145,7 @@ class ConversationService {
         success: true
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Conversation service error:', {
+      this.logger.error('Conversation service error:', {
         error: error instanceof Error ? error.message : String(error),
         sessionId
       });
@@ -219,7 +221,7 @@ class ConversationService {
 
       StreamService.endStream(res);
     } catch (error) {
-      LoggingManager.getInstance().error('Streaming chat error:', {
+      this.logger.error('Streaming chat error:', {
         error: error instanceof Error ? error.message : String(error),
         sessionId
       });
@@ -239,5 +241,3 @@ class ConversationService {
 }
 
 export const conversationService = new ConversationService();
-
-

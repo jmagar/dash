@@ -1,61 +1,59 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { RootState } from '@/client/store/storeTypes';
-import type { ReactNode } from 'react';
-
-interface UIState {
-  theme: 'light' | 'dark';
-  sidebarOpen: boolean;
-  modalOpen: boolean;
-  modalContent: ReactNode | null;
-}
+import { createSlice, type PayloadAction, Slice } from '@reduxjs/toolkit';
+import type { RootState, UIState, ThemeMode } from '../storeTypes';
 
 const initialState: UIState = {
+  loading: false,
   theme: 'light',
   sidebarOpen: true,
   modalOpen: false,
-  modalContent: null,
+  modalContent: null
 };
 
-const uiSlice = createSlice({
+export const uiSlice: Slice<UIState> = createSlice({
   name: 'ui',
   initialState,
   reducers: {
-    toggleTheme: (state) => {
-      state.theme = state.theme === 'light' ? 'dark' : 'light';
+    showLoading(state) {
+      state.loading = true;
     },
-    setTheme: (state, action: PayloadAction<'light' | 'dark'>) => {
-      state.theme = action.payload;
+    hideLoading(state) {
+      state.loading = false;
     },
-    toggleSidebar: (state) => {
+    toggleSidebar(state) {
       state.sidebarOpen = !state.sidebarOpen;
     },
-    setSidebarOpen: (state, action: PayloadAction<boolean>) => {
+    setSidebarOpen(state, action: PayloadAction<boolean>) {
       state.sidebarOpen = action.payload;
     },
-    openModal: (state, action: PayloadAction<ReactNode>) => {
+    setTheme(state, action: PayloadAction<ThemeMode>) {
+      state.theme = action.payload;
+    },
+    openModal(state, action: PayloadAction<React.ReactNode>) {
       state.modalOpen = true;
       state.modalContent = action.payload;
     },
-    closeModal: (state) => {
+    closeModal(state) {
       state.modalOpen = false;
       state.modalContent = null;
-    },
-  },
+    }
+  }
 });
 
 export const {
-  toggleTheme,
-  setTheme,
+  showLoading,
+  hideLoading,
   toggleSidebar,
   setSidebarOpen,
+  setTheme,
   openModal,
-  closeModal,
+  closeModal
 } = uiSlice.actions;
 
-export default uiSlice.reducer;
-
 // Selectors
-export const selectTheme = (state: RootState) => state.ui.theme;
+export const selectLoading = (state: RootState) => state.ui.loading;
 export const selectSidebarOpen = (state: RootState) => state.ui.sidebarOpen;
+export const selectTheme = (state: RootState) => state.ui.theme;
 export const selectModalOpen = (state: RootState) => state.ui.modalOpen;
 export const selectModalContent = (state: RootState) => state.ui.modalContent;
+
+export default uiSlice.reducer;

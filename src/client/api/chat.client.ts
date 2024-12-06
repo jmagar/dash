@@ -1,26 +1,12 @@
 import { BaseApiClient, type Endpoint } from './base.client';
-
-// Basic types until we create proper shared DTOs
-interface ChatMessage {
-  id: string;
-  content: string;
-  sender: string;
-  timestamp: Date;
-  metadata?: Record<string, unknown>;
-}
-
-interface ChatResponse {
-  message: ChatMessage;
-  success: boolean;
-  error?: string;
-}
-
-interface ChatOptions {
-  context?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  model?: string;
-  temperature?: number;
-}
+import { ApiError } from './api';
+import type { 
+  ChatMessage, 
+  ChatResponse,
+  ChatResponseData,
+  ChatModelConfig,
+} from '../../types/chat';
+import { ChatRole } from '../../types/chat';
 
 type ChatEndpoints = Record<string, Endpoint> & {
   SEND: '/api/chat';
@@ -30,13 +16,15 @@ const CHAT_ENDPOINTS: ChatEndpoints = {
   SEND: '/api/chat',
 };
 
+interface SendMessageOptions extends Partial<ChatModelConfig> {
+  context?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * Chat client for sending and receiving chat messages.
  */
 class ChatClient extends BaseApiClient<ChatEndpoints> {
-  /**
-   * Creates a new instance of the chat client.
-   */
   constructor() {
     super(CHAT_ENDPOINTS);
   }
@@ -45,18 +33,28 @@ class ChatClient extends BaseApiClient<ChatEndpoints> {
    * Sends a chat message to the server.
    * 
    * @param message The message to send.
-   * @param options Optional chat options.
+   * @param options Optional chat configuration.
    * @returns The server's response to the chat message.
-   * @throws {Error} If the server's response is null.
+   * @throws {ApiError} If the server's response is invalid or an error occurs.
    */
-  async sendChatMessage(message: string, options: ChatOptions = {}): Promise<ChatResponse> {
-    const response = await this.post<ChatResponse>(
+  async sendChatMessage(
+    message: string, 
+    options: SendMessageOptions = {}
+  ): Promise<ChatResponse<ChatResponseData>> {
+    const response = await this.post<ChatResponse<ChatResponseData>>(
       this.getEndpoint('SEND'),
-      { message, ...options }
+      {
+        role: ChatRole.USER,
+        content: message,
+        ...options
+      }
     );
 
     if (!response.data) {
-      throw new Error('Failed to send chat message');
+      throw new ApiError({
+        message: 'Failed to send chat message',
+        code: 'CHAT_SEND_FAILED'
+      });
     }
 
     return response.data;
@@ -69,5 +67,7 @@ const chatClient = new ChatClient();
 // Export bound methods
 export const { sendChatMessage } = chatClient;
 
-// Export types for external use
-export type { ChatMessage, ChatResponse, ChatOptions };
+// Export types from shared definitions
+export type { ChatMessage, ChatResponse, ChatResponseData };
+// Export the interface separately to avoid conflict
+export type { SendMessageOptions };

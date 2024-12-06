@@ -2,7 +2,7 @@ import { Server as HttpServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { ConfigManager } from './ConfigManager';
 import { MetricsManager } from './MetricsManager';
-import { SecurityManager } from './SecurityManager';
+import { SecurityManager } from '../security/SecurityManager';
 import { LoggingManager } from './LoggingManager';
 import { MonitoringManager } from './MonitoringManager';
 import { AgentManager } from './AgentManager';

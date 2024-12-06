@@ -1,18 +1,6 @@
-﻿import { api } from './api';
+import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
+import { ApiError } from './api';
 import { logger } from '../utils/frontendLogger';
-
-// Basic types until we create proper shared DTOs
-interface CompressionRequest {
-  hostId: string;
-  sourcePaths: string[];
-  targetPath: string;
-}
-
-interface ExtractionRequest {
-  hostId: string;
-  sourcePath: string;
-  targetPath: string;
-}
 
 interface ArchiveEntry {
   name: string;
@@ -27,53 +15,47 @@ interface ListArchiveResponse {
   entryCount: number;
 }
 
-type CompressionErrorCode = 
-  | 'COMPRESSION_ERROR'
-  | 'EXTRACTION_ERROR'
-  | 'LIST_ERROR'
-  | 'VALIDATION_ERROR';
-
-interface CompressionError {
-  code: CompressionErrorCode;
-  message: string;
-  details?: Record<string, unknown>;
+interface CompressionRequest {
+  hostId: string;
+  sourcePaths: string[];
+  targetPath: string;
 }
 
-export interface CompressionApi {
-  compressFiles(hostId: string, sourcePaths: string[], targetPath: string): Promise<void>;
-  extractFiles(hostId: string, sourcePath: string, targetPath: string): Promise<void>;
-  listArchiveContents(hostId: string, archivePath: string): Promise<ListArchiveResponse>;
+interface ExtractionRequest {
+  hostId: string;
+  sourcePath: string;
+  targetPath: string;
 }
 
-class CompressionApiError extends Error implements CompressionError {
-  constructor(
-    message: string,
-    public code: CompressionErrorCode,
-    public details?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'CompressionApiError';
-    Object.setPrototypeOf(this, CompressionApiError.prototype);
+type CompressionEndpoints = Record<string, Endpoint> & {
+  COMPRESS: '/api/compression/compress';
+  EXTRACT: '/api/compression/extract';
+  LIST: (...args: EndpointParams[]) => string;
+};
+
+const COMPRESSION_ENDPOINTS: CompressionEndpoints = {
+  COMPRESS: '/api/compression/compress',
+  EXTRACT: '/api/compression/extract',
+  LIST: (hostId: EndpointParams, archivePath: EndpointParams) => 
+    `/api/compression/list/${encodeURIComponent(String(hostId))}/${encodeURIComponent(String(archivePath))}`,
+};
+
+class CompressionClient extends BaseApiClient<CompressionEndpoints> {
+  constructor() {
+    super(COMPRESSION_ENDPOINTS);
   }
 
-  static fromError(error: unknown, code: CompressionErrorCode, details: Record<string, unknown>): CompressionApiError {
-    const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new CompressionApiError(`Operation failed: ${message}`, code, details);
-  }
-}
-
-class CompressionApiClient implements CompressionApi {
   private validateInput(params: Record<string, unknown>, operation: string): void {
     const missingParams = Object.entries(params)
       .filter(([_, value]) => !value || (Array.isArray(value) && !value.length))
       .map(([key]) => key);
 
     if (missingParams.length > 0) {
-      throw new CompressionApiError(
-        `Invalid ${operation} parameters: ${missingParams.join(', ')} ${missingParams.length > 1 ? 'are' : 'is'} required`,
-        'VALIDATION_ERROR',
-        params
-      );
+      throw new ApiError({
+        message: `Invalid ${operation} parameters: ${missingParams.join(', ')} ${missingParams.length > 1 ? 'are' : 'is'} required`,
+        code: 'VALIDATION_ERROR',
+        data: params
+      });
     }
   }
 
@@ -92,7 +74,18 @@ class CompressionApiClient implements CompressionApi {
         targetPath,
       };
 
-      await api.post<void>('/api/compression/compress', request);
+      const response = await this.post<void>(
+        this.getEndpoint('COMPRESS'),
+        request
+      );
+
+      if (!response.success) {
+        throw new ApiError({
+          message: response.error || 'Failed to compress files',
+          code: 'COMPRESSION_ERROR',
+          data: request
+        });
+      }
     } catch (error) {
       logger.error('Failed to compress files', {
         error: error instanceof Error ? error.message : String(error),
@@ -101,10 +94,10 @@ class CompressionApiClient implements CompressionApi {
         targetPath
       });
 
-      throw CompressionApiError.fromError(error, 'COMPRESSION_ERROR', {
-        hostId,
-        sourcePaths,
-        targetPath,
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to compress files',
+        code: 'COMPRESSION_ERROR',
+        data: { hostId, sourcePaths, targetPath }
       });
     }
   }
@@ -124,7 +117,18 @@ class CompressionApiClient implements CompressionApi {
         targetPath,
       };
 
-      await api.post<void>('/api/compression/extract', request);
+      const response = await this.post<void>(
+        this.getEndpoint('EXTRACT'),
+        request
+      );
+
+      if (!response.success) {
+        throw new ApiError({
+          message: response.error || 'Failed to extract files',
+          code: 'EXTRACTION_ERROR',
+          data: request
+        });
+      }
     } catch (error) {
       logger.error('Failed to extract files', {
         error: error instanceof Error ? error.message : String(error),
@@ -133,10 +137,10 @@ class CompressionApiClient implements CompressionApi {
         targetPath
       });
 
-      throw CompressionApiError.fromError(error, 'EXTRACTION_ERROR', {
-        hostId,
-        sourcePath,
-        targetPath,
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to extract files',
+        code: 'EXTRACTION_ERROR',
+        data: { hostId, sourcePath, targetPath }
       });
     }
   }
@@ -150,12 +154,16 @@ class CompressionApiClient implements CompressionApi {
 
       logger.info('Listing archive contents', { hostId, archivePath });
 
-      const response = await api.get<ListArchiveResponse>(
-        `/api/compression/list/${encodeURIComponent(hostId)}/${encodeURIComponent(archivePath)}`
+      const response = await this.get<ListArchiveResponse>(
+        this.getEndpoint('LIST', hostId, archivePath)
       );
 
       if (!response.data) {
-        throw new Error('No response data received');
+        throw new ApiError({
+          message: 'No response data received',
+          code: 'LIST_ERROR',
+          data: { hostId, archivePath }
+        });
       }
 
       return response.data;
@@ -166,21 +174,29 @@ class CompressionApiClient implements CompressionApi {
         archivePath
       });
 
-      throw CompressionApiError.fromError(error, 'LIST_ERROR', {
-        hostId,
-        archivePath,
+      throw error instanceof ApiError ? error : new ApiError({
+        message: 'Failed to list archive contents',
+        code: 'LIST_ERROR',
+        data: { hostId, archivePath }
       });
     }
   }
 }
 
-export const compressionApi = new CompressionApiClient();
+// Create a single instance
+const compressionClient = new CompressionClient();
 
+// Export bound methods
+export const {
+  compressFiles,
+  extractFiles,
+  listArchiveContents
+} = compressionClient;
+
+// Export types
 export type {
-  CompressionRequest,
-  ExtractionRequest,
+  ArchiveEntry,
   ListArchiveResponse,
-  CompressionError,
-  CompressionErrorCode,
-  ArchiveEntry
+  CompressionRequest,
+  ExtractionRequest
 };

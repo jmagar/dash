@@ -2,7 +2,7 @@ import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, type ChildProcess } from 'child_process';
 import config from '../config';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 
 interface Memory {
   id: string;
@@ -33,7 +33,7 @@ export class MemoryService extends EventEmitter {
   constructor() {
     super();
     this.startMonitoring();
-    this.initializePython().catch(error => {
+    void this.initializePython().catch(error => {
       LoggingManager.getInstance().error('Failed to initialize MemoryService:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -46,12 +46,12 @@ export class MemoryService extends EventEmitter {
     }
 
     this.updateInterval = setInterval(
-      () => this.updateStats(),
+      () => void this.updateStats(),
       config.server.process.monitorInterval
     );
 
     // Initial update
-    this.updateStats();
+    void this.updateStats();
   }
 
   private async initializePython(): Promise<void> {
@@ -132,7 +132,7 @@ export class MemoryService extends EventEmitter {
     });
   }
 
-  private async updateStats(): Promise<void> {
+  private updateStats(): void {
     try {
       const totalMem = os.totalmem();
       const freeMem = os.freemem();
@@ -145,7 +145,7 @@ export class MemoryService extends EventEmitter {
 
       if (os.platform() === 'linux') {
         // Read from /proc/meminfo for Linux
-        const meminfo = await this.readMemInfo();
+        const meminfo = this.readMemInfo();
         swapTotal = meminfo.SwapTotal || 0;
         swapFree = meminfo.SwapFree || 0;
         swapUsed = swapTotal - swapFree;
@@ -170,7 +170,7 @@ export class MemoryService extends EventEmitter {
     }
   }
 
-  private async readMemInfo(): Promise<Record<string, number>> {
+  private readMemInfo(): Record<string, number> {
     // Implementation for reading /proc/meminfo on Linux
     // This is a placeholder - actual implementation would read the file
     return {
@@ -266,5 +266,3 @@ export class MemoryService extends EventEmitter {
 }
 
 export const memoryService = new MemoryService();
-
-

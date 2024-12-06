@@ -1,51 +1,55 @@
 import { EventEmitter } from 'events';
-import { Client as SSHClient } from 'ssh2';
-import { LoggingManager } from '../managers/utils/LoggingManager';
-import { metrics, recordHostMetric } from '../metrics';
-import type { OperationLabels, ServiceMetricLabels } from '../metrics';
-import cache from '../cache';
-import { errorAggregator } from './errorAggregator';
-import { ServiceOperationExecutor } from './operation';
-import { db } from '../db';
-import { DockerService } from './docker.service';
-import { SyslogService } from './logging/syslog.service';
-import { sshService } from './ssh.service';
-import type { Pool, QueryResult } from 'pg';
-import type { Host } from '../../types/models-shared';
+import { LoggingManager } from '../managers/LoggingManager';
+import { MetricsManager } from '../managers/MetricsManager';
+import { LoggerAdapter } from '../utils/logging/logger.adapter';
+import type { ServiceContext as IServiceContext, ServiceOptions as IServiceOptions } from '../../types/service';
 import type { LogMetadata } from '../../types/logger';
-import type { ICacheService } from '../cache/types';
-import { AccessTokenPayloadDto, RefreshTokenPayloadDto } from '../routes/auth/dto/auth.dto';
-import { CommandResult } from '../../types/models-shared';
-import { ApiError } from '../../types/error';
-import { ContextProvider } from './context.provider';
 import type { ChatbotContext } from '../../types/chatbot';
-import type { Schema } from '../../types/validation';
-import { z } from 'zod';
+import { ApiError } from '../../types/error';
+import type { DockerService } from './docker.service';
+import type { SSHService } from './ssh.service';
+import type { Cache } from '../../types/cache';
+import type { Redis } from '../../types/redis';
 
-export interface ServiceContext {
-  user?: AccessTokenPayloadDto | RefreshTokenPayloadDto;
-  requestId?: string;
-  traceId?: string;
-  spanId?: string;
+// Error and options interfaces
+export interface ServiceError extends Error {
+  code?: string;
+  details?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  retryable?: boolean;
+}
+
+// Extend base service options with implementation-specific options
+export interface ServiceOptions {
+  name?: string;
+  logger?: LoggingManager;
+  metrics?: MetricsManager;
+  cache?: Cache;
+  db?: Redis;
+  dockerService?: DockerService;
+  sshService?: SSHService;
+  context?: ChatbotContext;
+  retry?: IServiceOptions['retry'];
+  ssh?: IServiceOptions['ssh'];
+}
+
+// Extend base service context with implementation-specific context
+export interface ServiceContext extends Omit<IServiceContext, 'options'> {
+  operationId: string;
+  startTime: number;
+  metadata: LogMetadata;
+  options: ServiceOptions;
   chatbot?: ChatbotContext;
 }
 
-export type ValidationSchema<T> = z.ZodType<T>;
+export interface ValidationSchema<T> {
+  parse(data: unknown): T;
+}
 
 export interface ValidationOptions {
   schema?: ValidationSchema<unknown>;
   strict?: boolean;
   partial?: boolean;
-}
-
-export interface ServiceConfig {
-  retryOptions?: RetryOptions;
-  sshOptions?: SSHOptions;
-  cacheOptions?: CacheOptions;
-  metricsEnabled?: boolean;
-  loggingEnabled?: boolean;
-  validation?: ValidationOptions;
 }
 
 export interface RetryOptions {
@@ -75,424 +79,250 @@ export interface ServiceMetrics {
   uptime: number;
 }
 
-export interface ServiceError extends Error {
-  code?: string;
-  timestamp?: string;
-  details?: Record<string, unknown>;
-  retryable?: boolean;
-  attempt?: number;
+export interface OperationOptions {
+  validateInput?: boolean;
+  cache?: CacheOptions;
+  retry?: RetryOptions;
+  metrics?: {
+    tags?: Record<string, string | number>;
+    type?: string;
+  };
+  context?: ServiceContext;
 }
 
-const defaultRetryOptions: Required<RetryOptions> = {
-  maxAttempts: 3,
-  initialDelay: 1000,
-  maxDelay: 10000,
-  factor: 2,
-  timeout: 30000
-};
-
-const defaultSSHOptions: Required<SSHOptions> = {
-  timeout: 10000,
-  keepaliveInterval: 10000,
-  readyTimeout: 20000
-};
-
-const defaultCacheOptions: Required<CacheOptions> = {
-  ttl: 300,
-  prefix: 'service:'
-};
-
-export interface ServiceOperationExecutor<T, TInput = void> {
-  (input: TInput, context?: ChatbotContext): Promise<T>;
+export interface ServiceOperationExecutor<TOutput, TInput = unknown> {
+  (input?: TInput, context?: ChatbotContext): Promise<TOutput>;
+  name?: string;
   schema?: ValidationSchema<TInput>;
-}
-
-export interface ServiceOptions<TInput = void> {
-  cache?: {
-    ttl?: number;
-    prefix?: string;
-  };
-  retry?: {
-    maxAttempts?: number;
-    initialDelay?: number;
-    maxDelay?: number;
-  };
-  metrics?: MetricsOptions;
-  context?: ChatbotContext;
-  validation?: ValidationOptions;
-  input?: TInput;
 }
 
 export interface OperationMetrics {
   duration: number;
-  timestamp: string;
   success: boolean;
-  operation: string;
-  tags?: Record<string, string | number>;
   error?: ServiceError;
 }
 
 export interface OperationResult<T> {
   data: T;
-  metrics: OperationMetrics;
-  error?: ServiceError;
+  metadata: Record<string, unknown>;
+  duration: number;
+  cached: boolean;
 }
 
 export interface MetricsOptions {
-  enabled?: boolean;
   tags?: Record<string, string | number>;
+  type?: string;
   operation?: string;
   customMetrics?: Record<string, number>;
 }
 
 export class BaseService extends EventEmitter {
-  protected readonly logger = logger;
-  protected readonly metrics = metrics;
-  protected readonly cache: ICacheService = cache;
-  protected readonly db = db;
-  protected readonly dockerService = new DockerService();
-  protected readonly syslogService = new SyslogService();
-  protected readonly sshService = sshService;
-  protected readonly contextProvider: ContextProvider = ContextProvider.getInstance();
-  protected context?: ServiceContext;
-  protected config: Required<ServiceConfig>;
-  private operationCount = 0;
-  private errorCount = 0;
-  private lastError?: ServiceError;
-  private startTime: number = Date.now();
+  protected readonly name: string;
+  protected readonly logger: LoggerAdapter;
+  protected readonly metrics: MetricsManager;
+  protected readonly cache: Cache;
+  protected readonly db: Redis;
+  protected readonly dockerService: DockerService;
+  protected readonly sshService: SSHService;
+  protected context: ServiceContext;
+  protected readonly status: 'ready' | 'error' = 'ready';
+  protected readonly version: string = '1.0.0';
+  protected lastError?: ServiceError;
 
-  constructor(config: ServiceConfig = {}) {
+  constructor(options: ServiceOptions = {}) {
     super();
-    this.config = {
-      retryOptions: { ...defaultRetryOptions, ...config.retryOptions },
-      sshOptions: { ...defaultSSHOptions, ...config.sshOptions },
-      cacheOptions: { ...defaultCacheOptions, ...config.cacheOptions },
-      metricsEnabled: config.metricsEnabled ?? true,
-      loggingEnabled: config.loggingEnabled ?? true,
-      validation: config.validation ?? { strict: false }
+    this.name = options.name || this.constructor.name;
+    this.logger = new LoggerAdapter(options.logger || LoggingManager.getInstance(), {
+      service: this.name,
+    });
+    this.metrics = options.metrics || MetricsManager.getInstance();
+    this.cache = options.cache as Cache;
+    this.db = options.db as Redis;
+    this.dockerService = options.dockerService as DockerService;
+    this.sshService = options.sshService as SSHService;
+    this.context = this.createContext(options);
+  }
+
+  protected createContext(options: ServiceOptions = {}): ServiceContext {
+    return {
+      operationId: crypto.randomUUID(),
+      startTime: Date.now(),
+      metadata: {},
+      options,
+    } as ServiceContext;
+  }
+
+  protected normalizeError(error: unknown): ServiceError {
+    if (error instanceof ApiError) {
+      return {
+        name: error.name || 'ApiError',
+        message: error.message,
+        code: error instanceof Error ? error.message : String(error),
+        details: {},
+        metadata: {},
+        retryable: false
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+
+    return {
+      name: 'UnknownError',
+      message: String(error),
     };
   }
 
-  setContext(context: ServiceContext): void {
-    this.context = context;
-    this.contextProvider.updateContext(context);
+  protected createError(message: string, code?: string, details?: Record<string, unknown>): ServiceError {
+    return {
+      name: 'ServiceError',
+      message,
+      code,
+      details,
+    };
   }
 
-  async getChatbotContext(): Promise<ChatbotContext> {
-    return this.contextProvider.getContext();
-  }
-
-  async updateChatbotContext(query: string, result: unknown): Promise<void> {
-    await this.contextProvider.updateContext({ query, result });
-  }
-
-  async cleanup(): Promise<void> {
-    await Promise.all([
-      this.cache?.clear?.(),
-      this.dockerService?.cleanup?.(),
-      this.syslogService?.cleanup?.()
-    ]);
-  }
-
-  protected async executeOperation<T, TInput = void>(
-    executor: ServiceOperationExecutor<T, TInput>,
-    options: ServiceOptions<TInput> = {}
-  ): Promise<OperationResult<T>> {
-    const startTime = process.hrtime.bigint();
-    const operationName = options.metrics?.operation || executor.name || 'unknown';
-    this.operationCount++;
-
-    try {
-      const input = await this.validateInput(
-        options.input as TInput,
-        executor.schema,
-        options.validation
-      );
-
-      const result = await this.withRetry(
-        async () => {
-          if (options.cache) {
-            return this.withCache(
-              () => executor(input, options.context),
-              options.cache.ttl || 3600,
-              options.cache.prefix
-            );
-          }
-          return executor(input, options.context);
-        },
-        options.retry
-      );
-
-      const duration = Number(process.hrtime.bigint() - startTime) / 1e6;
-      const metrics: OperationMetrics = {
-        duration,
-        timestamp: new Date().toISOString(),
-        success: true,
-        operation: operationName,
-        tags: options.metrics?.tags
-      };
-
-      if (this.config.metricsEnabled && options.metrics?.enabled !== false) {
-        this.recordOperationMetrics(operationName, duration, true, options.metrics);
-      }
-
-      return { data: result, metrics };
-
-    } catch (error) {
-      const duration = Number(process.hrtime.bigint() - startTime) / 1e6;
-      this.errorCount++;
-      
-      const serviceError = this.normalizeError(error);
-      serviceError.timestamp = new Date().toISOString();
-      this.lastError = serviceError;
-
-      const metrics: OperationMetrics = {
-        duration,
-        timestamp: new Date().toISOString(),
-        success: false,
-        operation: operationName,
-        tags: options.metrics?.tags,
-        error: serviceError
-      };
-
-      if (this.config.metricsEnabled && options.metrics?.enabled !== false) {
-        this.recordOperationMetrics(operationName, duration, false, options.metrics);
-      }
-
-      throw serviceError;
-    }
-  }
-
-  private async validateInput<T>(
-    input: T | undefined,
-    schema?: ValidationSchema<T>,
-    options?: ValidationOptions
-  ): Promise<T> {
+  protected validateInput<T>(input: T, schema?: ValidationSchema<T>): void {
     if (!schema) {
-      if (options?.strict) {
-        throw new Error('No validation schema provided for strict operation');
-      }
-      return input as T;
+      return;
     }
 
     try {
-      const validationSchema = options?.partial
-        ? schema.partial()
-        : schema;
-
-      return await validationSchema.parseAsync(input);
+      schema.parse(input);
     } catch (error) {
-      const validationError = new Error('Validation failed');
-      (validationError as ServiceError).code = 'VALIDATION_ERROR';
-      (validationError as ServiceError).details = error instanceof Error ? { message: error.message } : error;
-      throw validationError;
+      throw new ApiError('Invalid input', {
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
-  private normalizeError(error: unknown): ServiceError {
-    if (error instanceof Error) {
+  protected async executeOperation<TOutput, TInput = unknown>(
+    executor: ServiceOperationExecutor<TOutput, TInput>,
+    input?: TInput,
+    context?: ChatbotContext
+  ): Promise<OperationResult<TOutput>> {
+    const startTime = Date.now();
+
+    try {
+      if (executor.schema) {
+        this.validateInput(input, executor.schema);
+      }
+
+      const result = await executor(input, context);
+
+      this.recordMetrics(startTime, executor.name || 'unknown', {
+        success: 'true',
+      });
+
       return {
-        ...error,
-        code: (error as ServiceError).code,
-        details: (error as ServiceError).details,
-        timestamp: (error as ServiceError).timestamp,
-        retryable: (error as ServiceError).retryable,
-        attempt: (error as ServiceError).attempt
+        data: result,
+        metadata: {},
+        duration: Date.now() - startTime,
+        cached: false
       };
+    } catch (error) {
+      const normalizedError = this.normalizeError(error);
+      this.lastError = normalizedError;
+
+      this.recordMetrics(startTime, executor.name || 'unknown', {
+        success: 'false',
+        error: normalizedError.code || 'unknown',
+      });
+
+      throw normalizedError;
+    }
+  }
+
+  protected async cleanup(): Promise<void> {
+    try {
+      if (this.dockerService?.cleanup) {
+        await this.dockerService.cleanup();
+      }
+      if (this.sshService?.disconnectAll) {
+        this.sshService.disconnectAll();
+      }
+    } catch (error) {
+      this.logger.error('Error during cleanup', { error: this.normalizeError(error) });
+    }
+  }
+
+  protected recordMetrics(startTime: number, metricType: string, labels: Record<string, string> = {}): void {
+    const duration = Date.now() - startTime;
+    const metricLabels = {
+      ...labels,
+      service: this.name,
+    };
+
+    try {
+      const histogram = this.metrics.createHistogram(`${metricType}_duration_seconds`);
+      histogram.observe(metricLabels, duration / 1000);
+      
+      const counter = this.metrics.createCounter(`${metricType}_total`);
+      counter.inc(metricLabels);
+
+      if (this.lastError) {
+        const errorCounter = this.metrics.createCounter(`${metricType}_errors_total`);
+        errorCounter.inc(metricLabels);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to record metrics', { error: this.normalizeError(error) });
+    }
+  }
+
+  protected setContext(newContext: ServiceContext): void {
+    this.context = newContext;
+  }
+
+  protected getChatbotContext(): ChatbotContext | undefined {
+    return this.context?.chatbot;
+  }
+
+  protected updateChatbotContext(query: string, result: unknown): void {
+    if (!this.context?.chatbot) {
+      return;
     }
 
-    const serviceError = new Error(String(error));
-    (serviceError as ServiceError).code = 'UNKNOWN_ERROR';
-    (serviceError as ServiceError).details = { originalError: error };
-    return serviceError as ServiceError;
+    this.context.chatbot = {
+      ...this.context.chatbot,
+      lastQuery: {
+        timestamp: new Date(),
+        query,
+        result,
+      },
+    };
   }
 
   protected async withCache<T>(
-    executor: ServiceOperationExecutor<T>,
-    ttlSeconds: number,
-    prefix = ''
+    executor: () => Promise<T>,
+    options: { ttl?: number; key?: string; bypass?: boolean } = {}
   ): Promise<T> {
-    if (!this.cache) {
+    if (!this.cache?.cacheSession || options.bypass) {
       return executor();
     }
 
-    const cacheKey = `${prefix}${this.getCacheKey(executor)}`;
-  
+    const key = options.key || executor.name || 'default';
+
     try {
-      const cachedValue = await this.cache.get<T>(cacheKey);
-      if (cachedValue !== null) {
-        return cachedValue;
+      const cachedResult = await this.cache.getSession(key);
+      if (cachedResult) {
+        return JSON.parse(cachedResult) as T;
       }
-
-      const result = await executor();
-      await this.cache.set(cacheKey, result, ttlSeconds);
-      return result;
     } catch (error) {
-      const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
-      serviceError.code = 'CACHE_ERROR';
-      throw serviceError;
-    }
-  }
-
-  private getCacheKey(executor: ServiceOperationExecutor<unknown>): string {
-    return `${executor.name || executor.toString()}_${JSON.stringify(this.context || {})}`;
-  }
-
-  protected async withRetry<T>(
-    executor: () => Promise<T>,
-    options?: ServiceOptions['retry']
-  ): Promise<T> {
-    const retryOpts = {
-      maxAttempts: options?.maxAttempts || this.config.retryOptions.maxAttempts,
-      initialDelay: options?.initialDelay || this.config.retryOptions.initialDelay,
-      maxDelay: options?.maxDelay || this.config.retryOptions.maxDelay,
-      factor: this.config.retryOptions.factor,
-      timeout: this.config.retryOptions.timeout,
-      retryableErrors: this.config.retryOptions.retryableErrors
-    };
-
-    let attempt = 1;
-    let delay = retryOpts.initialDelay;
-
-    while (attempt <= retryOpts.maxAttempts) {
-      try {
-        const timeoutPromise = retryOpts.timeout
-          ? new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Operation timed out')), retryOpts.timeout)
-            )
-          : null;
-
-        const executorPromise = executor();
-        const result = await (timeoutPromise
-          ? Promise.race([executorPromise, timeoutPromise])
-          : executorPromise);
-
-        return result;
-      } catch (error) {
-        const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
-        serviceError.attempt = attempt;
-        
-        const isRetryable = this.isRetryableError(serviceError, retryOpts.retryableErrors);
-        serviceError.retryable = isRetryable;
-
-        if (!isRetryable || attempt === retryOpts.maxAttempts) {
-          throw serviceError;
-        }
-
-        this.LoggingManager.getInstance().warn(`Operation failed (attempt ${attempt}/${retryOpts.maxAttempts})`, {
-          error: serviceError.message,
-          code: serviceError.code,
-          attempt,
-          nextDelay: delay
-        });
-
-        await this.delay(delay);
-        delay = Math.min(delay * retryOpts.factor, retryOpts.maxDelay);
-        attempt++;
-      }
+      this.logger.warn('Cache retrieval failed', { error: this.normalizeError(error) });
     }
 
-    throw new Error('Max retry attempts reached');
-  }
-
-  private isRetryableError(error: ServiceError, retryableErrors?: Array<string | RegExp>): boolean {
-    if (!retryableErrors?.length) {
-      return true; // Default to retrying all errors if no patterns specified
+    const result = await executor();
+    try {
+      await this.cache.cacheSession(key, JSON.stringify(result));
+    } catch (error) {
+      this.logger.warn('Cache storage failed', { error: this.normalizeError(error) });
     }
 
-    return retryableErrors.some(pattern => {
-      if (pattern instanceof RegExp) {
-        return pattern.test(error.message) || (error.code && pattern.test(error.code));
-      }
-      return error.code === pattern;
-    });
-  }
-
-  protected handleError(error: unknown, context: Record<string, unknown> = {}): never {
-    const serviceError: ServiceError = error instanceof Error ? error : new Error(String(error));
-    
-    const metadata: LogMetadata = {
-      ...context,
-      error: serviceError.message,
-      code: serviceError.code,
-      details: serviceError.details,
-      stack: serviceError.stack,
-      attempt: serviceError.attempt,
-      retryable: serviceError.retryable
-    };
-
-    this.LoggingManager.getInstance().error('Operation failed', metadata);
-    errorAggregator.trackError(serviceError, metadata);
-
-    throw serviceError;
-  }
-
-  protected getMetrics(): ServiceMetrics {
-    const uptime = Date.now() - this.startTime;
-  
-    const baseMetrics = {
-      operationCount: this.operationCount,
-      errorCount: this.errorCount,
-      lastError: this.lastError,
-      uptime
-    };
-
-    if (this.config.metricsEnabled) {
-      metrics.gauge('service_uptime', uptime);
-      metrics.gauge('service_operation_count', this.operationCount);
-      metrics.gauge('service_error_count', this.errorCount);
-    }
-
-    return baseMetrics;
-  }
-
-  protected getHealthMetrics(): Record<string, unknown> {
-    const metrics = this.getMetrics();
-    return {
-      ...metrics,
-      healthy: this.errorCount === 0 || (Date.now() - (this.lastError?.timestamp ? new Date(this.lastError.timestamp).getTime() : 0)) > 300000, // 5 minutes
-      status: this.errorCount === 0 ? 'healthy' : 'degraded'
-    };
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  private recordOperationMetrics(
-    operation: string,
-    duration: number,
-    success: boolean,
-    options?: MetricsOptions
-  ): void {
-    const labels: OperationLabels = {
-      operation,
-      success: String(success),
-      service: this.constructor.name
-    };
-
-    // Record operation duration
-    metrics.histogram('operation_duration', duration, labels);
-
-    // Record operation result
-    metrics.increment('operation_total', 1, labels);
-
-    // Record custom metrics if provided
-    if (options?.customMetrics) {
-      Object.entries(options.customMetrics).forEach(([metric, value]) => {
-        const metricLabels: ServiceMetricLabels = {
-          service: this.constructor.name,
-          metric_type: metric
-        };
-        metrics.gauge(metric, value, metricLabels);
-      });
-    }
-
-    // Record service metrics
-    const serviceLabels = { service: this.constructor.name };
-    metrics.gauge('operation_count', this.operationCount, serviceLabels);
-    metrics.gauge('error_count', this.errorCount, serviceLabels);
+    return result;
   }
 }
-
-

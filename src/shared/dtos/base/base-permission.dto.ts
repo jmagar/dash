@@ -45,10 +45,10 @@ export class BasePermissionDto {
   @IsOptional()
   expiresAt?: Date;
 
-  @ApiProperty({ description: 'Additional permission metadata' })
-  @IsObject()
+  @ApiProperty({ description: 'Additional metadata', required: false })
   @IsOptional()
-  metadata?: Record<string, any> = {};
+  @IsObject()
+  metadata?: Record<string, unknown> = {};
 
   constructor(partial?: Partial<BasePermissionDto>) {
     // Set default values

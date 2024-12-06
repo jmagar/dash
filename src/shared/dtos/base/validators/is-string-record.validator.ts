@@ -1,5 +1,10 @@
 import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+import { isStringRecord } from '../../../utils/type-utils';
 
+/**
+ * Validator decorator to ensure an object is a Record<string, string>
+ * @param validationOptions - Options for the validation
+ */
 export function IsStringRecord(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
@@ -8,13 +13,10 @@ export function IsStringRecord(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: unknown, args: ValidationArguments): boolean {
-          if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
-            return false;
-          }
-          return Object.values(value as Record<string, unknown>).every((item) => typeof item === 'string');
+        validate(value: unknown): value is Record<string, string> {
+          return isStringRecord(value);
         },
-        defaultMessage(args: ValidationArguments): string {
+        defaultMessage(args: ValidationArguments) {
           return `${args.property} must be an object with string values`;
         },
       },

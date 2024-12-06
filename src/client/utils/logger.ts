@@ -1,9 +1,3 @@
-﻿import { LoggingManager } from '../../server/utils/logging/LoggingManager';
-/**
- * @deprecated Use frontendLogger.ts instead. This logger will be removed in a future version.
- * Import from '../utils/frontendLogger' instead of '../utils/logger'.
- */
-
 import { logger as frontendLogger } from './frontendLogger';
 import type { LogMetadata } from '../../types/logger';
 
@@ -17,7 +11,6 @@ class Logger {
   private prefix: string;
 
   constructor(options: LoggerOptions) {
-    consoleLoggingManager.getInstance().();
     this.level = options.level;
     this.prefix = options.prefix || '';
   }
@@ -27,23 +20,23 @@ class Logger {
       ...(typeof data === 'object' ? data as object : { data }),
       prefix: this.prefix
     };
-    return message;
+    return `${this.prefix ? `[${this.prefix}] ` : ''}${message}`;
   }
 
   debug(message: string, data?: unknown): void {
-    frontendLoggerLoggingManager.getInstance().(), data as LogMetadata);
+    frontendLogger.debug(this.formatMessage('debug', message), data as LogMetadata);
   }
 
   info(message: string, data?: unknown): void {
-    frontendLoggerLoggingManager.getInstance().(), data as LogMetadata);
+    frontendLogger.info(this.formatMessage('info', message), data as LogMetadata);
   }
 
   warn(message: string, data?: unknown): void {
-    frontendLoggerLoggingManager.getInstance().(), data as LogMetadata);
+    frontendLogger.warn(this.formatMessage('warn', message), data as LogMetadata);
   }
 
   error(message: string, data?: unknown): void {
-    frontendLoggerLoggingManager.getInstance().(), data as LogMetadata);
+    frontendLogger.error(this.formatMessage('error', message), data as LogMetadata);
   }
 }
 
@@ -51,5 +44,3 @@ export const logger = new Logger({
   level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
   prefix: 'Client',
 });
-
-

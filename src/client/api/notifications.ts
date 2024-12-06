@@ -1,74 +1,42 @@
-import { ApiResult } from './types';
-import { NotificationEntity, NotificationFilter, NotificationPreferences } from '../../types/notifications';
-import { BaseApi } from './base';
+import { BaseApiClient, type Endpoint, type EndpointParams, type EndpointFunction } from './base.client';
+import type { NotificationEntity } from '../../types/notifications';
+import type { ApiResponse } from '../../types/express';
 
-const NOTIFICATION_ENDPOINTS = {
-  GET: '/notifications',
-  READ: '/notifications/:id/read',
-  READ_ALL: '/notifications/read-all',
-  DELETE: '/notifications',
-  PREFERENCES: '/notifications/preferences',
-} as const;
+type NotificationsEndpoints = Record<string, Endpoint> & {
+  GET: '/api/notifications';
+  MARK_READ: EndpointFunction;
+  MARK_ALL_READ: '/api/notifications/mark-all-read';
+  CLEAR: '/api/notifications/clear';
+};
 
-export class NotificationsApi extends BaseApi {
+const NOTIFICATIONS_ENDPOINTS: NotificationsEndpoints = {
+  GET: '/api/notifications',
+  MARK_READ: (...args: EndpointParams[]) => `/api/notifications/${args[0]}/mark-read`,
+  MARK_ALL_READ: '/api/notifications/mark-all-read',
+  CLEAR: '/api/notifications/clear'
+};
+
+class NotificationsApiClient extends BaseApiClient<NotificationsEndpoints> {
   constructor() {
-    super(NOTIFICATION_ENDPOINTS);
+    super(NOTIFICATIONS_ENDPOINTS);
   }
 
-  /**
-   * Get notifications for a user
-   */
-  async getNotifications(filter: NotificationFilter): Promise<ApiResult<NotificationEntity[]>> {
-    const queryParams = new URLSearchParams();
-    if (filter.userId) queryParams.append('userId', filter.userId);
-    if (filter.type) queryParams.append('type', filter.type.join(','));
-    if (filter.read !== undefined) queryParams.append('read', String(filter.read));
-    if (filter.startDate) queryParams.append('startDate', filter.startDate.toISOString());
-    if (filter.endDate) queryParams.append('endDate', filter.endDate.toISOString());
-    if (filter.status) queryParams.append('status', filter.status.join(','));
-    if (filter.limit) queryParams.append('limit', String(filter.limit));
-    if (filter.offset) queryParams.append('offset', String(filter.offset));
-
-    return this.get<NotificationEntity[]>(this.getEndpoint('GET', undefined, queryParams));
+  async getNotifications(filter?: string): Promise<ApiResponse<NotificationEntity[]>> {
+    const params = filter ? { filter } : undefined;
+    return this.get(this.getEndpoint('GET'), { params });
   }
 
-  /**
-   * Mark notification as read
-   */
-  async markAsRead(notificationId: string): Promise<ApiResult<void>> {
-    return this.post<void>(this.getEndpoint('READ', notificationId));
+  async markAsRead(id: string): Promise<ApiResponse<void>> {
+    return this.post(this.getEndpoint('MARK_READ', id));
   }
 
-  /**
-   * Mark all notifications as read
-   */
-  async markAllAsRead(notificationIds: string[]): Promise<ApiResult<void>> {
-    return this.put<void>(this.getEndpoint('READ_ALL'), { ids: notificationIds });
+  async markAllAsRead(ids: string[]): Promise<ApiResponse<void>> {
+    return this.post(this.getEndpoint('MARK_ALL_READ'), { ids });
   }
 
-  /**
-   * Clear notifications for a user
-   */
-  async clearNotifications(userId: string): Promise<ApiResult<void>> {
-    return this.delete<void>(this.getEndpoint('DELETE'), { userId });
-  }
-
-  /**
-   * Get notification preferences
-   */
-  async getPreferences(userId: string): Promise<ApiResult<NotificationPreferences>> {
-    return this.get<NotificationPreferences>(this.getEndpoint('PREFERENCES', userId));
-  }
-
-  /**
-   * Update notification preferences
-   */
-  async updatePreferences(
-    userId: string,
-    preferences: Partial<NotificationPreferences>
-  ): Promise<ApiResult<NotificationPreferences>> {
-    return this.put<NotificationPreferences>(this.getEndpoint('PREFERENCES', userId), preferences);
+  async clearNotifications(userId: string): Promise<ApiResponse<void>> {
+    return this.post(this.getEndpoint('CLEAR'), { userId });
   }
 }
 
-export const notificationsApi = new NotificationsApi();
+export const notificationsApi = new NotificationsApiClient();

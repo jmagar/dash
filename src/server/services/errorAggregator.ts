@@ -1,5 +1,5 @@
 import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 
 interface ErrorGroup {
   count: number;
@@ -25,11 +25,13 @@ class ErrorAggregator {
   private errorGroups: Map<string, ErrorGroup>;
   private readonly maxOccurrences: number;
   private readonly flushInterval: number;
+  private readonly logger: LoggingManager;
 
   private constructor() {
     this.errorGroups = new Map();
     this.maxOccurrences = parseInt(process.env.ERROR_MAX_OCCURRENCES || '100');
     this.flushInterval = parseInt(process.env.ERROR_FLUSH_INTERVAL || '3600000'); // 1 hour
+    this.logger = LoggingManager.getInstance();
 
     // Periodically flush old errors
     setInterval(() => this.flushOldErrors(), this.flushInterval);
@@ -79,7 +81,7 @@ class ErrorAggregator {
 
     // Log error frequency
     if (group.count === 1 || group.count === 10 || group.count === 100 || (group.count % 1000 === 0)) {
-      LoggingManager.getInstance().warn('Error frequency alert:', {
+      this.logger.warn('Error frequency alert:', {
         error: error.message,
         count: group.count,
         firstSeen: group.firstSeen,
@@ -168,12 +170,10 @@ class ErrorAggregator {
     }
 
     if (flushedCount > 0) {
-      LoggingManager.getInstance().info('Flushed old error groups:', { count: flushedCount });
+      this.logger.info('Flushed old error groups:', { count: flushedCount });
     }
   }
 }
 
 export const errorAggregator = ErrorAggregator.getInstance();
 export default errorAggregator;
-
-

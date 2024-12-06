@@ -1,6 +1,8 @@
-import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
+import { BaseApiClient, type Endpoint } from './base.client';
+import { ApiError } from './api';
 import type { 
   LoginRequest, 
+  LoginResponse,
   LogoutResponse, 
   ValidateResponse,
   AuthenticatedUserDto,
@@ -34,28 +36,32 @@ class AuthClient extends BaseApiClient<AuthEndpoints> {
   }
 
   async login(request: LoginRequest): Promise<AuthenticatedUserDto> {
-    const response = await this.post<AuthenticatedUserDto>(
+    const response = await this.post<LoginResponse>(
       this.getEndpoint('LOGIN'),
-      { data: request }
+      request
     );
 
-    if (!response.data) {
-      throw new Error('Login failed');
+    if (!response.data?.success || !response.data?.user) {
+      throw new ApiError({
+        message: response.data?.error || 'Login failed',
+        code: 'AUTH_LOGIN_FAILED'
+      });
     }
 
-    return response.data;
+    return response.data.user;
   }
 
-  async logout(): Promise<LogoutResponse> {
+  async logout(): Promise<void> {
     const response = await this.post<LogoutResponse>(
       this.getEndpoint('LOGOUT')
     );
 
-    if (!response.success) {
-      throw new Error('Logout failed');
+    if (!response.data?.success) {
+      throw new ApiError({
+        message: response.data?.error || 'Logout failed',
+        code: 'AUTH_LOGOUT_FAILED'
+      });
     }
-
-    return response;
   }
 
   async validate(): Promise<ValidateResponse> {
@@ -63,45 +69,68 @@ class AuthClient extends BaseApiClient<AuthEndpoints> {
       this.getEndpoint('VALIDATE')
     );
 
-    if (!response.data) {
-      throw new Error('Token validation failed');
+    if (!response.data?.success) {
+      throw new ApiError({
+        message: response.data?.error || 'Token validation failed',
+        code: 'AUTH_VALIDATION_FAILED'
+      });
     }
 
     return response.data;
   }
 
-  async register(request: RegisterRequest): Promise<RegisterResponse> {
+  async register(request: RegisterRequest): Promise<AuthenticatedUserDto> {
     const response = await this.post<RegisterResponse>(
       this.getEndpoint('REGISTER'),
-      { data: request }
+      request
     );
 
-    if (!response.data) {
-      throw new Error('Registration failed');
+    if (!response.data?.success || !response.data?.user) {
+      throw new ApiError({
+        message: response.data?.error || 'Registration failed',
+        code: 'AUTH_REGISTRATION_FAILED'
+      });
     }
 
-    return response.data;
+    return response.data.user;
   }
 
   async refreshToken(request: RefreshTokenRequest): Promise<RefreshTokenResponse> {
     const response = await this.post<RefreshTokenResponse>(
       this.getEndpoint('REFRESH'),
-      { data: request }
+      request
     );
 
-    if (!response.data) {
-      throw new Error('Token refresh failed');
+    if (!response.data?.success) {
+      throw new ApiError({
+        message: response.data?.error || 'Token refresh failed',
+        code: 'AUTH_REFRESH_FAILED'
+      });
     }
 
     return response.data;
   }
 
   async updateUser(user: Partial<AuthenticatedUserDto>): Promise<AuthenticatedUserDto> {
-    const response = await this.post<AuthenticatedUserDto>(this.getEndpoint('UPDATE'), { data: user });
-    if (!response.data) {
-      throw new Error('Update user failed');
+    interface UpdateUserResponse {
+      success: boolean;
+      user: AuthenticatedUserDto;
+      error?: string;
     }
-    return response.data;
+
+    const response = await this.post<UpdateUserResponse>(
+      this.getEndpoint('UPDATE'),
+      user
+    );
+
+    if (!response.data?.success || !response.data?.user) {
+      throw new ApiError({
+        message: response.data?.error || 'Update user failed',
+        code: 'AUTH_UPDATE_FAILED'
+      });
+    }
+
+    return response.data.user;
   }
 }
 

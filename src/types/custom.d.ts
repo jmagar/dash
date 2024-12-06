@@ -1,10 +1,13 @@
 declare module '@copilotkit/react-core' {
-  import type { Message } from '@copilotkit/shared';
+  import type { Message, ChatResponse } from '@copilotkit/shared';
   import type { ReactNode } from 'react';
 
   export interface UseCopilotChatOptions {
     id: string;
-    onError?: (error: unknown) => void;
+    onError?: (error: Error) => void;
+    onResponse?: (response: ChatResponse) => void;
+    initialMessages?: Message[];
+    maxMessages?: number;
   }
 
   export interface UseCopilotChatReturn {
@@ -16,17 +19,24 @@ declare module '@copilotkit/react-core' {
     stop: () => void;
     clearMessages: () => void;
     error?: Error;
+    reset: () => void;
+    sendMessage: (content: string) => Promise<void>;
   }
 
   export interface CopilotApiConfig {
     chatApiEndpoint: string;
     headers: Record<string, string>;
     params?: Record<string, unknown>;
+    timeout?: number;
+    retries?: number;
   }
 
   export interface CopilotKitProps {
     children: ReactNode;
     apiConfig?: CopilotApiConfig;
+    theme?: 'light' | 'dark' | 'auto';
+    defaultLanguage?: string;
+    enableMarkdown?: boolean;
   }
 
   export const useCopilotChat: (options: UseCopilotChatOptions) => UseCopilotChatReturn;
@@ -34,15 +44,23 @@ declare module '@copilotkit/react-core' {
 }
 
 declare module '@copilotkit/shared' {
+  export type MessageRole = 'user' | 'assistant' | 'system';
+  export type MessageType = 'text' | 'code' | 'image' | 'file';
+
   export interface Message {
     id: string;
-    role: 'user' | 'assistant';
+    role: MessageRole;
     content: string;
+    type?: MessageType;
+    metadata?: Record<string, unknown>;
+    timestamp?: Date;
   }
 
   export interface MessageContentComplex {
-    type: string;
+    type: MessageType;
     text: string;
+    language?: string;
+    metadata?: Record<string, unknown>;
   }
 
   export type MessageContent = string | MessageContentComplex[];
@@ -51,28 +69,20 @@ declare module '@copilotkit/shared' {
     success: boolean;
     data?: string;
     error?: string;
-  }
-}
-
-declare module 'ioredis' {
-  class Redis {
-    constructor(options?: RedisOptions);
-    connect(): Promise<void>;
-    disconnect(): void;
-    quit(): Promise<'OK'>;
-    get(key: string): Promise<string | null>;
-    set(key: string, value: string, mode?: string, duration?: number): Promise<'OK' | null>;
-    del(...keys: string[]): Promise<number>;
-  }
-  
-  interface RedisOptions {
-    host?: string;
-    port?: number;
-    password?: string;
-    db?: number;
-    maxRetriesPerRequest?: number;
-    retryStrategy?: (times: number) => number | null;
+    metadata?: {
+      timestamp: Date;
+      processingTime?: number;
+      modelName?: string;
+      usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      };
+    };
   }
 
-  export = Redis;
+  export interface ChatError extends Error {
+    code: string;
+    details?: Record<string, unknown>;
+  }
 }

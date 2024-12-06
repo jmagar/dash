@@ -1,7 +1,8 @@
-import { RedisClientType } from 'redis';
-import { cache } from '../cache';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import type { CacheClient } from '../cache';
+import cacheModule from '../cache';
+import { LoggingManager } from '../managers/LoggingManager';
 import { ChatRole } from '../routes/chat/dto/chat.dto';
+import type { JsonObject } from '../managers/types/manager.types';
 
 interface ConversationMessage {
   role: ChatRole;
@@ -9,46 +10,70 @@ interface ConversationMessage {
   timestamp: Date;
 }
 
+interface SerializedMessage extends JsonObject {
+  role: ChatRole;
+  content: string;
+  timestamp: string;
+}
+
 export class ConversationCache {
-  private readonly client: RedisClientType;
+  private readonly client: CacheClient;
   private readonly prefix = 'conversation:';
   private readonly expiration = 60 * 60 * 24 * 7; // 7 days
+  private readonly logger: LoggingManager;
 
   constructor() {
-    this.client = cache.getClient();
+    this.client = cacheModule.getClient();
+    this.logger = LoggingManager.getInstance();
   }
 
   private getKey(sessionId: string): string {
     return `${this.prefix}${sessionId}`;
   }
 
+  private serializeMessages(messages: ConversationMessage[]): SerializedMessage[] {
+    return messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp.toISOString()
+    }));
+  }
+
+  private deserializeMessages(data: string): ConversationMessage[] {
+    const messages = JSON.parse(data) as SerializedMessage[];
+    return messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: new Date(msg.timestamp)
+    }));
+  }
+
   async saveHistory(sessionId: string, messages: ConversationMessage[]): Promise<void> {
     try {
       const key = this.getKey(sessionId);
-      await this.client.set(key, JSON.stringify(messages), {
-        EX: this.expiration
-      });
+      const serializedMessages = this.serializeMessages(messages);
+      await this.client.set(key, JSON.stringify(serializedMessages), this.expiration);
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to save conversation history:', {
-        error: error instanceof Error ? error.message : String(error),
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to save conversation history:', {
+        error: errorMessage,
         sessionId
       });
+      throw new Error(`Failed to save conversation history: ${errorMessage}`);
     }
   }
 
   async getHistory(sessionId: string): Promise<ConversationMessage[]> {
     try {
       const key = this.getKey(sessionId);
-      const data = await this.client.get(key);
+      const data = await this.client.get<string>(key);
       if (!data) return [];
       
-      return JSON.parse(data).map((msg: any) => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp)
-      }));
+      return this.deserializeMessages(data);
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to retrieve conversation history:', {
-        error: error instanceof Error ? error.message : String(error),
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to retrieve conversation history:', {
+        error: errorMessage,
         sessionId
       });
       return [];
@@ -58,16 +83,16 @@ export class ConversationCache {
   async clearHistory(sessionId: string): Promise<void> {
     try {
       const key = this.getKey(sessionId);
-      await this.client.del(key);
+      await this.client.delete(key);
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to clear conversation history:', {
-        error: error instanceof Error ? error.message : String(error),
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to clear conversation history:', {
+        error: errorMessage,
         sessionId
       });
+      throw new Error(`Failed to clear conversation history: ${errorMessage}`);
     }
   }
 }
 
 export const conversationCache = new ConversationCache();
-
-

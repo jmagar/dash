@@ -2,7 +2,7 @@
  * Logging system type definitions
  */
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'critical';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'critical';
 
 export interface LogContext {
   requestId?: string;
@@ -30,19 +30,39 @@ export interface LogMetadata extends LogContext {
 }
 
 export interface LogEntry {
+  id: string;
+  hostId: string;
   level: LogLevel;
   message: string;
   timestamp: string;
-  metadata?: LogMetadata;
+  source: string;
+  meta?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface LogOptions {
+export interface LogConfig {
+  level: LogLevel;
+  format?: 'json' | 'text';
   timestamp?: boolean;
   colors?: boolean;
-  level?: LogLevel;
+  filepath?: string;
+  maxSize?: string;
+  maxFiles?: number;
+  console: boolean;
+}
+
+export interface LogFormatter {
+  format(entry: LogEntry): string;
+}
+
+export interface LogTransport {
+  log(entry: LogEntry): void;
+  setFormatter(formatter: LogFormatter): void;
 }
 
 export interface Logger {
+  notify?: boolean;
   error(message: string, metadata?: LogMetadata): void;
   warn(message: string, metadata?: LogMetadata): void;
   info(message: string, metadata?: LogMetadata): void;
@@ -51,23 +71,43 @@ export interface Logger {
   critical(message: string, metadata?: LogMetadata & { notify?: boolean }): void;
 }
 
-/**
- * Extended logger interface with context support
- */
 export interface ExtendedLogger extends Logger {
   child(options: LogOptions): Logger;
 }
 
-/**
- * Logger configuration interface
- */
-export interface LoggerConfig {
-  level: LogLevel;
-  format: 'json' | 'text';
-  timestamp: boolean;
-  colors: boolean;
-  filepath?: string;
-  maxSize?: string;
-  maxFiles?: number;
-  console: boolean;
+export interface LogOptions {
+  level?: LogLevel;
+  transports?: LogTransport[];
+  format?: 'json' | 'text';
+  timestamp?: boolean;
+  colors?: boolean;
 }
+
+export interface LogFilter {
+  level?: LogLevel;
+  search?: string;
+  startTime?: Date;
+  endTime?: Date;
+  hostId?: string;
+  source?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface LogStats {
+  total: number;
+  byLevel: Record<LogLevel, number>;
+  byHost: Record<string, number>;
+  bySource: Record<string, number>;
+}
+
+export interface LoggingManager {
+  getInstance(): Logger;
+  getLogger(options?: LogOptions): Logger;
+  configure(config: LogConfig): void;
+  addTransport(transport: LogTransport): void;
+  removeTransport(transport: LogTransport): void;
+}
+
+// Re-export types for backward compatibility
+export type { LogEntry as ServerLogEntry, LogFilter as ServerLogFilter };

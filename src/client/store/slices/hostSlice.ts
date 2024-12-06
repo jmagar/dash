@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-
 import type { Host } from '../../../types/api';
-import { RootState } from '../index';
+import type { RootState, ConnectionState, ConnectionStatus } from '../storeTypes';
 
 interface HostState {
   hosts: Record<string, Host>;
+  selectedHostId: string | null;
   loading: boolean;
   error: string | null;
+  connections: Record<string, ConnectionState>;
 }
 
 interface ApiResponse<T> {
@@ -17,12 +18,14 @@ interface ApiResponse<T> {
 
 const initialState: HostState = {
   hosts: {},
+  selectedHostId: null,
   loading: false,
   error: null,
+  connections: {},
 };
 
 export const fetchHosts = createAsyncThunk<Host[], void, { rejectValue: string }>(
-  'hosts/fetchHosts',
+  'host/fetchHosts',
   async (_, { rejectWithValue }) => {
     try {
       const response = await fetch('/api/hosts');
@@ -40,7 +43,7 @@ export const fetchHosts = createAsyncThunk<Host[], void, { rejectValue: string }
 );
 
 export const addHost = createAsyncThunk<Host, Host, { rejectValue: string }>(
-  'hosts/addHost',
+  'host/addHost',
   async (host, { rejectWithValue }) => {
     try {
       const response = await fetch('/api/hosts', {
@@ -65,7 +68,7 @@ export const addHost = createAsyncThunk<Host, Host, { rejectValue: string }>(
 );
 
 export const removeHost = createAsyncThunk<string, string, { rejectValue: string }>(
-  'hosts/removeHost',
+  'host/removeHost',
   async (hostId, { rejectWithValue }) => {
     try {
       const response = await fetch(`/api/hosts/${hostId}`, {
@@ -86,7 +89,7 @@ export const removeHost = createAsyncThunk<string, string, { rejectValue: string
 );
 
 const hostSlice = createSlice({
-  name: 'hosts',
+  name: 'host',
   initialState,
   reducers: {
     updateHostStatus: (state, action: PayloadAction<{ id: string; status: string }>) => {
@@ -94,6 +97,17 @@ const hostSlice = createSlice({
       if (state.hosts[id]) {
         state.hosts[id].status = status;
       }
+    },
+    updateConnection: (state, action: PayloadAction<{ hostId: string; status: ConnectionStatus; error?: string }>) => {
+      const { hostId, status, error } = action.payload;
+      state.connections[hostId] = {
+        status,
+        lastConnected: status === 'connected' ? new Date() : undefined,
+        error,
+      };
+    },
+    selectHost: (state, action: PayloadAction<string | null>) => {
+      state.selectedHostId = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -107,6 +121,12 @@ const hostSlice = createSlice({
         state.error = null;
         state.hosts = action.payload.reduce<Record<string, Host>>((acc, host) => {
           acc[host.id] = host;
+          // Initialize connection state for new hosts
+          if (!state.connections[host.id]) {
+            state.connections[host.id] = {
+              status: 'disconnected',
+            };
+          }
           return acc;
         }, {});
       })
@@ -122,6 +142,10 @@ const hostSlice = createSlice({
         state.loading = false;
         state.error = null;
         state.hosts[action.payload.id] = action.payload;
+        // Initialize connection state for new host
+        state.connections[action.payload.id] = {
+          status: 'disconnected',
+        };
       })
       .addCase(addHost.rejected, (state, action) => {
         state.loading = false;
@@ -135,6 +159,10 @@ const hostSlice = createSlice({
         state.loading = false;
         state.error = null;
         delete state.hosts[action.payload];
+        delete state.connections[action.payload];
+        if (state.selectedHostId === action.payload) {
+          state.selectedHostId = null;
+        }
       })
       .addCase(removeHost.rejected, (state, action) => {
         state.loading = false;
@@ -143,18 +171,26 @@ const hostSlice = createSlice({
   },
 });
 
-export const { updateHostStatus } = hostSlice.actions;
+export const { updateHostStatus, updateConnection, selectHost } = hostSlice.actions;
 
 export const selectHosts = (state: RootState): Host[] =>
-  Object.values(state.hosts.hosts);
+  Object.values(state.host.hosts);
 
 export const selectHostById = (state: RootState, id: string): Host | undefined =>
-  state.hosts.hosts[id];
+  state.host.hosts[id];
+
+export const selectSelectedHost = (state: RootState): Host | null => {
+  const { selectedHostId, hosts } = state.host;
+  return selectedHostId ? (hosts[selectedHostId] ?? null) : null;
+};
+
+export const selectHostConnection = (state: RootState, hostId: string): ConnectionState | undefined =>
+  state.host.connections[hostId];
 
 export const selectHostsLoading = (state: RootState): boolean =>
-  state.hosts.loading;
+  state.host.loading;
 
 export const selectHostsError = (state: RootState): string | null =>
-  state.hosts.error;
+  state.host.error;
 
 export default hostSlice.reducer;
