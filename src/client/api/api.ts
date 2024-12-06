@@ -30,7 +30,7 @@ api.interceptors.request.use(
     const apiError: ApiError = {
       message: error instanceof Error ? error.message : 'Unknown error',
     };
-    loggerLoggingManager.getInstance().();
+    logger.error('API request error:', error);
     return Promise.reject(error);
   }
 );
@@ -45,7 +45,7 @@ api.interceptors.response.use(
       status: axiosError.response?.status,
       data: axiosError.response?.data,
     };
-    loggerLoggingManager.getInstance().();
+    logger.error('API response error:', error);
     return Promise.reject(error);
   }
 );

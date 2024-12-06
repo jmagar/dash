@@ -20,15 +20,14 @@
     "paths": {
       "@client/*": ["src/client/*"],
       "@shared/*": ["src/shared/*"],
-      "@server/*": ["src/server/*"]
+      "@server/*": ["src/server/*"],
+      "@types/*": ["src/types/*"]
     }
   },
   "include": [
-    "src/client/**/*.ts",
-    "src/client/**/*.tsx",
-    "src/shared/**/*.ts",
-    "src/types/**/*.ts",
-    "src/types/**/*.d.ts",
+    "src/client/**/*",
+    "src/shared/**/*",
+    "src/types/**/*",
     "src/**/*.stories.tsx",
     "src/server/routes/auth/dto/*.ts"
   ],

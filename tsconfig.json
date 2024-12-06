@@ -5,7 +5,7 @@
     "declaration": true,
     "tsBuildInfoFile": "./tsconfig.root.tsbuildinfo",
     "baseUrl": ".",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "verbatimModuleSyntax": true,
     "paths": {
       "@/*": ["src/*"],
@@ -15,6 +15,7 @@
     }
   },
   "references": [
+    { "path": "./tsconfig.shared.json" },
     { "path": "./tsconfig.server.json" },
     { "path": "./tsconfig.client.json" }
   ],

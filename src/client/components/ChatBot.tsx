@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import {
   Box,
@@ -43,7 +43,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
     id: 'main-chat',
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      LoggingManager.getInstance().();
+      logger.error('Chat error:', errorMessage);
       if (onError) {
         onError(error instanceof Error ? error : new Error(errorMessage));
       }
@@ -63,7 +63,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
       await sendMessage(message);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      LoggingManager.getInstance().();
+      logger.error('Failed to send message:', errorMessage);
       if (onError) {
         onError(error instanceof Error ? error : new Error('Failed to send message'));
       }
@@ -227,4 +227,3 @@ export const ChatBot: React.FC<ChatBotProps> = ({ onError }) => {
     </Paper>
   );
 };
-
