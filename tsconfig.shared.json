@@ -5,17 +5,19 @@
     "declaration": true,
     "tsBuildInfoFile": "./tsconfig.shared.tsbuildinfo",
     "baseUrl": ".",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "verbatimModuleSyntax": true,
     "paths": {
       "@/*": ["src/*"],
       "@shared/*": ["src/shared/*"],
-      "@types/*": ["src/types/*"]
+      "@types/*": ["src/types/*"],
+      "@server/*": ["src/server/*"]
     }
   },
   "include": [
-    "src/types/**/*",
-    "src/shared/**/*"
+    "./src/types/**/*.ts",
+    "./src/types/**/*.d.ts",
+    "./src/shared/**/*"
   ],
   "exclude": [
     "node_modules",

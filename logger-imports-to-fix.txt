@@ -20,7 +20,7 @@ Services:
 - [✓] src/server/services/compression.service.ts
 - [✓] src/server/services/llm.ts
 - [✓] src/server/services/log.service.ts (fixed: '../managers/LoggingManager')
-- [✓] src/server/services/metrics-storage.service.ts
+- [✓] src/server/services/metrics-storage.service.ts (fixed: '../managers/LoggingManager')
 - [✓] src/server/services/settings.service.ts
 - src/server/services/ssh.service.ts
 - src/server/services/stream.service.ts
@@ -56,9 +56,9 @@ Connections:
 - src/server/connections/config.ts
 
 Current incorrect import:
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/utils/LoggingManager'
 
 Should be changed to:
-import { LoggingManager } from '../../managers/LoggingManager';
+import { LoggingManager } from '../../managers/LoggingManager'
 
 Note: The import path should be relative to the file's location. All files should import from src/server/managers/LoggingManager.ts

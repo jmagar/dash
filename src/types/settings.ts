@@ -179,9 +179,15 @@ export interface Settings {
   user: UserPreferences;
 }
 
+// JSON Types
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonArray = JsonValue[];
+export type JsonObject = { [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
+
 // Settings Update Types
-export type SettingsPath = (keyof Settings | string)[]; // e.g. ['user', 'interface', 'theme']
-export type SettingsValue = any; // TODO: Make this more specific based on path
+export type SettingsPath = (string | number)[];
+export type SettingsValue = JsonValue;
 
 export interface SettingsUpdate {
   path: SettingsPath;

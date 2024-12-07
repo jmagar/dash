@@ -20,10 +20,11 @@
     { "path": "./tsconfig.client.json" }
   ],
   "include": [
-    "src/types/**/*",
-    "src/shared/**/*",
-    "src/server/**/*",
-    "src/client/**/*"
+    "./src/types/**/*.ts",
+    "./src/types/**/*.d.ts",
+    "./src/shared/**/*",
+    "./src/server/**/*",
+    "./src/client/**/*"
   ],
   "exclude": [
     "node_modules",

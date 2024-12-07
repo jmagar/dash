@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "..",
     "paths": {
       "@/*": ["src/*"],
       "@client/*": ["src/client/*"],
@@ -11,5 +11,9 @@
       "@config/*": ["config/*"],
       "@test/*": ["test/*"]
     }
-  }
+  },
+  "include": [
+    "../src/**/*.ts",
+    "../src/**/*.d.ts"
+  ]
 }

@@ -1,13 +1,9 @@
 import { EventEmitter } from 'events';
-import IORedis from 'ioredis';
+import IORedis, { Redis, RedisStatus } from 'ioredis';
 import { LoggingManager } from '../managers/LoggingManager';
-import { CacheKey, CacheValue, CacheStats, CacheHealth, CacheClient } from './types';
-import { 
-  RedisError, 
-  RedisErrorCode, 
-  RedisConnectionConfig,
-  REDIS_ERROR_MESSAGES
-} from '../../types/redis';
+import type { CacheKey, CacheValue, CacheStats, CacheHealth, CacheClient } from './types';
+import type { RedisConnectionConfig } from '../../types/redis';
+import { RedisError, RedisErrorCode, REDIS_ERROR_MESSAGES } from '../../types/redis';
 
 export interface RedisConfig {
   url: string;
@@ -25,8 +21,8 @@ interface RedisClientEvents {
   end: () => void;
 }
 
-interface RedisClientType extends IORedis {
-  status: string;
+interface RedisClientType extends Redis {
+  status: RedisStatus;
   set(key: string, value: string, mode?: string, duration?: number): Promise<'OK'>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<number>;
@@ -69,7 +65,7 @@ export class RedisClientWrapper extends EventEmitter implements CacheClient {
 
   private setupEventHandlers(): void {
     type RedisEventName = keyof RedisClientEvents;
-    const events: RedisEventName[] = ['connect', 'ready', 'error', 'close', 'reconnecting', 'end'];
+    const events: RedisEventName[] = ['connect', 'ready', 'error', 'close', 'reconnecting', 'end']
 
     events.forEach(event => {
       const clientEmitter = this.client as unknown as EventEmitter;
@@ -290,3 +286,7 @@ export class RedisClientWrapper extends EventEmitter implements CacheClient {
     }
   }
 }
+
+export const redis = new RedisClientWrapper({
+  url: process.env.REDIS_URL || 'localhost:6379'
+});

@@ -5,6 +5,7 @@
     "tsBuildInfoFile": "./.tsbuildinfo",
     "incremental": true,
     "skipLibCheck": true,
+    "verbatimModuleSyntax": false,
     "importsNotUsedAsValues": "remove",
     
     /* Language and Environment */
@@ -40,8 +41,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "useDefineForClassFields": false,
-    "skipDefaultLibCheck": true,
-    
+    "skipDefaultLibCheck": true
   },
   "watchOptions": {
     "watchFile": "useFsEvents",

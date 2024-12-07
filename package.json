@@ -235,7 +235,10 @@
     "check": "npm run check:shared && npm run check:client && npm run check:server",
     "check:client": "npm run type:check:client && eslint src/client --ext .ts,.tsx --max-warnings 0",
     "check:server": "npm run type:check:server && eslint src/server --ext .ts,.tsx --max-warnings 0",
-    "check:shared": "tsc --noEmit --project tsconfig.shared.json && eslint src/types src/shared --ext .ts,.tsx --max-warnings 0"
+    "check:shared": "tsc --noEmit --project tsconfig.shared.json && eslint src/types src/shared --ext .ts,.tsx --max-warnings 0",
+    "check:types": "tsc --noEmit",
+    "check:file": "node scripts/check-file.js",
+    "check:lint": "eslint src"
   },
   "browserslist": {
     "production": [

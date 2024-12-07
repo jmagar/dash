@@ -19,7 +19,8 @@
   "include": [
     "src/server/**/*",
     "src/shared/**/*",
-    "src/types/**/*"
+    "src/types/**/*.ts",
+    "src/types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",

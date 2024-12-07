@@ -3,15 +3,16 @@ module.exports = {
   extends: ['eslint:recommended'],
   overrides: [
     {
-      files: ['src/types/**/*.ts'],
+      files: ['src/**/*.ts', 'src/**/*.d.ts'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
-        project: ['./tsconfig.json'],
+        project: ['./tsconfig.eslint.json'],
         tsconfigRootDir: __dirname
       },
       extends: [
         'eslint:recommended',
-        'plugin:@typescript-eslint/recommended'
+        'plugin:@typescript-eslint/recommended',
+        'plugin:@typescript-eslint/recommended-requiring-type-checking'
       ],
       plugins: ['@typescript-eslint'],
       rules: {
@@ -23,7 +24,7 @@ module.exports = {
       files: ['src/server/**/*.ts'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
-        project: ['./tsconfig.server.json'],
+        project: ['./tsconfig.eslint.json'],
         tsconfigRootDir: __dirname
       },
       extends: [
@@ -46,7 +47,7 @@ module.exports = {
       files: ['src/client/**/*.ts', 'src/client/**/*.tsx'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
-        project: ['./tsconfig.client.json'],
+        project: ['./tsconfig.eslint.json'],
         tsconfigRootDir: __dirname,
         ecmaFeatures: {
           jsx: true
@@ -55,30 +56,41 @@ module.exports = {
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
+        'plugin:@typescript-eslint/recommended-requiring-type-checking',
         'plugin:react/recommended',
         'plugin:react-hooks/recommended'
       ],
       plugins: ['@typescript-eslint', 'react', 'react-hooks'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+        'react/react-in-jsx-scope': 'off',
+        'react/prop-types': 'off'
       }
     },
     {
       files: ['src/shared/**/*.ts'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
-        project: ['./tsconfig.json'],
+        project: ['./tsconfig.eslint.json'],
         tsconfigRootDir: __dirname
       },
       extends: [
         'eslint:recommended',
-        'plugin:@typescript-eslint/recommended'
+        'plugin:@typescript-eslint/recommended',
+        'plugin:@typescript-eslint/recommended-requiring-type-checking'
       ],
       plugins: ['@typescript-eslint'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'warn',
         '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
+      }
+    },
+    {
+      files: ['**/*.js', '**/*.cjs'],
+      env: {
+        node: true,
+        es2021: true
       }
     }
   ],

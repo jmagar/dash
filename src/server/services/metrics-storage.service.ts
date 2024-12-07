@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { LoggingManager } from '../managers/LoggingManager';
-import type { SystemMetrics } from '../../types/metrics.types';
+import type { SystemMetrics, NetworkInterface } from '../../types/metrics.types';
 import type { DBMetric } from '../../types/db-models';
 import type { Host } from '../../types/models-shared';
 
@@ -10,24 +10,37 @@ class MetricsStorageService {
    */
   private dbToSystemMetric(row: DBMetric): SystemMetrics {
     // Parse network interfaces from JSON string or default to empty array
-    const interfaces = Array.isArray(row.net_interfaces) ? row.net_interfaces :
-      (typeof row.net_interfaces === 'string' ?
-        JSON.parse(row.net_interfaces) :
-        [{
-          name: 'default',
-          bytesRecv: 0,
-          bytesSent: 0,
-          packetsRecv: 0,
-          packetsSent: 0,
-          errorsIn: 0,
-          errorsOut: 0,
-          dropsIn: 0,
-          dropsOut: 0
-        }]
-      );
+    const defaultInterface: NetworkInterface = {
+      name: 'default',
+      mac: '00:00:00:00:00:00',
+      ipv4: [],
+      ipv6: [],
+      rx_bytes: 0,
+      tx_bytes: 0,
+      rx_packets: 0,
+      tx_packets: 0
+    };
+
+    let interfaces: NetworkInterface[] = [defaultInterface];
+    
+    if (Array.isArray(row.net_interfaces)) {
+      interfaces = row.net_interfaces as NetworkInterface[];
+    } else if (typeof row.net_interfaces === 'string') {
+      try {
+        const parsed = JSON.parse(row.net_interfaces);
+        if (Array.isArray(parsed) && parsed.every(isValidNetworkInterface)) {
+          interfaces = parsed;
+        }
+      } catch (error) {
+        LoggingManager.getInstance().warn('Failed to parse network interfaces', { 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    }
 
     return {
       timestamp: row.timestamp,
+      hostId: row.host_id,
       cpu: {
         usage: row.cpu_total,
         total: row.cpu_total,
@@ -38,6 +51,7 @@ class MetricsStorageService {
         steal: row.cpu_steal ?? 0,
         cores: row.cpu_cores,
         threads: row.cpu_threads,
+        model: 'Unknown', // Adding required model property
       },
       memory: {
         total: row.memory_total,
@@ -57,20 +71,15 @@ class MetricsStorageService {
         used: row.storage_used,
         free: row.storage_free,
         usage: row.storage_usage,
-        read_bytes: row.io_read_bytes ?? 0,
-        write_bytes: row.io_write_bytes ?? 0,
-        read_count: row.io_read_count ?? 0,
-        write_count: row.io_write_count ?? 0,
-        health: 'unknown',
         ioStats: {
+          reads: row.io_read_count ?? 0,
+          writes: row.io_write_count ?? 0,
           readBytes: row.io_read_bytes ?? 0,
           writeBytes: row.io_write_bytes ?? 0,
-          readCount: row.io_read_count ?? 0,
-          writeCount: row.io_write_count ?? 0,
           readTime: 0,
           writeTime: 0,
-          ioTime: row.io_time ?? 0,
         },
+        mounts: [], // Add required mounts property
       },
       network: {
         bytesRecv: row.net_bytes_recv,
@@ -81,27 +90,18 @@ class MetricsStorageService {
         errorsOut: row.net_errors_out,
         dropsIn: row.net_drops_in,
         dropsOut: row.net_drops_out,
-        tx_bytes: row.net_bytes_sent,
-        rx_bytes: row.net_bytes_recv,
-        tx_packets: row.net_packets_sent,
-        rx_packets: row.net_packets_recv,
-        rx_errors: row.net_errors_in,
-        tx_errors: row.net_errors_out,
-        rx_dropped: row.net_drops_in,
-        tx_dropped: row.net_drops_out,
         tcp_conns: row.net_tcp_conns,
         udp_conns: row.net_udp_conns,
-        listen_ports: row.net_listen_ports,
+        listen_ports: row.net_listen_ports ? [row.net_listen_ports] : [],
         average_speed: row.net_average_speed,
         total_speed: row.net_total_speed,
-        health: 0,
         interfaces,
       },
       uptime: row.uptime_seconds,
       loadAverage: [
-        row.load_average_1,
-        row.load_average_5,
-        row.load_average_15,
+        row.load_average_1 ?? 0,
+        row.load_average_5 ?? 0,
+        row.load_average_15 ?? 0
       ],
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -160,11 +160,11 @@ class MetricsStorageService {
           metrics.storage.used,
           metrics.storage.free,
           metrics.storage.usage,
-          metrics.storage.ioStats.readCount,
-          metrics.storage.ioStats.writeCount,
+          metrics.storage.ioStats.reads,
+          metrics.storage.ioStats.writes,
           metrics.storage.ioStats.readBytes,
           metrics.storage.ioStats.writeBytes,
-          metrics.storage.ioStats.ioTime,
+          metrics.storage.ioStats.readTime + metrics.storage.ioStats.writeTime, // Combined time
           metrics.network.bytesSent,
           metrics.network.bytesRecv,
           metrics.network.packetsSent,
@@ -186,9 +186,17 @@ class MetricsStorageService {
         ]
       );
 
+      const firstRow = result.rows[0];
+      if (!firstRow) {
+        LoggingManager.getInstance().warn('No metrics found for host:', {
+          hostId: host.id,
+        });
+        return;
+      }
+
       LoggingManager.getInstance().info('Stored metrics:', {
         hostId: host.id,
-        metricsId: result.rows[0].id,
+        metricsId: firstRow.id,
       });
     } catch (error) {
       LoggingManager.getInstance().error('Failed to store metrics:', {
@@ -240,7 +248,7 @@ class MetricsStorageService {
         [host.id]
       );
 
-      if (result.rows.length === 0) {
+      if (result.rows.length === 0 || !result.rows[0]) {
         return null;
       }
 
@@ -253,6 +261,28 @@ class MetricsStorageService {
       throw error;
     }
   }
+}
+
+function isValidNetworkInterface(obj: unknown): obj is NetworkInterface {
+  if (!obj || typeof obj !== 'object') return false;
+  
+  const requiredFields: Array<keyof NetworkInterface> = [
+    'name',
+    'mac',
+    'ipv4',
+    'ipv6',
+    'rx_bytes',
+    'tx_bytes',
+    'rx_packets',
+    'tx_packets'
+  ];
+  
+  return requiredFields.every(field => {
+    const value = (obj as Record<string, unknown>)[field];
+    if (field === 'name' || field === 'mac') return typeof value === 'string';
+    if (field === 'ipv4' || field === 'ipv6') return Array.isArray(value) && value.every(ip => typeof ip === 'string');
+    return typeof value === 'number';
+  });
 }
 
 // Export singleton instance

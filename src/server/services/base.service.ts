@@ -309,8 +309,9 @@ export class BaseService extends EventEmitter {
 
     try {
       const cachedResult = await this.cache.getSession(key);
-      if (cachedResult) {
-        return JSON.parse(cachedResult) as T;
+      if (typeof cachedResult === 'string') {
+        const parsed = JSON.parse(cachedResult) as T;
+        return parsed;
       }
     } catch (error) {
       this.logger.warn('Cache retrieval failed', { error: this.normalizeError(error) });
@@ -324,5 +325,18 @@ export class BaseService extends EventEmitter {
     }
 
     return result;
+  }
+
+  protected handleError(error: unknown, metadata?: Record<string, unknown>): void {
+    const normalizedError = this.normalizeError(error);
+    const errorMetadata = {
+      ...metadata,
+      error: normalizedError,
+      service: this.name,
+      component: this.name
+    };
+    
+    this.logger.error(normalizedError.message, errorMetadata);
+    this.lastError = normalizedError;
   }
 }
