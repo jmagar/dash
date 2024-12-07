@@ -6,6 +6,7 @@
     "module": "esnext",
     "moduleResolution": "node",
     "composite": true,
+    "incremental": true,
     "declaration": true,
     "tsBuildInfoFile": "./tsconfig.client.tsbuildinfo",
     "outDir": "dist/client",

@@ -5,6 +5,7 @@
     "outDir": "dist/server",
     "rootDir": "src",
     "composite": true,
+    "incremental": true,
     "tsBuildInfoFile": "./tsconfig.server.tsbuildinfo",
     "sourceMap": true,
     "declaration": true,

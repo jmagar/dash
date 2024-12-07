@@ -1,6 +1,6 @@
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ChatRole } from '../routes/chat/dto/chat.dto';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { MessageSanitizer } from '../utils/sanitizer/messageSanitizer';
 
 export class StreamService {

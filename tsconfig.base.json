@@ -2,7 +2,6 @@
   "extends": "./config/paths.json",
   "compilerOptions": {
     /* Performance Optimizations */
-    "tsBuildInfoFile": "./.tsbuildinfo",
     "incremental": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": false,

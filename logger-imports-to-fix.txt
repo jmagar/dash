@@ -22,9 +22,9 @@ Services:
 - [✓] src/server/services/log.service.ts (fixed: '../managers/LoggingManager')
 - [✓] src/server/services/metrics-storage.service.ts (fixed: '../managers/LoggingManager')
 - [✓] src/server/services/settings.service.ts
-- src/server/services/ssh.service.ts
-- src/server/services/stream.service.ts
-- src/server/services/service-registry.ts
+- [✓] src/server/services/ssh.service.ts
+- [✓] src/server/services/stream.service.ts
+- [✓] src/server/services/service-registry.ts
 - src/server/services/preferences.service.ts
 - src/server/services/operation.ts
 - src/server/services/openai.ts

@@ -2,6 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "incremental": true,
     "declaration": true,
     "tsBuildInfoFile": "./tsconfig.shared.tsbuildinfo",
     "baseUrl": ".",

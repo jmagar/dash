@@ -1,36 +1,93 @@
+// Import dependencies
+const chalk = require('chalk');
+const fs = require('fs');
+const path = require('path');
+const ts = require('typescript');
+const { ESLint } = require('eslint');
+
 const file = process.argv[2];
 if (!file) {
-    console.error('Please provide a file path');
+    console.error(chalk.red('Error: Missing file path'));
+    console.error(chalk.cyan('Usage: node check-file.js <file-path>'));
     process.exit(1);
 }
 
-const ts = require('typescript');
-const path = require('path');
-const fs = require('fs');
-const { ESLint } = require('eslint');
+// Validate file exists and has correct extension
+const validExtensions = ['.ts', '.tsx'];
+if (!fs.existsSync(file)) {
+    console.error(chalk.red(`Error: File '${file}' does not exist`));
+    process.exit(1);
+}
+const ext = path.extname(file);
+if (!validExtensions.includes(ext)) {
+    console.error(chalk.red(`Error: File must be a TypeScript file (${validExtensions.join(' or ')})`));
+    process.exit(1);
+}
+
+// Add color constants for better readability
+// const colors = {
+//     reset: '\x1b[0m',
+//     bright: '\x1b[1m',
+//     dim: '\x1b[2m',
+//     red: '\x1b[31m',
+//     green: '\x1b[32m',
+//     yellow: '\x1b[33m',
+//     blue: '\x1b[34m',
+//     cyan: '\x1b[36m',
+//     gray: '\x1b[90m'
+// };
+
+// Helper function for consistent headers
+function printHeader(text) {
+    const line = '─'.repeat(text.length + 4);
+    console.log('\n' + chalk.blue(line));
+    console.log(chalk.blue('│ ') + chalk.blueBright(text) + chalk.blue(' │'));
+    console.log(chalk.blue(line) + '\n');
+}
+
+// Helper function for info messages
+function printInfo(label, value) {
+    console.log(chalk.cyan(label + ':') + ' ' + value);
+}
+
+// Helper function for success messages
+function printSuccess(text) {
+    console.log('\n' + chalk.green('✓ ' + text) + '\n');
+}
+
+// Helper function for error messages
+function printError(text) {
+    console.error(chalk.red('✗ ' + text));
+}
 
 // Get the appropriate tsconfig based on file path
 function getTsConfigPath(filePath) {
     const normalizedPath = path.normalize(filePath);
-    if (normalizedPath.includes('src/types/')) {
-        return 'tsconfig.json';
-    } else if (normalizedPath.includes('src/server/')) {
-        return 'tsconfig.server.json';
-    } else if (normalizedPath.includes('src/client/')) {
-        return 'tsconfig.client.json';
+    const configs = {
+        'src/server/': 'tsconfig.server.json',
+        'src/client/': 'tsconfig.client.json',
+        'src/shared/': 'tsconfig.shared.json'
+    };
+
+    for (const [dir, config] of Object.entries(configs)) {
+        if (normalizedPath.includes(dir)) {
+            return config;
+        }
     }
     return 'tsconfig.json'; // Default to root tsconfig
 }
 
 // Load and parse tsconfig with all its extended configs
 function loadTsConfig(configPath) {
+    if (!fs.existsSync(configPath)) {
+        console.error(chalk.red(`Error: TypeScript config '${configPath}' not found`));
+        process.exit(1);
+    }
+
     const { config: rawConfig, error } = ts.readConfigFile(configPath, ts.sys.readFile);
     if (error) {
-        console.error(ts.formatDiagnostic(error, {
-            getCurrentDirectory: () => process.cwd(),
-            getCanonicalFileName: fileName => fileName,
-            getNewLine: () => ts.sys.newLine
-        }));
+        console.error("\nTypeScript Configuration Errors:");
+        console.error(`- ${error.messageText}`);
         process.exit(1);
     }
 
@@ -45,111 +102,105 @@ function loadTsConfig(configPath) {
 }
 
 async function runChecks() {
-    let hasErrors = false;
+    printHeader('TypeScript File Check');
+    printInfo('Checking file', file);
 
     // TypeScript checks
     const configPath = path.join(process.cwd(), getTsConfigPath(file));
-    if (!fs.existsSync(configPath)) {
-        console.error(`Could not find ${configPath}`);
-        process.exit(1);
-    }
+    printInfo('TypeScript config', configPath);
 
     // Load the full config with all extends
     const config = loadTsConfig(configPath);
 
     // Get the directory of the target file
     const fileDir = path.dirname(path.resolve(file));
+    const originalBaseUrl = config.compilerOptions?.baseUrl || '.';
+    const resolvedBaseUrl = path.resolve(process.cwd(), originalBaseUrl);
+
+    printInfo('Base URL', resolvedBaseUrl);
+    printInfo('File directory', fileDir);
+
+    // Create a temporary config that includes only the file we want to check
+    const tempConfig = {
+        ...config,
+        compilerOptions: {
+            ...config.compilerOptions,
+            noEmit: true,
+            skipLibCheck: true,
+            isolatedModules: true,
+            baseUrl: resolvedBaseUrl,
+            paths: {
+                ...config.compilerOptions?.paths,
+                "*": ["*", path.relative(resolvedBaseUrl, fileDir) + "/*"]
+            },
+            rootDir: config.compilerOptions?.rootDir || '.'
+        },
+        files: [file],
+        include: undefined,
+        exclude: undefined
+    };
 
     // Parse the config content and get compiler options
-    const { options, errors } = ts.parseJsonConfigFileContent(
-        {
-            ...config,
-            include: [file],  // Only include the target file
-            exclude: []       // Don't exclude anything for this check
-        },
+    const { options, errors, fileNames } = ts.parseJsonConfigFileContent(
+        tempConfig,
         ts.sys,
-        fileDir,
-        undefined,
-        configPath
+        process.cwd()
     );
 
     if (errors.length) {
-        console.error(ts.formatDiagnostics(errors, {
-            getCurrentDirectory: () => process.cwd(),
-            getCanonicalFileName: fileName => fileName,
-            getNewLine: () => ts.sys.newLine
-        }));
+        printHeader('TypeScript Configuration Errors');
+        errors.forEach(error => {
+            printError(error.messageText);
+        });
         process.exit(1);
     }
 
-    // Add necessary compiler options
-    const compilerOptions = {
-        ...options,
-        noEmit: true,
-        skipLibCheck: true,
-        composite: false,
-        declaration: false,
-        incremental: false,
-        isolatedModules: true // This helps limit errors to just this file
-    };
-
-    // Create program and only check the specified file
-    const program = ts.createProgram([path.resolve(file)], compilerOptions);
+    // Create program and check the file
+    printHeader('Running TypeScript Checks');
+    const program = ts.createProgram(fileNames, options);
     const sourceFile = program.getSourceFile(path.resolve(file));
     if (!sourceFile) {
-        console.error('Could not find source file');
+        printError('Could not find source file');
         process.exit(1);
     }
 
     const diagnostics = ts.getPreEmitDiagnostics(program, sourceFile);
     let hasTypeScriptErrors = diagnostics.length > 0;
+    let hasErrors = false;
 
     if (hasTypeScriptErrors) {
-        console.error("\nTypeScript errors:");
-        console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-            getCurrentDirectory: () => process.cwd(),
-            getCanonicalFileName: fileName => fileName,
-            getNewLine: () => ts.sys.newLine
-        }));
+        printHeader('TypeScript Errors');
+        diagnostics.forEach(diagnostic => {
+            const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+            const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+            const location = chalk.gray(`${diagnostic.file.fileName}:${line + 1}:${character + 1}`);
+            printError(`${location}\n    ${message}`);
+        });
         hasErrors = true;
     }
 
     // ESLint checks
-    let hasEslintErrors = false;
-    console.log("\nESLint results:");
-    try {
-        const eslint = new ESLint({
-            useEslintrc: true,
-            overrideConfig: {
-                env: { node: true }
-            }
-        });
-        
-        const results = await eslint.lintFiles([file]);
-        const formatter = await eslint.loadFormatter('stylish');
-        const resultText = formatter.format(results);
-        
-        if (resultText) {
-            console.log(resultText);
-            if (results.some(result => result.errorCount > 0 || result.warningCount > 0)) {
-                hasErrors = true;
-                hasEslintErrors = true;
-            }
-        }
-    } catch (error) {
-        console.error('ESLint error:', error);
-        hasErrors = true;
-        hasEslintErrors = true;
+    printHeader('Running ESLint Checks');
+    const eslint = new ESLint();
+    const results = await eslint.lintFiles([file]);
+    const formatter = await eslint.loadFormatter('stylish');
+    const resultText = formatter.format(results);
+
+    if (resultText) {
+        console.log(resultText);
+        hasErrors = hasErrors || results.some(result => result.errorCount > 0);
     }
 
-    if (!hasTypeScriptErrors && !hasEslintErrors) {
-        console.log('\n✨ No TypeScript or ESLint errors found! ✨');
+    if (!hasErrors) {
+        printSuccess('All checks passed successfully!');
+    } else {
+        printError('Errors were found in the code. Please fix them and try again.');
     }
 
     process.exit(hasErrors ? 1 : 0);
 }
 
 runChecks().catch(error => {
-    console.error('Error running checks:', error);
+    printError(`Unexpected error: ${error.message}`);
     process.exit(1);
 });

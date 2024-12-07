@@ -1,5 +1,5 @@
 import { Client } from 'ssh2';
-import type { SFTPWrapper, Callback } from 'ssh2';
+import type { SFTPWrapper } from 'ssh2';
 import { EventEmitter } from 'events';
 import { LoggingManager } from '../managers/LoggingManager';
 import type { Host, CommandResult } from '../../types/models-shared';
@@ -162,7 +162,7 @@ export class SSHService extends EventEmitter {
     const client = await this.getConnection(host);
 
     return new Promise((resolve, reject) => {
-      client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
+      client.sftp((err: Error | null, sftp: SFTPWrapper) => {
         if (err) {
           const metadata: LogMetadata = {
             error: err.message,
@@ -180,7 +180,7 @@ export class SSHService extends EventEmitter {
           return;
         }
 
-        sftp.fastPut(localPath, remotePath, ((err: Error | null | undefined) => {
+        sftp.fastPut(localPath, remotePath, ((err: Error | null) => {
           if (err) {
             const metadata: LogMetadata = {
               error: err.message,
