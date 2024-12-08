@@ -2,18 +2,20 @@ import { EventEmitter } from 'events';
 import type { 
   ServiceResult, 
   ServiceOptions, 
-  ServiceContext, 
-  ServiceEventType,
+  ServiceContext,
   ServiceEvent
 } from '../../types/service';
+import { ServiceEventType } from '../../types/service';
 import type { Host } from '../../types/host';
-import type { LogMetadata } from '../../types/logger';
-import { LoggingManager } from '../managers/utils/LoggingManager';
-import { metrics, recordHostMetric } from '../metrics';
+import type { Logger, LogMetadata } from '../../types/logger';
+import { LoggingManager } from '../managers/LoggingManager';
+import { LoggerAdapter } from '../utils/logging/logger.adapter';
+import { metrics } from '../metrics';
 import { errorAggregator } from './errorAggregator';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ServiceOperationExecutor<T> extends EventEmitter {
+  private readonly logger: Logger;
   private context: ServiceContext;
   private operation: () => Promise<T>;
   private validator?: () => Promise<void>;
@@ -21,6 +23,9 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
 
   constructor(operation: () => Promise<T>, options: ServiceOptions = {}) {
     super();
+    this.logger = new LoggerAdapter(LoggingManager.getInstance(), {
+      component: 'ServiceOperationExecutor'
+    });
     this.operation = operation;
     this.context = {
       operationId: uuidv4(),
@@ -46,12 +51,16 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
       // Record metrics
       if (this.context.options.metrics) {
         const { type = 'operation_duration', tags = {} } = this.context.options.metrics;
-        recordHostMetric(this.context.metadata.hostId as string, type, duration, tags);
+        metrics.gauge('operation_duration', duration, {
+          ...tags,
+          host_id: this.context.metadata.hostId as string,
+          metric_type: type
+        });
       }
 
       // Emit success event
       this.emit('success', {
-        type: ServiceEventType.OperationSuccess,
+        type: ServiceEventType.OPERATION_END,
         timestamp: new Date(),
         context: this.context,
         data: result,
@@ -65,7 +74,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
       };
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
       const metadata: LogMetadata = {
         ...this.context.metadata,
         error: errorMessage,
@@ -74,7 +83,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
       };
 
       // Log error
-      LoggingManager.getInstance().error('Operation failed', metadata);
+      this.logger.error('Operation failed', metadata);
 
       // Track error
       errorAggregator.trackError(
@@ -84,7 +93,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
 
       // Emit error event
       this.emit('error', {
-        type: ServiceEventType.OperationError,
+        type: ServiceEventType.OPERATION_ERROR,
         timestamp: new Date(),
         context: this.context,
         error: error instanceof Error ? error : new Error(errorMessage),
@@ -99,8 +108,8 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
         try {
           await this.cleanupFn();
         } catch (error) {
-          LoggingManager.getInstance().error('Cleanup failed', {
-            error: error instanceof Error ? error.message : 'Unknown error',
+          this.logger.error('Cleanup failed', {
+            error: error instanceof Error ? error.message : String(error),
             ...this.context.metadata
           });
         }
@@ -128,7 +137,7 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
     while (attempt < maxAttempts) {
       try {
         if (attempt > 0) {
-          LoggingManager.getInstance().debug('Retrying operation', {
+          this.logger.debug('Retrying operation', {
             attempt,
             delay,
             ...this.context.metadata
@@ -181,5 +190,3 @@ export class ServiceOperationExecutor<T> extends EventEmitter {
     return this;
   }
 }
-
-

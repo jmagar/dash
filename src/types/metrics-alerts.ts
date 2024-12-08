@@ -1,4 +1,5 @@
-import type { SystemMetrics } from './process-metrics';
+// Re-export types from metrics.types
+export type { SystemMetrics, ProcessMetrics } from './metrics.types';
 
 export type AlertSeverity = 'info' | 'warning' | 'error' | 'critical';
 export type AlertStatus = 'active' | 'resolved' | 'acknowledged';
@@ -13,6 +14,7 @@ export interface Alert {
   title: string;
   message: string;
   source: string;
+  ruleId?: string;
   metric?: string;
   value?: number;
   threshold?: number;

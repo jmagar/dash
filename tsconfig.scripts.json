@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/scripts",
+    "rootDir": "scripts",
+    "composite": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./tsconfig.scripts.tsbuildinfo",
+    "sourceMap": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "scripts/**/*"
+  ],
+  "references": [
+    { "path": "./tsconfig.shared.json" }
+  ]
+}

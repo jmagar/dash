@@ -1,7 +1,7 @@
 import { ChatOpenAI } from 'langchain/chat_models/openai';
 import { HumanMessage, SystemMessage, BaseMessage, AIMessage } from 'langchain/schema';
 import config from '../config';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { SendMessageDto, ChatMessageDto, ChatSettingsDto, ChatRole } from '../routes/chat/dto/chat.dto';
 import { plainToClass } from 'class-transformer';
 
@@ -51,11 +51,6 @@ class ChatService {
         new HumanMessage(messageDto.content)
       ];
 
-      // If there's a code snippet, append it to the message
-      if (messageDto.codeSnippet) {
-        messages[1] = new HumanMessage(`${messageDto.content}\n\nCode:\n${messageDto.codeSnippet}`);
-      }
-
       // Get response from OpenAI
       const response = await this.openai.call(messages);
       const content = this.extractContent(response);
@@ -69,7 +64,8 @@ class ChatService {
         success: true
       });
     } catch (error) {
-      LoggingManager.getInstance().error('Chat service error:', {
+      const logger = LoggingManager.getInstance();
+      logger.error('Chat service error:', {
         error: error instanceof Error ? error.message : String(error),
       });
       
@@ -87,5 +83,3 @@ class ChatService {
 }
 
 export const chatService = new ChatService();
-
-

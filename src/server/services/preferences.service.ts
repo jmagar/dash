@@ -1,28 +1,44 @@
-import type { UserPreferences } from '@prisma/client';
-import prisma from '../db';
+import { PrismaClient, type UserPreferences } from '@prisma/client';
+import type { Result } from '../../types/common';
+import type { Logger } from '../../types/logger';
 import { LoggingManager } from '../managers/LoggingManager';
+import { LoggerAdapter } from '../utils/logging/logger.adapter';
 
 export class PreferencesService {
-  async getPreferences(userId: string): Promise<UserPreferences | null> {
+  private readonly logger: Logger;
+  private readonly prisma: PrismaClient;
+
+  constructor() {
+    this.logger = new LoggerAdapter(LoggingManager.getInstance(), {
+      component: 'PreferencesService'
+    });
+    this.prisma = new PrismaClient();
+  }
+
+  async getPreferences(userId: string): Promise<Result<UserPreferences | null>> {
     try {
-      return await prisma.userPreferences.findUnique({
+      const preferences = await this.prisma.userPreferences.findUnique({
         where: { userId },
       });
+      return { success: true, data: preferences };
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to get user preferences:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      this.logger.error('Failed to get user preferences', {
+        error: error instanceof Error ? error.message : String(error),
         userId,
       });
-      throw error;
+      return { 
+        success: false, 
+        error: new Error(error instanceof Error ? error.message : 'Failed to get user preferences')
+      };
     }
   }
 
   async updatePreferences(
     userId: string,
     data: Partial<Pick<UserPreferences, 'themeMode' | 'accentColor'>>
-  ): Promise<UserPreferences> {
+  ): Promise<Result<UserPreferences>> {
     try {
-      return await prisma.userPreferences.upsert({
+      const preferences = await this.prisma.userPreferences.upsert({
         where: { userId },
         update: data,
         create: {
@@ -30,13 +46,17 @@ export class PreferencesService {
           ...data,
         },
       });
+      return { success: true, data: preferences };
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to update user preferences:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      this.logger.error('Failed to update user preferences', {
+        error: error instanceof Error ? error.message : String(error),
         userId,
         data,
       });
-      throw error;
+      return { 
+        success: false, 
+        error: new Error(error instanceof Error ? error.message : 'Failed to update user preferences')
+      };
     }
   }
 }

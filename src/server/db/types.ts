@@ -1,5 +1,6 @@
-import { Result, PaginatedResponse, QueryOptions, CacheOptions } from '../../types/common';
-import { ChatMessageDto, ChatSessionDto } from '../routes/chat/dto/chat.dto';
+import type { Result, PaginatedResponse, QueryOptions, CacheOptions } from '../../types/common';
+import type { ChatMessageDto, ChatSessionDto } from '../routes/chat/dto/chat.dto';
+import type { UserPreferences } from '@prisma/client';
 
 export interface DatabaseStats {
   messageCount: number;
@@ -120,6 +121,28 @@ export interface DatabaseInterface {
      * Clean up old messages based on retention policy
      */
     cleanupMessages(retentionDays: number): Promise<Result<number>>;
+  };
+
+  userPreferences: {
+    /**
+     * Create or update user preferences
+     */
+    upsert(userId: string, preferences: Partial<UserPreferences>): Promise<Result<UserPreferences>>;
+
+    /**
+     * Find user preferences by user ID
+     */
+    findByUserId(userId: string): Promise<Result<UserPreferences | null>>;
+
+    /**
+     * Delete user preferences by user ID
+     */
+    deleteByUserId(userId: string): Promise<Result<void>>;
+
+    /**
+     * Update user preferences
+     */
+    update(userId: string, updates: Partial<UserPreferences>): Promise<Result<UserPreferences>>;
   };
 
   // Cache management

@@ -1,7 +1,18 @@
 module.exports = {
   root: true,
   extends: ['eslint:recommended'],
+  env: {
+    node: true,
+    es2022: true
+  },
   overrides: [
+    {
+      files: ['**/*.mjs'],
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module'
+      }
+    },
     {
       files: ['src/**/*.ts', 'src/**/*.d.ts'],
       parser: '@typescript-eslint/parser',

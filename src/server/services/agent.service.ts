@@ -1,6 +1,6 @@
 import { Server as SocketServer, Socket, Namespace } from 'socket.io';
 import { EventEmitter } from 'events';
-import { LoggingManager } from '../managers/utils/LoggingManager';
+import { LoggingManager } from '../managers/LoggingManager';
 import { AgentStatus } from '../../types/agent-config';
 import type {
   ClientToServerEvents,
@@ -8,11 +8,22 @@ import type {
   InterServerEvents,
   AgentInfo,
   AgentMetrics,
-  AgentCommandResult,
   LogFilter,
   LogEntry,
   SocketData
 } from '../../types/socket-events';
+import type {
+  HostId,
+  SessionId,
+  ProcessId,
+  BaseEventPayload,
+  BaseSuccessPayload,
+  BaseErrorPayload,
+  HostEventPayload,
+  ProcessEventPayload,
+  TerminalEventPayload
+} from '../../types/socket.io';
+import type { ProcessInfo } from '../../types/metrics.types';
 
 interface ConnectedAgent {
   socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
@@ -36,8 +47,20 @@ class AgentService extends EventEmitter {
       LoggingManager.getInstance().debug('Agent attempting to connect');
 
       // Handle registration
-      socket.once('agent:connected', (data: { info: AgentInfo }) => {
-        this.handleRegistration(socket, data.info);
+      socket.once('host:connect', (payload: Readonly<{ hostId: string }> & BaseEventPayload, callback: (response: BaseSuccessPayload | BaseErrorPayload) => void) => {
+        try {
+          this.handleRegistration(socket, { id: payload.hostId } as AgentInfo);
+          callback({
+            success: true,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          callback({
+            success: false,
+            timestamp: new Date().toISOString(),
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
       });
 
       // Set connection timeout
@@ -62,6 +85,7 @@ class AgentService extends EventEmitter {
     info: AgentInfo
   ): void {
     const { id } = info;
+    const hostId = id as unknown as HostId; // Cast string to HostId
 
     // Check if agent is already connected
     const existing = this.agents.get(id);
@@ -78,7 +102,12 @@ class AgentService extends EventEmitter {
     });
 
     // Store agent ID in socket data
-    socket.data.agentId = id;
+    Object.defineProperty(socket.data, 'agentId', {
+      value: id,
+      writable: false,
+      configurable: true,
+      enumerable: true
+    });
 
     // Setup agent event handlers
     this.setupAgentHandlers(socket, id);
@@ -90,11 +119,25 @@ class AgentService extends EventEmitter {
     });
 
     // Emit registration event
-    this.emit('agent:registered', info);
+    this.emit('host:updated', {
+      hostId,
+      ...info
+    });
 
     // Send command to acknowledge registration
-    socket.emit('agent:command', {
-      command: 'acknowledge'
+    socket.emit('process:update', {
+      hostId,
+      process: {
+        pid: 0,
+        name: '',
+        command: 'acknowledge',
+        status: 'running',
+        user: '',
+        cpu: 0,
+        memory: 0,
+        threads: 0,
+        fds: 0
+      }
     });
   }
 
@@ -102,19 +145,48 @@ class AgentService extends EventEmitter {
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     agentId: string
   ): void {
+    const hostId = agentId as unknown as HostId;
+
     // Handle metrics updates
-    socket.on('agent:metrics', (data: { metrics: AgentMetrics }) => {
+    socket.on('host:connect', (payload: HostEventPayload) => {
       const agent = this.agents.get(agentId);
       if (agent) {
-        agent.metrics = data.metrics;
         agent.lastSeen = new Date();
-        this.emit('agent:metrics', { hostId: agentId, metrics: data.metrics });
+        this.emit('process:metrics', {
+          hostId,
+          timestamp: new Date().toISOString(),
+          processes: [{
+            pid: 0,
+            name: '',
+            command: '',
+            status: 'running',
+            user: '',
+            cpu: 0,
+            memory: 0,
+            threads: 0,
+            fds: 0
+          }]
+        });
       }
     });
 
     // Handle command responses
-    socket.on('agent:command', (data: { command: string; args?: string[] }) => {
-      this.emit('agent:commandResult', { agentId, result: { success: true, output: JSON.stringify(data) } });
+    socket.on('process:monitor', (payload: HostEventPayload) => {
+      this.emit('process:update', {
+        hostId,
+        timestamp: new Date().toISOString(),
+        process: {
+          pid: 0,
+          name: '',
+          command: '',
+          status: 'running',
+          user: '',
+          cpu: 0,
+          memory: 0,
+          threads: 0,
+          fds: 0
+        }
+      });
     });
 
     // Handle errors
@@ -125,27 +197,46 @@ class AgentService extends EventEmitter {
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined,
       });
-      this.emit('agent:error', { hostId: agentId, error: errorMessage });
+      this.emit('error', errorMessage);
     });
 
     // Handle heartbeat
-    socket.on('agent:heartbeat', (data: { timestamp: Date; load: number[] }) => {
+    socket.on('host:connect', (payload: Readonly<{ hostId: HostId }> & BaseEventPayload, callback: (response: BaseSuccessPayload | BaseErrorPayload) => void) => {
       const agent = this.agents.get(agentId);
       if (agent) {
         agent.lastSeen = new Date();
-        this.emit('agent:heartbeat', {
-          hostId: agentId,
-          info: {
-            timestamp: data.timestamp,
-            status: 'healthy'
-          }
+        this.emit('host:updated', {
+          hostId,
+          timestamp: new Date().toISOString(),
+          id: agentId,
+          version: agent.info.version,
+          hostname: agent.info.hostname,
+          platform: agent.info.platform,
+          arch: agent.info.arch,
+          lastSeen: new Date(),
+          status: 'connected'
+        });
+        callback({
+          success: true,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        callback({
+          success: false,
+          timestamp: new Date().toISOString(),
+          error: 'Agent not found'
         });
       }
     });
 
     // Handle logs
-    socket.on('logs:stream', (data: { logs: LogEntry[] }) => {
-      this.emit('agent:logs', { hostId: agentId, logs: data.logs });
+    socket.on('terminal:join', (payload: TerminalEventPayload) => {
+      this.emit('terminal:data', {
+        hostId,
+        sessionId: payload.sessionId,
+        timestamp: new Date().toISOString(),
+        data: ''
+      });
     });
   }
 
@@ -154,7 +245,7 @@ class AgentService extends EventEmitter {
     if (agent) {
       LoggingManager.getInstance().info('Agent disconnected', { agentId });
       this.agents.delete(agentId);
-      this.emit('agent:disconnected', { hostId: agentId });
+      this.emit('host:disconnected', { hostId: agentId });
     }
   }
 
@@ -164,15 +255,13 @@ class AgentService extends EventEmitter {
   public async subscribeToLogs(agentId: string, filter?: LogFilter): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) {
-      throw new Error(`Agent ${agentId} not connected`);
+      throw new Error('Agent not found');
     }
-
-    agent.socket.emit('logs:new', {
-      id: '',
-      timestamp: new Date(),
-      level: 'info',
-      message: 'Log subscription started',
-      metadata: { filter }
+    await Promise.resolve(); // Ensure async context
+    this.emit('terminal:data', {
+      hostId: agentId,
+      sessionId: '',
+      data: JSON.stringify({ action: 'subscribe', filter })
     });
   }
 
@@ -182,11 +271,13 @@ class AgentService extends EventEmitter {
   public async unsubscribeFromLogs(agentId: string): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) {
-      throw new Error(`Agent ${agentId} not connected`);
+      throw new Error('Agent not found');
     }
-
-    agent.socket.emit('logs:error', {
-      error: 'Log subscription ended'
+    await Promise.resolve(); // Ensure async context
+    this.emit('terminal:data', {
+      hostId: agentId,
+      sessionId: '',
+      data: JSON.stringify({ action: 'unsubscribe' })
     });
   }
 
@@ -207,26 +298,39 @@ class AgentService extends EventEmitter {
   /**
    * Execute command on agent
    */
-  public async executeCommand(
-    agentId: string,
-    command: string,
-    args: string[] = []
-  ): Promise<void> {
+  public async executeCommand(agentId: string, command: string, args: string[] = []): Promise<void> {
     const agent = this.agents.get(agentId);
     if (!agent) {
-      throw new Error(`Agent ${agentId} not connected`);
+      throw new Error('Agent not found');
     }
 
+    const hostId = agentId as unknown as HostId;
+
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const commandTimeout = setTimeout(() => {
         reject(new Error('Command acknowledgment timeout'));
       }, 5000);
 
-      agent.socket.emit('agent:command', {
-        command,
-        args
+      agent.socket.emit('process:monitor', {
+        hostId,
+        process: {
+          pid: 0,
+          name: '',
+          command,
+          args,
+          status: 'running',
+          user: '',
+          cpu: 0,
+          memory: 0,
+          threads: 0,
+          fds: 0
+        }
       });
-      resolve();
+
+      agent.socket.once('process:update', () => {
+        clearTimeout(commandTimeout);
+        resolve();
+      });
     });
   }
 
@@ -309,5 +413,3 @@ export const getAgentService = (): AgentService => {
   }
   return agentServiceInstance;
 };
-
-
