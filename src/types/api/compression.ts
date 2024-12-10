@@ -6,6 +6,22 @@ export interface CompressionFormat {
   mimeType: string;
 }
 
+export interface ArchiveEntry {
+  name: string;
+  size: number;
+  isDirectory: boolean;
+  modifiedTime: string;
+}
+
+export interface ListArchiveResponse {
+  entries: ArchiveEntry[];
+}
+
+export interface CompressionError extends Error {
+  code: string;
+  details?: Record<string, string | string[]>;
+}
+
 export interface CompressionRequest {
   hostId: string;
   sourcePaths: string[];
@@ -16,27 +32,4 @@ export interface ExtractionRequest {
   hostId: string;
   sourcePath: string;
   targetPath: string;
-}
-
-export interface ListArchiveRequest {
-  hostId: string;
-  archivePath: string;
-}
-
-export interface ListArchiveResponse {
-  contents: string[];
-  totalSize: number;
-  compressedSize: number;
-  format: CompressionFormatValue;
-}
-
-export interface CompressionError extends Error {
-  code: 'COMPRESSION_ERROR' | 'EXTRACTION_ERROR' | 'LIST_ERROR';
-  details?: {
-    hostId: string;
-    sourcePaths?: string[];
-    sourcePath?: string;
-    targetPath?: string;
-    archivePath?: string;
-  };
 }

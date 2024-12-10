@@ -73,3 +73,33 @@ export interface SFTPWrapper {
   unlink(path: string, callback: (err?: Error) => void): void;
   rmdir(path: string, callback: (err?: Error) => void): void;
 }
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modified?: string;
+  permissions?: string;
+  owner?: string;
+  group?: string;
+  isSymlink?: boolean;
+  target?: string;
+}
+
+export interface DeleteRequest {
+  paths: string[];
+}
+
+export interface FileOperationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface FileUploadProgress {
+  id: string;
+  message: string;
+  progress: number;
+  completed?: boolean;
+}

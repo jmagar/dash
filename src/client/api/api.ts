@@ -1,18 +1,24 @@
 ﻿import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { logger } from '../utils/frontendLogger';
 
+export interface ApiErrorOptions {
+  message: string;
+  code?: string;
+  status?: number;
+  data?: Record<string, unknown>;
+}
+
 export class ApiError extends Error {
-  constructor(
-    public readonly details: {
-      status?: number;
-      data?: unknown;
-      message: string;
-      code?: string;
-    }
-  ) {
-    super(details.message);
+  readonly code?: string;
+  readonly status?: number;
+  readonly data?: Record<string, unknown>;
+
+  constructor(options: ApiErrorOptions) {
+    super(options.message);
     this.name = 'ApiError';
-    Object.setPrototypeOf(this, ApiError.prototype);
+    this.code = options.code;
+    this.status = options.status;
+    this.data = options.data;
   }
 }
 
@@ -57,7 +63,7 @@ api.interceptors.response.use(
       throw new ApiError({
         message: axiosError.message,
         status: axiosError.response?.status,
-        data: axiosError.response?.data,
+        data: axiosError.response?.data as Record<string, unknown>,
         code: 'RESPONSE_ERROR'
       });
     }

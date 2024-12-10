@@ -9,6 +9,8 @@ export interface BaseEntity {
   id: string;
   createdAt: Date;
   updatedAt: Date;
+  version?: number;
+  metadata?: Record<string, unknown>;
 }
 
 /**

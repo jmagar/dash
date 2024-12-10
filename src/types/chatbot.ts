@@ -1,5 +1,6 @@
 // Import only from types directory
 import type { Host } from './models-shared';
+import { LogLevel } from './logger';
 
 // Connection state type
 export type ConnectionState = 'connected' | 'disconnected' | 'error' | 'reconnecting';
@@ -105,8 +106,6 @@ export interface LogEntry {
   message: string;
   metadata?: Record<string, unknown>;
 }
-
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'critical';
 
 export interface LogErrorCount {
   last1h: number;

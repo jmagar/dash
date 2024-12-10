@@ -7,7 +7,7 @@ interface LoggerOptions {
 }
 
 class Logger {
-  private level: string;
+  private level: LogLevel;
   private prefix: string;
 
   constructor(options: LoggerOptions) {

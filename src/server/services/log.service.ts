@@ -3,13 +3,13 @@ import { EventEmitter } from 'events';
 import { LoggingManager } from '../managers/LoggingManager';
 import { getAgentService } from './agent.service';
 import type { ServerToClientEvents, ClientToServerEvents } from '../../types/socket-events';
-import type { LogFilter } from '../../types/logger';
+import type { LogFilter, LogLevel } from '../../types/logger';
 import type { HostId, SessionId, BaseEventPayload, HostEventPayload } from '../../types/socket.io';
 
 interface LogSubscribePayload extends BaseEventPayload {
   hostId: HostId;
   filter?: Omit<LogFilter, 'level'> & {
-    level?: 'error' | 'debug' | 'info' | 'warn';
+    level?: LogLevel;
   };
 }
 

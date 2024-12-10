@@ -1,7 +1,11 @@
 import React from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
+import { Provider } from 'react-redux';
 import { CssBaseline } from '@mui/material';
-
+import { SnackbarProvider } from 'notistack';
+import { LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { store } from './store';
 import { Navigation } from './components/Navigation';
 import { AuthProvider } from './context/AuthContext';
 import { CopilotProvider } from './context/CopilotContext';
@@ -11,22 +15,28 @@ import { AppRoutes } from './routes';
 
 export function App() {
   return (
-    <CopilotProvider>
-      <AppThemeProvider>
-        <CssBaseline />
-        <Router>
-          <AuthProvider>
-            <HostProvider>
-              <div className="min-h-screen">
-                <Navigation />
-                <main className="py-10">
-                  <AppRoutes />
-                </main>
-              </div>
-            </HostProvider>
-          </AuthProvider>
-        </Router>
-      </AppThemeProvider>
-    </CopilotProvider>
+    <Provider store={store}>
+      <CopilotProvider>
+        <AppThemeProvider>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <SnackbarProvider maxSnack={3}>
+              <CssBaseline />
+              <BrowserRouter>
+                <AuthProvider>
+                  <HostProvider>
+                    <div className="min-h-screen">
+                      <Navigation />
+                      <main className="py-10">
+                        <AppRoutes />
+                      </main>
+                    </div>
+                  </HostProvider>
+                </AuthProvider>
+              </BrowserRouter>
+            </SnackbarProvider>
+          </LocalizationProvider>
+        </AppThemeProvider>
+      </CopilotProvider>
+    </Provider>
   );
 }

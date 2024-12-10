@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
-import type { LogEntry, LogFilter } from '../../types/logging';
+import type { LogEntry, LogFilter } from '../../types/logger';
 import { logger } from '../utils/frontendLogger';
 import { LoggingManager } from '../../server/utils/logging/LoggingManager';
 

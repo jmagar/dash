@@ -52,3 +52,5 @@ export interface SetThemePayload {
 export interface SetSidebarPayload {
   open: boolean;
 }
+
+export type NotificationSeverity = 'success' | 'info' | 'warning' | 'error';

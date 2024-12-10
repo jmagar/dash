@@ -51,7 +51,7 @@ export function HostSelector({ open, onClose, onSelect, onAdd }: Props): JSX.Ele
       setError(null);
       const data = await listHosts();
       setHosts(data);
-    } catch (err) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load hosts');
     } finally {
       setLoading(false);
@@ -60,7 +60,9 @@ export function HostSelector({ open, onClose, onSelect, onAdd }: Props): JSX.Ele
 
   useEffect(() => {
     if (open) {
-      void loadHosts();
+      loadHosts().catch(err => {
+        console.error('Failed to load hosts:', err);
+      });
     }
   }, [open, loadHosts]);
 

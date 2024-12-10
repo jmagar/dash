@@ -5,7 +5,7 @@ import Login from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { HostManager } from './components/HostManager';
 import { DockerManager } from './components/DockerManager';
-import { FileExplorer } from './components/FileExplorer';
+import { FileExplorer } from './components/FileExplorer/index';
 import { NotificationSettings } from './components/NotificationSettings';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {

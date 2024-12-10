@@ -1,22 +1,25 @@
 import { Router } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { AuthenticatedRequest, ApiResponse, Response } from '../../../types/express';
-import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/models-shared';
+import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/host';
 import { ApiError } from '../../../types/error';
 import { LoggingManager } from '../../managers/LoggingManager';
 import { sshService } from '../../services/ssh.service';
 import { AgentInstaller } from '../../services/agent-installer';
 import { LinuxHandler } from '../../services/agent-installer/linux-handler';
 import { WindowsHandler } from '../../services/agent-installer/windows-handler';
-import { getAgentService } from '../../services/agent.service';
+import { AgentService } from '../../services/agent/services/agent.service';
 import { db } from '../../db';
 import { asyncAuthHandler } from '../../middleware/async';
+import config from '../../config';
+import { executeCommandAdapter } from '../../services/ssh/ssh-adapter';
+import { fileCopyAdapter } from '../../services/ssh/file-adapter';
 
 const router: Router = Router();
 const logger = LoggingManager.getInstance();
 const agentInstaller = new AgentInstaller(
-  new LinuxHandler(sshService),
-  new WindowsHandler(sshService)
+  new LinuxHandler(executeCommandAdapter, fileCopyAdapter),
+  new WindowsHandler(executeCommandAdapter, fileCopyAdapter)
 );
 
 interface HostParams extends ParamsDictionary {
@@ -46,11 +49,11 @@ const listHosts = async (
   }
 
   const result = await db.query<Host>(
-    'SELECT *, agent_status as "agentStatus" FROM hosts WHERE user_id = $1 ORDER BY created_at DESC',
+    'SELECT *, agent_status as "agentStatus", os_type as "os_type" FROM hosts WHERE user_id = $1 ORDER BY created_at DESC',
     [req.user.userId]
   );
 
-  const agentService = getAgentService();
+  const agentService = AgentService.getInstance();
 
   // Enrich with agent status
   const hosts = result.rows.map(host => ({
@@ -60,7 +63,7 @@ const listHosts = async (
       agentConnected: agentService.isConnected(host.id),
       agentMetrics: agentService.getAgentMetrics(host.id)
     }
-  } ));
+  }));
 
   res.json({
     success: true,
@@ -81,7 +84,7 @@ const getHost = async (
   }
 
   const result = await db.query<Host>(
-    'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
+    'SELECT *, agent_status as "agentStatus", os_type as "os_type" FROM hosts WHERE id = $1 AND user_id = $2',
     [req.params.id, req.user.userId]
   );
 
@@ -94,7 +97,7 @@ const getHost = async (
     throw new ApiError('Host not found', undefined, 404);
   }
 
-  const agentService = getAgentService();
+  const agentService = AgentService.getInstance();
 
   // Enrich with agent status
   const enrichedHost: ExtendedHost = {
@@ -127,9 +130,9 @@ const createHost = async (
   const result = await db.query<Host>(
     `INSERT INTO hosts (
       user_id, name, hostname, port, username, password,
-      status, agent_status, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-    RETURNING *, agent_status as "agentStatus"`,
+      status, agent_status, os_type, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+    RETURNING *, agent_status as "agentStatus", os_type as "os_type"`,
     [
       req.user.userId,
       req.body.name,
@@ -139,6 +142,7 @@ const createHost = async (
       req.body.password,
       'offline',
       null,
+      req.body.os_type || 'linux',
     ]
   );
 
@@ -193,15 +197,17 @@ const updateHost = async (
       port = COALESCE($3, port),
       username = COALESCE($4, username),
       password = COALESCE($5, password),
+      os_type = COALESCE($6, os_type),
       updated_at = NOW()
-    WHERE id = $6 AND user_id = $7
-    RETURNING *, agent_status as "agentStatus"`,
+    WHERE id = $7 AND user_id = $8
+    RETURNING *, agent_status as "agentStatus", os_type as "os_type"`,
     [
       req.body.name,
       req.body.hostname,
       req.body.port,
       req.body.username,
       req.body.password,
+      req.body.os_type,
       req.params.id,
       req.user.userId,
     ]
@@ -236,7 +242,7 @@ const deleteHost = async (
 
   // Get host first to check ownership
   const hostResult = await db.query<Host>(
-    'SELECT *, agent_status as "agentStatus" FROM hosts WHERE id = $1 AND user_id = $2',
+    'SELECT *, agent_status as "agentStatus", os_type as "os_type" FROM hosts WHERE id = $1 AND user_id = $2',
     [req.params.id, req.user.userId]
   );
 
@@ -249,26 +255,8 @@ const deleteHost = async (
     throw new ApiError('Host not found', undefined, 404);
   }
 
-  // Uninstall agent if installed
-  if (host.agentStatus === 'installed') {
-    try {
-      await agentInstaller.uninstallAgent(host);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to uninstall agent', {
-        error: errorMessage,
-        userId: req.user.userId,
-        hostId: host.id
-      });
-      // Continue with deletion
-    }
-  }
-
   // Delete host
-  await db.query(
-    'DELETE FROM hosts WHERE id = $1 AND user_id = $2',
-    [req.params.id, req.user.userId]
-  );
+  await db.query('DELETE FROM hosts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.userId]);
 
   res.json({
     success: true,

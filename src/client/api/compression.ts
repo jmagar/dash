@@ -1,185 +1,86 @@
-import { BaseApiClient, type Endpoint, type EndpointParams } from './base.client';
-import { ApiError } from './api';
-import { logger } from '../utils/frontendLogger';
+import type {
+  CompressionRequest,
+  ExtractionRequest,
+  ListArchiveResponse,
+  CompressionError,
+} from '../../types/api/compression';
 
-interface ArchiveEntry {
-  name: string;
-  size: number;
-  type: 'file' | 'directory';
-  modifiedAt: string;
+interface ErrorResponse {
+  message: string;
+  code: string;
+  details?: Record<string, string | string[]>;
 }
 
-interface ListArchiveResponse {
-  entries: ArchiveEntry[];
-  totalSize: number;
-  entryCount: number;
-}
+class CompressionClient {
+  private readonly baseUrl = '/api/compression';
 
-interface CompressionRequest {
-  hostId: string;
-  sourcePaths: string[];
-  targetPath: string;
-}
-
-interface ExtractionRequest {
-  hostId: string;
-  sourcePath: string;
-  targetPath: string;
-}
-
-type CompressionEndpoints = Record<string, Endpoint> & {
-  COMPRESS: '/api/compression/compress';
-  EXTRACT: '/api/compression/extract';
-  LIST: (...args: EndpointParams[]) => string;
-};
-
-const COMPRESSION_ENDPOINTS: CompressionEndpoints = {
-  COMPRESS: '/api/compression/compress',
-  EXTRACT: '/api/compression/extract',
-  LIST: (hostId: EndpointParams, archivePath: EndpointParams) => 
-    `/api/compression/list/${encodeURIComponent(String(hostId))}/${encodeURIComponent(String(archivePath))}`,
-};
-
-class CompressionClient extends BaseApiClient<CompressionEndpoints> {
-  constructor() {
-    super(COMPRESSION_ENDPOINTS);
+  private async handleErrorResponse(response: Response): Promise<never> {
+    const errorData = (await response.json()) as ErrorResponse;
+    const error = new Error(errorData.message) as CompressionError;
+    error.code = errorData.code;
+    error.details = errorData.details;
+    throw error;
   }
 
-  private validateInput(params: Record<string, unknown>, operation: string): void {
-    const missingParams = Object.entries(params)
-      .filter(([_, value]) => !value || (Array.isArray(value) && !value.length))
-      .map(([key]) => key);
-
-    if (missingParams.length > 0) {
-      throw new ApiError({
-        message: `Invalid ${operation} parameters: ${missingParams.join(', ')} ${missingParams.length > 1 ? 'are' : 'is'} required`,
-        code: 'VALIDATION_ERROR',
-        data: params
-      });
-    }
-  }
-
-  async compressFiles(hostId: string, sourcePaths: string[], targetPath: string): Promise<void> {
-    try {
-      this.validateInput(
-        { hostId, sourcePaths, targetPath },
-        'compression'
-      );
-
-      logger.info('Compressing files', { hostId, sourcePaths, targetPath });
-
-      const request: CompressionRequest = {
+  async compressFiles(
+    hostId: string,
+    sourcePaths: string[],
+    targetPath: string
+  ): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/compress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         hostId,
         sourcePaths,
         targetPath,
-      };
+      } as CompressionRequest),
+    });
 
-      const response = await this.post<void>(
-        this.getEndpoint('COMPRESS'),
-        request
-      );
-
-      if (!response.success) {
-        throw new ApiError({
-          message: response.error || 'Failed to compress files',
-          code: 'COMPRESSION_ERROR',
-          data: request
-        });
-      }
-    } catch (error) {
-      logger.error('Failed to compress files', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId,
-        sourcePaths,
-        targetPath
-      });
-
-      throw error instanceof ApiError ? error : new ApiError({
-        message: 'Failed to compress files',
-        code: 'COMPRESSION_ERROR',
-        data: { hostId, sourcePaths, targetPath }
-      });
+    if (!response.ok) {
+      await this.handleErrorResponse(response);
     }
   }
 
-  async extractFiles(hostId: string, sourcePath: string, targetPath: string): Promise<void> {
-    try {
-      this.validateInput(
-        { hostId, sourcePath, targetPath },
-        'extraction'
-      );
-
-      logger.info('Extracting files', { hostId, sourcePath, targetPath });
-
-      const request: ExtractionRequest = {
+  async extractFiles(
+    hostId: string,
+    sourcePath: string,
+    targetPath: string
+  ): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/extract`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         hostId,
         sourcePath,
         targetPath,
-      };
+      } as ExtractionRequest),
+    });
 
-      const response = await this.post<void>(
-        this.getEndpoint('EXTRACT'),
-        request
-      );
-
-      if (!response.success) {
-        throw new ApiError({
-          message: response.error || 'Failed to extract files',
-          code: 'EXTRACTION_ERROR',
-          data: request
-        });
-      }
-    } catch (error) {
-      logger.error('Failed to extract files', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId,
-        sourcePath,
-        targetPath
-      });
-
-      throw error instanceof ApiError ? error : new ApiError({
-        message: 'Failed to extract files',
-        code: 'EXTRACTION_ERROR',
-        data: { hostId, sourcePath, targetPath }
-      });
+    if (!response.ok) {
+      await this.handleErrorResponse(response);
     }
   }
 
-  async listArchiveContents(hostId: string, archivePath: string): Promise<ListArchiveResponse> {
-    try {
-      this.validateInput(
-        { hostId, archivePath },
-        'list'
-      );
+  async listArchiveContents(
+    hostId: string,
+    archivePath: string
+  ): Promise<ListArchiveResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/list?hostId=${encodeURIComponent(
+        hostId
+      )}&archivePath=${encodeURIComponent(archivePath)}`
+    );
 
-      logger.info('Listing archive contents', { hostId, archivePath });
-
-      const response = await this.get<ListArchiveResponse>(
-        this.getEndpoint('LIST', hostId, archivePath)
-      );
-
-      if (!response.data) {
-        throw new ApiError({
-          message: 'No response data received',
-          code: 'LIST_ERROR',
-          data: { hostId, archivePath }
-        });
-      }
-
-      return response.data;
-    } catch (error) {
-      logger.error('Failed to list archive contents', {
-        error: error instanceof Error ? error.message : String(error),
-        hostId,
-        archivePath
-      });
-
-      throw error instanceof ApiError ? error : new ApiError({
-        message: 'Failed to list archive contents',
-        code: 'LIST_ERROR',
-        data: { hostId, archivePath }
-      });
+    if (!response.ok) {
+      await this.handleErrorResponse(response);
     }
+
+    return response.json() as Promise<ListArchiveResponse>;
   }
 }
 
@@ -187,16 +88,16 @@ class CompressionClient extends BaseApiClient<CompressionEndpoints> {
 const compressionClient = new CompressionClient();
 
 // Export bound methods
-export const {
-  compressFiles,
-  extractFiles,
-  listArchiveContents
-} = compressionClient;
+export const compressionApi = {
+  compressFiles: compressionClient.compressFiles.bind(compressionClient),
+  extractFiles: compressionClient.extractFiles.bind(compressionClient),
+  listArchiveContents: compressionClient.listArchiveContents.bind(compressionClient),
+};
 
 // Export types
 export type {
   ArchiveEntry,
   ListArchiveResponse,
   CompressionRequest,
-  ExtractionRequest
-};
+  ExtractionRequest,
+} from '../../types/api/compression';

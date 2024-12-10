@@ -1,5 +1,6 @@
-﻿import express, { json, urlencoded, Request, Response, NextFunction } from 'express';
+﻿import express, { json, urlencoded } from 'express';
 import { Server as SocketServer } from 'socket.io';
+import type { Socket } from 'socket.io';
 import WebSocket from 'ws';
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../types/socket-events';
 import http from 'http';
@@ -11,25 +12,29 @@ import { rateLimit } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { createClient } from 'redis';
 import config from './config';
-import { LoggingManager } from './utils/logging/LoggingManager';
+import { LoggingManager } from './managers/LoggingManager';
 import { errorHandler, notFoundHandler, corsConfig } from './middleware/security';
 import { setupMetrics, metrics } from './metrics';
-import { ProcessMonitorFactory } from './services/process/process-monitor-factory';
-import { ProcessCacheImpl } from './services/process/process-cache';
 import { hostService } from './services/host.service';
-import { initializeAgentService } from './services/agent.service';
+import { AgentService } from './services/agent/services/agent.service';
+import { ConnectionService } from './services/agent/services/connection.service';
+import { MessageHandler } from './services/agent/services/message.handler';
+import { MetricsService } from './services/agent/services/metrics.service';
+import { PrismaClient } from '@prisma/client';
 import routes from './routes';
-import type { Host } from '../types/models-shared';
+
+interface ServerServices {
+  hostService: typeof hostService;
+  metrics: typeof metrics;
+}
 
 class Server {
   private readonly app: express.Application;
   private readonly httpServer: http.Server;
   private readonly io: SocketServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
   private readonly wsServer: WebSocket.Server;
-  private readonly agentService: any;
-  private readonly hostService: any;
-  private readonly metrics: any;
-  private readonly cache?: any;
+  private readonly agentService: AgentService;
+  private readonly services: ServerServices;
 
   constructor() {
     this.app = express();
@@ -47,23 +52,35 @@ class Server {
     this.wsServer = new WebSocket.Server({ server: this.httpServer });
 
     // Initialize services with proper dependencies
-    this.agentService = initializeAgentService(this.wsServer, this.io);
-    this.hostService = hostService;
-    this.metrics = metrics;
+    const prisma = new PrismaClient();
+    const connectionService = new ConnectionService();
+    const metricsService = new MetricsService();
+    const messageHandler = new MessageHandler(metricsService, connectionService);
+
+    this.agentService = AgentService.initialize(
+      this.io as unknown as Socket,
+      connectionService,
+      messageHandler,
+      metricsService
+    );
+
+    this.services = {
+      hostService,
+      metrics
+    };
   }
 
   async initialize(): Promise<void> {
     try {
       // Initialize services
       await Promise.all([
-        this.hostService.initialize(),
-        this.metrics.initialize(),
+        this.services.hostService.initialize(),
+        this.services.metrics.initialize(),
       ]);
 
       // Setup Socket.IO middleware
-      this.io.use(async (socket, next) => {
+      this.io.use((socket, next) => {
         try {
-          // Add authentication and session handling here
           socket.data = {
             authenticated: true,
             sessionId: socket.id,
@@ -170,8 +187,7 @@ class Server {
     try {
       // Cleanup services
       await Promise.all([
-        this.hostService.cleanup(),
-        this.metrics.cleanup(),
+        this.services.metrics.cleanup(),
       ]);
 
       // Close servers
@@ -208,4 +224,3 @@ process.on('SIGTERM', () => {
     process.exit(1);
   });
 });
-

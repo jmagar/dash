@@ -22,7 +22,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import type { LogEntry, LogFilter } from '@/types/logging';
+import type { LogEntry, LogFilter } from '../../types/logger';
 import { useLogViewer } from '../hooks/useLogViewer';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -46,6 +46,8 @@ interface LogRowProps extends ListChildComponentProps {
 
 const LogRow = React.memo(({ data, index, style }: LogRowProps) => {
   const log = data.logs[index];
+  if (!log) return null;
+  
   return (
     <div style={style} className={`log-row ${log.level}`}>
       <span className="timestamp">{log.timestamp}</span>

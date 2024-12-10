@@ -11,6 +11,7 @@ export interface MetricsEntity extends BaseEntity {
 }
 
 export interface SystemMetrics extends BaseEntity {
+  id: string;
   cpu: CpuMetrics;
   memory: MemoryMetrics;
   storage: StorageMetrics;

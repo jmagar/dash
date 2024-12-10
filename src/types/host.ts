@@ -1,21 +1,40 @@
-import { BaseEntity } from './base';
-import { ServiceStatus } from './status';
+import type { BaseEntity } from './base';
 
 export interface Host extends BaseEntity {
+  id: string;
+  name: string;
+  hostname: string;
+  os_type: 'linux' | 'windows' | 'darwin';
+  username: string;
+  password?: string;
+  port: number;
+  status: 'online' | 'offline' | 'error' | 'installing';
+  lastSeen?: Date;
+  agentStatus?: 'installed' | 'error' | null;
+  agentVersion?: string;
+  environment?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateHostRequest {
   name: string;
   hostname: string;
   port: number;
   username: string;
   password?: string;
-  privateKey?: string;
-  passphrase?: string;
+  os_type?: 'linux' | 'windows' | 'darwin';
   environment?: string;
-  tags?: string[];
-  status: ServiceStatus;
-  lastSeen?: Date;
-  agentStatus?: ServiceStatus;
-  agentVersion?: string;
-  metadata?: Record<string, unknown>;
+  install_agent?: boolean;
+}
+
+export interface UpdateHostRequest {
+  name?: string;
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  os_type?: 'linux' | 'windows' | 'darwin';
+  environment?: string;
 }
 
 export interface HostGroup extends BaseEntity {
@@ -32,15 +51,15 @@ export interface HostStats {
   offline: number;
   error: number;
   byOs: Record<string, number>;
-  byStatus: Record<ServiceStatus, number>;
-  byAgentStatus: Record<ServiceStatus, number>;
+  byStatus: Record<string, number>;
+  byAgentStatus: Record<string, number>;
   byFeature: Record<string, number>;
 }
 
 export interface HostFilter {
   search?: string;
-  status?: ServiceStatus[];
-  agentStatus?: ServiceStatus[];
+  status?: ('online' | 'offline' | 'error' | 'installing')[];
+  agentStatus?: ('installed' | 'error' | null)[];
   os?: string[];
   features?: string[];
   tags?: string[];

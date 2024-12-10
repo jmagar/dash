@@ -2,8 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { BaseService } from './base-service';
 import { ServiceConfig } from '../types/service-config';
 import { EventEmitter } from 'events';
-
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+import { LogLevel } from '../../types/logger';
 
 export interface LogEntry {
   timestamp: Date;

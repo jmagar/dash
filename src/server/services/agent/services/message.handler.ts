@@ -1,26 +1,16 @@
-import type { WebSocket } from 'ws';
-import type { Socket } from 'socket.io';
-import type { 
-  AgentMessage, 
-  AgentId, 
-  ConnectionId,
-  AgentInfo,
-  AgentMetrics,
-  AgentCommandResult,
-  ExtractMessage
-} from '../agent.types';
-import { ERROR_CODES } from '../utils/constants';
-import { 
-  validateAgentMessage,
-  validateMessageByType,
-  validateAgentId,
-  validateConnectionId,
-  createValidationError
-} from '../utils/validation';
-import { logger } from '../../../utils/logger';
+import { WebSocket } from 'ws';
+import { Socket } from 'socket.io';
+import { ERROR_CODES } from '../../../utils/constants';
+import { handleError } from '../utils/error.handler';
+import { ApiError } from '../../../../../types/error';
+import type { AgentMessage } from '../agent.types';
+import { validateMessageByType } from '../utils/validation';
+import { validateConnectionId } from '../utils/connection';
 import { MetricsService } from './metrics.service';
 import { ConnectionService } from './connection.service';
-import { LoggingManager } from '../../../managers/utils/LoggingManager';
+import type { RegisterMessage, HeartbeatMessage, MetricsMessage, CommandResponseMessage, ErrorMessage } from '../message.types';
+
+type ExtractMessage<T extends AgentMessage['type']> = Extract<AgentMessage, { type: T }>;
 
 export class MessageHandler {
   private readonly metricsService: MetricsService;
@@ -34,42 +24,32 @@ export class MessageHandler {
     this.connectionService = connectionService;
   }
 
-  public async handleWebSocketMessage(
-    ws: WebSocket,
-    connectionId: ConnectionId,
-    data: unknown
-  ): Promise<void> {
+  public async handleWebSocketMessage(message: unknown, ws: WebSocket, connectionId: string): Promise<void> {
     try {
-      const message = validateAgentMessage(data);
-      await this.handleMessage(message, ws, connectionId);
+      const validatedMessage = validateMessageByType(message, 'websocket');
+      await this.handleMessage(validatedMessage, ws, connectionId);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(ws, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
+      await this.sendErrorResponse(ws, ERROR_CODES.INTERNAL_ERROR, 'Failed to handle message', error);
     }
   }
 
-  public async handleSocketIOMessage(
-    socket: Socket,
-    connectionId: ConnectionId,
-    data: unknown
-  ): Promise<void> {
+  public async handleSocketMessage(message: unknown, socket: Socket, connectionId: string): Promise<void> {
     try {
-      const message = validateAgentMessage(data);
-      await this.handleMessage(message, socket, connectionId);
+      const validatedMessage = validateMessageByType(message, 'socketio');
+      await this.handleMessage(validatedMessage, socket, connectionId);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(socket, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
+      await this.sendErrorResponse(socket, ERROR_CODES.INTERNAL_ERROR, 'Failed to handle message', error);
     }
   }
 
   private async handleMessage(
     message: AgentMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const startTime = Date.now();
-
     try {
+      validateConnectionId(connectionId);
+
       switch (message.type) {
         case 'register':
           await this.handleRegisterMessage(message, connection, connectionId);
@@ -86,168 +66,146 @@ export class MessageHandler {
         case 'error':
           await this.handleErrorMessage(message, connection, connectionId);
           break;
-        default:
+        default: {
           const exhaustiveCheck: never = message;
-          throw new Error(`Unhandled message type: ${(message as any).type}`);
+          throw new Error(`Unhandled message type: ${exhaustiveCheck}`);
+        }
       }
-
-      this.metricsService.recordMessageHandlingTime(message.type, Date.now() - startTime);
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.MESSAGE_HANDLING_ERROR, 'Failed to handle message', error);
-      this.metricsService.recordMessageError(message.type);
+      handleError(error, {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        context: 'handle_message',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.INTERNAL_ERROR, 'Failed to handle message', error);
     }
   }
 
   private async handleRegisterMessage(
-    message: ExtractMessage<'register'>,
+    message: RegisterMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const { payload: agentInfo } = message;
-    
     try {
-      const agentId = validateAgentId(agentInfo.id);
-      await this.connectionService.registerAgent(agentId, connectionId, agentInfo);
-      
-      loggerLoggingManager.getInstance().();
-      this.metricsService.recordAgentRegistration();
-      
-      this.sendSuccessResponse(connection, 'register', { agentId });
+      const { payload } = message;
+      await this.sendSuccessResponse(connection, 'register', { registered: true });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.REGISTRATION_ERROR, 'Failed to register agent', error);
-      this.metricsService.recordRegistrationError();
+      handleError(error, {
+        code: ERROR_CODES.VALIDATION_ERROR,
+        context: 'register_agent',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.VALIDATION_ERROR, 'Failed to register agent', error);
     }
   }
 
   private async handleHeartbeatMessage(
-    message: ExtractMessage<'heartbeat'>,
+    message: HeartbeatMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const { payload: metrics } = message;
-    
     try {
-      const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
-      await this.connectionService.updateAgentHeartbeat(agentId, metrics);
-      
-      loggerLoggingManager.getInstance().();
-      this.metricsService.recordHeartbeat();
-      
-      this.sendSuccessResponse(connection, 'heartbeat', { agentId });
+      const { payload } = message;
+      await this.sendSuccessResponse(connection, 'heartbeat', { received: true });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.HEARTBEAT_ERROR, 'Failed to process heartbeat', error);
-      this.metricsService.recordHeartbeatError();
+      handleError(error, {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        context: 'heartbeat',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.INTERNAL_ERROR, 'Failed to process heartbeat', error);
     }
   }
 
   private async handleMetricsMessage(
-    message: ExtractMessage<'metrics'>,
+    message: MetricsMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const { payload: metrics } = message;
-    
     try {
-      const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
-      await this.metricsService.recordAgentMetrics(agentId, metrics);
-      
-      loggerLoggingManager.getInstance().();
-      this.metricsService.recordMetricsUpdate();
-      
-      this.sendSuccessResponse(connection, 'metrics', { agentId });
+      const { payload } = message;
+      await this.metricsService.updateMetrics(connectionId, payload);
+      await this.sendSuccessResponse(connection, 'metrics', { received: true });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.METRICS_ERROR, 'Failed to process metrics', error);
-      this.metricsService.recordMetricsError();
+      handleError(error, {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        context: 'metrics',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.INTERNAL_ERROR, 'Failed to process metrics', error);
     }
   }
 
   private async handleCommandResponseMessage(
-    message: ExtractMessage<'command_response'>,
+    message: CommandResponseMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const { payload: commandResult } = message;
-    
     try {
-      const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
-      await this.connectionService.processCommandResponse(agentId, commandResult);
-      
-      loggerLoggingManager.getInstance().();
-      this.metricsService.recordCommandResponse();
-      
-      this.sendSuccessResponse(connection, 'command_response', { agentId });
+      const { payload } = message;
+      await this.sendSuccessResponse(connection, 'command_response', { received: true });
     } catch (error) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.COMMAND_ERROR, 'Failed to process command response', error);
-      this.metricsService.recordCommandError();
+      handleError(error, {
+        code: ERROR_CODES.COMMAND_ERROR,
+        context: 'command_response',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.COMMAND_ERROR, 'Failed to process command response', error);
     }
   }
 
   private async handleErrorMessage(
-    message: ExtractMessage<'error'>,
+    message: ErrorMessage,
     connection: WebSocket | Socket,
-    connectionId: ConnectionId
+    connectionId: string
   ): Promise<void> {
-    const { payload: error } = message;
-    
     try {
-      const agentId = await this.connectionService.getAgentIdByConnectionId(connectionId);
-      await this.connectionService.recordAgentError(agentId, error);
-      
-      loggerLoggingManager.getInstance().();
-      this.metricsService.recordAgentError();
-      
-      this.sendSuccessResponse(connection, 'error', { agentId });
-    } catch (err) {
-      loggerLoggingManager.getInstance().();
-      this.sendErrorResponse(connection, ERROR_CODES.ERROR_HANDLING_ERROR, 'Failed to process agent error', err);
-      this.metricsService.recordErrorHandlingError();
+      const { payload } = message;
+      await this.sendSuccessResponse(connection, 'error', { received: true });
+    } catch (error) {
+      handleError(error, {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        context: 'error_message',
+        connectionId
+      });
+      await this.sendErrorResponse(connection, ERROR_CODES.INTERNAL_ERROR, 'Failed to process error message', error);
     }
   }
 
-  private sendSuccessResponse(
-    connection: WebSocket | Socket,
-    type: AgentMessage['type'],
-    data: Record<string, unknown>
-  ): void {
+  public async sendSuccessResponse(connection: WebSocket | Socket, type: AgentMessage['type'], payload: Record<string, unknown>): Promise<void> {
     const response = {
-      type: `${type}_response` as const,
+      type,
       success: true,
-      data,
-      timestamp: new Date().toISOString()
+      payload,
     };
-
     if (connection instanceof WebSocket) {
-      connection.send(JSON.stringify(response));
+      await connection.send(JSON.stringify(response));
     } else {
-      connection.emit('message', response);
+      await connection.emit(type, response);
     }
   }
 
-  private sendErrorResponse(
+  public async sendErrorResponse(
     connection: WebSocket | Socket,
     code: keyof typeof ERROR_CODES,
     message: string,
     details?: unknown
-  ): void {
-    const error = createValidationError(code, message, details);
-    const response = {
-      type: 'error' as const,
+  ): Promise<void> {
+    const errorResponse = {
+      type: 'error',
       success: false,
-      error,
+      error: {
+        code,
+        message,
+        details: details instanceof Error ? details.message : details
+      },
       timestamp: new Date().toISOString()
     };
 
     if (connection instanceof WebSocket) {
-      connection.send(JSON.stringify(response));
+      await connection.send(JSON.stringify(errorResponse));
     } else {
-      connection.emit('message', response);
+      await connection.emit('error', errorResponse);
     }
   }
 }
-
-

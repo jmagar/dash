@@ -1,4 +1,4 @@
-import type { Host } from '../../types/models-shared';
+import type { Host, CreateHostRequest, UpdateHostRequest } from '../../types/models-shared';
 import type { ProcessMetrics } from '../../types/metrics';
 import { LoggingManager } from '../managers/LoggingManager';
 
@@ -22,18 +22,28 @@ export interface ProcessInfo extends ProcessMetrics {
   updatedAt: Date;
 }
 
-class HostService {
-  private initialized = false;
+export interface IHostService {
+  listHosts(userId: string): Promise<Host[]>;
+  getHost(userId: string, hostId: string): Promise<Host | null>;
+  createHost(userId: string, data: CreateHostRequest): Promise<Host>;
+  updateHost(userId: string, hostId: string, data: UpdateHostRequest): Promise<Host | null>;
+  deleteHost(userId: string, hostId: string): Promise<void>;
+  testConnection(host: Host): Promise<void>;
+  initialize(): Promise<void>;
+  cleanup(): Promise<void>;
+}
 
-  initialize(): void {
-    if (this.initialized) return;
-    
+export class HostService implements IHostService {
+  private initialized = false;
+  private logger = LoggingManager.getInstance();
+
+  async initialize(): Promise<void> {
     try {
-      LoggingManager.getInstance().info('Initializing host service...');
+      // Initialize any required resources
+      await Promise.resolve(); // Ensure async context
       this.initialized = true;
-      LoggingManager.getInstance().info('Host service initialized successfully');
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to initialize host service:', {
+      this.logger.error('Failed to initialize host service:', {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
         errorStack: error instanceof Error ? error.stack : undefined
       });
@@ -41,39 +51,122 @@ class HostService {
     }
   }
 
-  getHost(hostId: string): Promise<Host | null> {
+  async cleanup(): Promise<void> {
     try {
-      // This would typically query your database
-      // For now, return a mock host
-      const mockHost: Host = {
-        id: hostId,
-        name: `Host ${hostId}`,
-        hostname: `host-${hostId}`,
-        port: 22,
-        username: 'admin',
-        status: 'installing', // Can be: 'online' | 'offline' | 'error' | 'installing'
-        agentStatus: 'installed', // Can be: 'installed' | 'error' | null
-        agentVersion: '1.0.0',
-        environment: 'production',
-        tags: ['production'],
-        metadata: {},
-        os_type: 'linux',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      return Promise.resolve(mockHost);
+      // Cleanup any resources
+      await Promise.resolve(); // Ensure async context
+      this.initialized = false;
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to get host:', {
+      this.logger.error('Failed to cleanup host service:', {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        errorStack: error instanceof Error ? error.stack : undefined,
-        hostId
+        errorStack: error instanceof Error ? error.stack : undefined
       });
-      return Promise.resolve(null);
+      throw error;
     }
   }
 
-  listProcesses(host: Host): Promise<ProcessInfo[]> {
+  async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+  }
+
+  async listHosts(userId: string): Promise<Host[]> {
     try {
+      await this.ensureInitialized();
+      // TODO: Implement database query
+      return [];
+    } catch (error) {
+      this.logger.error('Failed to list hosts:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId
+      });
+      return [];
+    }
+  }
+
+  async getHost(userId: string, hostId: string): Promise<Host | null> {
+    try {
+      await this.ensureInitialized();
+      // TODO: Implement database query
+      return null;
+    } catch (error) {
+      this.logger.error('Failed to get host:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId,
+        hostId
+      });
+      return null;
+    }
+  }
+
+  async createHost(userId: string, data: CreateHostRequest): Promise<Host> {
+    try {
+      await this.ensureInitialized();
+      // TODO: Implement database query
+      throw new Error('Not implemented');
+    } catch (error) {
+      this.logger.error('Failed to create host:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId,
+        data
+      });
+      throw error;
+    }
+  }
+
+  async updateHost(userId: string, hostId: string, data: UpdateHostRequest): Promise<Host | null> {
+    try {
+      await this.ensureInitialized();
+      // TODO: Implement database query
+      return null;
+    } catch (error) {
+      this.logger.error('Failed to update host:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId,
+        hostId,
+        data
+      });
+      return null;
+    }
+  }
+
+  async deleteHost(userId: string, hostId: string): Promise<void> {
+    try {
+      await this.ensureInitialized();
+      // TODO: Implement database query
+    } catch (error) {
+      this.logger.error('Failed to delete host:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId,
+        hostId
+      });
+      throw error;
+    }
+  }
+
+  async testConnection(host: Host): Promise<void> {
+    try {
+      await this.ensureInitialized();
+      // TODO: Implement connection test
+    } catch (error) {
+      this.logger.error('Failed to test connection:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        host
+      });
+      throw error;
+    }
+  }
+
+  async listProcesses(host: Host): Promise<ProcessInfo[]> {
+    try {
+      await this.ensureInitialized();
       // This would typically query your agent/system
       // For now, return mock processes
       const now = new Date();
@@ -110,14 +203,14 @@ class HostService {
         createdAt: now,
         updatedAt: now
       };
-      return Promise.resolve([mockProcess]);
+      return [mockProcess];
     } catch (error) {
-      LoggingManager.getInstance().error('Failed to list processes:', {
+      this.logger.error('Failed to list processes:', {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
         errorStack: error instanceof Error ? error.stack : undefined,
         hostId: host.id
       });
-      return Promise.resolve([]);
+      return [];
     }
   }
 }

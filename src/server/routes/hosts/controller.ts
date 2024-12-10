@@ -3,9 +3,10 @@ import type { Host, CreateHostRequest, UpdateHostRequest } from '../../../types/
 import type { SystemMetrics } from '../../../types/metrics';
 import { AgentStatus } from '../../../types/agent-config';
 import { ApiError } from '../../../types/error';
-import * as hostService from './service';
-import { getAgentService } from '../../services/agent.service';
+import { hostService } from '../../services/host.service';
+import { AgentService } from '../../services/agent/services/agent.service';
 import { metricsStorageService } from '../../services/metrics-storage.service';
+import type { IHostService } from '../../services/host.service';
 
 // Request parameter types
 export interface HostIdParam {
@@ -194,17 +195,19 @@ export async function getHostStatus(
     throw new ApiError('Host not found', undefined, 404);
   }
 
-  const agentService = getAgentService();
-  const agentStatus = agentService.getAgentStatus(host.id);
+  const agentService = AgentService.getInstance();
   const agentMetrics = agentService.getAgentMetrics(host.id);
   const isConnected = agentService.isConnected(host.id);
+  
+  const status = isConnected ? 'online' : 'offline';
 
   const updatedHost: Host = {
     ...host,
-    agentStatus: mapAgentStatus(agentStatus),
-    status: isConnected ? 'online' : 'offline',
+    agentStatus: isConnected ? 'installed' : null,
+    status,
     metadata: {
       ...host.metadata,
+      agentConnected: isConnected,
       agentMetrics
     }
   };
@@ -235,7 +238,7 @@ export async function connectHost(
   await hostService.testConnection(host);
 
   // Then ensure agent is connected
-  const agentService = getAgentService();
+  const agentService = AgentService.getInstance();
   if (!agentService.isConnected(host.id)) {
     const attempts = 3;
     const timeout = 5000;
@@ -273,9 +276,9 @@ export async function disconnectHost(
     throw new ApiError('Host not found', undefined, 404);
   }
 
-  const agentService = getAgentService();
+  const agentService = AgentService.getInstance();
   if (agentService.isConnected(host.id)) {
-    agentService.disconnectAgent(host.id);
+    await agentService.disconnectAgent(host.id);
   }
 
   res.json({

@@ -1,15 +1,17 @@
+import { LogLevel } from './logger';
+
 export interface LogEntry {
   id: string;
   hostId: string;
   timestamp: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
+  level: LogLevel;
   message: string;
   source: string;
   metadata?: Record<string, unknown>;
 }
 
 export interface LogFilter {
-  level?: 'debug' | 'info' | 'warn' | 'error';
+  level?: LogLevel;
   source?: string;
   search?: string;
   startTime?: string;

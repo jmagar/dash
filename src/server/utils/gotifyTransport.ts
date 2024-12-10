@@ -3,6 +3,7 @@ import { Readable, Writable } from 'stream';
 import axios from 'axios';
 import { LogEntry } from 'winston';
 import { EventEmitter } from 'events';
+import { LogLevel } from '../../types/logger';
 
 interface GotifyMessage {
   message: string;
