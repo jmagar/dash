@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { HostSelector } from '../HostSelector';
 import { useHost } from '../../hooks/useHost';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
-import { useNotification } from '../../hooks/useNotification';
 import { FileList } from './components/FileList';
 import { FileToolbar } from './components/FileToolbar';
 import { FileContextMenu } from './components/FileContextMenu';
@@ -32,38 +31,33 @@ interface FileExplorerProps {
 
 export function FileExplorer({ hostId: initialHostId, path: initialPath = '/' }: FileExplorerProps) {
   const navigate = useNavigate();
-  const { showNotification } = useNotification();
   const { handleError } = useErrorHandler();
-  const [path, setPath] = useState(initialPath);
+  const [path] = useState(initialPath);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [bulkOperations] = useState<{ id: string; message: string; progress: number; completed?: boolean }[]>([]);
 
   const { host } = useHost(initialHostId);
 
   const { viewState, setViewMode, setSortState } = useFileView();
   const { state: selectionState, actions: selectionActions } = useFileSelection({ files });
-  const { state: operationState, operations } = useFileOperations(host?.id || '', path);
+  const { operations } = useFileOperations(host?.id || '', path);
   const { contextMenu, handleContextMenu, handleCloseContextMenu } = useFileContextMenu();
   const { dialogs, openDialog, closeDialog } = useFileDialogs();
-  const { clipboardState, copyToClipboard, cutToClipboard, clearClipboard, canPaste } = useFileClipboard();
+  const { copyToClipboard, cutToClipboard, canPaste } = useFileClipboard();
   const { downloadMultiple } = useFileDownload();
 
   const handleRefresh = useCallback(async () => {
     if (!host?.id) return;
     setLoading(true);
     try {
-      const result = await fileOperations.list(host.id, path);
+      const result = await fileOperations.listFiles(host.id, path);
       if (result.success && result.data) {
-        setFiles(result.data);
-        setError(null);
-      } else {
-        setError(result.error || 'Failed to load files');
+        setFiles(result.data.files);
       }
     } catch (err) {
       handleError(err);
-      setError('Failed to load files');
     } finally {
       setLoading(false);
     }
@@ -95,6 +89,29 @@ export function FileExplorer({ hostId: initialHostId, path: initialPath = '/' }:
     setSortState(field, newDirection);
   }, [viewState.sortState.field, viewState.sortState.direction, setSortState]);
 
+  const handleDownload = useCallback(() => {
+    void downloadMultiple(selectionState.selectedFiles);
+  }, [downloadMultiple, selectionState.selectedFiles]);
+
+  const handleRename = useCallback((file: FileInfo, newName: string) => {
+    void operations.rename(file, newName);
+  }, [operations]);
+
+  const handleDelete = useCallback(() => {
+    void operations.delete(selectionState.selectedFiles);
+  }, [operations, selectionState.selectedFiles]);
+
+  const handlePaste = useCallback(() => {
+    // Implement paste operation
+    console.log('Paste operation not implemented');
+  }, []);
+
+  const handleCompressFiles = useCallback(async (paths: string[], format: string): Promise<void> => {
+    // Implement compression operation
+    console.log('Compress operation not implemented', paths, format);
+    return Promise.resolve();
+  }, []);
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <HostSelector
@@ -106,7 +123,7 @@ export function FileExplorer({ hostId: initialHostId, path: initialPath = '/' }:
       <FileBreadcrumbs hostId={host?.id || ''} path={path} />
 
       <FileToolbar
-        onRefresh={handleRefresh}
+        onRefresh={() => void handleRefresh()}
         onNewFolder={handleNewFolder}
         onUpload={handleUpload}
         viewMode={viewState.mode}
@@ -124,56 +141,64 @@ export function FileExplorer({ hostId: initialHostId, path: initialPath = '/' }:
 
       <FileList
         files={files}
-        loading={loading}
-        error={error}
-        viewMode={viewState.mode}
-        sortState={viewState.sortState}
         selectedFiles={selectionState.selectedFiles}
+        viewMode={viewState.mode}
         onSelect={selectionActions.selectFile}
-        onSelectRange={selectionActions.selectRange}
         onContextMenu={handleContextMenu}
+        onMoreClick={handleContextMenu}
       />
 
       <FileContextMenu
-        open={contextMenu.open}
-        anchorPosition={contextMenu.position}
-        onClose={handleCloseContextMenu}
+        file={contextMenu.file}
         selectedFiles={selectionState.selectedFiles}
+        anchorPosition={contextMenu.anchorEl ? {
+          top: contextMenu.anchorEl.getBoundingClientRect().top,
+          left: contextMenu.anchorEl.getBoundingClientRect().left
+        } : null}
         canPaste={canPaste}
-        onCopy={copyToClipboard}
-        onCut={cutToClipboard}
-        onPaste={operations.paste}
-        onDelete={() => openDialog('delete')}
+        onClose={handleCloseContextMenu}
+        onCopy={() => copyToClipboard(selectionState.selectedFiles)}
+        onCut={() => cutToClipboard(selectionState.selectedFiles)}
+        onPaste={handlePaste}
+        onDelete={() => void handleDelete()}
         onRename={() => openDialog('rename')}
-        onShare={() => openDialog('share')}
-        onDownload={downloadMultiple}
+        onDownload={() => void handleDownload()}
+        onPreview={() => openDialog('preview')}
+        onCompress={handleCompress}
+        hostId={host?.id || ''}
       />
 
       <FileOperationDialogs
         dialogs={dialogs}
         onClose={closeDialog}
         selectedFiles={selectionState.selectedFiles}
-        operations={operations}
+        selectedFile={contextMenu.file}
+        onCreateFolder={(name) => void operations.createFolder(name)}
+        onRename={(newName) => {
+          if (contextMenu.file) {
+            void handleRename(contextMenu.file, newName);
+          }
+        }}
+        onDelete={handleDelete}
       />
 
       <CompressionDialog
         open={dialogs.compress}
         onClose={() => closeDialog('compress')}
         selectedFiles={selectionState.selectedFiles}
-        onCompress={operations.compress}
+        onCompress={handleCompressFiles}
       />
 
       <BulkOperationProgress
-        operations={operationState.operations}
-        onCancel={operations.cancelOperation}
+        open={bulkOperations.length > 0}
+        operations={bulkOperations}
       />
 
       <FileUploadDialog
         open={showUploadDialog}
         onClose={() => setShowUploadDialog(false)}
-        hostId={host?.id || ''}
-        path={path}
-        onUploadComplete={handleRefresh}
+        onUpload={async (files) => operations.upload(files)}
+        currentPath={path}
       />
     </Box>
   );

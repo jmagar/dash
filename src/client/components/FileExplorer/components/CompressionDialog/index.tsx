@@ -12,97 +12,104 @@ import {
   MenuItem,
   Alert,
 } from '@mui/material';
-import { useCompression } from '../../../../hooks/useCompression';
+import type { FileInfo } from '../../../../../types/files';
 
 interface CompressionDialogProps {
   open: boolean;
   onClose: () => void;
-  hostId: string;
-  selectedPaths: string[];
-  mode: 'compress' | 'extract';
-  currentPath: string;
+  selectedFiles: FileInfo[];
+  onCompress: (paths: string[], format: string) => Promise<void>;
 }
 
 export function CompressionDialog({
   open,
   onClose,
-  hostId,
-  selectedPaths,
-  mode,
-  currentPath,
-}: CompressionDialogProps): JSX.Element {
-  const [targetPath, setTargetPath] = useState(currentPath);
+  selectedFiles,
+  onCompress,
+}: CompressionDialogProps) {
   const [format, setFormat] = useState('zip');
-  const { compressFiles, extractFiles } = useCompression();
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (event: React.MouseEvent) => {
-    event.preventDefault();
-    if (!targetPath.trim() || selectedPaths.length === 0) return;
+  const selectedPaths = selectedFiles.map(file => file.path);
 
-    const submitOperation = async () => {
-      try {
-        if (mode === 'compress') {
-          const fileName = selectedPaths[0].split('/').pop();
-          if (!fileName) {
-            throw new Error('Invalid file name');
-          }
-          const archivePath = `${targetPath}/${fileName}.${format}`;
-          await compressFiles(hostId, selectedPaths, archivePath);
-        } else {
-          const sourcePath = selectedPaths[0];
-          if (!sourcePath) {
-            throw new Error('No file selected for extraction');
-          }
-          await extractFiles(hostId, sourcePath, targetPath);
-        }
-        onClose();
-      } catch (error) {
-        // Error handling is done in useCompression hook
+  const handleConfirm = () => {
+    if (!selectedPaths.length) return;
+    
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Get base name from first file, fallback to 'archive' if not available
+      const firstPath = selectedPaths[0];
+      if (!firstPath) {
+        throw new Error('No files selected');
       }
-    };
-
-    void submitOperation();
+      
+      const pathParts = firstPath.split('/');
+      const lastPart = pathParts[pathParts.length - 1];
+      const baseName = lastPart ? lastPart.split('.')[0] : 'archive';
+      const fileName = name || baseName;
+      
+      if (!fileName) {
+        throw new Error('Invalid file name');
+      }
+      
+      void onCompress(selectedPaths, format).then(() => {
+        setLoading(false);
+        onClose();
+      }).catch((err) => {
+        setError(err instanceof Error ? err.message : 'Operation failed');
+        setLoading(false);
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Operation failed');
+      setLoading(false);
+    }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        {mode === 'compress' ? 'Compress Files' : 'Extract Archive'}
-      </DialogTitle>
+      <DialogTitle>Compress Files</DialogTitle>
       <DialogContent>
         <TextField
-          autoFocus
-          margin="dense"
-          label="Target Path"
+          label="Archive Name"
           fullWidth
-          value={targetPath}
-          onChange={(e) => setTargetPath(e.target.value)}
-          sx={{ mb: 2 }}
+          margin="normal"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter archive name (optional)"
         />
-        {mode === 'compress' && (
-          <FormControl fullWidth>
-            <InputLabel>Format</InputLabel>
-            <Select
-              value={format}
-              label="Format"
-              onChange={(e) => setFormat(e.target.value)}
-            >
-              <MenuItem value="zip">ZIP</MenuItem>
-              <MenuItem value="tar">TAR</MenuItem>
-              <MenuItem value="gz">GZIP</MenuItem>
-              <MenuItem value="bz2">BZIP2</MenuItem>
-            </Select>
-          </FormControl>
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Format</InputLabel>
+          <Select
+            value={format}
+            onChange={(e) => setFormat(e.target.value)}
+            label="Format"
+          >
+            <MenuItem value="zip">ZIP</MenuItem>
+            <MenuItem value="tar">TAR</MenuItem>
+            <MenuItem value="gz">GZIP</MenuItem>
+          </Select>
+        </FormControl>
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} disabled={loading}>
+          Cancel
+        </Button>
         <Button
-          onClick={handleSubmit}
+          onClick={handleConfirm}
           variant="contained"
-          disabled={!targetPath.trim() || selectedPaths.length === 0}
+          color="primary"
+          disabled={loading || !selectedPaths.length}
         >
-          {mode === 'compress' ? 'Compress' : 'Extract'}
+          Compress
         </Button>
       </DialogActions>
     </Dialog>

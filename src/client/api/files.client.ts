@@ -179,24 +179,18 @@ class FileOperationsClient extends BaseApiClient<FileOperationsEndpoints> {
   }
 }
 
-export const fileOperations = new FileOperationsClient();
+// Create a single instance
+const fileOperationsInstance = new FileOperationsClient();
 
-// Export all methods with proper binding
-export const { 
-  createFolder: _createFolder,
-  rename: _rename,
-  move: _move,
-  copy: _copy,
-  upload: _upload,
-  listFiles: _listFiles,
-  openFile: _openFile
-} = fileOperations;
+// Export bound methods directly
+export const createFolder = fileOperationsInstance.createFolder.bind(fileOperationsInstance);
+export const rename = fileOperationsInstance.rename.bind(fileOperationsInstance);
+export const move = fileOperationsInstance.move.bind(fileOperationsInstance);
+export const copy = fileOperationsInstance.copy.bind(fileOperationsInstance);
+export const upload = fileOperationsInstance.upload.bind(fileOperationsInstance);
+export const listFiles = fileOperationsInstance.listFiles.bind(fileOperationsInstance);
+export const openFile = fileOperationsInstance.openFile.bind(fileOperationsInstance);
+export const deleteFiles = fileOperationsInstance.deleteFiles.bind(fileOperationsInstance);
 
-export const createFolder = _createFolder.bind(fileOperations);
-export const rename = _rename.bind(fileOperations);
-export const move = _move.bind(fileOperations);
-export const copy = _copy.bind(fileOperations);
-export const upload = _upload.bind(fileOperations);
-export const listFiles = _listFiles.bind(fileOperations);
-export const openFile = _openFile.bind(fileOperations);
-export const deleteFiles = fileOperations.deleteFiles.bind(fileOperations);
+// Export the instance if needed
+export const fileOperations = fileOperationsInstance;

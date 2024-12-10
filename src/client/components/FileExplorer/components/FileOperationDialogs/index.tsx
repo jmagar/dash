@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FileInfo } from '@types/files';
+import type { FileInfo } from '../../../../../types/files';
 import { NewFolderDialog } from './NewFolderDialog';
 import { RenameDialog } from './RenameDialog';
 import { DeleteDialog } from './DeleteDialog';

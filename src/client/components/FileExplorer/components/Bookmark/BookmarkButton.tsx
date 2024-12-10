@@ -1,11 +1,9 @@
-import React, { useState, useCallback } from 'react';
-import { IconButton, Tooltip, CircularProgress } from '@mui/material';
-import StarIcon from '@mui/icons-material/Star';
-import StarBorderIcon from '@mui/icons-material/StarBorder';
-import type { FileInfo } from '../../../../../types/files';
-import { BookmarkDialog } from './BookmarkDialog';
+import React, { useState } from 'react';
+import { IconButton, Tooltip } from '@mui/material';
+import { BookmarkBorder, Bookmark } from '@mui/icons-material';
 import { useBookmarks } from '../../../../hooks/useBookmarks';
-import { logger } from '../../../../utils/frontendLogger';
+import { BookmarkDialog } from './BookmarkDialog';
+import type { FileInfo } from '../../../../../types/files';
 
 interface BookmarkButtonProps {
   file: FileInfo;
@@ -13,100 +11,47 @@ interface BookmarkButtonProps {
 }
 
 export function BookmarkButton({ file, hostId }: BookmarkButtonProps) {
-  const {
-    bookmarks,
-    loading,
-    addBookmark,
-    removeBookmark,
-    updateBookmarkNotes,
-    isBookmarked,
-    getBookmark
-  } = useBookmarks();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const { bookmarks, addBookmark, removeBookmark, updateBookmarkNotes } = useBookmarks();
 
-  const existingBookmark = getBookmark(hostId, file.path);
-  const isCurrentlyBookmarked = isBookmarked(hostId, file.path);
+  const existingBookmark = bookmarks.find(
+    (b) => b.hostId === hostId && b.path === file.path
+  );
 
-  const handleClick = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (isProcessing) return;
-
-    if (isCurrentlyBookmarked) {
-      setIsProcessing(true);
-      removeBookmark(hostId, file.path)
-        .catch((error) => {
-          logger.error('Failed to remove bookmark:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            hostId,
-            path: file.path,
-          });
-        })
-        .finally(() => {
-          setIsProcessing(false);
-        });
+  const handleClick = () => {
+    if (existingBookmark) {
+      void removeBookmark(hostId, file.path);
     } else {
       setDialogOpen(true);
     }
-  }, [isProcessing, isCurrentlyBookmarked, hostId, file.path, removeBookmark]);
+  };
 
-  const handleEditClick = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-    setDialogOpen(true);
-  }, []);
-
-  const handleDialogConfirm = useCallback((notes: string) => {
-    if (isProcessing) return;
-
-    setIsProcessing(true);
-    const promise = existingBookmark
-      ? updateBookmarkNotes(hostId, file.path, notes)
-      : addBookmark(hostId, file.path, file.name, file.type === 'directory', notes);
-
-    promise
-      .then(() => {
+  const handleDialogConfirm = (notes: string) => {
+    if (existingBookmark) {
+      void updateBookmarkNotes(hostId, file.path, notes).then(() => {
         setDialogOpen(false);
-      })
-      .catch((error) => {
-        logger.error('Failed to update bookmark:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hostId,
-          path: file.path,
-        });
-      })
-      .finally(() => {
-        setIsProcessing(false);
       });
-  }, [isProcessing, existingBookmark, hostId, file, addBookmark, updateBookmarkNotes]);
-
-  if (loading) {
-    return (
-      <IconButton size="small" disabled>
-        <CircularProgress size={20} />
-      </IconButton>
-    );
-  }
+    } else {
+      void addBookmark(
+        hostId,
+        file.path,
+        file.name,
+        file.type === 'directory',
+        notes
+      ).then(() => {
+        setDialogOpen(false);
+      });
+    }
+  };
 
   return (
     <>
-      <Tooltip title={isCurrentlyBookmarked ? 'Remove bookmark' : 'Add bookmark'}>
-        <IconButton
-          onClick={handleClick}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            if (isCurrentlyBookmarked) {
-              handleEditClick(e);
-            }
-          }}
-          size="small"
-          disabled={isProcessing}
-        >
-          {isProcessing ? (
-            <CircularProgress size={20} />
-          ) : isCurrentlyBookmarked ? (
-            <StarIcon color="primary" />
+      <Tooltip title={existingBookmark ? 'Remove Bookmark' : 'Add Bookmark'}>
+        <IconButton onClick={handleClick} size="small">
+          {existingBookmark ? (
+            <Bookmark fontSize="small" color="primary" />
           ) : (
-            <StarBorderIcon />
+            <BookmarkBorder fontSize="small" />
           )}
         </IconButton>
       </Tooltip>
@@ -116,7 +61,7 @@ export function BookmarkButton({ file, hostId }: BookmarkButtonProps) {
         onClose={() => setDialogOpen(false)}
         onConfirm={handleDialogConfirm}
         file={file}
-        existingNotes={existingBookmark?.notes}
+        existingNotes={existingBookmark?.notes || undefined}
       />
     </>
   );

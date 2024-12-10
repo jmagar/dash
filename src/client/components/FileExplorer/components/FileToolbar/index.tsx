@@ -22,13 +22,10 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Compress as CompressIcon,
-  Unarchive as UnarchiveIcon
+  FolderZip as ExtractIcon
 } from '@mui/icons-material';
 import type { FileInfo } from '../../../../../types/files';
 
-type ViewMode = 'list' | 'grid';
-type SortField = keyof FileInfo;
-type SortDirection = 'asc' | 'desc';
 interface FileToolbarProps {
   onRefresh: () => void;
   onNewFolder: () => void;
@@ -75,6 +72,12 @@ export function FileToolbar({
   const handleSortSelect = (field: keyof FileInfo) => {
     onSort(field);
     handleSortClose();
+  };
+
+  const handleViewModeChange = (_: React.MouseEvent<HTMLElement>, newMode: 'list' | 'grid' | null) => {
+    if (newMode) {
+      onViewModeChange(newMode);
+    }
   };
 
   return (
@@ -142,7 +145,7 @@ export function FileToolbar({
       <ToggleButtonGroup
         value={viewMode}
         exclusive
-        onChange={(_, value) => value && onViewModeChange(value)}
+        onChange={handleViewModeChange}
         disabled={disabled}
         size="small"
       >

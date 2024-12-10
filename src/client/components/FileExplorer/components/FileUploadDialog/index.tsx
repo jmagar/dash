@@ -70,6 +70,10 @@ export function FileUploadDialog({
     setSelectedFiles(dt.files);
   }, [selectedFiles]);
 
+  const handleUploadClick = useCallback(() => {
+    void handleUpload();
+  }, [handleUpload]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Upload Files</DialogTitle>
@@ -145,7 +149,7 @@ export function FileUploadDialog({
           Cancel
         </Button>
         <Button
-          onClick={handleUpload}
+          onClick={handleUploadClick}
           variant="contained"
           disabled={!selectedFiles || uploading}
         >

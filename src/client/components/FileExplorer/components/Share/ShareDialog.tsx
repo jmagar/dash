@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -10,34 +10,39 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormHelperText,
-  IconButton,
-  InputAdornment,
-  Box,
   Alert,
+  Box,
+  IconButton,
+  InputAdornment
 } from '@mui/material';
+import { ContentCopy } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers';
-import {
-  ContentCopy,
-  Close,
-} from '@mui/icons-material';
-import { useSnackbar } from 'notistack';
-import { ShareAccessType, SharePermission, type ShareConfig } from '../../../../../types/sharing';
 import { useErrorHandler } from '../../../../hooks/useErrorHandler';
 import { useCsrfToken } from '../../../../hooks/useCsrfToken';
+import type { ShareConfig } from '../../../../../types/sharing';
+import { ShareAccessType, SharePermission } from '../../../../../types/sharing';
+import { useNotification } from '../../../../hooks/useNotification';
 
 interface ShareDialogProps {
-  open: boolean;
   path: string;
-  onClose: () => void;
-  onShare: (config: ShareConfig) => Promise<{ url: string }>;
-  error?: string;
+  onSubmit: (config: ShareConfig) => Promise<{ url: string } | void>;
+  initialConfig?: Partial<Omit<ShareConfig, 'path' | '_csrf'>>;
+  mode?: 'create' | 'edit';
+  open?: boolean;
+  onClose?: () => void;
 }
 
-export default function ShareDialog({ open, path, onClose, onShare, error: propError }: ShareDialogProps) {
-  const { enqueueSnackbar } = useSnackbar();
+export default function ShareDialog({ 
+  path, 
+  onSubmit, 
+  initialConfig,
+  mode = 'create',
+  open: propOpen = true,
+  onClose: propOnClose
+}: ShareDialogProps) {
   const { handleError } = useErrorHandler();
   const { csrfToken } = useCsrfToken();
+  const { showNotification } = useNotification();
 
   const [formData, setFormData] = useState<Omit<ShareConfig, 'path' | '_csrf'>>({
     accessType: ShareAccessType.PUBLIC,
@@ -46,8 +51,17 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
   });
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(propError || null);
+  const [error, setError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialConfig) {
+      setFormData(prev => ({
+        ...prev,
+        ...initialConfig
+      }));
+    }
+  }, [initialConfig]);
 
   const validateForm = () => {
     if (!path) {
@@ -76,10 +90,16 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
         _csrf: csrfToken || undefined,
       };
 
-      const result = await onShare(shareConfig);
-      setShareUrl(result.url);
+      const result = await onSubmit(shareConfig);
+      if (result && 'url' in result) {
+        setShareUrl(result.url);
+      }
+      showNotification(`Share ${mode === 'create' ? 'created' : 'updated'} successfully`, 'success');
+      if (mode === 'edit' && propOnClose) {
+        propOnClose();
+      }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create share';
+      const errorMessage = err instanceof Error ? err.message : `Failed to ${mode} share`;
       setError(errorMessage);
       handleError(err);
     } finally {
@@ -92,16 +112,10 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      enqueueSnackbar('URL copied to clipboard', {
-        variant: 'success',
-        autoHideDuration: 3000,
-      });
+      showNotification('URL copied to clipboard', 'success');
     } catch (err) {
       handleError(err);
-      enqueueSnackbar('Failed to copy URL', {
-        variant: 'error',
-        autoHideDuration: 3000,
-      });
+      showNotification('Failed to copy URL', 'error');
     }
   };
 
@@ -113,12 +127,14 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
       permission: SharePermission.READ,
       expiresAt: null,
     });
-    onClose();
+    if (propOnClose) {
+      propOnClose();
+    }
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Share {path}</DialogTitle>
+    <Dialog open={propOpen} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{mode === 'create' ? 'Share' : 'Edit Share'} {path}</DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -126,7 +142,7 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
           </Alert>
         )}
 
-        {shareUrl ? (
+        {shareUrl && mode === 'create' ? (
           <Box sx={{ mt: 2 }}>
             <TextField
               fullWidth
@@ -215,15 +231,15 @@ export default function ShareDialog({ open, path, onClose, onShare, error: propE
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>
-          {shareUrl ? 'Close' : 'Cancel'}
+          {shareUrl && mode === 'create' ? 'Close' : 'Cancel'}
         </Button>
-        {!shareUrl && (
+        {(!shareUrl || mode === 'edit') && (
           <Button
             onClick={() => void handleSubmit()}
             variant="contained"
             disabled={loading}
           >
-            Share
+            {mode === 'create' ? 'Share' : 'Save Changes'}
           </Button>
         )}
       </DialogActions>

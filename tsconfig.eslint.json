@@ -1,11 +1,41 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "lib": ["dom", "dom.iterable", "ES2021"],
+    "module": "esnext",
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@client/*": ["src/client/*"],
+      "@shared/*": ["src/shared/*"],
+      "@server/*": ["src/server/*"],
+      "@types/*": ["src/types/*"]
+    }
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.d.ts"
+    "src/client/components/FileExplorer/*.ts",
+    "src/client/components/FileExplorer/*.tsx",
+    "src/client/components/FileExplorer/hooks/*.ts",
+    "src/client/components/FileExplorer/hooks/*.tsx",
+    "src/client/components/FileExplorer/components/**/*.ts",
+    "src/client/components/FileExplorer/components/**/*.tsx",
+    "src/client/hooks/**/*.ts",
+    "src/client/utils/**/*.ts",
+    "src/client/api/**/*.ts",
+    "src/client/store/**/*.ts",
+    "src/client/context/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ]
 }

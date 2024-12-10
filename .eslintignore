@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+coverage/
+*.test.ts
+*.spec.ts
+
+# Explicitly include the FileOperationDialogs
+!src/client/components/FileExplorer/components/FileOperationDialogs/index.tsx 

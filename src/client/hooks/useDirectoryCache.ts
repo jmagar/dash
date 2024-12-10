@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { FileInfo } from '../components/FileExplorer';
+import type { FileInfo } from '../../types/files';
 
 interface CacheEntry {
   files: FileInfo[];

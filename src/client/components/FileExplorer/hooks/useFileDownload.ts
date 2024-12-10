@@ -7,7 +7,7 @@ export function useFileDownload() {
   const { handleError } = useErrorHandler();
   const { showNotification } = useNotification();
 
-  const downloadFile = useCallback(async (file: FileInfo) => {
+  const downloadFile = useCallback((file: FileInfo) => {
     try {
       // Create a temporary anchor element
       const link = document.createElement('a');
@@ -33,8 +33,16 @@ export function useFileDownload() {
 
   const downloadMultiple = useCallback(async (files: FileInfo[]) => {
     try {
+      if (files.length === 0) {
+        throw new Error('No files selected for download');
+      }
+
       if (files.length === 1) {
-        await downloadFile(files[0]);
+        const file = files[0];
+        if (!file) {
+          throw new Error('Invalid file selected for download');
+        }
+        void downloadFile(file);
         return;
       }
 

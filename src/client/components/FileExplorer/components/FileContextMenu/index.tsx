@@ -69,6 +69,8 @@ export function FileContextMenu({
 
   if (!file) return null;
 
+  const isDirectory = file.type === 'directory';
+
   return (
     <>
       <Menu
@@ -78,7 +80,7 @@ export function FileContextMenu({
         anchorPosition={anchorPosition || undefined}
         sx={{ '& .MuiPaper-root': { minWidth: 200 } }}
       >
-        {!multipleSelected && !file.type === 'directory' && (
+        {!multipleSelected && !isDirectory && (
           <>
             <MenuItem onClick={onPreview}>
               <ListItemIcon>
@@ -134,7 +136,7 @@ export function FileContextMenu({
 
         <Divider />
 
-        {!file.type === 'directory' && (
+        {!isDirectory && (
           <>
             <MenuItem onClick={onDownload}>
               <ListItemIcon>
@@ -166,7 +168,7 @@ export function FileContextMenu({
         </MenuItem>
       </Menu>
 
-      {!file.type === 'directory' && (
+      {!isDirectory && (
         <OpenWithMenu
           file={file}
           anchorEl={openWithAnchor}

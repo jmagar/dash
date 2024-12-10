@@ -1,4 +1,8 @@
-import { TransportError, TransportErrorName, TransportErrorCode } from '../types/transport/errors';
+import { TransportError } from '../types/transport/errors';
+import type { 
+    TransportErrorName, 
+    TransportErrorCode 
+} from '../types/transport/errors';
 
 // Re-export error types
 export type { TransportErrorName, TransportErrorCode } from '../types/transport/errors';
@@ -101,7 +105,7 @@ export class NetworkTransportError extends BaseTransportError {
     }
 }
 
-export function formatMessage(message: unknown, format?: string): string {
+export function formatMessage(message: unknown, _format?: string): string {
     if (typeof message === 'string') {
         return message;
     }

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { FileInfo } from '../components/FileExplorer';
+import type { FileInfo } from '../../types/files';
 
 interface ClipboardState {
   files: FileInfo[];

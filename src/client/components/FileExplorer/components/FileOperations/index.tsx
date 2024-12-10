@@ -90,6 +90,11 @@ export function RenameDialog({ open, file, onClose, onConfirm, error }: RenameDi
     }
   };
 
+  const isDisabled = React.useMemo(() => {
+    const trimmedName = newName.trim();
+    return !trimmedName || (file?.name != null && trimmedName === file.name);
+  }, [newName, file?.name]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Rename {file?.name}</DialogTitle>
@@ -110,7 +115,7 @@ export function RenameDialog({ open, file, onClose, onConfirm, error }: RenameDi
         <Button
           onClick={handleConfirm}
           variant="contained"
-          disabled={!newName.trim() || (file?.name && newName.trim() === file.name)}
+          disabled={isDisabled}
         >
           Rename
         </Button>
