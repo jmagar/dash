@@ -1,161 +1,223 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
-  Box,
-  Typography,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
+  Alert,
+  Typography,
 } from '@mui/material';
-import {
-  CloudUpload as UploadIcon,
-  Close as CloseIcon,
-} from '@mui/icons-material';
+import type { DropzoneOptions, FileRejection } from 'react-dropzone';
+import { useDropzone } from 'react-dropzone';
+import { useTranslation } from 'react-i18next';
+import { useUploadFile } from '../../hooks/useFileUpload';
+import type { UploadState } from '../../types/uploads';
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+// Common file types and their MIME types
+const ACCEPTED_FILE_TYPES = {
+  // Images
+  'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'],
+  // Documents
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  // Text
+  'text/plain': ['.txt'],
+  'text/html': ['.html', '.htm'],
+  'text/css': ['.css'],
+  'text/javascript': ['.js'],
+  // Archives
+  'application/zip': ['.zip'],
+  'application/x-rar-compressed': ['.rar'],
+  'application/x-7z-compressed': ['.7z'],
+  // Audio
+  'audio/*': ['.mp3', '.wav', '.ogg'],
+  // Video
+  'video/*': ['.mp4', '.avi', '.mov', '.wmv'],
+};
 
 interface FileUploadDialogProps {
   open: boolean;
-  onClose: () => void;
-  onUpload: (files: FileList) => Promise<void>;
   currentPath: string;
+  onClose: () => void;
+  onSuccess: () => void;
 }
 
-export function FileUploadDialog({
+export const FileUploadDialog: React.FC<FileUploadDialogProps> = ({
   open,
-  onClose,
-  onUpload,
   currentPath,
-}: FileUploadDialogProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
-  const [uploading, setUploading] = useState(false);
+  onClose,
+  onSuccess,
+}) => {
+  const { t } = useTranslation('translation', {
+    keyPrefix: 'fileExplorer.upload',
+  });
+  const [uploadState, setUploadState] = useState<UploadState>('idle');
+  const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const currentFileRef = useRef<File | null>(null);
+  const { uploadFile, cancelUpload, isUploading } = useUploadFile();
 
-  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files.length > 0) {
-      setSelectedFiles(event.target.files);
-      setError(null);
+  const handleClose = useCallback(() => {
+    if (isUploading) {
+      cancelUpload();
     }
-  }, []);
+    setError(null);
+    setProgress(0);
+    setUploadState('idle');
+    setRetryCount(0);
+    currentFileRef.current = null;
+    onClose();
+  }, [isUploading, cancelUpload, onClose]);
 
-  const handleUpload = useCallback(async () => {
-    if (!selectedFiles) return;
+  const handleRetry = useCallback(() => {
+    const file = currentFileRef.current;
+    if (!file) return;
 
-    try {
-      setUploading(true);
-      setError(null);
-      await onUpload(selectedFiles);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload files');
-    } finally {
-      setUploading(false);
-    }
-  }, [selectedFiles, onUpload, onClose]);
-
-  const handleRemoveFile = useCallback((index: number) => {
-    if (!selectedFiles) return;
-
-    const dt = new DataTransfer();
-    Array.from(selectedFiles)
-      .filter((_, i) => i !== index)
-      .forEach(file => dt.items.add(file));
+    setError(null);
+    setProgress(0);
+    setUploadState('uploading');
     
-    setSelectedFiles(dt.files);
-  }, [selectedFiles]);
+    void (async () => {
+      try {
+        await uploadFile({
+          file,
+          path: currentPath,
+          onProgress: (uploadProgress: number) => setProgress(uploadProgress),
+        });
+        setUploadState('success');
+        onSuccess();
+        handleClose();
+      } catch (error) {
+        console.error('Upload retry failed:', error);
+        if (retryCount < MAX_RETRIES) {
+          setRetryCount(prev => prev + 1);
+          // Schedule next retry
+          setTimeout(handleRetry, RETRY_DELAY);
+        } else {
+          setError(`Upload failed after ${MAX_RETRIES} retries. ${error instanceof Error ? error.message : ''}`);
+          setUploadState('error');
+        }
+      }
+    })();
+  }, [currentPath, handleClose, onSuccess, uploadFile, retryCount]);
 
-  const handleUploadClick = useCallback(() => {
-    void handleUpload();
-  }, [handleUpload]);
+  const onDrop = useCallback(
+    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
+      if (fileRejections.length > 0) {
+        const errors = fileRejections.map(rejection => 
+          `${rejection.file.name}: ${rejection.errors.map(e => e.message).join(', ')}`
+        );
+        setError(`Invalid file(s): ${errors.join('; ')}`);
+        return;
+      }
+
+      const file = acceptedFiles[0];
+      if (!file) return;
+
+      currentFileRef.current = file;
+      setError(null);
+      setProgress(0);
+      setRetryCount(0);
+      setUploadState('uploading');
+      
+      void (async () => {
+        try {
+          await uploadFile({
+            file,
+            path: currentPath,
+            onProgress: (uploadProgress: number) => setProgress(uploadProgress),
+          });
+          setUploadState('success');
+          onSuccess();
+          handleClose();
+        } catch (error) {
+          console.error('Upload failed:', error);
+          if (retryCount < MAX_RETRIES) {
+            setRetryCount(prev => prev + 1);
+            // Schedule retry
+            setTimeout(handleRetry, RETRY_DELAY);
+          } else {
+            setError(`Upload failed after ${MAX_RETRIES} retries. ${error instanceof Error ? error.message : ''}`);
+            setUploadState('error');
+          }
+        }
+      })();
+    },
+    [currentPath, handleClose, onSuccess, uploadFile, retryCount, handleRetry]
+  );
+
+  const dropzoneConfig: DropzoneOptions = {
+    onDrop,
+    multiple: false,
+    maxFiles: 1,
+    accept: ACCEPTED_FILE_TYPES,
+    maxSize: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB default
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone(dropzoneConfig);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Upload Files</DialogTitle>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{t('title')}</DialogTitle>
       <DialogContent>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Upload location: {currentPath}
-          </Typography>
-          {error && (
-            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-              {error}
-            </Typography>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        <div
+          {...getRootProps()}
+          style={{
+            border: '2px dashed #ccc',
+            borderRadius: '4px',
+            padding: '20px',
+            textAlign: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <input {...getInputProps()} />
+          {isDragActive ? (
+            <p>{t('dropHere')}</p>
+          ) : (
+            <>
+              <p>{t('dragOrClick')}</p>
+              <Typography variant="caption" color="textSecondary">
+                Supported file types: {Object.values(ACCEPTED_FILE_TYPES).flat().join(', ')}
+              </Typography>
+            </>
           )}
-        </Box>
-
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-          multiple
-        />
-
-        {!selectedFiles && (
-          <Box
-            sx={{
-              border: '2px dashed',
-              borderColor: 'divider',
-              borderRadius: 1,
-              p: 3,
-              textAlign: 'center',
-              cursor: 'pointer',
-            }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <UploadIcon sx={{ fontSize: 48, color: 'action.active', mb: 1 }} />
-            <Typography>
-              Click to select files or drag and drop them here
-            </Typography>
-          </Box>
-        )}
-
-        {selectedFiles && (
-          <List>
-            {Array.from(selectedFiles).map((file, index) => (
-              <ListItem key={`${file.name}-${index}`}>
-                <ListItemText
-                  primary={file.name}
-                  secondary={`${(file.size / 1024).toFixed(1)} KB`}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    onClick={() => handleRemoveFile(index)}
-                    disabled={uploading}
-                  >
-                    <CloseIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
-          </List>
-        )}
-
-        {uploading && (
-          <Box sx={{ mt: 2 }}>
-            <LinearProgress />
-          </Box>
+        </div>
+        {uploadState === 'uploading' && (
+          <>
+            <LinearProgress
+              variant="determinate"
+              value={progress}
+              sx={{ mt: 2 }}
+            />
+            {retryCount > 0 && (
+              <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+                Retry attempt {retryCount} of {MAX_RETRIES}...
+              </Typography>
+            )}
+          </>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={uploading}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleUploadClick}
-          variant="contained"
-          disabled={!selectedFiles || uploading}
-        >
-          Upload
+        <Button onClick={handleClose}>
+          {isUploading ? t('cancel') : t('common:close')}
         </Button>
       </DialogActions>
     </Dialog>
   );
-} 
+};
+
+export default FileUploadDialog; 

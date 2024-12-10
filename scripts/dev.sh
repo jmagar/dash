@@ -4,6 +4,7 @@
 set -e
 
 # Load utilities
+# shellcheck disable=SC1091
 source "$(dirname "$0")/utils.sh"
 
 # Parse command line arguments
